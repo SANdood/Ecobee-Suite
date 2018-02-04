@@ -17,6 +17,7 @@
  *	1.0.2 - Updated settings and TempDisable handling
  *  1.2.0 - Sync version number with new holdHours/holdAction support
  *	1.2.1 - Protect against LOG type errors
+ *	1.3.0 - Move to SANdood namespace
  *
  */
 def getVersionNum() { return "1.2.1" }
@@ -24,11 +25,11 @@ private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNu
 
 definition(
 	name: "ecobee Smart Zones",
-	namespace: "smartthings",
+	namespace: "SANdood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Synchronizes ecobee recirculation fan between two zones",
 	category: "Convenience",
-	parent: "smartthings:Ecobee (Connect)",
+	parent: "SANdood:Ecobee (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
