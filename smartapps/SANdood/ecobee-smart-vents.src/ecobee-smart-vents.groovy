@@ -30,7 +30,7 @@ private def getVersionLabel() { return "Ecobee Suite Smart Vents, version ${getV
 import groovy.json.JsonSlurper
 
 definition(
-	name: "Ecobee Suite Smart Vents",
+	name: "ecobee Suite Smart Vents",
 	namespace: "SANdood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Automates SmartThings-controlled vents to meet a target temperature in a room",
