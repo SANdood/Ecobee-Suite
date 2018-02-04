@@ -27,19 +27,20 @@
  *	1.2.2	- 	Include device names in notifications
  *	1.2.3	-	Protect against LOG type errors
  *	1.2.4	-	Fix typo in turnOffHVAC
+ *	1.3.0   -   Move to SANdood namespace
  *
  */
  
-def getVersionNum() { return "1.2.4" }
-private def getVersionLabel() { return "ecobee Open Contacts version ${getVersionNum()}" }
+def getVersionNum() { return "1.3.0" }
+private def getVersionLabel() { return "Ecobee Suite Open Contacts, version ${getVersionNum()}" }
 
 definition(
-	name: "ecobee Open Contacts",
-	namespace: "smartthings",
+	name: "ecobee Suite Open Contacts",
+	namespace: "SANdood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Turn HVAC on/off based on status of contact sensors or switches",
 	category: "Convenience",
-	parent: "smartthings:Ecobee (Connect)",
+	parent: "SANdood:Ecobee Suite (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
