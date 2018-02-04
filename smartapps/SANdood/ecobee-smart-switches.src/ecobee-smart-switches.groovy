@@ -17,17 +17,18 @@
  *	1.0.3 - Updated settings and TempDisable handling
  *	1.2.0 - Sync version number with new holdHours/holdAction support
  *	1.2.1 - Protect agsinst LOG type errors
+ *	1.3.0 - Move to SANdood namespace
  */
-def getVersionNum() { return "1.2.1" }
-private def getVersionLabel() { return "ecobee Smart Switches Version ${getVersionNum()}" }
+def getVersionNum() { return "1.3.0" }
+private def getVersionLabel() { return "Ecobee Suite Smart Switches, version ${getVersionNum()}" }
 
 definition(
-	name: "ecobee Smart Switches",
-	namespace: "smartthings",
+	name: "Ecobee Suite Smart Switches",
+	namespace: "SANdood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Automates SmartThings-controlled switches, dimmers and generic vents based on thermostat operating state",
 	category: "Convenience",
-	parent: "smartthings:Ecobee (Connect)",
+	parent: "SANdood:Ecobee (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
