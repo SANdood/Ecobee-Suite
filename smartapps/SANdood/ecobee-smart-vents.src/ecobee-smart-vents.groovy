@@ -23,18 +23,19 @@
  *	1.0.9 - Close the vents if idle while in cool Mode
  *  1.2.0 - Sync version number with new holdHours/holdAction support
  *	1.2.1 - Protect against LOG type errors
+ *	1.3.0 - Move to SANdood namespace
  */
-def getVersionNum() { return "1.2.1" }
-private def getVersionLabel() { return "ecobee Smart Vents Version ${getVersionNum()}" }
+def getVersionNum() { return "1.3.0" }
+private def getVersionLabel() { return "Ecobee Suite Smart Vents, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Smart Vents",
-	namespace: "smartthings",
+	namespace: "SANdood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Automates SmartThings-controlled vents to meet a target temperature in a room",
 	category: "Convenience",
-	parent: "smartthings:Ecobee (Connect)",
+	parent: "SANdood:Ecobee (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
