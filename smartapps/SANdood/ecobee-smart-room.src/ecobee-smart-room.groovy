@@ -22,18 +22,19 @@
  *	1.0.3 - Updated settings and TempDisable handling
  *	1.2.0 - Sync version number with new holdHours/holdAction support
  *	1.2.1 - Protect against LOG type errors
+ *	1.3.0 - Move to SANdood namespace
  */
-def getVersionNum() { return "1.2.1" }
-private def getVersionLabel() { return "ecobee Smart Room Version ${getVersionNum()}" }
+def getVersionNum() { return "1.3.0" }
+private def getVersionLabel() { return "Ecobee Suite Smart Room, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
 definition(
-	name: "ecobee Smart Room",
-	namespace: "smartthings",
+	name: "ecobee Suite Smart Room",
+	namespace: "SANdood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Automates a Smart Room with sensors (ecobee sensor, door, windows, occupancy), adding/removing the room from selected climates and (optionally) opening/closing SmartThings-controlled vents.",
 	category: "Convenience",
-	parent: "smartthings:Ecobee (Connect)",
+	parent: "SANdood:Ecobee Suite (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
