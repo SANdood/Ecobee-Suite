@@ -20,11 +20,11 @@
  *	1.3.0 - Move to SANdood namespace
  *
  */
-def getVersionNum() { return "1.2.1" }
-private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
+def getVersionNum() { return "1.3.0" }
+private def getVersionLabel() { return "Ecobee Suite Smart Zones, version ${getVersionNum()}" }
 
 definition(
-	name: "ecobee Smart Zones",
+	name: "Ecobee Suite Smart Zones",
 	namespace: "SANdood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Synchronizes ecobee recirculation fan between two zones",
