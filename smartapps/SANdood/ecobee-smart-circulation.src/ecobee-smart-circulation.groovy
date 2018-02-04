@@ -33,20 +33,21 @@
  *  1.2.2 - Can now set adjustments based on temperature difference between inside (average) and outside
  *	1.2.3 - Protect against LOG type errors
  *	1.2.4 - Allow changes while thermostatMode is 'off' also
+ *	1.3.0 - Move to SANdood namespace
  *
  */
-def getVersionNum() { return "1.2.4" }
-private def getVersionLabel() { return "ecobee Smart Circulation Version ${getVersionNum()}" }
+def getVersionNum() { return "1.3.0" }
+private def getVersionLabel() { return "Ecobee Suite Smart Circulation, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
 definition(
-	name: "ecobee Smart Circulation",
-	namespace: "smartthings",
+	name: "ecobee Suite Smart Circulation",
+	namespace: "SANdood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "If a larger than configured temperature delta is found between 2 or more sensors, the minimum Fan On minutes per hour (m/hr) will be automatically adjusted.",
 	category: "Convenience",
-	parent: "smartthings:Ecobee (Connect)",
+	parent: "SANdood:Ecobee (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
