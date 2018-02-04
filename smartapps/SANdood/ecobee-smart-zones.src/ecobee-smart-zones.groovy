@@ -29,7 +29,7 @@ definition(
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Synchronizes ecobee recirculation fan between two zones",
 	category: "Convenience",
-	parent: "SANdood:Ecobee (Connect)",
+	parent: "SANdood:Ecobee Suite (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
