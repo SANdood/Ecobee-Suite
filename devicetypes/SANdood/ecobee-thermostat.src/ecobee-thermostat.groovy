@@ -59,14 +59,15 @@
  *	1.2.19 - Hard-coded thermostat commands entry points
  *	1.2.20 - Eliminate extraneous temp display between up/down arrows of multiAttributeTile
  *  1.2.21a - Fix non-temporary program changes
+ *	1.3.0 - Move to SANdood namespace
  */
 
-def getVersionNum() { return "1.2.21a" }
+def getVersionNum() { return "1.3.0" }
 private def getVersionLabel() { return "Ecobee Thermostat version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
 metadata {
-	definition (name: "Ecobee Thermostat", namespace: "smartthings", author: "SmartThings") {
+	definition (name: "Ecobee Thermostat", namespace: "SANdood", author: "Barry Burke") {
 		capability "Actuator"
 		capability "Thermostat"
         capability "Sensor"
