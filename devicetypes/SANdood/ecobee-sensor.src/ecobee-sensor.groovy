@@ -2,6 +2,7 @@
  *  Ecobee Sensor
  *
  *  Copyright 2015 Juan Risso
+ *	Copyright 2017-2018 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -27,16 +28,16 @@
  *	1.2.0  - Sync revision number with new holdHours/holdAction updates
  *	1.2.1  - Reinstated default icon for default Temperature tile
  *	1.2.2  - Added new Program icons, Awake/Wakeup attributes (not currently displayed)
- *	1.2.3  - Protect against LOG type errors
+ *	1.3.0  - Moved to SANdood namespace
  *
  */
 
-def getVersionNum() { return "1.2.3" }
+def getVersionNum() { return "1.3.0" }
 private def getVersionLabel() { return "Ecobee Sensor Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
-	definition (name: "Ecobee Sensor", namespace: "smartthings", author: "SmartThings") {
+	definition (name: "Ecobee Sensor", namespace: "SANdood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
 		capability "Sensor"
 		capability "Temperature Measurement"
 		capability "Motion Sensor"
@@ -106,8 +107,8 @@ metadata {
         valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			//state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true)
-            state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
+			state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true)
+            //state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
 		}
         
         standardTile("motion", "device.motion", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
@@ -392,7 +393,6 @@ private debugLevel(level=3) {
 private def LOG(message, level=3, child=null, logType="debug", event=false, displayEvent=false) {
 	def prefix = ""
 	if ( parent.settings.debugLevel?.toInteger() == 5 ) { prefix = "LOG: " }
-	if (logType == null) logType = 'debug'
 	if ( debugLevel(level) ) { 
     	log."${logType}" "${prefix}${message}"
         if (event) { debugEvent(message, displayEvent) }        
