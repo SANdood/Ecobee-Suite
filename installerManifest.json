@@ -11,7 +11,7 @@
 	"forumUrl": "https://community.smartthings.com/t/release-ecobee-suite-v1-3-0",
 	"docUrl": "https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
 	"releaseType": "production",
-	"keywords"": [
+	"keywords": [
 		"ecobee", 
 		"thermostat", 
 		"hvac"
