@@ -1551,7 +1551,7 @@ private def generateEventLocalParams() {
         lastPoll: lastPoll
     ]
     def LOGtype = (apiConnection == 'lost') ? 'error' : ((apiConnection == 'warn') ? 'warn' : 'info')
-    if (debugLevel(2)) LOG("generateEventLocalParams() - updating API status with: ${data}", 2, null, LOGtype)
+    if (debugLevel(2)) LOG("Updating API status with: ${data}", 2, null, LOGtype)
     settings.thermostats?.each {
     	getChildDevice(it)?.generateEvent(data)
      }
