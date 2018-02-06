@@ -1693,7 +1693,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
     boolean alertsUpdated = atomicState.alertsUpdated
     boolean runtimeUpdated = atomicState.runtimeUpdated
     boolean getWeather = atomicState.getWeather
-    String preText = /*getDebugLevel() <= 2 ? '' :*/ 'pollEcobeeAPI() - '
+    String preText = getDebugLevel() <= 2 ? '' : 'pollEcobeeAPI() - '
 	boolean somethingChanged = false
     String allMyChildren = getChildThermostatDeviceIdsString()
     String checkTherms = allMyChildren
