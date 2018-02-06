@@ -7,16 +7,16 @@
 	author: "Barry A. Burke (storageanarchy@gmail.com)",
 	description: "Free Suite to integrate your Ecobee Thermostats and Sensors with SmartThings.",
 	category: "My Apps",
-	bannerUrl: "https://raw.githubusercontent.com/tonesto7/nest-manager/master/Images/App/nst_manager_5_banner.png",   <REQUIRED>
-	forumUrl: "https://community.smartthings.com/t/release-ecobee-suite-v1-3-0",   <OPTIONAL>
-	docUrl: "http://thingsthataresmart.wiki/index.php?title=NST_Manager",  <OPTIONAL>
+	bannerUrl: "", 
+	forumUrl: "https://community.smartthings.com/t/release-ecobee-suite-v1-3-0",
+	docUrl: "https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
 	releaseType: "production",
 	keywords: [
 		"ecobee", 
 		"thermostat", 
 		"hvac"
 	],
-	notes: "change text here or html here",
+	notes: "NOTICE: Moved to SANdood namespace so that it can coexist with SmartThings stock Ecobee support. Requires COMPLETE NEW INSTALLATION for users of versions prior to 1.3.0 (Feb 2018 release).",
 	smartApps: {
 		parent: {
 			name: "Ecobee Suite (Connect)",
