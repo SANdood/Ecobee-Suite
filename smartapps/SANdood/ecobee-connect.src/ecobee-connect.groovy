@@ -50,10 +50,11 @@
  *	1.3.0f- Correct precision for C heat/cool ranges
  *	1.3.0h- Fix heat/cool Differential
  *  1.3.0i- Added org.apache.http.conn.ConnectTimeoutException handling...
+ *	1.3.0j- Changed Events order to ensure temperatureDisplay updates after connection lost
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.3.0i" }
+def getVersionNum() { return "1.3.0j" }
 private def getVersionLabel() { return "Ecobee Suite (Connect), version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -182,7 +183,6 @@ def mainPage() {
     	    }        
 	        section("Preferences") {
     	    	href ("preferencesPage", title: "Ecobee Suite Preferences", description: "Tap to review global settings")
-                LOG("In Preferences page section after preferences line", 5, null, "trace")
                 href ("askAlexaPage", title: "Ask Alexa Preferences", description: "Tap to review Ask Alexa settings")
         	}
             
@@ -1551,7 +1551,7 @@ private def generateEventLocalParams() {
         lastPoll: lastPoll
     ]
     def LOGtype = (apiConnection == 'lost') ? 'error' : ((apiConnection == 'warn') ? 'warn' : 'info')
-    if (debugLevel(2)) LOG("Updating API status with: ${data}", 2, null, LOGtype)
+    if (debugLevel(2)) LOG("Updating API status with ${data}", 2, null, LOGtype)
     settings.thermostats?.each {
     	getChildDevice(it)?.generateEvent(data)
      }
@@ -1934,7 +1934,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
                 if (runtimeUpdated && getWeather) atomicState.getWeather = false
                 if (alertsUpdated) atomicState.alertsUpdated = false
                 
-                // Not sure why this is here...it just tells the children that we are once again connected to the Ecobee API Cloud
+                // Tell the children that we are once again connected to the Ecobee API Cloud
                 if (apiConnected() != "full") {
 					apiRestored()
                     generateEventLocalParams() // Update the connection status
@@ -2740,7 +2740,7 @@ def updateThermostatData() {
         Boolean smartRecovery = false
         Boolean overCool = false
         Boolean dehumidifying = false
-        
+
         // Let's deduce if we are in Smart Recovery mode
         if (equipStatus.contains('ea')) {
         	isHeating = true
@@ -2765,7 +2765,7 @@ def updateThermostatData() {
             	equipStatus = equipStatus + ',smartRecovery'
             }
         }
-            
+        
         if (forcePoll || (equipStatus != lastEquipStatus)) {
 			if (equipStatus == 'fan') {
 				equipOpStat = 'fan only'
@@ -2827,9 +2827,21 @@ def updateThermostatData() {
         def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
         def changeOften =  atomicState.changeOften  ? atomicState.changeOften  : [:]
         //changeEquip was initialized earlier
-        
-        def data = [:]
-        
+         
+        def data = [forced: forcePoll,]				// Tell the DTH to force-update all attributes, states and tiles
+ 
+        // Equipment operating status - need to send first so that temperatureDisplay is properly updated after API connection loss/recovery
+        if (forcePoll || (lastEquipStatus != equipStatus) || (atomicState.wasConnected != isConnected)) { 
+        	atomicState.wasConnected = isConnected
+            data += [
+        		equipmentStatus: 		  equipStatus,
+            	thermostatOperatingState: thermOpStat,
+            	equipmentOperatingState:  equipOpStat,
+        	]
+            changeEquip[tid] = equipStatus
+            atomicState.changeEquip = changeEquip
+        }       
+
         // Runtime stuff that changes most frequently - we test them 1 at a time, and send only the ones that change
         // Send these first, as they generally are the reason anything else changes (so the thermostat's notification log makes sense)
 		if (forcePoll || runtimeUpdated) {
@@ -2883,17 +2895,6 @@ def updateThermostatData() {
         	]
             changeConfig[tid] = configList
             atomicState.changeConfig = changeConfig
-        }
-        
-        // Equipment operating status - I *think* this can change with either thermostat or runtime changes
-        if (/* isConnected && */ (forcePoll || (lastEquipStatus != equipStatus) || !isConnected)) { 
-            data += [
-        		equipmentStatus: 		  equipStatus,
-            	thermostatOperatingState: thermOpStat,
-            	equipmentOperatingState:  equipOpStat,
-        	]
-            changeEquip[tid] = equipStatus
-            atomicState.changeEquip = changeEquip
         }
         
 		// Thermostat configuration settinngs
@@ -2980,12 +2981,12 @@ def updateThermostatData() {
         	}            
     	}
         
-
         if (debugLevelFour) LOG("updateThermostatData() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
 
 		// it is possible that thermostatSummary indicated things have changed that we don't care about...
 		if (data != [:]) {
-        	data += [ thermostatTime:stat.thermostatTime ]
+        	data += [ thermostatTime:stat.thermostatTime, ]
+            if (forcePoll) data += [forced: false,]			// end of forced update
 //        	def DNI = [ app.id, stat.identifier ].join('.')
 //        	def tstatName = (thermostatsWithNames?.containsKey(DNI)) ? thermostatsWithNames[DNI] : null
 //            if (tstatName == null) {
