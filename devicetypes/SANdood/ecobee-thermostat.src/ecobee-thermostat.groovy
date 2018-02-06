@@ -59,10 +59,11 @@
  *	1.3.0i - Fixed param passing on up/down arrows
  *	1.3.0j - Fixed temp display between up/down arrows
  *	1.3.0  - Move to SANdood namespace
+ *	1.3.0k - Added forcedChange when parent forcePoll
  */
 
-def getVersionNum() { return "1.3.0" }
-private def getVersionLabel() { return "Ecobee Thermostat version ${getVersionNum()}" }
+def getVersionNum() { return "1.3.0k" }
+private def getVersionLabel() { return "Ecobee Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
 metadata {
@@ -308,9 +309,9 @@ metadata {
 
         // Show status of the API Connection for the Thermostat
 		standardTile("apiStatus", "device.apiConnected", width: 1, height: 1) {
-        	state "full", label: "FULL", backgroundColor: "#00A0D3", icon: "st.contact.contact.closed"
-            state "warn", label: "WARN", backgroundColor: "#FFFF33", icon: "st.contact.contact.open"
-            state "lost", label: "LOST", backgroundColor: "#ffa81e", icon: "st.contact.contact.open"
+        	state "full", label: "FULL", backgroundColor: "#44b621", icon: "st.contact.contact.closed"
+            state "warn", label: "WARN", backgroundColor: "#e86d13", icon: "st.contact.contact.open"
+            state "lost", label: "LOST", backgroundColor: "#bc2323", icon: "st.contact.contact.open"
 		}
 
 		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
@@ -773,6 +774,7 @@ def generateEvent(Map results) {
     //LOG("Debug level of parent: ${parent.settings.debugLevel}", 4, null, "debug")
 	def linkText = getLinkText(device)
     def isMetric = wantMetric()
+    def forceChange = false
 
 	def updateTempRanges = false
     def precision = device.currentValue('decimalPrecision')
@@ -801,12 +803,13 @@ def generateEvent(Map results) {
             String tempDisplay = ""
 			def eventFront = [name: name, linkText: linkText, handlerName: name]
 			def event = [:]
+            if (name == 'forced') forceChange = value
             def sendValue = value.toString() // was String
-			def isChange = (name == 'temperature') || isStateChange(device, name, sendValue)
+			def isChange = forceChange || (name == 'temperature') || isStateChange(device, name, sendValue)
             def tMode = device.currentValue('thermostatMode')
             if (name == 'thermostatMode') tMode = sendValue
             
-			switch (name) {
+			switch (name) {	
 				case 'heatingSetpoint':
                 	LOG("heatingSetpoint: ${sendValue}",3,null,'info')
                 	if (isChange) {
@@ -976,7 +979,8 @@ def generateEvent(Map results) {
 				
 				case 'humiditySetpoint':
 					if (isChange && (sendValue != '0')) {
-                    	event = eventFront + [value: sendValue, descriptionText: "Humidity setpoint is ${sendValue}%", isStateChange: true, displayed: false]
+                    	def dispValue = sendValue.replaceAll('-', "-\n")
+                    	event = eventFront + [value: dispValue, descriptionText: "Humidity setpoint is ${sendValue}%", isStateChange: true, displayed: false]
                         def hum = device.currentValue('humidity')
                         if (hum == null) hum = 0
 		            	sendEvent( name: 'humidity', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${hum}% (setpoint: ${sendValue}%)", isStateChange: false, displayed: true )
