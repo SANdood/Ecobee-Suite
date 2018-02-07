@@ -1458,6 +1458,7 @@ def pollChildren(deviceId=null,force=false) {
     } else {
     	forcePoll = atomicState.forcePoll
     }
+    
 	if (debugLevelFour) LOG("=====> pollChildren(${deviceId}) - atomicState.forcePoll(${forcePoll}) atomicState.lastPoll(${atomicState.lastPoll}) now(${now()}) atomicState.lastPollDate(${atomicState.lastPollDate})", 2, child, "trace")
     
 	if(apiConnected() == "lost") {
@@ -2566,14 +2567,14 @@ def updateThermostatData() {
         }
         
         // store the currently running event (in case we need to modify or delete it later, as in Vacation handling)
-        log.debug "before tempRunningEvent"
+        //log.debug "before tempRunningEvent"
         def tempRunningEvent = [:]
        	tempRunningEvent[tid] = (runningEvent != [:]) ? runningEvent : [:]
 		if (tempRunningEvent[tid] != [:]) {
         	if (atomicState.runningEvent) tempRunningEvent = atomicState.runningEvent + tempRunningEvent
         	atomicState.runningEvent = tempRunningEvent
 		}
-        log.debug "after tempRunningEvent"
+        //log.debug "after tempRunningEvent"
             
 		def thermostatHold = ''
         String holdEndsAt = ''
@@ -2986,7 +2987,6 @@ def updateThermostatData() {
     	}
         
         if (debugLevelFour) LOG("updateThermostatData() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
-
 		// it is possible that thermostatSummary indicated things have changed that we don't care about...
 		if (data != [:]) {
         	data += [ thermostatTime:stat.thermostatTime, ]
