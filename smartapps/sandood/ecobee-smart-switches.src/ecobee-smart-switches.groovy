@@ -24,7 +24,7 @@ private def getVersionLabel() { return "Ecobee Suite Smart Switches, version ${g
 
 definition(
 	name: "ecobee Suite Smart Switches",
-	namespace: "SANdood",
+	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Automates SmartThings-controlled switches, dimmers and generic vents based on thermostat operating state",
 	category: "Convenience",
