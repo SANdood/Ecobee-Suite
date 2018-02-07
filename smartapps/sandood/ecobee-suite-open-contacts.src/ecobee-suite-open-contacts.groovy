@@ -1,5 +1,5 @@
 /**
- *  ecobee Open Contacts
+ *  ecobee Suite Open Contacts
  *
  *  Copyright 2016 Sean Kendall Schneyer
  *	Copyright 2017 Barry A. Burke *
