@@ -86,7 +86,7 @@ definition(
 	name: "Ecobee Suite (Connect)",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy@gmail.com)",
-	description: "Connect your Ecobee thermostat(s) to SmartThings.",
+	description: "Connect your Ecobee thermostats and sensors to SmartThings, along with a Suite of Helper SmartApps.",
 	category: "My Apps",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
