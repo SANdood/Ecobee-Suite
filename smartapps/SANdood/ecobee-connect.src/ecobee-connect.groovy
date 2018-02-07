@@ -2538,7 +2538,7 @@ def updateThermostatData() {
         String scheduledClimateId = 'unknown'
 		String scheduledClimateName = 'Unknown'
         def schedClimateRef = null
-        if (program) {
+        if (program != [:]) {
         	scheduledClimateId = program.currentClimateRef 
         	schedClimateRef = program.climates.find { it.climateRef == scheduledClimateId }
             scheduledClimateName = schedClimateRef.name
@@ -2566,10 +2566,14 @@ def updateThermostatData() {
         }
         
         // store the currently running event (in case we need to modify or delete it later, as in Vacation handling)
+        log.debug "before tempRunningEvent"
         def tempRunningEvent = [:]
-       	tempRunningEvent[tid] = runningEvent ? runningEvent : [:]
-        if (atomicState.runningEvent) tempRunningEvent = atomicState.runningEvent + tempRunningEvent
-        atomicState.runningEvent = tempRunningEvent
+       	tempRunningEvent[tid] = (runningEvent != [:]) ? runningEvent : [:]
+		if (tempRunningEvent[tid] != [:]) {
+        	if (atomicState.runningEvent) tempRunningEvent = atomicState.runningEvent + tempRunningEvent
+        	atomicState.runningEvent = tempRunningEvent
+		}
+        log.debug "after tempRunningEvent"
             
 		def thermostatHold = ''
         String holdEndsAt = ''
