@@ -63,7 +63,7 @@
  */
 
 def getVersionNum() { return "1.3.0k" }
-private def getVersionLabel() { return "Ecobee Thermostat, version ${getVersionNum()}" }
+private def getVersionLabel() { return "Ecobee Thermostat version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
 metadata {
