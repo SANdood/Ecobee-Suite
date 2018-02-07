@@ -803,12 +803,12 @@ def generateEvent(Map results) {
             String tempDisplay = ""
 			def eventFront = [name: name, linkText: linkText, handlerName: name]
 			def event = [:]
-            if (name == 'forced') forceChange = value
+            if (name == 'forced') forceChange = value as Boolean            
             def sendValue = value.toString() // was String
+
 			def isChange = forceChange || (name == 'temperature') || isStateChange(device, name, sendValue)
             def tMode = device.currentValue('thermostatMode')
             if (name == 'thermostatMode') tMode = sendValue
-            
 			switch (name) {	
 				case 'heatingSetpoint':
                 	LOG("heatingSetpoint: ${sendValue}",3,null,'info')
@@ -824,7 +824,9 @@ def generateEvent(Map results) {
                             sendEvent(name: 'thermostatSetpoint', value: avg.toString(), descriptionText: "Thermostat setpoint average is ${avg}°", displayed: true, isStateChange: true)
 							objectsUpdated++
                         }
-                        Double heatAt = ((value.toDouble() - device.currentValue('heatDifferential').toDouble()).toDouble().round(precision.toInteger()))
+                        def heatDiff = device.currentValue('heatDifferential')
+                        if (heatDiff == null) heatDiff = 0.0
+                        Double heatAt = ((value.toDouble() - heatDiff.toDouble()).toDouble().round(precision.toInteger()))
                         sendEvent(name: 'heatAtSetpoint', value: heatAt, isStateChange: true, displayed: false)
                         if (!device.currentValue('thermostatOperatingState').startsWith('heat')) sendValue = heatAt.toString()
                         event = eventFront + [value: sendValue, /*descriptionText: "Heating setpoint is ${sendValue}°", */ isStateChange: true, displayed: false]
@@ -845,7 +847,9 @@ def generateEvent(Map results) {
                             sendEvent(name: 'thermostatSetpoint', value: avg.toString(), descriptionText: "Thermostat setpoint average is ${avg}°", displayed: true, isStateChange: true)
 							objectsUpdated++
                         }
-                        Double coolAt = ((value.toDouble() + device.currentValue('coolDifferential').toDouble()).toDouble().round(precision.toInteger()))
+                        def coolDiff = device.currentValue('coolDifferential')
+                        if (coolDiff == null) coolDiff = 0.0
+                        Double coolAt = ((value.toDouble() + coolDiff.toDouble()).toDouble().round(precision.toInteger()))
                         sendEvent(name: 'coolAtSetpoint', value: coolAt, isStateChange: true, displayed: false)
                         if (!device.currentValue('thermostatOperatingState').startsWith('cool')) sendValue = coolAt.toString()
                         event = eventFront + [value: sendValue, /*descriptionText: "Cooling setpoint is ${sendValue}°",*/  isStateChange: true, displayed: false]
