@@ -52,7 +52,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Setup Routines", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for this Contact/Switch Handler") {
         	label title: "Name this Handler", required: true, defaultValue: "Contact/Switch Handler"
         }
