@@ -40,7 +40,7 @@ definition(
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Turn HVAC on/off based on status of contact sensors or switches",
 	category: "Convenience",
-	parent: "SANdood:Ecobee Suite (Connect)",
+	parent: "sandood:Ecobee Suite (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
