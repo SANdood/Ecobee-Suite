@@ -40,7 +40,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Configure Smart Switches", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for Smart Switches Helper App") {
         	label title: "Name this Smart Switches Handler", required: true, defaultValue: "Smart Switches"      
         }
