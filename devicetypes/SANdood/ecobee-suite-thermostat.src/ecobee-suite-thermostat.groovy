@@ -62,7 +62,7 @@
  *	1.3.0k - Added forcedChange when parent forcePoll
  */
 
-def getVersionNum() { return "1.3.0k" }
+def getVersionNum() { return "1.3.0" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
