@@ -802,10 +802,9 @@ def generateEvent(Map results) {
             
             String tempDisplay = ""
 			def eventFront = [name: name, linkText: linkText, handlerName: name]
-			def event = [:]
-            if (name == 'forced') forceChange = value as Boolean            
+			def event = [:]           
             def sendValue = value.toString() // was String
-
+			if (name == 'forced') forceChange = sendValue as Boolean
 			def isChange = forceChange || (name == 'temperature') || isStateChange(device, name, sendValue)
             def tMode = device.currentValue('thermostatMode')
             if (name == 'thermostatMode') tMode = sendValue
