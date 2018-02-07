@@ -30,7 +30,7 @@ import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Suite Smart Room",
-	namespace: "SANdood",
+	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Automates a Smart Room with sensors (ecobee sensor, door, windows, occupancy), adding/removing the room from selected climates and (optionally) opening/closing SmartThings-controlled vents.",
 	category: "Convenience",
