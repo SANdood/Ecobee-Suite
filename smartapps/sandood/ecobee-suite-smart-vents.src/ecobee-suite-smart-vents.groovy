@@ -47,7 +47,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Configure Smart Vents", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for Smart Vents Helper") {
         	label title: "Name this Smart Vents Helper", required: true, defaultValue: "Smart Vents"      
         }
