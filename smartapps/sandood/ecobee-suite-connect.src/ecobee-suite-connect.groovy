@@ -133,7 +133,7 @@ def mainPage() {
 	}
     if (atomicState.initialized) { readyToInstall = true }
     
-	dynamicPage(name: "mainPage", title: "Welcome to ecobee (Connect)", install: readyToInstall, uninstall: false, submitOnChange: true) {
+	dynamicPage(name: "mainPage", title: "Welcome to ${getVersionLabel()}", install: readyToInstall, uninstall: false, submitOnChange: true) {
     	def ecoAuthDesc = (atomicState.authToken != null) ? "[Connected]\n" :"[Not Connected]\n"        
 		
         // If not device Handlers we cannot proceed
