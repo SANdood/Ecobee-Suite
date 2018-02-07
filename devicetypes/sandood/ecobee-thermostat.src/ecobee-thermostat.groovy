@@ -63,11 +63,11 @@
  */
 
 def getVersionNum() { return "1.3.0k" }
-private def getVersionLabel() { return "Ecobee Suite Thermostat version ${getVersionNum()}" }
+private def getVersionLabel() { return "Ecobee Thermostat version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
 metadata {
-	definition (name: "Ecobee Suite Thermostat", namespace: "SANdood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
+	definition (name: "Ecobee Thermostat", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
 		capability "Actuator"
 		capability "Thermostat"
         capability "Sensor"
