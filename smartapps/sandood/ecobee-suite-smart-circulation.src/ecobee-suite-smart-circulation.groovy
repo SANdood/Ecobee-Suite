@@ -59,7 +59,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Configure Smart Circulation", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for Smart Circulation Handler") {
         	label title: "Name this Smart Circulation Handler", required: true, defaultValue: "Smart Circulation"  
         }
