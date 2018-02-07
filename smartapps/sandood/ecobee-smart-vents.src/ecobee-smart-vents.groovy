@@ -31,7 +31,7 @@ import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Suite Smart Vents",
-	namespace: "SANdood",
+	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Automates SmartThings-controlled vents to meet a target temperature in a room",
 	category: "Convenience",
