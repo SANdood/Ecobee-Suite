@@ -25,7 +25,7 @@
 			"oAuth": true,
 			"version": "1.3.0",
 			"appSettings": { },
-			"appUrl": "smartapps/sandood/ecobee-connect.src/ecobee-connect.groovy",
+			"appUrl": "smartapps/sandood/ecobee-suite-connect.src/ecobee-connect.groovy",
 			"optional": false
 		},
 		"children": [
@@ -35,7 +35,7 @@
 				"published": true,
 				"version": "1.3.0",
 				"appSettings": { },
-				"appUrl": "smartapps/sandood/ecobee-open-contacts.src/ecobee-open-contacts.groovy",
+				"appUrl": "smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-open-contacts.groovy",
 				"optional": false
 			},
 			{
@@ -44,7 +44,7 @@
 				"published": true,
 				"version": "1.3.0",
 				"appSettings": { },
-				"appUrl": "smartapps/sandood/ecobee-routines.src/ecobee-routines.groovy",
+				"appUrl": "smartapps/sandood/ecobee-suite-routines.src/ecobee-routines.groovy",
 				"optional": false
 			},
 			{
@@ -53,7 +53,7 @@
 				"published": true,
 				"version": "1.3.0",
 				"appSettings": { },
-				"appUrl": "smartapps/sandood/ecobee-smart-circulation.src/ecobee-smart-circulation.groovy",
+				"appUrl": "smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-smart-circulation.groovy",
 				"optional": false
 			},
 			{
@@ -62,7 +62,7 @@
 				"published": true,
 				"version": "1.3.0",
 				"appSettings": { },
-				"appUrl": "smartapps/sandood/ecobee-smart-room.src/ecobee-smart-room.groovy",
+				"appUrl": "smartapps/sandood/ecobee-suite-smart-room.src/ecobee-smart-room.groovy",
 				"optional": false
 			},
 			{
@@ -71,7 +71,7 @@
 				"published": true,
 				"version": "1.3.0",
 				"appSettings": { },
-				"appUrl": "smartapps/sandood/ecobee-smart-switches.src/ecobee-smart-switches.groovy",
+				"appUrl": "smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-smart-switches.groovy",
 				"optional": false
 			},
 			{
@@ -80,7 +80,7 @@
 				"published": true,
 				"version": "1.3.0",
 				"appSettings": { },
-				"appUrl": "smartapps/sandood/ecobee-smart-vents.src/ecobee-smart-vents.groovy",
+				"appUrl": "smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-smart-vents.groovy",
 				"optional": false
 			},
 			{
@@ -89,7 +89,7 @@
 				"published": true,
 				"version": "1.3.0",
 				"appSettings": { },
-				"appUrl": "smartapps/sandood/ecobee-smart-zones.src/ecobee-smart-zones.groovy",
+				"appUrl": "smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-smart-zones.groovy",
 				"optional": false
 			}
 		]
