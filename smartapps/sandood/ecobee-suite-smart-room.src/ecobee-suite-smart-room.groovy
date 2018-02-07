@@ -46,7 +46,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Configure Smart Room", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for Smart Room Handler") {
         	label title: "Name this Smart Room Handler", required: true, defaultValue: "Smart Room"      
         }
