@@ -40,7 +40,7 @@ private def getVersionLabel() { return "ecobee Suite Routines, version ${getVers
 
 definition(
 	name: "ecobee Suite Routines",
-	namespace: "SANdood",
+	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "Change ecobee Programs based on SmartThings Routine execution or Mode changes, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
 	category: "Convenience",
