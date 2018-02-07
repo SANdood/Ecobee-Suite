@@ -12,7 +12,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	Ecobee Service Manager
+ *	Ecobee Suite Service Manager
  *
  *	Original Author: scott
  *	Date: 2013
@@ -59,25 +59,25 @@ private def getVersionLabel() { return "Ecobee Suite (Connect), version ${getVer
 private def getHelperSmartApps() {
 	return [ 
 		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",  
-            namespace: "SANdood", multiple: true, 
+            namespace: "sandood", multiple: true, 
             title: "New Contacts & Switches Handler..."],
     	[name: "ecobeeRoutinesChild", appName: "ecobee Suite Routines",  
-            namespace: "SANdood", multiple: true, 
+            namespace: "sandood", multiple: true, 
             title: "New Mode/Routine/Program Handler..."], 
         [name: "ecobeeCirculationChild", appName: "ecobee Suite Smart Circulation",
-			 namespace: "SANdood", multiple: true,
+			 namespace: "sandood", multiple: true,
 			 title: "New Smart Circulation Handler..."],
         [name: "ecobeeRoomChild", appName: "ecobee Suite Smart Room",
-        	namespace: "SANdood", multiple: true,
+        	namespace: "sandood", multiple: true,
             title: "New Smart Room Handler..."],
         [name: "ecobeeSwitchesChild", appName: "ecobee Suite Smart Switches",
-        	namespace: "SANdood", multiple: true,
+        	namespace: "sandood", multiple: true,
             title: "New Smart Switch/Dimmer/Vent Handler..."],
         [name: "ecobeeVentsChild", appName: "ecobee Suite Smart Vents",
-        	namespace: "SANdood", multiple: true,
+        	namespace: "sandood", multiple: true,
             title: "New Smart Vents Handler..."],
 		[name: "ecobeeZonesChild", appName: "ecobee Suite Smart Zones",
-			 namespace: "SANdood", multiple: true,
+			 namespace: "sandood", multiple: true,
 			 title: "New Smart Zone Handler..."]
 	]
 }
@@ -86,7 +86,7 @@ definition(
 	name: "Ecobee Suite (Connect)",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy@gmail.com)",
-	description: "Connect your Ecobee thermostat to SmartThings.",
+	description: "Connect your Ecobee thermostat(s) to SmartThings.",
 	category: "My Apps",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
