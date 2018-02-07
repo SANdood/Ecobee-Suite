@@ -820,7 +820,7 @@ def getEcobeeThermostats() {
 	atomicState.thermostatsWithNames = stats
     atomicState.statLocation = statLocation
     LOG("getEcobeeThermostats() - thermostatsWithNames: ${stats}, locations: ${statLocation}", 4, null, 'trace')
-	return stats
+	return stats.sort { it.value }
 }
 
 // Get the list of Ecobee Sensors for use in the settings pages (Only include the sensors that are tied to a thermostat that was selected)
@@ -885,6 +885,7 @@ Map getEcobeeSensors() {
 	} // end thermostats.each loop
 	
     LOG("getEcobeeSensors() - remote sensor list: ${sensorMap}", 4)
+    sensorMap = sensorMap.sort { it.value }
     atomicState.eligibleSensors = sensorMap
     atomicState.numAvailSensors = sensorMap.size() ?: 0
 	return sensorMap
@@ -1131,7 +1132,7 @@ def appHandler(evt) {
     	LOG('appHandler(touch) event, forced poll',2,null,'info')
 		atomicState.forcePoll = true
         atomicState.getWeather = true	// update the weather also
-    	pollChildren()
+    	pollChildren(null, true)
     }
 }
 
@@ -2846,28 +2847,6 @@ def updateThermostatData() {
             changeEquip[tid] = equipStatus
             atomicState.changeEquip = changeEquip
         }       
-
-        // Runtime stuff that changes most frequently - we test them 1 at a time, and send only the ones that change
-        // Send these first, as they generally are the reason anything else changes (so the thermostat's notification log makes sense)
-		if (forcePoll || runtimeUpdated) {
-        	String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
-            def oftenList = [tempTemperature,occupancy,runtime.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,humiditySetpoint,userPrecision]
-            def lastOList = []
-            lastOList = changeOften[tid]
-            if (forcePoll || !lastOList || (lastOList.size() < 9)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1] 
-            if (lastOList[0] != tempTemperature) data += [temperature: String.format("%.${apiPrecision}f", tempTemperature?.round(apiPrecision)),]
-            if (lastOList[1] != occupancy) data += [motion: occupancy,]
-            if (lastOList[2] != runtime.actualHumidity) data += [humidity: runtime.actualHumidity,]
-            // send these next two also when the userPrecision changes
-            if ((lastOList[3] != tempHeatingSetpoint) || (lastOList[8] != userPrecision)) data += [heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint?.round(userPrecision)),]
-            if ((lastOList[4] != tempCoolingSetpoint) || (lastOList[8] != userPrecision)) data += [coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint?.round(userPrecision)),]
-            if (lastOList[5] != wSymbol) data += [weatherSymbol: wSymbol]
-            if ((lastOList[6] != tempWeatherTemperature)|| (lastOList[8] != userPrecision)) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", tempWeatherTemperature?.round(userPrecision)),]
-            if (lastOList[7] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint,]
-            if (lastOList[8] != userPrecision) data+= [userPrecision: userPrecision,]
-           	changeOften[tid] = oftenList
-            atomicState.changeOften = changeOften
-		}
         
         // API link to Ecobee's Cloud status - doesn't change unless things get broken
         Integer pollingInterval = getPollingInterval() // if this changes, we recalculate checkInterval for Health Check
@@ -2985,6 +2964,29 @@ def updateThermostatData() {
         		atomicState.currentProgramName = tempProgram
         	}            
     	}
+
+        // MOVED TO THE BOTTOM because these values are dependent upon changes to states above when they get to the thermostat DTH
+        // Runtime stuff that changes most frequently - we test them 1 at a time, and send only the ones that change
+        // Send these first, as they generally are the reason anything else changes (so the thermostat's notification log makes sense)
+		if (forcePoll || runtimeUpdated) {
+        	String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
+            def oftenList = [tempTemperature,occupancy,runtime.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,humiditySetpoint,userPrecision]
+            def lastOList = []
+            lastOList = changeOften[tid]
+            if (forcePoll || !lastOList || (lastOList.size() < 9)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1] 
+            if (lastOList[0] != tempTemperature) data += [temperature: String.format("%.${apiPrecision}f", tempTemperature?.round(apiPrecision)),]
+            if (lastOList[1] != occupancy) data += [motion: occupancy,]
+            if (lastOList[2] != runtime.actualHumidity) data += [humidity: runtime.actualHumidity,]
+            // send these next two also when the userPrecision changes
+            if ((lastOList[3] != tempHeatingSetpoint) || (lastOList[8] != userPrecision)) data += [heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint?.round(userPrecision)),]
+            if ((lastOList[4] != tempCoolingSetpoint) || (lastOList[8] != userPrecision)) data += [coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint?.round(userPrecision)),]
+            if (lastOList[5] != wSymbol) data += [weatherSymbol: wSymbol]
+            if ((lastOList[6] != tempWeatherTemperature)|| (lastOList[8] != userPrecision)) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", tempWeatherTemperature?.round(userPrecision)),]
+            if (lastOList[7] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint,]
+            if (lastOList[8] != userPrecision) data+= [userPrecision: userPrecision,]
+           	changeOften[tid] = oftenList
+            atomicState.changeOften = changeOften
+		}
         
         if (debugLevelFour) LOG("updateThermostatData() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
 		// it is possible that thermostatSummary indicated things have changed that we don't care about...
