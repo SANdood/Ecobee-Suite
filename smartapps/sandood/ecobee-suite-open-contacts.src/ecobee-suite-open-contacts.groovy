@@ -32,7 +32,7 @@
  */
  
 def getVersionNum() { return "1.3.0" }
-private def getVersionLabel() { return "ecobee Suite Open Contacts, version ${getVersionNum()}" }
+private def getVersionLabel() { return "Ecobee Suite Open Contacts, version ${getVersionNum()}" }
 
 definition(
 	name: "ecobee Suite Open Contacts",
