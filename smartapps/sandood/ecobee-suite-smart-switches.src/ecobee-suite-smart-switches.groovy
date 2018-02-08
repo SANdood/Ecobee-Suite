@@ -17,10 +17,10 @@
  *	1.0.3 - Updated settings and TempDisable handling
  *	1.2.0 - Sync version number with new holdHours/holdAction support
  *	1.2.1 - Protect agsinst LOG type errors
- *	1.3.0 - Move to sandood namespace
+ *	1.3.0 - Major Release: renamed and moved to "sandood" namespace
  */
 def getVersionNum() { return "1.3.0" }
-private def getVersionLabel() { return "ecobee Suite Smart Switches, version ${getVersionNum()}" }
+private def getVersionLabel() { return "Ecobee Suite Smart Switches, version ${getVersionNum()}" }
 
 definition(
 	name: "ecobee Suite Smart Switches",
