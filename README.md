@@ -1,6 +1,6 @@
-Free Ecobee Thermostat Suite
+Free Ecobee Suite, version: 1.3.* 
 ======================================================
-Latest Version: 1.3.0 Released February 4, 2018
+Released February 8, 2018
 ---------------------------------------------
 
 >NOTE: This version of Ecobee Thermostat support and integration for SmartThings has been developed as an extension of the amazing contributions originally created by Sean Stryker (StrykerSKS). This README file is an edited/updated version of Sean's, modified to reflect the enhancements AND the GitHub paths/locations for those wanting to use my version. I have NOT yet updated all the screen shots - these currently reflect the UI of Sean's version, and not mine.
