@@ -46,7 +46,7 @@
  *	1.2.12- Added minDelta handling (for setting heat/cool setpoints)
  *	1.2.13- Minor performance optimizations
  *	1.2.14- Improved handling of locations & zipodes WRT sunrise/sunset calculations
- *	1.3.0 - Major Release: renamed and move to "sandood" namespace
+ *	1.3.0 - Major Release: renamed and move to "sandood" namespace 
  */  
 import groovy.json.JsonOutput
 
