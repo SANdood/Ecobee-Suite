@@ -20,6 +20,7 @@ Important Notice!
   - [Updating](#updating)
 - [Features](#features)
   - [Thermostat and Sensor Device User Interfaces](#features-therm-ui)
+	  - [Key Feature Explanations](#key-features)
   - [Ecobee Suite (Connect) SmartApp](#features-connect-sa)
   - [ecobee Suite Routines SmartApp](#features-routines-sa)
   - [ecobee Suite Open Contacts SmartApp](#features-opencontact-sa)
@@ -352,7 +353,7 @@ Key Highlights include:
 ### <a name="features-therm-ui">Thermostat and Sensor Device User Interfaces</a>
 The primary user interface on a day-to-day basis will be two different types of Device Handlers that are shown on the **`Things`** list under **`My Home`** in the mobile app. 
 
-#### Key Feature Explanations
+#### <a name="key-features">Key Feature Explanations</a>
 
 <b>Thermostat UI</b>
   - The main MultiAttributeTile tile now reflects additional information
