@@ -598,10 +598,11 @@ The SmartThings IDE also provides helpful insights related to the current state 
 - SmartThings IDE: <https://graph.api.smartthings.com>
 
 
------------------------------
 -------------------------
 ## <a name="reporting-issues">Reporting Issues</a>
-All issues or feature requests should be submitted to the latest release thread on the SmartThings Community. For the major release version 1.2.0, please use this thread: https://community.smartthings.com/t/release-free-ecobee-suite-version-1-2-0/94841
+All issues or feature requests should be submitted to the latest release thread on the SmartThings Community. For the major release version 1.3.0, please use this thread: https://community.smartthings.com/t/release-free-ecobee-suite-version-1-3/118319
+
+If you have complaints, please email them to me directly at either [storageanarchy@gmail.com](mailto://storageanarchy@gmail.com) or to @storageanarchy on the SmartThings Community.
 
 ## <a name="license">License<a/>
 
