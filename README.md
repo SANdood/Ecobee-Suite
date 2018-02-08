@@ -14,13 +14,27 @@ Important Notice!
   - [What's New](#whazzup)
 - [Installation](#installation)
   - [Upgrading from Prior Releases](#upgrading)
-  - [Install Device Handlers](#install-device-types)
-  - [Install SmartApp in IDE](#install-smartapp)
-  - [Install SmartApp on Device](#install-smartapp-phone)
-  - [Updating](#updating)
+  - [Installation Preparation](#install-prep)
+  - [Installing Using GitHub Integration](#github-install)
+	  - [Installing Device Handlers](#github-devices)
+	  - [Installing SmartApps](#github-smartapps)
+	  - [Enabling oAuth](#github-oauth)
+  - [Installing Manually from Code](#manual-install)
+	  - [Installing Device Handlers](#manual-devices)
+	  - [Installing Ecobee Suite (Connect)](#manual-connect)
+	  - [Endabling oAuth](#manual-oauth)
+	  - [Installing Helper SmartApps](#install-helpers)
+  - [Finalizing Installation on SmartThings Mobile](#install-mobile)
+  - [Updating the Code](#updating)
+	  - [Updating using GitHub](#github-updates)
+	  - [Updating Manually from Code](#manual-updates)
 - [Features](#features)
+  - [General Overview](#general)
   - [Thermostat and Sensor Device User Interfaces](#features-therm-ui)
-	  - [Key Feature Explanations](#key-features)
+	  - [Thermostat User Interface](#thermostat)
+	  - [Sensor User Interface](#sensor)
+	  - [SmartThings Integration](#smartthings)
+	  - [Operational Enhancements](#operational)
   - [Ecobee Suite (Connect) SmartApp](#features-connect-sa)
   - [ecobee Suite Routines SmartApp](#features-routines-sa)
   - [ecobee Suite Open Contacts SmartApp](#features-opencontact-sa)
@@ -118,7 +132,7 @@ If you are not familiar with adding your own custom devices, then be sure to fam
 
 You will also need to make sure that you have your Ecobee username and password handy. You should login to <http://www.ecobee.com/> now to ensure you have your credentials.
 
-## Installing Using GitHub Integration (Recommended Method)
+## <a name="github-install">Installing Using GitHub Integration (Recommended Method)</a>
 If this is your first time installing this new Ecobee Suite (versions 1.3.* and later) first follow these steps to link your IDE with the new Ecobee Suite repository (note: this is a new repository, different from the one used for prior versions - everyone will be required to perform these steps once to get to the new version).
 1. Login to the IDE at [ide.smartthings.com](http://ide.smartthings.com)
 2. Click on **`My Locations`** at the top of the page
@@ -131,50 +145,50 @@ If this is your first time installing this new Ecobee Suite (versions 1.3.* and 
     - Branch: **`master`**
 7. Click **`Save`**
 
-### Installing Ecobee Suite Device Handlers
+### <a name="github-devices">Installing Ecobee Suite Device Handlers</a>
 Once the Ecobee Suite repository is connected to your IDE, use the GitHub integration to install the current version into your workspace. In the IDE:
 
 8. Click **`Update from Repo`** and select the **`Ecobee-Suite`** repository we just added
 9. Find and Select **`ecobee-sensor.groovy`** and **`ecobee-thermostat.groovy`**
-10. Select **`Publish`**(bottom right of screen near the `Cancel` button)
+10. Select **`Publish`**(bottom right of screen near the **`Cancel`** button)
 11. Click **`Execute Update`**
-	- Note the response at the top of the `My Devices Handlers` page. It should be something like "**`Updated 0 devices and created 2 new devices, 2 published`**"
-	- Verify that the two devices show up in the list and are marked with Status `Published` (NOTE: You may have to reload the `My Device Handlers` screen for the devices to show up properly.)
+	- Note the response at the top of the **`My Devices Handlers`** page. It should be something like "**`Updated 0 devices and created 2 new devices, 2 published`**"
+	- Verify that the two devices show up in the list and are marked with Status **`Published`** (NOTE: You may have to reload the **`My Device Handlers`** screen for the devices to show up properly.)
 
 Once completed, you can delete the OLD device handlers if you prefer. To do so, you can select the Edit Properties icon next to each device and select Delete.
 
-### Installing Ecobee Suite SmartApps
+### <a name="github-smartapps">Installing Ecobee Suite SmartApps</a>
 Once you have both of the Ecobee Suite Device Handlers added and published in your IDE, it is time to add the Ecobee Suite SmartApps.
 
-12. Click on the `My SmartApps` tab
-13. Click `Update from Repo` and select the `**Ecobee-Suite**` repository we added earlier
-14. Select the checkboxes next to `ecobee-suite-connect.groovy`, `ecobee-suite-routines.groovy`, `ecobee-suite-open-contacts.groovy`, `ecobee-suite-smart-circulation.groovy`, `ecobee-suite-smart-room.groovy`, `ecobee-suite-smart-switches.groovy`, `ecobee-suite-smart-vents.groovy`, and `ecobee-suite-smart-zones.groovy` (all 8 SmartApps listed)
-15. Select `Publish`(bottom right of screen near the `Cancel` button)
-16. Click `Execute Update`
-	- Again, note the response at the top of the My SmartApps page. It should be something like "`Updated 0 and created 8 SmartApps, 8 published`"
-	- Verify that all 8 of the SmartApps show up in the list and are marked with Status `Published`
+12. Click on the **`My SmartApps`** tab
+13. Click **`Update from Repo`** and select the **`**Ecobee-Suite**`** repository we added earlier
+14. Select the checkboxes next to **`ecobee-suite-connect.groovy`**, **`ecobee-suite-routines.groovy`**, **`ecobee-suite-open-contacts.groovy`**, **`ecobee-suite-smart-circulation.groovy`**, **`ecobee-suite-smart-room.groovy`**, **`ecobee-suite-smart-switches.groovy`**, **`ecobee-suite-smart-vents.groovy`**, and **`ecobee-suite-smart-zones.groovy`** (all 8 SmartApps listed)
+15. Select **`Publish`**(bottom right of screen near the `Cancel` button)
+16. Click **`Execute Update`**
+	- Again, note the response at the top of the My SmartApps page. It should be something like "**`Updated 0 and created 8 SmartApps, 8 published`**"
+	- Verify that all 8 of the SmartApps show up in the list and are marked with Status **`Published`**
 
-### Enabling oAuth for `Ecobee Suite (Connect)`
+### <a name="github-oauth">Enabling oAuth for `Ecobee Suite (Connect)`</a>
 Finally, we must enable oAuth for the connector SmartApp as follows:
 
 **NOTE: This is the most commonly missed set of steps, but failing to enable OAuth will generate cryptic errors later when you try to use the SmartApp. *So please don't skip these steps.***
 
-17. Locate the `Ecobee (Connect)` SmartApp from the list and Click on the `Edit Properties` button to the left of the SmartApp that we just added (looks like pencil on a paper)
-18. Click on the `oAuth` tab (
-19. Click `Enable oAuth in Smart App`
-20. Click `Update` (bottom left of screen)
-21. Verify that `Updated SmartApp` appears at the top of the screen
+17. Locate the **`Ecobee (Connect)`** SmartApp from the list and Click on the **`Edit Properties`** button to the left of the SmartApp that we just added (looks like pencil on a paper)
+18. Click on the **`oAuth`** tab (
+19. Click **`Enable oAuth in Smart App`**
+20. Click **`Update`** (bottom left of screen)
+21. Verify that **`Updated SmartApp`** appears at the top of the screen
 
-That's it - you are now all set to skip down to [install the Ecobee Suite from your mobile device](#install-smartapp-phone).
+That's it - you are now all set to skip down to [install the Ecobee Suite from your mobile device](#mobile).
 
 **REMINDER:** The entire Ecobee Suite is installed using the Ecobee Suite (Connect) SmartApp. You should not attempt to install the individual devices or SmartApps directly - this will undoubtedly result in a failed installation, and you may require assistance from SmartThings support to recover if you don't follow these instructions.
 
 Once completed, you can delete the OLD SmartApps if you prefer. To do so, you can select the Edit Properties icon next to each of the old SmartApps (the ones NOT in the "sandood" namespace) and select Delete.
 
-## Installing Manually from Code
+## <a name="manual-install">Installing Manually from Code</a>
 For this method it is recommended that you have one browser window open on GitHub and another on the IDE. If you have used the GitHub installation method above, you can skip this section and [proceed to completing the installation on your mobile device](#install-smartapp-phone).
 
-### Installing Ecobee Suite Device Handlers Manually
+### <a name="manual-devices">Installing Ecobee Suite Device Handlers Manually</a>
 Follow these steps to install the **`Ecobee Sensor`** Device Handler:
 1. Login to the IDE at [ide.smartthings.com](http://ide.smartthings.com)
 2. [IDE] Click on **`My Locations`** at the top of the page
@@ -206,7 +220,7 @@ Follow these steps to install the **`Ecobee Thermostat`** Device Handler:
 
 Once completed, you can delete the OLD device handlers if you prefer. To do so, you can select the Edit Properties icon next to each device and select Delete.
 
-### Installing `Ecobee Suite (Connect)` Manually from Code
+### <a name="manual-connect">Installing `Ecobee Suite (Connect)` Manually from Code</a>
 Again, it is recommended to have one browser window open on GitHub and another on the IDE.
 
 Follow these steps to add the **`Ecobee Suite (Connect)`** SmartApp to your IDE:
@@ -222,7 +236,7 @@ Follow these steps to add the **`Ecobee Suite (Connect)`** SmartApp to your IDE:
 11. [IDE] Click **`Save`**
 12. [IDE] Click **`Publish`** --> **`For Me`**
 
-### Enabling oAuth for `Ecobee Suite (Connect)`
+### <a name="manual-oauth">Enabling oAuth for `Ecobee Suite (Connect)`</a>
 Finally, we must enable oAuth for the connector SmartApp as follows:
 
 **NOTE: This is the most commonly missed set of steps, but failing to enable OAuth will generate cryptic errors later when you try to use the SmartApp. *So please don't skip these steps.***
@@ -235,10 +249,10 @@ Finally, we must enable oAuth for the connector SmartApp as follows:
 18. [IDE] Click **`Update`** (bottom left of screen)
 19. [IDE] Verify that **`Updated SmartApp`** appears at the top of the screen
 
-### Installing the Ecobee Suite Helper SmartApps Manually from Code
+### <a name="manual-helpers">Installing the Ecobee Suite Helper SmartApps Manually from Code</a>
 Follow these steps to add the Helper SmartApps to your IDE, one at a time (links to Raw Source Code are provided below):
 
-**NOTE:** It is mandatory that you add ALL of the available Helper SmartApps, or `Ecobee Suite (Connect)` will fail with an error.
+**NOTE:** It is mandatory that you add ALL of the available Helper SmartApps, or **`Ecobee Suite (Connect)`** will fail with an error.
 20. [IDE] Click on the **`My SmartApps`** tab
 21. [IDE] Click **`New SmartApp`** (top right corner)
 22. [IDE] Click **`From Code`**
@@ -264,7 +278,7 @@ G. [`ecobee Smart Zones`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite
 
 Once completed, you can delete the OLD SmartApps if you prefer. To do so, you can select the Edit Properties icon next to each of the old SmartApps (the ones NOT in the "sandood" namespace) and select Delete.
 
-## <a name="install-smartapp-phone">Install and Run `Ecobee Suite (Connect)` SmartApp on Phone/Tablet</a>
+## <a name="install-mobile">Finalizing Installation on SmartThings Mobile</a>
 
 The final steps for installing the Ecobee Suite Device Handlers and SmartApps is completed entirely using the Ecobee Suite (Connect) SmartApp. The SmartApp will guide you through the basic installation and setup process. It includes the following aspects:
 - Authentication with Ecobee to allow API Calls for your thermostat(s) (and connected sensors)
@@ -310,10 +324,10 @@ Using the default settings is fine, but some of the more advanced features will 
 
 
 -------------------------
-## Updating
+## <a name="updating">Updating the Code</a>
 If you have enabled GitHub integration with the SmartThings IDE, then updates are a breeze. Otherwise the steps are a bit more manual but not too complicated.
 
-### Updating with GitHub Integration
+### <a name="github-updates">Updating with GitHub Integration</a>
 The IDE provides visual cues to alert you that any device types or SmartApps have been updated in their upstream repositories. See the [GitHub/IDE integration guide](http://docs.smartthings.com/en/latest/tools-and-ide/github-integration.html) for more details on the different colors.
 
 Once you have determined that an update is available, follow these steps:
@@ -329,7 +343,7 @@ Once you have determined that an update is available, follow these steps:
 
 You should now be running on the updated code. Be sure that you check for both updates of the SmartApp **and** the Device Type. Updating one but not the other could cause compatibility problems.
 
-### Updating manually (without GitHub Integration)
+### <a name="manual-updates">Updating manually</a>
 
 To update manually, you will need to "cut & paste" the raw code from GitHub into the SmartThings IDE, Save and Publish the code. I will leave it to the reader to work through the full individual steps, but the links to the code are the same as those that were used during the initial install process.
 
@@ -337,7 +351,7 @@ Note that there are EIGHT SmartApps and TWO Device Handlers in this suite. For p
 
 --------------------------
 ## <a name="features">Features</a>
-### General
+### <a name="general">General</a>
 This collection of SmartApps and Device Handlers has been designed for simple installation, flexibile configuration options and easy operation. It is also extensible through the use of Child SmartApps that can easily be added to the configuration. **And it fully implements the related [SmartThings Capabilities](http://docs.smartthings.com/en/latest/capabilities-reference.html).**
 
 Key Highlights include:
@@ -353,9 +367,7 @@ Key Highlights include:
 ### <a name="features-therm-ui">Thermostat and Sensor Device User Interfaces</a>
 The primary user interface on a day-to-day basis will be two different types of Device Handlers that are shown on the **`Things`** list under **`My Home`** in the mobile app. 
 
-#### <a name="key-features">Key Feature Explanations</a>
-
-<b>Thermostat UI</b>
+#### <a name="thermostat">Thermostat UI</a>
   - The main MultiAttributeTile tile now reflects additional information
     - Background colors match Ecobee3 thermostat colors for Idle (magenta), Heat (orange) & Cool (blue), and Fan Only (green) and Offline (red) are added
     - Displays (Smart Recovery) when heating/cooling in advance of a Program change
@@ -382,14 +394,14 @@ The primary user interface on a day-to-day basis will be two different types of 
     - If pressed once, will only request the latest updates from the Ecobee Cloud
     - If pressed a second time within a few seconds of the first press completing, will force a full update from the Ecobee Cloud
    
-<b>Sensor UI Feature Enhancements</b>
+#### <a neme="sensor">Sensor UI</a>
   -	A new multiAttributeTile replaces the old presentation, with motion displayed at the bottom left corner
   - Now displays the parent thermostat current Program within each Sensor device
   - New mini-icons indicate which of the 3 default programs (Home, Away, Sleep) the sensor is included in
     - The sensor can be added or removed from a Program by tapping these mini icons
   - Includes 4 new blank mini-tiles that are utilized by the new Smart Room Helper App
 	
-<b>SmartThings Integration</b>
+#### <a name="smartthings">SmartThings Integration</a>
   - Messages sent to the Device notification log (found under the Recently tab of a Device) are now optimized, most with associated colored icons 
   - All current Attributes and Capabilities of Thermostat devices are supported
   - Most Ecobee Settings Object variables are are now available as Attributes of a Thermostat (so things like WebCoRE can see and use them) 
@@ -400,7 +412,7 @@ The primary user interface on a day-to-day basis will be two different types of 
     - Delete the current Vacation
     - Change the minimum fan on time for both the current running Program and current Vacation event
 
-<b>Operational Enhancements</b>
+#### <a name="operational">Operational Enhancements</a>
 
   - **Operational Efficiency**
     - Redesigned to do only lightweight polls of the Ecobee Cloud before requesting updates
@@ -431,7 +443,8 @@ NOTE: You will not be able to configure Ask Alexa support until you have fully i
 
 - This feature will evolve over the coming months to include more control over what gets sent to Ask Alexa and to support Notifications Only. So stay tuned!
 
-Screenshots of both the **`Ecobee Thermostat`** and the **`Ecobee Sensor`** are shown below (OLD versions - new screeenshots coming soon).
+Screenshots of both the **`Ecobee Thermostat`** and the **`Ecobee Sensor`** are shown below (OLD versions - new screenshots coming soon).
+
 ------------------------------------------------------------------------------------
 
 `Ecobee Thermostat` Device |  `Ecobee Thermostat` Device w/ Annotation
@@ -465,7 +478,7 @@ The SmartApp provides the following capabilities:
 
 
 ## <a name="features-routines-sa">`Mode/Routine/Program` Handler</a>
-The `ecobee Suite Routines` SmartApp (aka `ecobee Suite Routines`) provides the ability to change the running Program (Comfort Setting) when a SmartThings Mode is changed (for example, by running a Routine) or a Routine is run. 
+The `ecobee Suite Routines` SmartApp provides the ability to change the running Program (Comfort Setting) when a SmartThings Mode is changed (for example, by running a Routine) or a Routine is run. 
 
 <b>Features:</b>
 - Change one or multiple thermostats
