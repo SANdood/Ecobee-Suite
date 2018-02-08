@@ -46,15 +46,11 @@
  *	1.2.12- Added minDelta handling (for setting heat/cool setpoints)
  *	1.2.13- Minor performance optimizations
  *	1.2.14- Improved handling of locations & zipodes WRT sunrise/sunset calculations
- *	1.3.0 - Major Release: Optimized heat/coolSetpoint UI and API
- *	1.3.0f- Correct precision for C heat/cool ranges
- *	1.3.0h- Fix heat/cool Differential
- *  1.3.0i- Added org.apache.http.conn.ConnectTimeoutException handling...
- *	1.3.0j- Changed Events order to ensure temperatureDisplay updates after connection lost
+ *	1.3.0 - Major Release: renamed and move to "sandood" namespace
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.3.0j" }
+def getVersionNum() { return "1.3.0" }
 private def getVersionLabel() { return "Ecobee Suite (Connect), version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1132,7 +1128,7 @@ def appHandler(evt) {
     	LOG('appHandler(touch) event, forced poll',2,null,'info')
 		atomicState.forcePoll = true
         atomicState.getWeather = true	// update the weather also
-    	pollChildren(null, true)
+    	pollChildren(null, true)		// double force-poll
     }
 }
 
@@ -1459,7 +1455,6 @@ def pollChildren(deviceId=null,force=false) {
     } else {
     	forcePoll = atomicState.forcePoll
     }
-    
 	if (debugLevelFour) LOG("=====> pollChildren(${deviceId}) - atomicState.forcePoll(${forcePoll}) atomicState.lastPoll(${atomicState.lastPoll}) now(${now()}) atomicState.lastPollDate(${atomicState.lastPollDate})", 2, child, "trace")
     
 	if(apiConnected() == "lost") {
@@ -2847,7 +2842,7 @@ def updateThermostatData() {
             changeEquip[tid] = equipStatus
             atomicState.changeEquip = changeEquip
         }       
-        
+
         // API link to Ecobee's Cloud status - doesn't change unless things get broken
         Integer pollingInterval = getPollingInterval() // if this changes, we recalculate checkInterval for Health Check
         def cloudList = [lastPoll,apiConnection,pollingInterval,isConnected]
@@ -2962,9 +2957,9 @@ def updateThermostatData() {
                 tempProgram[tid] = currentClimateName
         		if (atomicState.currentProgramName) tempProgram = atomicState.currentProgramName + tempProgram
         		atomicState.currentProgramName = tempProgram
-        	}            
+        	}     
     	}
-
+        
         // MOVED TO THE BOTTOM because these values are dependent upon changes to states above when they get to the thermostat DTH
         // Runtime stuff that changes most frequently - we test them 1 at a time, and send only the ones that change
         // Send these first, as they generally are the reason anything else changes (so the thermostat's notification log makes sense)
@@ -2973,22 +2968,23 @@ def updateThermostatData() {
             def oftenList = [tempTemperature,occupancy,runtime.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,humiditySetpoint,userPrecision]
             def lastOList = []
             lastOList = changeOften[tid]
-            if (forcePoll || !lastOList || (lastOList.size() < 9)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1] 
+            if (forcePoll || !lastOList || (lastOList.size() < 9)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1]
+            if (lastOList[8] != userPrecision) data+= [decimalPrecision: userPrecision,]															// send first so that DTH uses the latest setting
             if (lastOList[0] != tempTemperature) data += [temperature: String.format("%.${apiPrecision}f", tempTemperature?.round(apiPrecision)),]
             if (lastOList[1] != occupancy) data += [motion: occupancy,]
             if (lastOList[2] != runtime.actualHumidity) data += [humidity: runtime.actualHumidity,]
+            if (lastOList[7] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint,]
             // send these next two also when the userPrecision changes
             if ((lastOList[3] != tempHeatingSetpoint) || (lastOList[8] != userPrecision)) data += [heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint?.round(userPrecision)),]
             if ((lastOList[4] != tempCoolingSetpoint) || (lastOList[8] != userPrecision)) data += [coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint?.round(userPrecision)),]
             if (lastOList[5] != wSymbol) data += [weatherSymbol: wSymbol]
             if ((lastOList[6] != tempWeatherTemperature)|| (lastOList[8] != userPrecision)) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", tempWeatherTemperature?.round(userPrecision)),]
-            if (lastOList[7] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint,]
-            if (lastOList[8] != userPrecision) data+= [userPrecision: userPrecision,]
            	changeOften[tid] = oftenList
             atomicState.changeOften = changeOften
 		}
         
         if (debugLevelFour) LOG("updateThermostatData() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
+
 		// it is possible that thermostatSummary indicated things have changed that we don't care about...
 		if (data != [:]) {
         	data += [ thermostatTime:stat.thermostatTime, ]
