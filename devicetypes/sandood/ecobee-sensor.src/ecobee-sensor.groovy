@@ -28,12 +28,12 @@
  *	1.2.0  - Sync revision number with new holdHours/holdAction updates
  *	1.2.1  - Reinstated default icon for default Temperature tile
  *	1.2.2  - Added new Program icons, Awake/Wakeup attributes (not currently displayed)
- *	1.3.0  - Moved to SANdood namespace
+ *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
  *
  */
 
 def getVersionNum() { return "1.3.0" }
-private def getVersionLabel() { return "Ecobee Sensor Version ${getVersionNum()}" }
+private def getVersionLabel() { return "Ecobee Sensor, Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {

@@ -33,11 +33,11 @@
  *  1.2.2 - Can now set adjustments based on temperature difference between inside (average) and outside
  *	1.2.3 - Protect against LOG type errors
  *	1.2.4 - Allow changes while thermostatMode is 'off' also
- *	1.3.0 - Move to SANdood namespace
+ *	1.3.0 - Major release: renamed and moved to "sandood" namespace
  *
  */
 def getVersionNum() { return "1.3.0" }
-private def getVersionLabel() { return "ecobee Suite Smart Circulation, version ${getVersionNum()}" }
+private def getVersionLabel() { return "Ecobee Suite Smart Circulation, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
