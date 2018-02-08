@@ -51,7 +51,7 @@ Important Notice!
 ## <a name="intro">Introduction</a>
 This document describes the various features related to the Ecobee Suite of Device Handlers and supporting Helper SmartApps for Ecobee thermostats and sensors. 
 
-The following components are part of the solution:
+The following components are part of the Suite:
 - **Ecobee Suite (Connect) SmartApp**: This SmartApp provides a single interface for Ecobee Installation, Authorization, Device Setup (both Thermostats **and** Sensors), Behavioral Settings and even a Debug Dashboard. Additional features can be added over time as well thanks to built in support for Child SmartApps, keeping everything nicely integrated into one app. 
 
    ***IMPORTANT**: This is the "parent" SmartApp to the entire Ecobee Suite - **users should not install any instances of the other SmartApps or devices**, neither on their mobile devices nor in the IDE.*
