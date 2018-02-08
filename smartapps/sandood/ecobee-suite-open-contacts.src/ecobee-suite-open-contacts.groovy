@@ -27,7 +27,7 @@
  *	1.2.2	- 	Include device names in notifications
  *	1.2.3	-	Protect against LOG type errors
  *	1.2.4	-	Fix typo in turnOffHVAC
- *	1.3.0   -   Move to sandood namespace
+ *	1.3.0   -   Major Release: renamed and moved to "sandood" namespace
  *
  */
  
