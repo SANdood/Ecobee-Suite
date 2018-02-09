@@ -48,6 +48,13 @@ Important Notice!
   - [Reporting Issues](#reporting-issues)
 - - [Quick Links](#quicklinks)
 - [License](#license)
+- [Integrating With Ecobee Suite Devices](#integration)
+  - [Supported Device Attributes](#attributes)
+  - [Supported Commands](#commands)
+	  - [Changing Programs](#changeprogram)
+	  - [Changing Thermostat Modes](#changingmode)
+	  - [Changing Thermostat Fan Modes](#changingfan)
+	  - [Complex Commands Requiring Arguments](#complex)
 
 ## <a name="intro">Introduction</a>
 This document describes the various features related to the Ecobee Suite of Device Handlers and supporting Helper SmartApps for Ecobee thermostats and sensors. 
@@ -612,11 +619,14 @@ The SmartThings IDE also provides helpful insights related to the current state 
 - SmartThings IDE: <https://graph.api.smartthings.com>
 
 
--------------------------
+----------------------------------------------
+
 ## <a name="reporting-issues">Reporting Issues</a>
 All issues or feature requests should be submitted to the latest release thread on the SmartThings Community. For the major release version 1.3.0, please use this thread: https://community.smartthings.com/t/release-free-ecobee-suite-version-1-3/118319
 
 If you have complaints, please email them to me directly at either [storageanarchy@gmail.com](mailto://storageanarchy@gmail.com) or to @storageanarchy on the SmartThings Community.
+
+------------------------------------------------------------------
 
 ## <a name="license">License<a/>
 
@@ -624,3 +634,153 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may not use 
       http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+----------------------------------------------------
+
+## <a name="integration">Integrating With Ecobee Suite Devices</a>
+The Ecobee Suite's thermostat devices can be leveraged by other SmartApps and by WebCoRE automations in a variety of ways. The provided Ecobee Thermostat DTH implements the following SmartThings capability sets completely (click each capability for the SmartThings Developer Documentation describing each capability):
+
+- [Actuator](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Actuator)
+- Health Check
+- [Motion Sensor](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Motion-Sensor)
+- [Refresh](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Refresh)
+- [Relative Humidity Measurement](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Relative-Humidity-Measurement)
+- [Sensor](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Sensor)
+- [Temperature Measurement](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Temperature-Measurement)
+- [Thermostat](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Thermostat)
+- [Thermostat Cooling Setpoint](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Thermostat-Cooling-Setpoint)
+- [Thermostat Fan Mode](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Thermostat-Fan-Mode)
+- [Thermostat Heating Setpoint](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Thermostat-Heating-Setpoint)
+- [Thermostat Mode](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Thermostat-Mode)
+- [Thermostat Operating State](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Thermostat-Operating-State)
+- [Thermostat Setpoint](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Thermostat-Setpoint)
+
+It is thus possible to subscribe to state changes associated with these capabilities, and to send commands to the devices using the standard command sets these capabilities define.
+
+Because the current SmartThings defined capabilities do not fully expose ALL of the native capabilities of Ecobee thermostats, several additional attributes (states) and commands have been added. 
+
+-----------------------------
+
+### <a name="attributes">Supported Device Attributes (States)</a>
+Here is the complete list of attributes (states) that the DTH maintains and exposes (items in italics are added, and/or have overloaded meanings from the SmartThings definitions):
+
+*apiConnected: full*
+*autoMode: true*
+*auxHeatMode: false*
+checkInterval: 960
+*coolAtSetpoint: 74.5*
+*coolDifferential: 0.5*
+coolingSetpoint: 74.5
+*coolingSetpointDisplay: 74.0*
+coolingSetpointMax: 92.0
+coolingSetpointMin: 65.0
+coolingSetpointRange: [65.0, 92.0]
+*coolMode: true*
+coolRange: (65..92)
+coolRangeHigh: 92.0
+coolRangeLow: 65.0
+*coolStages: 1*
+*currentProgram: Home*
+*currentProgramId: home*
+*currentProgramName: Hold: Home*
+*debugEventFromParent: setProgram(Home) for EcoTherm: Downstairs)**decimalPrecision: 1*
+*ecobeeConnected: true*
+*equipmentOperatingState: idle*
+*equipmentStatus: idle*
+*fanMinOnTime: 50*
+*hasBoiler: false*
+*hasDehumidifier: true*
+*hasElectric: false*
+*hasForcedAir: true*
+*hasHeatPump: false*
+*hasHumidifier: true*
+*heatAtSetpoint: 68.5*
+*heatCoolMinDelta: 4.0*
+*heatDifferential: 0.5*
+*heatingSetpoint: 68.5*
+*heatingSetpointDisplay: 69.0*
+heatingSetpointMax: 78.0
+heatingSetpointMin: 45.0
+heatingSetpointRange: [45.0, 78.0]
+*heatMode: true*
+*heatRange: (45..78)*
+heatRangeHigh: 78.0
+heatRangeLow: 45.0
+*heatStages: 2*
+*holdStatus: Hold ends today at 6:30pm*
+humidity: 41
+*humiditySetpoint: 42*
+*lastPoll: Succeeded*
+motion: inactive
+*newCoolSetpoint: 0.0*
+*newHeatSetpoint: 0.0*
+programsList: ["Away", "Home", "Sleep", "Awake"]
+*scheduledProgram: Away*
+*scheduledProgramId: away*
+*scheduledProgramName: Away*
+*setpointDisplay: 68.0°*
+*statHoldAction: nextPeriod*
+supportedThermostatFanModes: [on, auto, circulate, off]
+supportedThermostatModes: [off, heat, auto, cool]
+temperature: 68.7
+*temperatureDisplay: 68.7°*
+*temperatureScale: F*
+thermostatFanMode: auto
+*thermostatFanModeDisplay: circulate*
+*thermostatHold: hold*
+thermostatMode: heat
+thermostatOperatingState: idle
+*thermostatOperatingStateDisplay: idle*
+thermostatSetpoint: 69.0
+thermostatSetpointMax: 78.0
+thermostatSetpointRange: [null, 78.0]
+*thermostatStatus: Setpoint updating...*
+*thermostatTime: 2018-02-09 17:00:23*
+*timeOfDay: day*
+*weatherSymbol: 0*
+*weatherTemperature: 27.9*
+
+---------------------------------------------------
+
+### <a name="commands">Supported Commands</a>
+
+The complete set of thermostat DTH commands that can be called programmatically is:
+
+#### <a name="changeprogram">Changing Programs</a>
+- **home** - change to the "Home" program
+- **present** - change to the "Home" program (for compatibility with Nest smart thermostats)
+- **asleep** - change to the "Sleep" program
+- **night** - change to the "Sleep" program
+- **away** - change to the "Away" program
+- **wakeup** - change to the "Wakeup" program
+- **awake** - change to the "Awake" program
+- **resumeProgram** - return to the regularly scheduled program
+
+Calling any of the above will initiate a Hold for the requested program for the currently specified duration (Permanent, Until I Change, 2 Hours, 4 Hours, etc.). If the duration is Until I Change (temporary) and the requested program is the same as the current program, resumeProgram is effected instead to return to the scheduled program.
+
+#### <a name="changemode">Changing Thermostat Modes</a>
+- **off** - turns off the thermostat/HVAC. Note, however, if the Fan Minimum On Time is not zero when this is called, the HVAC will turn off, but the fan will remain in circulate mode. Thus, to turn the HVAC *completely* off, you should first call **fanOff**, then **off**
+- **auto** - puts HVAC into Auto mode, where either Heating or Cooling can be supplied, based upon the internal temperature and the heat/cool setpoint values
+- **cool** - puts HVAC into Cooling (only) mode
+- **heat** - puts HVAC into Heating (only) mode
+- **emergencyHeat** - for HVAC systems supporting auxiliary heat (usually heat-pump systems), turns on  auxiliary heating
+- **emergency** - ditto emergencyHeat
+- **auxHeatOnly** - ditto emergencyHeat
+
+#### <a name="changefan">Changing Fan Operating Modes</a>
+- **fanOff** - turns the fan completely off. If Fan Minimum On Time is non-zero, it will be reset to zero
+- **fanAuto** - sets the fan to operate "on-demand" whenever heating or cooling
+- **fanCirculate** - same as fanAuto, except the Fan Minimum On Time is non-zero
+- **fanOn** - runs the fan continuously
+
+#### <a name="complex">Complex Commands Requiring Arguments</a>
+The following command entry points require multiple arguments, and so are most optimally utilized by SmartApps that can construct the required arguments. Specifically, I have not heard of anyone successfully utilizing these from WebCoRE. If you want to try using them, I suggest you review the DTH code directly to understand the required argument structure.
+
+- **setCoolingSetpoint** - change the cooling setpoint (will create a Temperature Hold); specify temperature in F or C, based on how you have configured the Ecobee Suite and Thermostat (both should agree)
+- **setHeatingSetpoint** - ditto, but for heating setpoint
+- **setThermostatProgram** - use to change to custom Programs/Climates other than the ones defined above
+- **setFanMinOnTime** - used to set a custom number of minutes for the Fan Minimum On Time circulation mode
+- **setVacationFanMinOnTime** - ditto, but for a vacation
+- **scheduleVacation** - define a vacation programmatically 
+- **deleteVacation** - delete a previously defined vacation
+- **cancelVacation** - cancel the currently active vacation (if any)
