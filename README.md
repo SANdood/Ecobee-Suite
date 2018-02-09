@@ -662,84 +662,84 @@ Because the current SmartThings defined capabilities do not fully expose ALL of 
 -----------------------------
 
 ### <a name="attributes">Supported Device Attributes (States)</a>
-Here is the complete list of attributes (states) that the DTH maintains and exposes (items in italics are added, and/or have overloaded meanings from the SmartThings definitions):
-
-> *apiConnected: full*
-> *autoMode: true*
-> *auxHeatMode: false*
-> checkInterval: 960
-> *coolAtSetpoint: 74.5*
-> *coolDifferential: 0.5*
-> coolingSetpoint: 74.5
-> *coolingSetpointDisplay: 74.0*
-> coolingSetpointMax: 92.0
-> coolingSetpointMin: 65.0
-> coolingSetpointRange: [65.0, 92.0]
-> *coolMode: true*
-> coolRange: (65..92)
-> coolRangeHigh: 92.0
-> coolRangeLow: 65.0
-> *coolStages: 1*
-> *currentProgram: Home*
-> *currentProgramId: home*
-> *currentProgramName: Hold: Home*
-> *debugEventFromParent: setProgram(Home) for EcoTherm: Downstairs)**decimalPrecision: 1*
-> *ecobeeConnected: true*
-> *equipmentOperatingState: idle*
-> *equipmentStatus: idle*
-> *fanMinOnTime: 50*
-> *hasBoiler: false*
-> *hasDehumidifier: true*
-> *hasElectric: false*
-> *hasForcedAir: true*
-> *hasHeatPump: false*
-> *hasHumidifier: true*
-> *heatAtSetpoint: 68.5*
-> *heatCoolMinDelta: 4.0*
-> *heatDifferential: 0.5*
-> *heatingSetpoint: 68.5*
-> *heatingSetpointDisplay: 69.0*
-> heatingSetpointMax: 78.0
-> heatingSetpointMin: 45.0
-> heatingSetpointRange: [45.0, 78.0]
-> *heatMode: true*
-> *heatRange: (45..78)*
-> heatRangeHigh: 78.0
-> heatRangeLow: 45.0
-> *heatStages: 2*
-> *holdStatus: Hold ends today at 6:30pm*
-> humidity: 41
-> *humiditySetpoint: 42*
-> *lastPoll: Succeeded*
-> motion: inactive
-> *newCoolSetpoint: 0.0*
-> *newHeatSetpoint: 0.0*
-> programsList: ["Away", "Home", "Sleep", "Awake"]
-> *scheduledProgram: Away*
-> *scheduledProgramId: away*
-> *scheduledProgramName: Away*
-> *setpointDisplay: 68.0°*
-> *statHoldAction: nextPeriod*
-> supportedThermostatFanModes: [on, auto, circulate, off]
-> supportedThermostatModes: [off, heat, auto, cool]
-> temperature: 68.7
-> *temperatureDisplay: 68.7°*
-> *temperatureScale: F*
-> thermostatFanMode: auto
-> *thermostatFanModeDisplay: circulate*
-> *thermostatHold: hold*
-> thermostatMode: heat
-> thermostatOperatingState: idle
-> *thermostatOperatingStateDisplay: idle*
-> thermostatSetpoint: 69.0
-> thermostatSetpointMax: 78.0
-> thermostatSetpointRange: [null, 78.0]
-> *thermostatStatus: Setpoint updating...*
-> *thermostatTime: 2018-02-09 17:00:23*
-> *timeOfDay: day*
-> *weatherSymbol: 0*
-> *weatherTemperature: 27.9*
-
+Here is the complete list of attributes (states) that the DTH maintains and exposes (items marked with asterisks are added, and/or have overloaded meanings from the SmartThings definitions):
+    
+    *apiConnected: full*
+    *autoMode: true*
+    *auxHeatMode: false*
+    checkInterval: 960
+    *coolAtSetpoint: 74.5*
+    *coolDifferential: 0.5*
+    coolingSetpoint: 74.5
+    *coolingSetpointDisplay: 74.0*
+    coolingSetpointMax: 92.0
+    coolingSetpointMin: 65.0
+    coolingSetpointRange: [65.0, 92.0]
+    *coolMode: true*
+    coolRange: (65..92)
+    coolRangeHigh: 92.0
+    coolRangeLow: 65.0
+    *coolStages: 1*
+    *currentProgram: Home*
+    *currentProgramId: home*
+    *currentProgramName: Hold: Home*
+    *debugEventFromParent: setProgram(Home) for EcoTherm: Downstairs)**decimalPrecision: 1*
+    *ecobeeConnected: true*
+    *equipmentOperatingState: idle*
+    *equipmentStatus: idle*
+    *fanMinOnTime: 50*
+    *hasBoiler: false*
+    *hasDehumidifier: true*
+    *hasElectric: false*
+    *hasForcedAir: true*
+    *hasHeatPump: false*
+    *hasHumidifier: true*
+    *heatAtSetpoint: 68.5*
+    *heatCoolMinDelta: 4.0*
+    *heatDifferential: 0.5*
+    *heatingSetpoint: 68.5*
+    *heatingSetpointDisplay: 69.0*
+    heatingSetpointMax: 78.0
+    heatingSetpointMin: 45.0
+    heatingSetpointRange: [45.0, 78.0]
+    *heatMode: true*
+    *heatRange: (45..78)*
+    heatRangeHigh: 78.0
+    heatRangeLow: 45.0
+    *heatStages: 2*
+    *holdStatus: Hold ends today at 6:30pm*
+    humidity: 41
+    *humiditySetpoint: 42*
+    *lastPoll: Succeeded*
+    motion: inactive
+    *newCoolSetpoint: 0.0*
+    *newHeatSetpoint: 0.0*
+    programsList: ["Away", "Home", "Sleep", "Awake"]
+    *scheduledProgram: Away*
+    *scheduledProgramId: away*
+    *scheduledProgramName: Away*
+    *setpointDisplay: 68.0°*
+    *statHoldAction: nextPeriod*
+    supportedThermostatFanModes: [on, auto, circulate, off]
+    supportedThermostatModes: [off, heat, auto, cool]
+    temperature: 68.7
+    *temperatureDisplay: 68.7°*
+    *temperatureScale: F*
+    thermostatFanMode: auto
+    *thermostatFanModeDisplay: circulate*
+    *thermostatHold: hold*
+    thermostatMode: heat
+    thermostatOperatingState: idle
+    *thermostatOperatingStateDisplay: idle*
+    thermostatSetpoint: 69.0
+    thermostatSetpointMax: 78.0
+    thermostatSetpointRange: [null, 78.0]
+    *thermostatStatus: Setpoint updating...*
+    *thermostatTime: 2018-02-09 17:00:23*
+    *timeOfDay: day*
+    *weatherSymbol: 0*
+    *weatherTemperature: 27.9*
+    
 ---------------------------------------------------
 
 ### <a name="commands">Supported Commands</a>
