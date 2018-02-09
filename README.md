@@ -35,6 +35,7 @@ Important Notice!
 	  - [Sensor User Interface](#sensor)
 	  - [SmartThings Integration](#smartthings)
 	  - [Operational Enhancements](#operational)
+  - [Screenshots](#screenshots)
   - [Ecobee Suite (Connect) SmartApp](#features-connect-sa)
   - [ecobee Suite Routines SmartApp](#features-routines-sa)
   - [ecobee Suite Open Contacts SmartApp](#features-opencontact-sa)
@@ -443,17 +444,30 @@ NOTE: You will not be able to configure Ask Alexa support until you have fully i
 
 - This feature will evolve over the coming months to include more control over what gets sent to Ask Alexa and to support Notifications Only. So stay tuned!
 
-Screenshots of both the **`Ecobee Thermostat`** and the **`Ecobee Sensor`** are shown below (OLD versions - new screenshots coming soon).
+## <a name="screenshots">Screenshots</a> 
 
-------------------------------------------------------------------------------------
 
-`Ecobee Thermostat` Device |  `Ecobee Thermostat` Device w/ Annotation
+Ecobee Thermostat Device |  Ecobee Thermostat Device with Annotation
 :-------------------------:|:-------------------------:
-<img src="https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/UISnapshot-v1.2.0.jpg" border="1" width="250" /> | coming soon
+<img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0%20Tstat.png" border="1" height="1200" /> | <img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0-Tstat-annotated.png" border="1" height="1200" />
 
-`Ecobee Sensor` Device |  `Ecobee Sensor` Device w/ Annotation
+Ecobee Sensor Device |  <nbsp;> 
 :-------------------------:|:-------------------------:
-<img src="https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/UISensor-v1.2.0.png" border="1" width="250" /> | coming soon
+<img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0-sensor.jpg" border="1" width="295" /> | 
+
+###Annotation  Notes**
+- **Button** Executes labeled action/state when pressed (unless grey)|
+- **Cycler** Displays current state, toggles to next state when pressed|
+- **Slider** Opens SmartThings Slider control (limited to whole numbers only)|
+- **Current Temperature** Decimal value of current Temperature display on Thermostat (note: may be an average of the associated sensors)
+- **Up / Down Setpoint buttons** will be slow to respond, but will not actually change the setpoint until 5 seconds after last button pressed (configurable delay in Ecobee Suite (Control) Preferences). Operates in 1° increments in Fahrenheit, and 0.5° increments in Celsius
+- **Thermostat Operating State** describes the current activity, or the temperature at which a demand for heat/cool will be made (heating/cooling/fan only/idle/pending heat/pending cool)
+- **Refresh Button** Tap once to request a changes-only poll to the Ecobee API, tap again immeditately after the "Bee" icon reappears to force a poll of ***all*** the Ecobee API
+- **Equipment Operating State** more detailed state of operations, including heat/cool stages, humidifier/dehumidifier, Smart Recovery, emergency/aux heat, etc.
+- **Hold/Vacation Status** displays when current hold or vacation is scheduled to end. Occaisionally reports other status of interest
+- **Thermostat Date & Time** date and time as of the last completed poll of the Ecobee API
+- **Command Center** Most every tile below this is active, unless the tile is greyed out. Tiles are greyed if the action is not currently allowed because of some state (e.g., cannot change the Program when the thermostat is in Vacation mode).
+- 
 
 ## <a name="features-connect-sa">`Ecobee (Connect)` SmartApp</a>
 The **`Ecobee Suite (Connect)`** SmartApp provides a single SmartApp interface for accessing installation, updates, Child SmartApps and even debugging tools. The interface uses dynamic pages to guide the user through the installation process in order simplify the steps as much as possible.
