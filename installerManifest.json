@@ -7,7 +7,7 @@
 	"author": 	"Barry A. Burke (storageanarchy@gmail.com)",
 	"description": 	"Free Suite of SmartApps and Device Handlers to integrate your Ecobee Thermostats and Sensors with SmartThings.",
 	"category": 	"My Apps",
-	"bannerUrl": 	"https://github.com/SANdood/Ecobee-Suite/blob/master/Ecobee_Suite_banner.png", 
+	"bannerUrl": 	"https://github.com/sandood/Ecobee-Suite/blob/master/Ecobee_Suite_banner.png", 
 	"forumUrl": 	"https://community.smartthings.com/t/release-free-ecobee-suite-version-1-3/118319",
 	"docUrl": 	"https://github.com/sandood/Ecobee-Suite/blob/master/README.md",
 	"releaseType":	"production",
