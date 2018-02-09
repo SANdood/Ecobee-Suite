@@ -455,7 +455,7 @@ Ecobee Sensor Device |  <nbsp;>
 :-------------------------:|:-------------------------:
 <img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0-sensor.jpg" border="1" width="295" /> | 
 
-###Annotation  Notes**
+### Annotation Notes
 - **Button** Executes labeled action/state when pressed (unless grey)|
 - **Cycler** Displays current state, toggles to next state when pressed|
 - **Slider** Opens SmartThings Slider control (limited to whole numbers only)|
