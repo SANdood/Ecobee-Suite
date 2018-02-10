@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.3.0",
+			"version": 	"1.3.01",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-connect.src/ecobee-suite-connect.groovy",
 			"optional": 	false
