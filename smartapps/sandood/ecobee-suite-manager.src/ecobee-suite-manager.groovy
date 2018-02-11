@@ -48,11 +48,12 @@
  *	1.2.14- Improved handling of locations & zipodes WRT sunrise/sunset calculations
  *	1.3.0 - Major Release: renamed and move to "sandood" namespace 
  *	1.3.01- Sort lists of Thermostat and Sensor names in LOG displays
+ *	1.4.0 - Renamed devices and manager, removed watchdogDevices
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.3.01" }
-private def getVersionLabel() { return "Ecobee Suite (Connect), version ${getVersionNum()}" }
+def getVersionNum() { return "1.4.0" }
+private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
 		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",  
@@ -80,7 +81,7 @@ private def getHelperSmartApps() {
 }
  
 definition(
-	name: "Ecobee Suite (Connect)",
+	name: "Ecobee Suite Manager",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy@gmail.com)",
 	description: "Connect your Ecobee thermostats and sensors to SmartThings, along with a Suite of Helper SmartApps.",
@@ -183,11 +184,11 @@ def mainPage() {
                 href ("askAlexaPage", title: "Ask Alexa Preferences", description: "Tap to review Ask Alexa settings")
         	}
             
-            if( settings.useWatchdogDevices == true ) {
-            	section("Extra Poll and Watchdog Devices") {
-                	href ("addWatchdogDevicesPage", title: "Watchdog Devices", description: "Tap to select Poll and Watchdog Devices")
-                }
-            }
+//            if( settings.useWatchdogDevices == true ) {
+//            	section("Extra Poll and Watchdog Devices") {
+//                	href ("addWatchdogDevicesPage", title: "Watchdog Devices", description: "Tap to select Poll and Watchdog Devices")
+//                }
+//            }
            
     	} // End if(atomicState.authToken)
         
@@ -392,11 +393,11 @@ def preferencesPage() {
         section("Showing a Thermostat as a separate Sensor is useful if you need to access the actual temperature in the room where the Thermostat is located and not just the (average) temperature displayed on the Thermostat") {
             input(name: "showThermsAsSensor", title:"Include Thermostats as a separate Ecobee Sensor?", type: "bool", required:false, defaultValue: false, description: "")
         }
-		if (settings.pollingInterval?.toInteger() > 2) {
-			section("Monitoring external devices can be used to drive polling and the watchdog events. Be warned, however, not to select too many devices or devices that will send too many events as this can cause issues with the connection.\nBe sure NOT to select any Ecobee devices!") {
-            	input(name: "useWatchdogDevices", title:"Monitor external devices to drive additional polling and watchdog events?", type: "bool", required:false, description: "", defaultValue:false)
-            }
-        }
+//		if (settings.pollingInterval?.toInteger() > 2) {
+//			section("Monitoring external devices can be used to drive polling and the watchdog events. Be warned, however, not to select too many devices or devices that will send too many events as this can cause issues with the connection.\nBe sure NOT to select any Ecobee devices!") {
+//            	input(name: "useWatchdogDevices", title:"Monitor external devices to drive additional polling and watchdog events?", type: "bool", required:false, description: "", defaultValue:false)
+//            }
+//        }
         section("Set the pause between pressing the setpoint arrows and initiating the API calls. The pause needs to be long enough to allow you to click the arrow again for changing by more than one degree.") {
             input(name: "arrowPause", title:"Delay timer value after pressing setpoint arrows", type: "enum", required:false, multiple:false, description: "4", defaultValue:5, options:["1", "2", "3", "4", "5"])
 		}
@@ -530,8 +531,8 @@ private def Boolean testForDeviceHandlers() {
     def success = true
     
 	try {    	
-		d1 = addChildDevice(app.namespace, getChildThermostatName(), "dummyThermDNI-${DNIAdder}", null, ["label":"Ecobee Thermostat:TestingForInstall", completedSetup:true])
-		d2 = addChildDevice(app.namespace, getChildSensorName(), "dummySensorDNI-${DNIAdder}", null, ["label":"Ecobee Sensor:TestingForInstall", completedSetup:true])
+		d1 = addChildDevice(app.namespace, getChildThermostatName(), "dummyThermDNI-${DNIAdder}", null, ["label":"Ecobee Suite Thermostat:TestingForInstall", completedSetup:true])
+		d2 = addChildDevice(app.namespace, getChildSensorName(), "dummySensorDNI-${DNIAdder}", null, ["label":"Ecobee Suite Sensor:TestingForInstall", completedSetup:true])
 	} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
 		LOG("You MUST add the ${getChildThermostatName()} and ${getChildSensorName()} Device Handlers to the IDE BEFORE running the setup.", 1, null, "error")
 		success = false
@@ -861,19 +862,19 @@ Map getEcobeeSensors() {
 			if (it.type == "ecobee3_remote_sensor") {
             	LOG("Adding an ecobee3_remote_sensor: ${it}", 4, null, "trace")
 				def value = "${it?.name}"
-				def key = "ecobee_sensor-"+ it?.id + "-" + it?.code
+				def key = "ecobee_suite-sensor-"+ it?.id + "-" + it?.code
 				sensorMap["${key}"] = value
 			} else if ( (it.type == "thermostat") && (settings.showThermsAsSensor == true) ) {            	
 				LOG("Adding a Thermostat as a Sensor: ${it}", 4, null, "trace")
            	    def value = "${it?.name}"
-				def key = "ecobee_sensor_thermostat-"+ it?.id + "-" + it?.name
+				def key = "ecobee_suite-sensor_tstat-"+ it?.id + "-" + it?.name
        	       	LOG("Adding a Thermostat as a Sensor: ${it}, key: ${key}  value: ${value}", 4, null, "trace")
 				sensorMap["${key}"] = value + " (Thermostat)"
        	   	} else if ( it.type == "control_sensor" && it.capability[0]?.type == "temperature") {
        	   		// We can add this one as it supports temperature
        	      	LOG("Adding a control_sensor: ${it}", 4, null, "trace")
 				def value = "${it?.name}"
-				def key = "control_sensor-"+ it?.id
+				def key = "ecobee_suite-control_sensor-"+ it?.id
 				sensorMap["${key}"] = value    
            	} else {
            		LOG("Did NOT add: ${it}. settings.showThermsAsSensor=${settings.showThermsAsSensor}", 4, null, "trace")
@@ -1048,14 +1049,14 @@ def initialize() {
     subscribe(location, "sunrise", sunriseEvent)
     subscribe(location, "position", scheduleWatchdog)
     
-    if ( settings.useWatchdogDevices == true ) {
-    	if ( settings.watchdogBattery?.size() > 0) { subscribe(settings.watchdogBattery, "battery", userDefinedEvent) }
-        if ( settings.watchdogHumidity?.size() > 0) { subscribe(settings.watchdogHumidity, "humidity", userDefinedEvent) }
-        if ( settings.watchdogLuminance?.size() > 0) { subscribe(settings.watchdogLuminance, "illuminance", userDefinedEvent) }
-        if ( settings.watchdogMotion?.size() > 0) { subscribe(settings.watchdogMotion, "motion", userDefinedEvent) }
-        if ( settings.watchdogSwitch?.size() > 0) { subscribe(settings.watchdogSwitch, "switch", userDefinedEvent) }
-        if ( settings.watchdogTemp?.size() > 0) { subscribe(settings.watchdogTemp, "temperature", userDefinedEvent) }    
-    }    
+//    if ( settings.useWatchdogDevices == true ) {
+//    	if ( settings.watchdogBattery?.size() > 0) { subscribe(settings.watchdogBattery, "battery", userDefinedEvent) }
+//        if ( settings.watchdogHumidity?.size() > 0) { subscribe(settings.watchdogHumidity, "humidity", userDefinedEvent) }
+//        if ( settings.watchdogLuminance?.size() > 0) { subscribe(settings.watchdogLuminance, "illuminance", userDefinedEvent) }
+//        if ( settings.watchdogMotion?.size() > 0) { subscribe(settings.watchdogMotion, "motion", userDefinedEvent) }
+//        if ( settings.watchdogSwitch?.size() > 0) { subscribe(settings.watchdogSwitch, "switch", userDefinedEvent) }
+//        if ( settings.watchdogTemp?.size() > 0) { subscribe(settings.watchdogTemp, "temperature", userDefinedEvent) }    
+//    }    
     
     // Schedule the various handlers
     LOG("Spawning scheduled events from initialize()", 5, null, "trace")
@@ -1086,7 +1087,7 @@ private def createChildrenThermostats() {
 		def d = getChildDevice(dni)
 		if(!d) {        	
             try {
-				d = addChildDevice(app.namespace, getChildThermostatName(), dni, null, ["label":"EcoTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
+				d = addChildDevice(app.namespace, getChildThermostatName(), dni, null, ["label":"EcobeeTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
 			} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
             	LOG("You MUST add the ${getChildSensorName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
                 return false
@@ -1108,7 +1109,7 @@ private def createChildrenSensors() {
 		def d = getChildDevice(dni)
 		if(!d) {        	
             try {
-				d = addChildDevice(app.namespace, getChildSensorName(), dni, null, ["label":"EcoSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
+				d = addChildDevice(app.namespace, getChildSensorName(), dni, null, ["label":"EcobeeSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
 			} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
             	LOG("You MUST add the ${getChildSensorName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
                 return false
@@ -3645,8 +3646,8 @@ private def sendJsonRetry() {
     return sendJson(child, atomicState.savedActionJsonBody)
 }
 
-private def getChildThermostatName() { return "Ecobee Thermostat" }
-private def getChildSensorName()     { return "Ecobee Sensor" }
+private def getChildThermostatName() { return "Ecobee Suite Thermostat" }
+private def getChildSensorName()     { return "Ecobee Suite Sensor" }
 private def getServerUrl()           { return "https://graph.api.smartthings.com" }
 private def getShardUrl()            { return getApiServerUrl() }
 private def getCallbackUrl()         { return "${serverUrl}/oauth/callback" }
