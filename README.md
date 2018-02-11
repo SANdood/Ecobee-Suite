@@ -4,12 +4,14 @@ Latest: Version 1.4.0 Released February 11, 2018
 
 REALLY IMPORTANT!!!
 =====================================================
-Early morning February 11, 2018, I realized a significant issue with release 1.3.0 that caused conflicts with the installation of this release in SmartThings locations that had prior releases already installed and nut fully released. The fix has necessitated a complete new re-release as version 1.4.*. Users who have already installed v1.3.0 should immeditaely remove it and install this new version. If you have any issues with this, please PM me directly.
+Early morning February 11, 2018, I realized a significant issue with release 1.3.0 that caused conflicts with the installation of this release in SmartThings locations that had prior releases already installed and nut fully released. The fix has necessitated a complete new re-release as version 1.4.*. 
 
-<b>The significant changes include:</b>
+***Users who have already installed v1.3.0 should immeditaely remove it and install this new version. If you have any issues with this, please PM me directly.***
+
+<b>The significant changes to 1.4.0 include:</b>
 - Ecobee Suite (Connect) has been renamed to <b>Ecobee Suite Manager</b>
-- Created devices now named "EcobeeSensor: (ecobee sensor name)" and "Ecobee Thermostat: (ecobee thermostat name)"
-- Created Sensors' SmartThings Network ID will be different from prior releases (this is what caused most of the issues)
+- Created devices now named "EcobeeSensor: (ecobee sensor name)" and "Ecobee Thermostat: (ecobee thermostat name)" to distinguish from prior versions
+- Created Sensors' SmartThings Network ID will be different from prior releases (this is what caused most of the issues with the 1.3.0 release)
 
 Important Notice!
 -----------------
