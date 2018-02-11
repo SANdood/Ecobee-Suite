@@ -12,7 +12,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	Ecobee Thermostat
+ *	Ecobee Suite Thermostat
  *
  *	Author: SmartThings
  *	Date: 2013-06-13
@@ -48,14 +48,15 @@
  *	1.2.20 - Eliminate extraneous temp display between up/down arrows of multiAttributeTile
  *  1.2.21a- Fix non-temporary program changes
  *	1.3.0  - Major release: rename and move to "sandood" namespace
+ *	1.4.0  - Major release: Renamed device files
  */
 
-def getVersionNum() { return "1.3.0" }
-private def getVersionLabel() { return "Ecobee Thermostat, version ${getVersionNum()}" }
+def getVersionNum() { return "1.4.0" }
+private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
 metadata {
-	definition (name: "Ecobee Thermostat", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
+	definition (name: "Ecobee Suite Thermostat", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
 		capability "Actuator"
 		capability "Thermostat"
         capability "Sensor"
@@ -305,8 +306,8 @@ metadata {
 		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			//state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
-            state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
+			state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
+            //state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
 		}
         
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
