@@ -1,7 +1,9 @@
-Free Ecobee Suite, version: 1.3.* 
+Free Ecobee Suite, version: 1.4.* 
 ======================================================
-Latest: Version 1.3.0 Released February 8, 2018
+Latest: Version 1.4.0 Released February 11, 2018
 
+WAIT! Version 1.3.0 contains a serious bug that can mess up an existing prior installation. PLEASE DO NOT INSTALL v1.3.0 - A New 1.4.0 will be release momentarily!!!
+=====================================================
 
 Important Notice!
 -----------------
