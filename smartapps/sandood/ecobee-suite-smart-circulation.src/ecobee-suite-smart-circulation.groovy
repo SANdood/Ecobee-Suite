@@ -34,9 +34,10 @@
  *	1.2.3 - Protect against LOG type errors
  *	1.2.4 - Allow changes while thermostatMode is 'off' also
  *	1.3.0 - Major release: renamed and moved to "sandood" namespace
+ *	1.4.0 - Renamed parent Ecobee Suite Manager
  *
  */
-def getVersionNum() { return "1.3.0" }
+def getVersionNum() { return "1.4.0" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -47,7 +48,7 @@ definition(
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
 	description: "If a larger than configured temperature delta is found between 2 or more sensors, the minimum Fan On minutes per hour (m/hr) will be automatically adjusted.",
 	category: "Convenience",
-	parent: "sandood:Ecobee Suite (Connect)",
+	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false
