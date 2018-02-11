@@ -48,11 +48,12 @@
  *	1.2.14- Improved handling of locations & zipodes WRT sunrise/sunset calculations
  *	1.3.0 - Major Release: renamed and move to "sandood" namespace 
  *	1.3.01- Sort lists of Thermostat and Sensor names in LOG displays
- *	1.4.0 - Renamed devices and manager, removed watchdogDevices
+ *	1.4.00- Renamed devices and manager, removed watchdogDevices
+ *	1.4.01- Fix sensor device naming bug
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -2245,15 +2246,15 @@ def updateSensorData() {
         	switch (it.type) {
             	case 'ecobee3_remote_sensor':
                 	// Ecobee3 remote temp/occupancy sensor
-                	sensorDNI = "ecobee_sensor-" + it?.id + "-" + it?.code
+                	sensorDNI = "ecobee_suite-sensor-" + it?.id + "-" + it?.code
                     break;
                 case 'control_sensor':
                 	// SmartSI style control sensor (temp or humidity)
-                	sensorDNI = "control_sensor-" + it?.id
+                	sensorDNI = "ecobee_suite-control_sensor-" + it?.id
                     break;
                 case 'thermostat':
                 	// The thermostat itself
-                	sensorDNI = "ecobee_sensor_thermostat-"+ it?.id + "-" + it?.name
+                	sensorDNI = "ecobee_suite-sensor_tstat-"+ it?.id + "-" + it?.name
                     break;
      		} 
 			if (debugLevelFour) LOG("updateSensorData() - Sensor ${it.name}, sensorDNI == ${sensorDNI}", 4)
