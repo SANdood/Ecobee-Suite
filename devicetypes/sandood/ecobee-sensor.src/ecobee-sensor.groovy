@@ -29,15 +29,16 @@
  *	1.2.1  - Reinstated default icon for default Temperature tile
  *	1.2.2  - Added new Program icons, Awake/Wakeup attributes (not currently displayed)
  *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
+ *	1.4.0  - Major Release: renamed devices also
  *
  */
 
-def getVersionNum() { return "1.3.0" }
-private def getVersionLabel() { return "Ecobee Sensor, Version ${getVersionNum()}" }
+def getVersionNum() { return "1.4.0" }
+private def getVersionLabel() { return "Ecobee Suite Sensor, Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
-	definition (name: "Ecobee Sensor", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
+	definition (name: "Ecobee Suite Sensor", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
 		capability "Sensor"
 		capability "Temperature Measurement"
 		capability "Motion Sensor"
