@@ -51,10 +51,11 @@
  *	1.4.00- Renamed devices and manager, removed watchdogDevices
  *	1.4.01- Fix sensor device naming bug
  *	1.4.02- Handle javax.net.ssl.SSLPeerUnverifiedException; fixed poll daemon recovery
+ *  1.4.03- Fixed internal mentions of "Ecobee (Connect)"
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.02" }
+def getVersionNum() { return "1.4.03" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -207,7 +208,7 @@ def mainPage() {
 			href ("removePage", description: "Tap to remove ${app.name}", title: "Remove this instance")
 		}            
 		
-		section ("Name this instance of Ecobee (Connect)") {
+		section ("Name this instance of Ecobee Suite Manager") {
 			label name: "name", title: "Assign a name", required: false, defaultValue: app.name, description: app.name, submitOnChange: true
 		}
      
@@ -216,8 +217,8 @@ def mainPage() {
 }
 
 def removePage() {
-	dynamicPage(name: "removePage", title: "Remove ecobee (Connect) and All Devices", install: false, uninstall: true) {
-    	section ("WARNING!\n\nRemoving ecobee (Connect) also removes all Devices\n") {
+	dynamicPage(name: "removePage", title: "Remove Ecobee Suite Manager and All Devices", install: false, uninstall: true) {
+    	section ("WARNING!\n\nRemoving eEcobee Suite Manager also removes all Devices\n") {
         }
     }
 }
@@ -231,13 +232,13 @@ def authPage() {
 			atomicState.accessToken = createAccessToken()
        	} catch(Exception e) {
     		LOG("authPage() --> OAuth Exception: ${e}", 1, null, "error")
-            LOG("authPage() --> Probable Cause: OAuth not enabled in SmartThings IDE for the 'Ecobee (Connect)' SmartApp", 1, null, 'info')
+            LOG("authPage() --> Probable Cause: OAuth not enabled in SmartThings IDE for the 'Ecobee Suite Manager' SmartApp", 1, null, 'info')
         	if (!atomicState.accessToken) {
             	LOG("authPage() --> No OAuth Access token", 3, null, 'error')
         		return dynamicPage(name: "authPage", title: "OAuth Initialization Failure", nextPage: "", uninstall: true) {
             		section() {
                 		paragraph "Error initializing Ecobee Authentication: could not get the OAuth access token.\n\nPlease verify that OAuth has been enabled in " +
-                    		"the SmartThings IDE for the 'Ecobee (Connect)' SmartApp, and then try again.\n\nIf this error persists, view Live Logging in the IDE for " +
+                    		"the SmartThings IDE for the 'Ecobee Suite Manager' SmartApp, and then try again.\n\nIf this error persists, view Live Logging in the IDE for " +
                         	"additional error information."
                 	}
             	}
@@ -372,7 +373,7 @@ def askAlexaPage() {
 
 def preferencesPage() {
     LOG("=====> preferencesPage() entered. settings: ${settings}", 5)
-    dynamicPage(name: "preferencesPage", title: "Update Ecobee (Connect) Preferences", nextPage: "") {
+    dynamicPage(name: "preferencesPage", title: "Update Ecobee Suite Manager Preferences", nextPage: "") {
 		section("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour. You can have them sent ${location.contactBookEnabled?'to selected Contacts':'via SMS'} or as a Push notification (default).") {
             input(name: 'recipients', title: 'Send notifications to', descriptions: 'Contacts', type: 'contact', required: false, multiple: true) {
             	input "phone", "phone", title: "Send SMS notifications to", description: "Phone Number", required: false }
@@ -465,7 +466,7 @@ def debugDashboardPage() {
         }
     	section("Commands") {
         	href(name: "pollChildrenPage", title: "", required: false, page: "pollChildrenPage", description: "Tap to execute command: pollChildren()")
-            href ("removePage", description: "Tap to remove ecobee (Connect) ", title: "")
+            href ("removePage", description: "Tap to remove Ecobee Suite Manager ", title: "")
         }
     }    
 }
@@ -3941,7 +3942,7 @@ private def apiLost(where = "[where not specified]") {
     }
    
     // provide cleanup steps when API Connection is lost
-	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from SmartThings/Ecobee, because the access credential changed or was lost. Please go to the Ecobee (Connect) SmartApp and re-enter your account login credentials."
+	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from SmartThings/Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager SmartApp and re-enter your account login credentials."
     atomicState.connected = "lost"
     atomicState.authToken = null
     
@@ -3963,7 +3964,7 @@ private def apiLost(where = "[where not specified]") {
 }
 
 def notifyApiLost() {
-	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from SmartThings/Ecobee, because the access credential changed or was lost. Please go to the Ecobee (Connect) SmartApp and re-enter your account login credentials."
+	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from SmartThings/Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager SmartApp and re-enter your account login credentials."
     if ( atomicState.connected == "lost" ) {
     	generateEventLocalParams()
 		sendPushAndFeeds(notificationMessage)
