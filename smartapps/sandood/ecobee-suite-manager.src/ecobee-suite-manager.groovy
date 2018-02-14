@@ -1,7 +1,7 @@
 /**
  *  Based on original code Copyright 2015 SmartThings
  *	Additional changes Copyright 2016 Sean Kendall Schneyer
- *  Additional changes Copyright 2017 Barry A. Burke
+ *  Additional changes Copyright 2017, 2018 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -17,7 +17,7 @@
  *	Original Author: scott
  *	Date: 2013
  *
- *	Updates by Barry A. Burke (storageanarchy@gmail.com)
+ *	Updates by Barry A. Burke (storageanarchy@gmail.com) 2016, 2017, & 2018
  *
  *  See Github Changelog for complete change history
  *	1.1.1 -	Preparations for Ecobee Alerts support and Ask Alexa integrations
@@ -52,10 +52,11 @@
  *	1.4.01- Fix sensor device naming bug
  *	1.4.02- Handle javax.net.ssl.SSLPeerUnverifiedException; fixed poll daemon recovery
  *  1.4.03- Fixed internal mentions of "Ecobee (Connect)"
+ *	1.4.04- Handle javax.net.ssl.SSLHandshakeException & java.net.SocketTimeoutException
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.03" }
+def getVersionNum() { return "1.4.04" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1563,8 +1564,10 @@ private def generateEventLocalParams() {
 // NOTE: Despite the documentation, Runtime Revision CAN change more frequently than every 3 minutes - equipmentStatus is 
 //       apparently updated in real time (or at least very close to real time)
 private boolean checkThermostatSummary(thermostatIdsString) {
-	String preText = getDebugLevel() <= 2 ? '' : 'checkThermostatSummary - '
+	String preText = getDebugLevel() <= 2 ? '' : 'checkThermostatSummary() - '
     def debugLevelFour = debugLevel(4)
+    if (debugLevelFour) LOG("checkThermostatSummary() - ${thermostatIdsString}",4,null,'trace')
+    
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeEquipmentStatus":"false"}}'
 	def pollParams = [
 			uri: apiEndpoint,
@@ -1616,9 +1619,9 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 
                         // update global flags (we update the superset of changes for all requested tstats)
                         if (tru || tau || ttu) {
-                            runtimeUpdated = (runtimeUpdated || tru)
-                            alertsUpdated = (alertsUpdated || tau)
-                            thermostatUpdated = (thermostatUpdated || ttu)
+                            runtimeUpdated = (runtimeUpdated || tru || atomicState.runtimeUpdated)
+                            alertsUpdated = (alertsUpdated || tau || atomicState.alertsUpdated)
+                            thermostatUpdated = (thermostatUpdated || ttu || atomicState.thermostatUpdated)
                             result = true
                             tstatsStr = (tstatsStr=="") ? tstat : (tstatsStr.contains(tstat)) ? tstatsStr : tstatsStr + ",${tstat}"
                         }
@@ -1629,12 +1632,20 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                     atomicState.alertsUpdated = alertsUpdated			// Revised: alerts
 					atomicState.runtimeUpdated = runtimeUpdated			// Revised: runtime, equip status, remote sensors, weather?
                     atomicState.changedThermostatIds = tstatsStr    	// only these thermostats need to be requested in pollEcobeeAPI
-				}
-                // if we get here, we had http status== 200, but API status != 0
+                	// Tell the children that we are once again connected to the Ecobee API Cloud
+    				if (apiConnected() != "full") {
+						apiRestored()
+        				generateEventLocalParams() // Update the connection status
+    				}
+				} else {
+                	// if we get here, we had http status== 200, but API status != 0
+					LOG("${preText}ThermnostatSummary poll got API status ${statusCode}", 1, null, 'warn')
+                }
 			} else {
 				LOG("${preText}ThermostatSummary poll got http status ${resp.status}", 1, null, "error")
 			}
 		}
+        atomicState.inTimeoutRetry = 0
 	} catch (groovyx.net.http.HttpResponseException e) {   
         result = false // this thread failed to get the summary
         if ((e.statusCode == 500) && (e.response.data.status.code == 14) /*&& ((atomicState.authTokenExpires - now()) <= 0) */){
@@ -1647,21 +1658,31 @@ private boolean checkThermostatSummary(thermostatIdsString) {
             } else {
                 LOG(preText+'Auth_token refresh failed', 1, null, 'error')
             }
+            atomicState.inTimeoutRetry = 0
         } else {
         	LOG("${preText}HttpResponseException; Exception info: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
         }
     } catch (java.util.concurrent.TimeoutException e) {
-    	LOG("checkThermostatSummary() - TimeoutException: ${e}.", 1, null, "warn")
+    	LOG("checkThermostatSummary() - Concurrent Execution Timeout: ${e}.", 1, null, "warn")
         // Do not add an else statement to run immediately as this could cause an long looping cycle
         runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true])
-       	result = false    
-    } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException e) {
+       	result = false
+    //
+    // These appear to be transient errors, treat them all as if a Timeout...
+    } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
     	LOG("checkThermostatSummary() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
-        atomicState.connected = 'warn'
-        atomicState.lastPoll = now()
-        atomicState.lastPollDate = getTimestamp()
-		generateEventLocalParams()
+        if (apiConnected != 'warn') {
+        	atomicState.connected = 'warn'
+        	atomicState.lastPoll = now()
+        	atomicState.lastPollDate = getTimestamp()
+			generateEventLocalParams()
+        }
+        def inTimeoutRetry = atomicState.inTimeoutRetry
+        if (inTimeoutRetry == null) inTimeoutRetry = 0
+        if (inTimeoutRetry < 3) runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true])
+        atomicState.inTimeoutRetry = inTimeoutRetry + 1
         result = false
+        // throw e
     } catch (Exception e) {
 		LOG("checkThermostatSummary() - General Exception: ${e}.", 1, null, "error")
  /*       atomicState.reAttemptPoll = atomicState.reAttemptPoll + 1
@@ -1679,6 +1700,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
             }
         }  */ 
         result = false
+        throw e
     }
 
     if (debugLevel(4)) LOG("<===== Leaving checkThermostatSummary() result: ${result}, tstats: ${tstatsStr}", 4, null, "info")
@@ -1713,9 +1735,11 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
     } else {
         // log.debug "Shouldn't be checkingThermostatSummary() again!"
     	somethingChanged = checkThermostatSummary(thermostatIdsString)
-        thermostatUpdated = atomicState.thermostatUpdated				// update these again after checkThermostatSummary
-        alertsUpdated = atomicState.alertsUpdated
-    	runtimeUpdated = atomicState.runtimeUpdated
+        if (somethingChanged) {
+        	thermostatUpdated = atomicState.thermostatUpdated				// update these again after checkThermostatSummary
+        	alertsUpdated = atomicState.alertsUpdated
+    		runtimeUpdated = atomicState.runtimeUpdated
+        }
     }
     
     // if nothing has changed, and this isn't a forced poll, just return (keep count of polls we have skipped)
@@ -1964,6 +1988,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
 				}
 			}
 		}
+        atomicState.inTimeoutRetry = 0	// Not in Timeout Recovery any longer
 	} catch (groovyx.net.http.HttpResponseException e) {  
     	result = false  // this thread failed
     	if ((e.statusCode == 500) && (e.response.data.status.code == 14)) {
@@ -1972,27 +1997,35 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
             if (debugLevelFour) LOG( "pollEcobeeAPI() - Refreshing your auth_token!", 4, null, 'info')
             if ( refreshAuthToken() ) { 
             	// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
-                LOG( preText+'Auth_token refreshed', 2, null, 'info')
+                LOG( 'pollEcobeeAPI() - Auth_token refreshed', 2, null, 'info')
             } else {
-                LOG( preText+'Auth_token refresh failed', 1, null, 'error')
+                LOG( 'pollEcobeeApi() _ Auth_token refresh failed', 1, null, 'error')
             }
+            atomicState.inTimeoutRetry = 0
         } else {
-        	LOG("${preText}HttpResponseException; Exception info: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
+        	LOG("pollEcobeeAPI() - HttpResponseException: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
         }
     } catch (java.util.concurrent.TimeoutException e) {
-    	LOG("${preText}TimeoutException: ${e}.", 1, null, "warn")
+    	LOG("pollEcobeeAPI() - Concurrent TimeoutException: ${e}.", 1, null, "warn")
         // Do not add an else statement to run immediately as this could cause an long looping cycle if the API is offline
         runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true]) 
         result = false
-    } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException e) {
-    	LOG("${preText}${e}.",1,null,'warn') 	// Just log it, and hope for better next time...
-        atomicState.connected = 'warn'
-        atomicState.lastPoll = now()
-        atomicState.lastPollDate = getTimestamp()
-		generateEventLocalParams()
+    } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+    	LOG("pollEcobeeAPI() - ${e}.",1,null,'warn') 	// Just log it, and hope for better next time...
+        if (apiConnected != 'warn') {
+        	atomicState.connected = 'warn'
+        	atomicState.lastPoll = now()
+        	atomicState.lastPollDate = getTimestamp()
+			generateEventLocalParams()
+        }
+        def inTimeoutRetry = atomicState.inTimeoutRetry
+        if (inTimeoutRetry == null) inTimeoutRetry = 0
+        if (inTimeoutRetry < 3) runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true])
+        atomicState.inTimeoutRetry = inTimeoutRetry + 1
         result = false
+        // throw e
     } catch (Exception e) {
-		LOG("${preText}General Exception: ${e}.", 1, null, "error")
+		LOG("pollEcobeAPI() - General Exception: ${e}.", 1, null, "error")
         atomicState.reAttemptPoll = atomicState.reAttemptPoll + 1
         if (atomicState.reAttemptPoll > 3) {        
         	apiLost("${preText}Too many retries (${atomicState.reAttemptPoll - 1}) for polling.")
@@ -2008,6 +2041,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
             }
         }
         result = false
+        throw e
     }
     if (debugLevelFour) LOG("<===== Leaving pollEcobeeAPI() results: ${result}", 4)
 	return result
