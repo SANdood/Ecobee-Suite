@@ -49,9 +49,10 @@
  *  1.2.21a- Fix non-temporary program changes
  *	1.3.0  - Major release: rename and move to "sandood" namespace
  *	1.4.0  - Major release: Renamed device files
+ *	1.4.01 - Don't display apiConnected status changes in device log unless in Debug Level 4 or 5
  */
 
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -1033,7 +1034,8 @@ def generateEvent(Map results) {
                 	break;
 				
 				case 'apiConnected':
-                	if (isChange) event = eventFront + [value: sendValue, descriptionText: "API Connection is ${value}", isStateChange: true, displayed: true]
+ 					// only display in the devices' log if we are in debug level 4 or 5
+                	if (isChange) event = eventFront + [value: sendValue, descriptionText: "API Connection is ${value}", isStateChange: true, displayed: debugLevelFour]
 					break;
 				
 				case 'weatherSymbol':
