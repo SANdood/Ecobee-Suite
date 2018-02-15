@@ -51,7 +51,7 @@ def mainPage() {
 				input(name: 'tempSource', title: 'Monitor this temperature source', type: 'enum', required: true, multiple: false, description: 'Tap to choose...', metadata:[values:['Location', 'Temperature Device', "Thermostat's Weather", 'WU Weather Station']], submitOnChange: true)
 				if (tempSource) {
 					if (tempSource == 'Location') {
-						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (seconds)', required: true, description: 'Tap to choose...', metadata:[values:[5,10,15,20,30,60]]
+						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (seconds)', required: true, description: 'Tap to choose...', metadata:[values:[5,10,15,20,30,60]])
 					} else if (tempSource == 'Temperature Device') {
 						input(name: 'thermometer', type: 'capability.temperatureMeasurement', required: true, multiple: false)
 					} else if (tempSource == "Thermostat's Weather") {
@@ -60,7 +60,7 @@ def mainPage() {
 						}
 					} else if (tempSource == "WU Weather Station") {
 						input(name: 'stationID', type: 'string', description: 'Enter WU station identifier', required: true)
-						input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (seconds)', required: true, description: 'Tap to choose...', metadata:[values:[5,10,15,20,30,60]]
+						input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (seconds)', required: true, description: 'Tap to choose...', metadata:[values:[5,10,15,20,30,60]])
 					}
 				}
 			}
