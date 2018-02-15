@@ -47,31 +47,45 @@ def mainPage() {
 // input(name: "modeOrRoutine", title: "Use Mode Change, Routine Execution or Ecobee Program: ", type: "enum", 
 // required: true, multiple: false, description: "Tap to choose...", metadata:[values:["Mode", "Routine", "Ecobee Program"]], submitOnChange: true)
         if (!settings.tempDisable) {
-				section(title: "Select Thermometer") {
-					input(name: thermoSource, title: "Monitor this thermometer", type: 'enum', metadata:[values:["Location", "Temperature Device", "Thermostat Weather", "  "WU Weather Station"]], submitOnChange: true
+			section(title: "Select Thermometer") {
+				input(name: 'tempSource', title: 'Monitor this temperature source', type: 'enum', required: true, multiple: false, description: 'Tap to choose...', metadata:[values:['Location', 'Temperature Device', "Thermostat's Weather", 'WU Weather Station']], submitOnChange: true)
+				if (tempSource) {
+					if (tempSource == 'Location') {
+						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (seconds)', required: true, description: 'Tap to choose...', metadata:[values:[5,10,15,20,30,60]]
+					} else if (tempSource == 'Temperature Device') {
+						input(name: 'thermometer', type: 'capability.temperatureMeasurement', required: true, multiple: false)
+					} else if (tempSource == "Thermostat's Weather") {
+						if (thermostats.size() > 1) {
+							input(name: 'tstatTemp', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, metadata:[values:thermostats])
+						}
+					} else if (tempSource == "WU Weather Station") {
+						input(name: 'stationID', type: 'string', description: 'Enter WU station identifier', required: true)
+						input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (seconds)', required: true, description: 'Tap to choose...', metadata:[values:[5,10,15,20,30,60]]
+					}
 				}
-               	section(title: "When the temperature is at or above...") {
-        			input(name: "lowerThreshold", title: "Lower Threshold (Optional)", type: 'number', required: false)
-        		}
-
-        		section(title: "When the temperature is at or below...") {
-            		input(name: "upperThreshold", title: "Upper Threshold (Optional)", type: 'number', required: false)
-				}
-        
-				section(title: "Set Thermostat Mode To...") {
-        			input(name: "mode", type: "enum", title: "Pick Thermostat Mode", 
-                		metadata:[values:['heat','cool','off','auto']],
-                   		required: true, multiple: false, submitOnChange: true)
-        		}      
-                section(title: "Notifications") {
-					input(name:"sendPushMessage", type: "enum", title: "Send a push notification?", metadata: [values: ["Yes", "No"]], 
-    				required: false)
-				}
-
-        }
+			}
+		}
+		section(title: 'Mode Thresholds') {
+       		input(name: "aboveTemp", title: "When the temperature is at or above", type: 'decimal', description: 'Enter decimal temperature (optional)', required: false, submitOnChange: true)
+			if (aboveTemp) {
+				input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, metadata:[values:getThermostatModes()])
+			}
+            input(name: "belowThemp", title: 'When the temperature is at or below...', type: 'number', description: 'Enter decimal temperature', required: false, submitOnChange: true)
+			if (belowTemp) {
+				input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, metadata:[values:getThermostatModes()])
+			}
+			if ((belowTemp && aboveTemp) && (belowTemp != aboveTemp)) {
+				input(name: 'betweenMode', title: "Between ${belowTemp} and ${aboveTemp} set thermostat mode to", type: 'enum', description: 'Tap to choose...', required: false, multiple: false, metadata:[values:getThermostatModes()])
+			}
+		}
+        //section(title: "Notifications") {
+		//	input(name:"sendPushMessage", type: "enum", title: "Send a push notification?", metadata: [values: ["Yes", "No"]], 
+    	//			required: false)
+		//		}
+        //}
         section(title: "Temporary Disable") {
         	input(name: "tempDisable", title: "Temporarily Disable this Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
-        }
+		}
         section (getVersionLabel()) {}
     }
 }
@@ -91,15 +105,35 @@ def initialize() {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
-	
-	subscribe( settings.thermostat, "weatherTemperature", weatherChangeHandler)
+	switch( settings.tempSource) {
+		 case 'Location':
+			// setup timed event
+			break;
+		
+		case 'Temperature Device':
+			subscribe( settings.thermometer, 'temperature', tempChangeHandler)
+			break;
+		
+		case "Thermostat's Weather":
+			def theStat = []
+			theStat = settings.thermostats.size() == 1 ? settings.thermostats : [settings.tstatTemp]
+			subscribe(theStat, "weatherTemperature", tempChangeHandler)
+			break;
+		
+		case 'WU Weather Station':
+			// check pws name is valid
+			// setup timed event
+			break;
+	}
 }
 
-def weatherChangeHandler(evt) {
-	int newTemperature = evt.value as int
-    String switchToMode = settings.mode
-    def message = "Ecobee Switched to ${switchToMode}"
-    
+def tempChangeHandler(evt) {
+	Double newTemp = evt.DoubleValue
+	temperatureUpdate( newTemp )
+}   
+							  
+def temperatureUpdate( Double temp ) {
+	/*
     if (settings.lowerThreshold != null && settings.upperThreshold != null) {
     	if (newTemperature >= settings.lowerThreshold && newTemperature <= settings.upperThreshold) { 
       	  	thermostat.setThermostatMode(switchToMode) 
@@ -118,7 +152,7 @@ def weatherChangeHandler(evt) {
              send(message)
         }
     }
-
+	*/
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
