@@ -106,7 +106,7 @@ def initialize() {
     	return true
     }
 	switch( settings.tempSource) {
-		 case 'Location':
+		case 'Location':
 			// setup timed event
 			break;
 		
