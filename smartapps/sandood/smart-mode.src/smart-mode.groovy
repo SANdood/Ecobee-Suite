@@ -18,7 +18,7 @@ def getVersionNum() { return "1.4.0" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode, version ${getVersionNum()}" }
 
 definition(
-	name: "Ecobee Suite Smart Mode",
+	name: "ecobee Suite Smart Mode",
 	namespace: "sandood",
 	author: "Justin J. Leonard & Barry A. Burke",
 	description: "Set Ecobee Heat/Cool/Auto Mode Based on outside temperature",
