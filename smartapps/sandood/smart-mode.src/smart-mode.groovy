@@ -66,12 +66,12 @@ def mainPage() {
 			}
 		}
 		section(title: 'Mode Thresholds') {
-			// need to set min & max
-       		input(name: "aboveTemp", title: "When the temperature is at or above", type: 'decimal', description: 'Enter decimal temperature (optional)', required: false, submitOnChange: true)
+			// need to set min & max - get from thermostat range
+       		input(name: "aboveTemp", title: "When the temperature is at or above", type: 'decimal', description: 'Enter decimal temperature (optional)', range: getThermostatRange(), required: false, submitOnChange: true)
 			if (aboveTemp) {
 				input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, metadata:[values:getThermostatModes()])
 			}
-            input(name: "belowThemp", title: 'When the temperature is at or below...', type: 'number', description: 'Enter decimal temperature', required: false, submitOnChange: true)
+            input(name: "belowThemp", title: 'When the temperature is at or below...', type: 'number', description: 'Enter decimal temperature (optional)', range: getThermostatRange(), required: false, submitOnChange: true)
 			if (belowTemp) {
 				input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, metadata:[values:getThermostatModes()])
 			}
@@ -157,6 +157,18 @@ def getThermostatModes() {
 		modes += it.currentValue('supportedThermostatModes') // need to parse this json
 	}
 }
+							  
+def getThermostatRange() {
+	Double low = 0.0
+	Double high = 99.0
+	settings.thermostats.each {
+		def l = it.currentValue('heatingSetpointMin') as Double
+		def h = it.currentValue('coolingSetpointMax') as Double
+		if (l > low) low = l
+		if (h < high) high = h
+	}
+	return "${low.round(0)}..${high.round(0)}"
+}								  
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
