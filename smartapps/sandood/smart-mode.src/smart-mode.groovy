@@ -66,6 +66,7 @@ def mainPage() {
 			}
 		}
 		section(title: 'Mode Thresholds') {
+			// need to set min & max
        		input(name: "aboveTemp", title: "When the temperature is at or above", type: 'decimal', description: 'Enter decimal temperature (optional)', required: false, submitOnChange: true)
 			if (aboveTemp) {
 				input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, metadata:[values:getThermostatModes()])
@@ -100,7 +101,6 @@ def updated() {
 }
 
 def initialize() {
-
 	if(tempDisable == true) {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
@@ -133,26 +133,29 @@ def tempChangeHandler(evt) {
 }   
 							  
 def temperatureUpdate( Double temp ) {
-	/*
-    if (settings.lowerThreshold != null && settings.upperThreshold != null) {
-    	if (newTemperature >= settings.lowerThreshold && newTemperature <= settings.upperThreshold) { 
-      	  	thermostat.setThermostatMode(switchToMode) 
-        	send(message)
-        }
-    }
-    else if (settings.lowerThreshold != null) {
-    	if (newTemperature >= settings.lowerThreshold) { 
-        	thermostat.setThermostatMode(switchToMode)
-            send(message)
-         }
-    }
-    else if (settings.upperThreshold != null) {
-    	if (newTemperature <= settings.upperThreshold) { 
-       		 thermostat.setThermostatMode(switchToMode) 
-             send(message)
-        }
-    }
-	*/
+	def desiredMode = null
+	if (settings.aboveTemp && (temp >= settings.aboveTemp)) {
+		desiredMode = settings.aboveMode
+	} else if (settings.belowTemp && (temp <= settings.belowTemp)) {
+		desiredMode = settings.belowMode
+	} else if (settings.aboveTemp && settings.belowTemp && settings.betweenMode) {
+		desiredMode = settings.betweenMode
+	}
+	if (desiredMode != null) {
+		settings.thermostats.each { 
+			if (it.currentValue('thermostatMode') != desiredMode) {
+				it.setThermostatMode(desiredMode)
+				// notify
+			}
+		}
+	}
+}
+
+def getThermostatModes() {
+	def modes = []
+	thermostats.each {
+		modes += it.currentValue('supportedThermostatModes') // need to parse this json
+	}
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
@@ -162,6 +165,7 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
     log."${logType}" message
 }
 
+// Gotta fix notifications...
 private send(msg) {
 	if (sendPushMessage != "No") {
 		log.debug("sending push message")
