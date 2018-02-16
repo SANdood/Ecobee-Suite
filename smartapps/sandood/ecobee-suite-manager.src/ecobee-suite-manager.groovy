@@ -53,10 +53,11 @@
  *	1.4.02- Handle javax.net.ssl.SSLPeerUnverifiedException; fixed poll daemon recovery
  *  1.4.03- Fixed internal mentions of "Ecobee (Connect)"
  *	1.4.04- Handle javax.net.ssl.SSLHandshakeException & java.net.SocketTimeoutException
+ *  1.4.05- Improved timeout handling
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.04" }
+def getVersionNum() { return "1.4.05" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1654,13 +1655,13 @@ private boolean checkThermostatSummary(thermostatIdsString) {
             if (debugLevel(4)) LOG( "Refreshing your auth_token!", 4)
             if ( refreshAuthToken() ) {
                 // Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
-                LOG( preText+'Auth_token refreshed', 2, null, 'info')
+                LOG('checkThermostatSummary() - Auth_token refreshed', 2, null, 'info')
             } else {
-                LOG(preText+'Auth_token refresh failed', 1, null, 'error')
+                LOG('checkThermostatSummary() - Auth_token refresh failed', 1, null, 'error')
             }
             atomicState.inTimeoutRetry = 0
         } else {
-        	LOG("${preText}HttpResponseException; Exception info: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
+        	LOG("checkThermostatSummary() - HttpResponseException: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
         }
     } catch (java.util.concurrent.TimeoutException e) {
     	LOG("checkThermostatSummary() - Concurrent Execution Timeout: ${e}.", 1, null, "warn")
@@ -1995,9 +1996,11 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
            	if (debugLevelThree) LOG("pollEcobeAPI() - HttpResponseException occurred: Auth_token has expired", 3, null, "warn")
            	atomicState.action = "pollChildren"
             if (debugLevelFour) LOG( "pollEcobeeAPI() - Refreshing your auth_token!", 4, null, 'info')
+            atomicState.action = "pollChildren"
             if ( refreshAuthToken() ) { 
             	// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
                 LOG( 'pollEcobeeAPI() - Auth_token refreshed', 2, null, 'info')
+                //runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true])
             } else {
                 LOG( 'pollEcobeeApi() _ Auth_token refresh failed', 1, null, 'error')
             }
@@ -3101,8 +3104,11 @@ private refreshAuthToken(child=null) {
                 if(resp.status == 200) {
                     LOG('refreshAuthToken() - 200 Response received - Extracting info.', 4, child, 'trace' )
                     atomicState.reAttempt = 0 
-                    apiRestored()                    
-                    generateEventLocalParams() // Update the connected state at the thermostat devices
+                    // Tell the children that we are once again connected to the Ecobee API Cloud
+                	if (apiConnected() != "full") {
+						apiRestored()
+                    	generateEventLocalParams() // Update the connection status
+                	}
                     
                     jsonMap = resp.data // Needed to work around strange bug that wasn't updating state when accessing resp.data directly
                     LOG("resp.data = ${resp.data} -- jsonMap is? ${jsonMap}", 4, child)
@@ -3137,6 +3143,9 @@ private refreshAuthToken(child=null) {
                         if (action) { // && atomicState.action != "") {
                             LOG("Token refreshed. Rescheduling aborted action: ${action}", 4, child, 'trace')
                             runIn( 5, "${action}", [overwrite: true]) // this will collapse multiple threads back into just one
+                        } else {
+                        	// Assume we had to re-authorize during a pollEcobeeAPI session
+                            runIn(5, "pollChildren", [overwrite: true])
                         }
                     } else {
                     	LOG("No jsonMap??? ${jsonMap}", 2, child, 'trace')
@@ -3145,6 +3154,7 @@ private refreshAuthToken(child=null) {
 				    // Reschedule polling if it has been a while since the previous poll    
     				if (!isDaemonAlive("poll")) { LOG("refreshAuthToken - rescheduling poll daemon",1,null,'warn'); spawnDaemon("poll") }
     				if (!isDaemonAlive("watchdog")) { LOG("refreshAuthToken - rescheduling watchdog daemon",1,null,'warn'); spawnDaemon("watchdog") }
+                    atomicState.inTimeoutRetry = 0
                     return true
                 } else {
                     LOG("refreshAuthToken() - Failed ${resp.status} : ${resp.status.code}!", 1, child, 'error')
@@ -3177,14 +3187,26 @@ private refreshAuthToken(child=null) {
 		} catch (java.util.concurrent.TimeoutException e) {
 			LOG("refreshAuthToken(), TimeoutException: ${e}.", 1, child, "warn")
 			// Likely bad luck and network overload, move on and let it try again
-            if(canSchedule()) { runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) } else { refreshAuthToken() }            
+            if(canSchedule()) { runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) } else { refreshAuthToken(child) }            
             return false
-        } /* catch (org.apache.http.conn.ConnectTimeoutException e) {
-    		LOG("refreshAuthToken(), ConnectTimeoutException: ${e}.",1,null,'warn')
-        	if(canSchedule()) { runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) } else { refreshAuthToken() }
+        } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+    		LOG("refreshAuthToken() - ${e}.",1,child,'warn')  // Just log it, and hope for better next time...
+        	if (apiConnected != 'warn') {
+        		atomicState.connected = 'warn'
+        		atomicState.lastPoll = now()
+        		atomicState.lastPollDate = getTimestamp()
+				generateEventLocalParams()
+        	}
+        	def inTimeoutRetry = atomicState.inTimeoutRetry
+        	if (inTimeoutRetry == null) inTimeoutRetry = 0
+            // try to re-Authorize for 5 minutes
+        	if (inTimeoutRetry < 20) runIn(atomicState.reAttemptInterval.toInteger(), "refreshAuthToken", [overwrite: true])
+        	atomicState.inTimeoutRetry = inTimeoutRetry + 1
+    		//LOG("refreshAuthToken(), ConnectTimeoutException: ${e}.",1,null,'warn')
+        	//if(canSchedule()) { runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) } else { refreshAuthToken() }
         	return false
-    	} */ catch (Exception e) {
-        	LOG("refreshAuthToken(), General Exception: ${e}.", 1, child, "error")            
+    	} catch (Exception e) {
+        	LOG("refreshAuthToken() - Exception: ${e}.", 1, child, "error")            
             /*
             atomicState.reAttempt = atomicState.reAttempt + 1
 	        if (atomicState.reAttempt > 3) {                       	
@@ -3200,6 +3222,7 @@ private refreshAuthToken(child=null) {
         	    	refreshAuthToken(child) 
    	        	}
        		} */
+            throw e
             return false
         }
     }
@@ -3258,7 +3281,7 @@ def setMode(child, mode, deviceId) {
 }
 
 def setFanMinOnTime(child, deviceId, howLong) {
-	LOG("setFanMinOnTime(${howLong})", 4, child)
+	LOG("setFanMinOnTime(${howLong})", 2, child)
     
     if (!howLong.isNumber() || (howLong.toInteger() < 0) || howLong.toInteger() > 55) {
     	LOG("setFanMinOnTime() - Invalid Argument ${howLong}",2,child,'warn')
@@ -3600,7 +3623,7 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 
 // API Helper Functions
 private def sendJson(child=null, String jsonBody) {
-    
+    log.debug "sendJson() - ${jsonBody}"
 	def returnStatus
     def result = false
     
@@ -3610,7 +3633,12 @@ private def sendJson(child=null, String jsonBody) {
 			headers: ["Content-Type": "application/json", "Authorization": "Bearer ${atomicState.authToken}"],
 			body: jsonBody
 	]
-	
+    
+    // Just in case something goes wrong...
+	atomicState.savedActionJsonBody = jsonBody
+    atomicState.savedActionChild = child.deviceNetworkId
+    atomicState.action = "sendJsonRetry"
+            
 	try{
 		httpPost(cmdParams) { resp ->
    	    	returnStatus = resp.data.status.code
@@ -3624,8 +3652,11 @@ private def sendJson(child=null, String jsonBody) {
 				if (resp.data.status.code == 0) {
 					if (debugLevel(4)) LOG("Successful call to ecobee API.", 4, child)
                     result = true
-					apiRestored()
-                    generateEventLocalParams()
+                	// Tell the children that we are once again connected to the Ecobee API Cloud
+                	if (apiConnected() != "full") {
+						apiRestored()
+                    	generateEventLocalParams() // Update the connection status
+                	}
 				} else {
 					LOG("Error return code = ${resp.data.status.code}", 1, child, "error")
 				}
@@ -3662,12 +3693,30 @@ private def sendJson(child=null, String jsonBody) {
         } else {
         	LOG("sendJson() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} || ${e.response.data.status.code}", 1, null, "error")
         }
+    // These appear to be transient errors, treat them all as if a Timeout...
+    } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+    	LOG("sendJson() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
+        if (apiConnected != 'warn') {
+        	atomicState.connected = 'warn'
+        	atomicState.lastPoll = now()
+        	atomicState.lastPollDate = getTimestamp()
+			generateEventLocalParams()
+        }
+        def inTimeoutRetry = atomicState.inTimeoutRetry
+        if (inTimeoutRetry == null) inTimeoutRetry = 0
+        if (inTimeoutRetry < 8) {
+            // retry quickly...
+        	runIn(2, "sendJsonRetry", [overwrite: true])
+        }
+        atomicState.inTimeoutRetry = inTimeoutRetry + 1
+        result = false
     } catch(Exception e) {
     	// Might need to further break down 
-		LOG("sendJson() - Exception Sending Json: " + e, 1, child, "error")
-        // atomicState.connected = "warn"
-        // generateEventLocalParams()
+		LOG("sendJson() - Exception: ${e}", 1, child, "error")
+        result = false
+        throw e
 	}
+    
 	return result
 }
 
