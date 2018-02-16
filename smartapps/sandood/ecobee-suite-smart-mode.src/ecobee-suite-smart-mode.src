@@ -12,7 +12,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *
+ *	1.4.0 -	Initial release
  */
 def getVersionNum() { return "1.4.0" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode, version ${getVersionNum()}" }
@@ -22,7 +22,7 @@ definition(
 	name: "ecobee Suite Smart Mode",
 	namespace: "sandood",
 	author: "Justin J. Leonard & Barry A. Burke",
-	description: "Set Ecobee Heat/Cool/Auto Mode Based on outside temperature",
+	description: "Set Ecobee Heat/Cool/Auto mode based on outside temperature",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -119,44 +119,58 @@ def initialize() {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
+    LOG("Initializing...",2,null,'info')
+    
+    Double tempNow
 	switch( settings.tempSource) {
 		case 'Weather for Location':
-			if (locFreq == 1) {
+			if (settings.locFreq == 1) {
             	runEvery1Minute( getZipTemp() )
             } else if (locFreq < 60) {
-            	runEvery"${locFreq}"Minutes( getZipTemp() )
+            	runEvery"${settings.locFreq}"Minutes( getZipTemp() )
             } else {
-            	locHours = locFreq / 60
+            	locHours = settings.locFreq / 60
                 runEvery"${locHours}"Hours( getZipTemp() )
             }
+            tempNow = getZipTemp()
 			break;
 		
 		case 'SmartThings Temperature Sensor':
 			subscribe( settings.thermometer, 'temperature', tempChangeHandler)
+            tempNow = settings.thermometer.currentValue('temperature').toDouble()
+            temperatureUpdate(tempNow)
 			break;
 		
 		case "Thermostat's Weather Temperature":
 			def theStat = []
 			theStat = settings.thermostats.size() == 1 ? settings.thermostats : [settings.tstatTemp]
-			subscribe(theStat, "weatherTemperature", tempChangeHandler)
+			subscribe(theStat, 'weatherTemperature', tempChangeHandler)
+            tempNow = theStat.currentValue('weatherTemperature').toDouble()
 			break;
 		
 		case 'WeatherUnderground Station':
-			if (pwsFreq == 1) {
+			if (settings.pwsFreq == 1) {
             	runEvery1Minute( getPwsTemp() )
-            } else if (pwsFreq < 60) {
-            	runEvery"${pwsFreq}"Minutes( getPwsTemp() )
+            } else if (settings.pwsFreq < 60) {
+            	runEvery"${settings.pwsFreq}"Minutes( getPwsTemp() )
             } else {
-            	pwsHours = pwsFreq / 60
+            	pwsHours = settings.pwsFreq / 60
                 runEvery"${pwsHours}"Hours( getPwsTemp() )
             }
+            tempNow = getPwsTemp()
 			break;
 	}
+    LOG("Initialization complete...current temperature is ${tempNow}",2,null,'info')
 }
 
 def tempChangeHandler(evt) {
-	Double newTemp = evt.DoubleValue
-	temperatureUpdate( newTemp )
+	Double newTemp 
+    try { 
+    	newTemp = evt.doubleValue 
+		temperatureUpdate( newTemp )
+    } catch (e) {
+    	LOG("Invalid temp: ${e}",2,null,'warn')
+    }
 }   
 							  
 def temperatureUpdate( Double temp ) {
@@ -172,43 +186,45 @@ def temperatureUpdate( Double temp ) {
 		settings.thermostats.each { 
 			if (it.currentValue('thermostatMode') != desiredMode) {
 				it.setThermostatMode(desiredMode)
-				NOTIFY("${app.label} changed ${it.displayName} to mode: ${desiredMode}")
+                LOG("Temp is ${temp}, changed ${it.displayName}'s mode to ${desiredMode}",2,null,'info')
+				NOTIFY("${app.label} Temp changed to ${temp}, changed ${it.displayName} to mode: ${desiredMode}")
 			} else {
-            	NOTIFY("${app.label} found ${it.displayName} is already in ${desiredMode} mode")
+            	LOG("Temp is ${temp}, found ${it.displayName} is already in ${desiredMode} mode",3,null,'info')
+            	// NOTIFY("${app.label} Temp changed to ${temp}, found ${it.displayName} is already in ${desiredMode} mode")
             }
 		}
 	}
 }
 
 private def getZipTemp() {
-	getWUTemp('zip')
+	return getWUTemp('zip')
 }
 
 private def getPwsTemp() {
-	getWUTemp('pws')
+	return getWUTemp('pws')
 }
 
 private def getWUTemp(type) {
 	def isMetric = (getTemperatureScale() == "C")
     Double tempNow = 999.99
-    def source = (type == 'zip') ? zipCode : "pws:"+stationID
+    def source = (type == 'zip') ? settings.zipCode : "pws:"+settings.stationID
 	Map wdata = getWeatherFeature('conditions', source)
     if (wdata && wdata.response) {
     	LOG("conditions: ${wdata.response}",4,null,'trace')
 		if (wdata.response.containsKey('error')) {
         	if (wdata.response.error.type != 'invalidfeature') {
     			LOG("Please check ${type=='zip'?'Zipcode':'WU Station'} setting, error:\n${wdata.response.error.type}: ${wdata.response.error.description}" ,1,null,'error')
-        		return
+        		return null
             } 
             else {
             	LOG("Error requesting weather:\n${wdata.response.error}",2,null,'warn')
-            	return
+            	return null
             }
 		}
     }
     else {
     	LOG("Please check Zipcode/PWS setting, weather returned: null",2,null,'warn')
-    	return false
+    	return null
     }
     if (wdata.current_observation) { 
     	if (!isMetric) {
@@ -218,19 +234,21 @@ private def getWUTemp(type) {
         }
         if (tempNow != 999.99) {
         	temperatureUpdate(tempNow)
+            return tempNow
         } else {
         	LOG("Invalid temp returned ${newTemp}, ignoring...",2,null,'warn')
-            return
+            return null
         }
     }
     LOG("Current conditions unavailable",1,null,'error')
+    return null
 }
 
 // return all the modes that ALL thermostats support
 def getThermostatModes() {
 	def theModes = []
     
-    thermostats.each { stat ->
+    settings.thermostats.each { stat ->
     	if (theModes == []) {
         	theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", ")
         } else {
@@ -287,11 +305,13 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 }
 
 private def NOTIFY(message) {
-    if (location.contactBookEnabled && recipients) {
-        sendNotificationToContacts(message, recipients)		// notify contacts & hello home
-    } else if (pushNotify) {
-    	sendNotification(message)							// push and hello home
-    } else {
-        sendNotificationEvent(message)						// just hello home
+	if (settings.notify) {
+    	if (location.contactBookEnabled && settings.recipients) {
+        	sendNotificationToContacts(message, settings.recipients)// notify contacts & hello home
+    	} else if (settings.pushNotify) {
+    		sendNotification(message)								// push and hello home
+    	} else {
+        	sendNotificationEvent(message)							// just hello home
+    	}
     }
 }
