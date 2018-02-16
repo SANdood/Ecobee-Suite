@@ -54,31 +54,35 @@
  *  1.4.03- Fixed internal mentions of "Ecobee (Connect)"
  *	1.4.04- Handle javax.net.ssl.SSLHandshakeException & java.net.SocketTimeoutException
  *  1.4.05- Improved timeout handling
+ *	1.4.06- Added new Smart Mode helper SmartApp
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.05" }
+def getVersionNum() { return "1.4.06" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
 		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",  
             namespace: "sandood", multiple: true, 
-            title: "New Contacts & Switches Handler..."],
+            title: "New Contacts & Switches Helper..."],
     	[name: "ecobeeRoutinesChild", appName: "ecobee Suite Routines",  
             namespace: "sandood", multiple: true, 
-            title: "New Mode/Routine/Program Handler..."], 
+            title: "New Mode/Routine/Program Helper..."], 
         [name: "ecobeeCirculationChild", appName: "ecobee Suite Smart Circulation",
 			 namespace: "sandood", multiple: true,
-			 title: "New Smart Circulation Handler..."],
+			 title: "New Smart Circulation Helper..."],
+		[name: "ecobeeModeChild", appName: "ecobee Suite Smart Mode",
+        	namespace: "sandood", multiple: true,
+            title: "New Smart Mode Helper..."],
         [name: "ecobeeRoomChild", appName: "ecobee Suite Smart Room",
         	namespace: "sandood", multiple: true,
-            title: "New Smart Room Handler..."],
+            title: "New Smart Room Helper..."],
         [name: "ecobeeSwitchesChild", appName: "ecobee Suite Smart Switches",
         	namespace: "sandood", multiple: true,
-            title: "New Smart Switch/Dimmer/Vent Handler..."],
+            title: "New Smart Switch/Dimmer/Vent Helper..."],
         [name: "ecobeeVentsChild", appName: "ecobee Suite Smart Vents",
         	namespace: "sandood", multiple: true,
-            title: "New Smart Vents Handler..."],
+            title: "New Smart Vents Helper..."],
 		[name: "ecobeeZonesChild", appName: "ecobee Suite Smart Zones",
 			 namespace: "sandood", multiple: true,
 			 title: "New Smart Zone Handler..."]
@@ -220,7 +224,7 @@ def mainPage() {
 
 def removePage() {
 	dynamicPage(name: "removePage", title: "Remove Ecobee Suite Manager and All Devices", install: false, uninstall: true) {
-    	section ("WARNING!\n\nRemoving eEcobee Suite Manager also removes all Devices\n") {
+    	section ("WARNING!\n\nRemoving Ecobee Suite Manager also removes all Devices\n") {
         }
     }
 }
