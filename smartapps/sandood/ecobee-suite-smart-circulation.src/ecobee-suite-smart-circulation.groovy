@@ -35,9 +35,10 @@
  *	1.2.4 - Allow changes while thermostatMode is 'off' also
  *	1.3.0 - Major release: renamed and moved to "sandood" namespace
  *	1.4.0 - Renamed parent Ecobee Suite Manager
+ *	1.4.01- Tweaked supportedThermostatModes handling
  *
  */
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -150,7 +151,7 @@ def getThermostatModesList() {
 	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
     if (settings.theThermostat) {
     	def tempModes = theThermostat.currentValue('supportedThermostatModes')
-        if (tempModes) statModes = tempModes.substring(1,tempModes.length()-1).split(', ').collect{it} 
+        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
     }
     return statModes
 }
