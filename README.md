@@ -50,6 +50,7 @@ Important Notice!
   - [ecobee Suite Routines SmartApp](#features-routines-sa)
   - [ecobee Suite Open Contacts SmartApp](#features-opencontact-sa)
   - [ecobee Suite Smart Circulation SmartApp](#features-smart-circ-sa)
+  - [ecobeeSuite Smart Mode](#smart-mode-sa) ***(NEW!)***
   - [ecobee Suite Smart Room SmartApp](#features-smart-room-sa)
   - [ecobee Suite Smart Switches SmartApp](#features-smart-switches-sa)
   - [ecobee Suite Smart Vents SmartApp](#features-smart-vents-sa)
@@ -106,13 +107,16 @@ As noted, this work is fully Open Source, and available for use at no charge. Ho
 
 As mentioned, the most significant enhancement with the release of 1.3.* is the separation from the SmartThings Ecobee support, as well as from all prior versions of both @StrykerSKS' and my own Ecobee integration. Users of these prior versions should review the [Upgrading from Prior Releases](#upgrading) section below for more IMPORTANT information before installing this version.
 
-#### Key enhancements in release 1.3.0
+#### Key enhancements in release 1.4.0
+- ***Significantly improved handling of connection errors.*** While I cannot yet guaranteed non-stop operation during all SmartThings and/or Ecobee Cloud issues, the code now silently recovers from most error conditions;
+- Addition of the new [Smart Mode](#smart-mode-sa) Helper SmartApp
 - Enhanced setpoint adjustments, including using the Up/Down arrows on the main tile;
-- Enhanced UI, with the addition of 
+- Enhanced UI, with the addition of
   - Current & target humidity levels (the latter only when humidifier or dehumidifier is enabled;
   - New slider to manually adjust fan circulation time (fanMinOnTime);
+ <sp>
+
 - Better (complete?) support for Celsius; 
-- Silent handling of connection timeouts between SmartThing and Ecobee cloud APIs, for fewer of those ominous "You MUST reconnect" notifications;
 - A cornucopia of performance optimizations to improve both initial installations and running performance
 - Improved API status display (last row in the Thermostat UI) - now shows "WARN" status when a call to the Ecobee API times out
 
@@ -548,6 +552,21 @@ The `Ecobee Suite Smart Ciculation` SmartApp will adjust fan mininum on time of 
 - Option to override fan minutes per hour during Vacation hold
 - Enable during specific Location Modes or when thermostat is in specific Program
 - Temporarily Disable app without having to delete and recreate!
+
+## <a name="smart-mode-sa">`Smart Mode` Handler</a> (NEW!)
+This (new) Helper will automatically change Ecobee Thermostats' Mode based on external temperature changes. Generally, the intention is to run Cool or Heat only modes when the outside temperatures might otherwise cause cycling between Heat/Cool if "Auto" were selected. Can also be used to turn the HVAC off when outdoor temperatures warrant leaving the windows open.
+
+**Features**
+* Choose from only the Modes that are configured on the thermostat (Auto, Aux_Heat, Cool, Heat, Off) 
+* Choose from 4 possible temperature sources:
+  * Zip Code (SmartThings Location or manually specified Zip Code) - uses SmartThings embedded support for WeatherUnderground data
+  * Any SmartThings Temperature Sensor
+  * The Ecobee-supplied outdoor Weather Temperature (note, this is notoriously bad data for most people, unless you live within a couple of miles of the weather sources Ecobee uses)
+  * A nearby WeatherUnderground Personal Weather Station (pws) (the app will help locate nearby pws's)
+* Optionally deliver Notifications whenever the thermostat(s) mode is changed
+* Use a single instance (below, above and between temperatures), or create multiple instances
+
+Many thanks to @JustinL for the original idea, the starting code base, and beta testing for this new Smart Mode Helper.
 
 ## <a name="features-smart-room-sa">`Smart Room` Handler</a>
 The `ecobee Suite Smart Room` Helper SmartApp will automate a normally unused room, Activating it one or more of the Doors associated with the Smart Room are left open for a configurable number of minutes, and Deactivating it when all the Doors are closed for a configurable number of hours.
