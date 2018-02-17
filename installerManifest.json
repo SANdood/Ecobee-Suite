@@ -8,7 +8,7 @@
 	"description": 	"PLEASE UNINSTALL v1.3.0!!!! Free Suite of SmartApps and Device Handlers to integrate your Ecobee Thermostats and Sensors with SmartThings.",
 	"category": 	"My Apps",
 	"bannerUrl": 	"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/Ecobee_Suite_banner.png", 
-	"forumUrl": 	"https://community.smartthings.com/t/release-free-ecobee-suite-version-1-3/118319",
+	"forumUrl": 	"https://community.smartthings.com/t/release-updated-ecobee-suite-v1-4-0-free/118597",
 	"docUrl": 	"https://github.com/sandood/Ecobee-Suite/blob/master/README.md",
 	"releaseType":	"production",
 	"keywords": [
@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.4.0",
+			"version": 	"1.4.06",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -51,9 +51,18 @@
 				"name": 	"ecobee Suite Smart Circulation",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.4.0",
+				"version": 	"1.4.01",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
+				"optional": 	false
+			},
+			{
+				"name": 	"ecobee Suite Smart Mode",
+				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+				"published": 	true,
+				"version": 	"1.4.0",
+				"appSettings": 	{ },
+				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
 				"optional": 	false
 			},
 			{
@@ -99,7 +108,7 @@
 			"name": 	"Ecobee Suite Thermostat",
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published":	true,
-			"version": 	"1.4.0",
+			"version": 	"1.4.02",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
 			"optional": 	false
 		},
@@ -107,7 +116,7 @@
 			"name": 	"Ecobee Suite Sensor",
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
-			"version": 	"1.4.0",
+			"version": 	"1.4.01",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
 			"optional": 	false
 		}

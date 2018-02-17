@@ -49,9 +49,11 @@
  *  1.2.21a- Fix non-temporary program changes
  *	1.3.0  - Major release: rename and move to "sandood" namespace
  *	1.4.0  - Major release: Renamed device files
+ *	1.4.01 - Don't display apiConnected status changes in device log unless in Debug Level 4 or 5
+ *	1.4.02 - Fixed display of fanMinOnTime in device log
  */
 
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.02" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -140,10 +142,8 @@ metadata {
         attribute "logo", "string"
         attribute "timeOfDay", "enum", ["day", "night"]
         attribute "lastPoll", "string"
-        
-        attribute "supportedThermostatModes", "JSON_OBJECT" // enum
-        attribute "supportedThermostatFanModes", "JSON_OBJECT" // enum
-        
+        attribute "supportedThermostatModes", "JSON_OBJECT" // USAGE: List theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", ")
+        attribute "supportedThermostatFanModes", "JSON_OBJECT" // USAGE: List theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(", ")
 		attribute "equipmentStatus", "string"
         attribute "humiditySetpoint", "string"
         attribute "weatherTemperature", "number"
@@ -190,7 +190,7 @@ metadata {
         attribute "coolDifferential", "number"
         attribute "heatCoolMinDelta", "number"
         attribute "fanMinOnTime", "number"
-        attribute "programsList", "enum"
+        attribute "programsList", "enum"				// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
         attribute "thermostatOperatingStateDisplay", "string"
         attribute "thermostatFanModeDisplay", "string"
         attribute "thermostatTime", "string"
@@ -306,8 +306,8 @@ metadata {
 		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			//state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
-            state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
+			state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
+            //state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
 		}
         
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
@@ -323,6 +323,9 @@ metadata {
         valueTile("weatherTempColor", "device.weatherTemperature", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
 			state("weatherTemperature", label:'${currentValue}°', unit:"F",	backgroundColors: getStockTempColors(), defaultState: true)		// use Fahrenheit scale so that outdoor temps register
 		}
+        valueTile("fanMinOnTimeColor", "device.fanMinOnTime", width: 2, height: 2, decoration: "flat") {
+        	state("fanMinOnTime", label: '${currentValue}′', backgroundColor: "#808080", defaultState: true)
+        }
 		
 		standardTile("mode", "device.thermostatMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "off", action:"heat", label: "Mode: Off", nextState: "updating", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_label.png"
@@ -346,7 +349,6 @@ metadata {
 			state "updating", 						label: 'Working', 					icon: "st.motion.motion.inactive"
 		}
         
-        // TODO Use a different color for the one that is active
 		standardTile("setModeHeat", "device.setModeHeat", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {			
 			state "heat", action:"heat",  label: "Heat", nextState: "updating", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_heat.png"
             state "heat dis", action:"noOp",  label: "Heat", nextState: "heat dis", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_heat_grey.png"
@@ -411,14 +413,14 @@ metadata {
 			state "circulate dis",	action:"noOp", 			label: "Fan Auto", 		nextState: "circulate dis",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_grey.png"            
             state "updating", 								label:"Working", 									icon: "st.motion.motion.inactive"
 		}
-        standardTile("fanModeAutoSlider", "device.thermostatFanMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-        	state "on", action:"fanAuto", nextState: "auto", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_auto_slider_off.png"
-            state "auto", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/fanmode_auto_slider_on.png"
-        }
-		standardTile("fanModeOnSlider", "device.thermostatFanMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-        	state "auto", action:"fanOn", nextState: "auto", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_on_slider_off.png"
-            state "on", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_on_slider_on.png"
-        }
+//        standardTile("fanModeAutoSlider", "device.thermostatFanMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+//        	state "on", action:"fanAuto", nextState: "auto", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_auto_slider_off.png"
+//            state "auto", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/fanmode_auto_slider_on.png"
+//        }
+//		standardTile("fanModeOnSlider", "device.thermostatFanMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+//        	state "auto", action:"fanOn", nextState: "auto", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_on_slider_off.png"
+//            state "on", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_on_slider_on.png"
+//        }
         
 		standardTile("upButtonControl", "device.thermostatSetpoint", width: 2, height: 1, inactiveLabel: false, decoration: "flat") {
 			state "setpoint", action:"raiseSetpoint", icon:"st.thermostat.thermostat-up", defaultState: true
@@ -635,26 +637,21 @@ metadata {
 		}
         standardTile("weatherTemperature", "device.weatherTemperature", width: 2, height: 2, decoration: "flat") {
 			state "default", action: "noOpWeatherTemperature", nextState: "default", label: 'Out: ${currentValue}°', defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_fc.png"
-		}
-        
+		}       
         valueTile("lastPoll", "device.lastPoll", height: 1, width: 5, decoration: "flat") {
 			state "thermostatStatus", label:'Last Poll: ${currentValue}', defaultState: true, backgroundColor:"#ffffff"
 		}
-        
 		valueTile("holdStatus", "device.holdStatus", height: 1, width: 4, decoration: "flat") {
 			state "default", label:'${currentValue}', defaultState: true //, backgroundColor:"#000000", foregroudColor: "#ffffff"
-		}
-		
+		}		
         standardTile("ecoLogo", "device.logo", inactiveLabel: false, width: 1, height: 1) {
 			state "default", defaultState: true,  icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"			
 		}
-
         standardTile("oneBuffer", "device.logo", inactiveLabel: false, width: 1, height: 1, decoration: "flat") {
         	state "default", defaultState: true
         }
-        
         valueTile("fanMinOnTime", "device.fanMinOnTime", width: 1, height: 1, decoration: "flat") {
-        	state "fanMinOnTime", /*"default",  action: "noOp", nextState: "default", */ label: '${currentValue}m/hr', defaultState: true
+        	state "fanMinOnTime", label: '${currentValue}m/hr', defaultState: true
         }
         valueTile("tstatDate", "device.tstatDate", width: 1, height: 1, decoration: "flat") {
         	state "default", /*"default",  action: "noOp", nextState: "default", */ label: '${currentValue}', defaultState: true
@@ -1033,7 +1030,8 @@ def generateEvent(Map results) {
                 	break;
 				
 				case 'apiConnected':
-                	if (isChange) event = eventFront + [value: sendValue, descriptionText: "API Connection is ${value}", isStateChange: true, displayed: true]
+                	// only display in the devices' log if we are in debug level 4 or 5
+                	if (isChange) event = eventFront + [value: sendValue, descriptionText: "API Connection is ${value}", isStateChange: true, displayed: debugLevelFour]
 					break;
 				
 				case 'weatherSymbol':
@@ -1081,7 +1079,7 @@ def generateEvent(Map results) {
 				case 'fanMinOnTime':
 					if (isChange || forceChange) {
                     	def circulateText = (value == 0) ? 'Fan Circulation is disabled' : "Fan Circulation is ${sendValue} minutes per hour"
-                    	if (isChange) event = eventFront + [value: sendValue, descriptionText: circulateText, isStateChange: isChange, displayed: true]
+                    	event = eventFront + [value: sendValue, descriptionText: circulateText, /* isStateChange: isChange, */ displayed: true]
                         def fanMode = device.currentValue('thermostatFanMode')
                         if (fanMode != 'on') {
                        		if (device.currentValue('thermostatMode') == 'off') {
@@ -2332,7 +2330,7 @@ void setFanMinOnTime(minutes=20) {
             generateEvent(updates)
         }
     } else {
-    	LOG("setFanMinOnTime(${minutes}) - invalid argument",5,null, 'error')
+    	LOG("setFanMinOnTime(${minutes}) - invalid argument",1,null, 'error')
     }
 }
 
@@ -2355,7 +2353,7 @@ void setVacationFanMinOnTime(minutes=0) {
             generateEvent(updates)
         }
     } else {
-    	LOG("setVacationFanMinOnTime(${minutes}) - invalid argument",5,null, "error")
+    	LOG("setVacationFanMinOnTime(${minutes}) - invalid argument",1,null, "error")
     }
 }
 

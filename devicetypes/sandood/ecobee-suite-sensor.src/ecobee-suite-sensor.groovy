@@ -30,10 +30,11 @@
  *	1.2.2  - Added new Program icons, Awake/Wakeup attributes (not currently displayed)
  *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
  *	1.4.0  - Major Release: renamed devices also
+ *	1.4.01 - Added VersionLabel display
  *
  */
 
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -202,6 +203,9 @@ metadata {
 		details(   ['temperatureDisplay',
         			'currentProgramIcon', 	'doors', 'windows', 'vents', 'SmartRoom',
                     						'Home',  'Away',  'Sleep', 'refresh'])
+	}
+    preferences {
+       	input "dummy", "text", title: "${getVersionLabel()}", description: "."
 	}
 }
 
