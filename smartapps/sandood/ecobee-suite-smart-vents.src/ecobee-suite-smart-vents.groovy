@@ -25,8 +25,9 @@
  *	1.2.1 - Protect against LOG type errors
  *	1.3.0 - Major Release: renamed and moved to "sandood" namespace
  *	1.4.0 - Renamed parent Ecobee Suite Manager
+ *	1.4.01- Select ventState when disabling, better temperature validation
  */
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -34,7 +35,7 @@ definition(
 	name: "ecobee Suite Smart Vents",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "Automates SmartThings-controlled vents to meet a target temperature in a room",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates SmartThings-controlled vents to meet a target temperature in a room.",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -58,20 +59,20 @@ def mainPage() {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn on below to re-enable this Helper."
             } else {
             	paragraph("Select temperature sensors for this handler. If you select multiple sensors, the temperature will be averaged across all of them.${settings.theSensors?'\n\nCurrent temperature is '+getCurrentTemperature().toString()+'°.':''}")
-        		input(name: "theSensors", type:"capability.temperatureMeasurement", title: "Use which temperature Sensor(s)", required: true, multiple: true, submitOnChange: true)
+        		input(name: "theSensors", type:"capability.temperatureMeasurement", title: "Use which temperature Sensor(s)", description: 'Tap to choose...', required: true, multiple: true, submitOnChange: true)
             }
 		}
         
         if (!settings.tempDisable) {
        		section(title: "Smart Vents: Windows (optional)") {
         		paragraph("Windows will temporarily deactivate Smart Vents while they are open")
-            	input(name: "theWindows", type: "capability.contactSensor", title: "Which Window contact sensor(s)? (optional)", required: false, multiple: true)
+            	input(name: "theWindows", type: "capability.contactSensor", title: "Which Window contact sensor(s)? (optional)", description: 'Tap to choose...', required: false, multiple: true)
         	}
        
         	section(title: "Smart Vents: Automated Vents") {
         		paragraph("Specified Econet or Keen vents will be opened until target temperature is achieved, and then closed")
-            	input(name: "theEconetVents", type: "device.econetVent", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, submitOnChange: true)
-            	input(name: "theKeenVents", type: "device.keenHomeSmartVent", title: "Control which Keen Home Smart Vent(s)?", required: false, multiple:true, submitOnChange: true)
+            	input(name: "theEconetVents", type: "device.econetVent", title: "Control which EcoNet Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
+            	input(name: "theKeenVents", type: "device.keenHomeSmartVent", title: "Control which Keen Home Smart Vent(s)?", description: 'Tap to choose...', required: false, multiple:true, submitOnChange: true)
             	if (settings.theEconetVents || settings.theKeenVents) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage.")
             		input(name: "minimumVentLevel", type: "number", title: "Minimum vent level when closed?", required: true, defaultValue:10, description: '10', range: "0..100")
@@ -80,7 +81,7 @@ def mainPage() {
         
 			section(title: "Smart Vents: Thermostat") {
 				paragraph("Specify which thermostat to monitor for heating/cooling events")
-				input(name: "theThermostat", type: "capability.thermostat", title: "Select thermostat", multiple: false, required: true, submitOnChange: true)
+				input(name: "theThermostat", type: "capability.thermostat", title: "Select thermostat", description: 'Tap to choose...', multiple: false, required: true, submitOnChange: true)
 			}
 		
 			section(title: "Smart Vents: Target Temperature") {
@@ -89,12 +90,17 @@ def mainPage() {
                 }
 				input(name: "useThermostat", type: "bool", title: "Follow setpoints on thermostat${settings.theThermostat?' '+settings.theThermostat.displayName:''}?", required: true, defaultValue: true, submitOnChange: true)
 				if (!settings.useThermostat) {
-					input(name: "heatingSetpoint", type: "number", title: "Target heating setpoint?", required: true)
-					input(name: "coolingSetpoint", type: "number", title: "Target cooling setpoint?", required: true)
+					input(name: "heatingSetpoint", type: "decimal", title: "Target heating setpoint?", description: 'Tap to choose...', required: true)
+					input(name: "coolingSetpoint", type: "decimal", title: "Target cooling setpoint?", description: 'Tap to choose...', required: true)
 				}
 			}
-        }
-        	
+        } else { 
+        	if (settings.theEconetVents || settings.theKeenVents) {
+            	section( title: "Disabled Vent State") {
+            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:['open','closed','unchanged'], required: true, multiple: false, defaultValue: 'closed')
+                }
+      		}
+        }        	
 		section(title: "Temporarily Disable?") {
         	input(name: "tempDisable", title: "Temporarily Disable this Helper? ", type: "bool", description: "", defaultValue: false, submitOnChange: true)                
         }
@@ -124,9 +130,14 @@ def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
     atomicState.scheduled = false
     // Now, just exit if we are disabled...
-	if(tempDisable == true) {
-    	LOG("temporarily disabled as per request.", 1, null, "warn")
-    	return true
+	if (tempDisable) {
+        if (disabledVents && (disabledVents != 'unchanged')) {
+        	setTheVents(disabledVents)
+            LOG("Temporarily disabled as per request, setting vents to ${disabledVents}.", 1, null, "warn")
+        } else {
+        	LOG("Temporarily disabled as per request, vents unchanged", 1, null, "warn")
+        }
+        return true
     }
 
     subscribe(theSensors, 'temperature', changeHandler)	
@@ -158,46 +169,57 @@ private String checkTemperature() {
     
 	def cOpState = theThermostat.currentValue('thermostatOperatingState')
     LOG("Current Operating State ${cOpState}",3,null,'info')
-	def cTemp = getCurrentTemperature()
+	Double cTemp = getCurrentTemperature()
 	def vents = ''			// if not heating/cooling/fan, then no change to current vents
-    if (cOpState == 'heating') {
-    	def heatTarget = useThermostat? (smarter? theThermostat.currentTemperature : theThermostat.currentValue('heatingSetpoint')) : settings.heatingSetpoint
-        if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
-		vents = (heatTarget <= cTemp) ? 'closed' : 'open'
-        LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
-    } else if (cOpState == 'cooling') {
-    	def coolTarget = useThermostat? (smarter? theThermostat.currentTemperature : theThermostat.currentValue('coolingSetpoint')) : settings.coolingSetpoint
-        if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
-		vents = (coolTarget >= cTemp) ? 'closed' : 'open'
-        LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
-	} else if (cOpState == 'idle') {
-    	LOG("${theThermostat.displayName} is idle, room temperature is ${cTemp}°",3,null,'info')
-        def currentMode = theThermostat.currentValue('thermostatMode')
-        if (currentMode == 'cool') {
-        	def coolTarget = useThermostat ? theThermostat.currentValue('coolingSetpoint') : settings.coolingSetpoint
-            vents = (coolTarget >= cTemp) ? 'closed' : 'open'
-        } 
-    } else if (vents == '' && (cOpState == 'fan only')) {
-    	vents = 'open'		// if fan only, open the vents
-        LOG("${theThermostat.displayName} is running fan only, room temperature is ${cTemp}°",3,null,'info')
-    }
+    if (cTemp != null) {	// only if valid temperature readings (Ecosensors can return "unknown")
+    	if (cOpState == 'heating') {
+    		Double heatTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature.toDouble() : theThermostat.currentValue('heatingSetpoint').toDouble()) : settings.heatingSetpoint.toDouble()
+        	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential').toDouble()
+			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
+        	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
+    	} else if (cOpState == 'cooling') {
+    		Double coolTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature.toDouble() : theThermostat.currentValue('coolingSetpoint').toDouble()) : settings.coolingSetpoint.toDouble()
+        	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
+			vents = (coolTarget >= cTemp) ? 'closed' : 'open'
+        	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
+		} else if (cOpState == 'idle') {
+    		LOG("${theThermostat.displayName} is idle, room temperature is ${cTemp}°",3,null,'info')
+        	def currentMode = theThermostat.currentValue('thermostatMode')
+        	if (currentMode == 'cool') {
+        		def coolTarget = useThermostat ? theThermostat.currentValue('coolingSetpoint').toDOuble() : settings.coolingSetpoint.toDouble()
+            	vents = (coolTarget >= cTemp) ? 'closed' : 'open'
+        	} 
+    	} else if (vents == '' && (cOpState == 'fan only')) {
+    		vents = 'open'		// if fan only, open the vents
+        	LOG("${theThermostat.displayName} is running fan only, room temperature is ${cTemp}°",3,null,'info')
+    	}
     
-	if (theWindows && theWindows.currentContact.contains('open')) {
-		vents = 'closed'	// but if a window is open, close the vents
-        LOG("${(theWindows.size()>1)?'A':'The'} window/contact is open",3,null,'info')
+		if (theWindows && theWindows.currentContact.contains('open')) {
+			vents = 'closed'	// but if a window is open, close the vents
+        	LOG("${(theWindows.size()>1)?'A':'The'} window/contact is open",3,null,'info')
+    	}
+		LOG("Vents should be ${vents!=''?vents:'unchanged'}",3,null,'info')
+		return vents
     }
-	LOG("Vents should be ${vents!=''?vents:'unchanged'}",3,null,'info')
-	return vents
 }
 
 def getCurrentTemperature() {
 	Double tTemp = 0.0
+    Integer i = 0
 	settings.theSensors.each {
-		tTemp += it.currentTemperature
+		if (it.currentTemperature.isNumber()) {
+        	tTemp += it.currentTemperature.toDouble()
+            i++
+        }
 	}
-	if (settings.theSensors.size() > 1) tTemp = tTemp / settings.theSensors.size() // average all the sensors, if more than 1
-	tTemp = tTemp.round(1)
-    return tTemp
+	if (i > 1) tTemp = tTemp / i // average all the sensors, if more than 1
+    if (i > 0) {
+		tTemp = tTemp.round(1)
+    	return tTemp
+    } else {
+    	LOG("No valid temperature readings from ${settings.theSensors}",1,null,'warn')
+    	return null
+    }
 }
 
 private def setTheVents(ventState) {
