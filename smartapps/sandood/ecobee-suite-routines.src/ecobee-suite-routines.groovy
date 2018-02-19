@@ -34,8 +34,9 @@
  * 1.2.2 - Protect against LOG type errors
  * 1.3.0 - Major Release: renamed and moved to "sandood" namespace
  * 1.4.0 - Renamed parent to Ecobee Suite Manager
+ * 1.4.01- Updated description
  */
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Routines, version ${getVersionNum()}" }
 
 
@@ -43,7 +44,7 @@ definition(
 	name: "ecobee Suite Routines",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "Change ecobee Programs based on SmartThings Routine execution or Mode changes, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nChange Ecobee Programs based on SmartThings Routine execution or Mode changes, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -167,11 +168,12 @@ def installed() {
 def updated() {
 	LOG("updated() entered", 5)
 	unsubscribe()
+    unschedule()
     initialize()
 }
 
 def initialize() {
-	LOG("initialize() entered")
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
     if(tempDisable == true) {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
