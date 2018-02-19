@@ -51,7 +51,7 @@
 				"name": 	"ecobee Suite Smart Circulation",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.4.01",
+				"version": 	"1.4.02",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
 				"optional": 	false
