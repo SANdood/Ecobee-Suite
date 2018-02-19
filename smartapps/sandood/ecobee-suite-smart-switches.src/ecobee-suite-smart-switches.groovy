@@ -19,15 +19,16 @@
  *	1.2.1 - Protect agsinst LOG type errors
  *	1.3.0 - Major Release: renamed and moved to "sandood" namespace
  *	1.4.0 - Renamed parent Ecobee Suite Manager
+ *	1.4.01- Updated description
  */
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Switches, version ${getVersionNum()}" }
 
 definition(
 	name: "ecobee Suite Smart Switches",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "Automates SmartThings-controlled switches, dimmers and generic vents based on thermostat operating state",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates SmartThings-controlled switches, dimmers and generic vents based on thermostat operating state",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
