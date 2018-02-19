@@ -36,9 +36,10 @@
  *	1.3.0 - Major release: renamed and moved to "sandood" namespace
  *	1.4.0 - Renamed parent Ecobee Suite Manager
  *	1.4.01- Tweaked supportedThermostatModes handling
+ *	1.4.02- Added install warning to description
  *
  */
-def getVersionNum() { return "1.4.01" }
+def getVersionNum() { return "1.4.02" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -47,7 +48,7 @@ definition(
 	name: "ecobee Suite Smart Circulation",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "If a larger than configured temperature delta is found between 2 or more sensors, the minimum Fan On minutes per hour (m/hr) will be automatically adjusted.",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAdjust fan circulation time based on temperature delta between 2 or more rooms.",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
