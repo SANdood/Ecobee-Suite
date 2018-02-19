@@ -22,7 +22,7 @@
  *	1.4.01- Updated description
  *
  */
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Zones, version ${getVersionNum()}" }
 
 definition(
