@@ -19,6 +19,7 @@
  *	1.2.1 - Protect against LOG type errors
  *	1.3.0 - Major Release: renamed and moved to "sandood" namespace
  *	1.4.0 - Rename parent Ecobee Suite Manager
+ *	1.4.01- Updated description
  *
  */
 def getVersionNum() { return "1.4.0" }
@@ -28,7 +29,7 @@ definition(
 	name: "ecobee Suite Smart Zones",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "Synchronizes ecobee recirculation fan between two zones",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSynchronizes ecobee recirculation fan between two zones",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -81,7 +82,7 @@ def updated() {
 }
 
 def initialize() {
-	LOG("initialize() entered")
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	
 	// Get slaves into a known state
 	slaveThermostats.each { stat ->
