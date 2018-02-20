@@ -5,7 +5,7 @@
 	"repoBranch": 	"master",
 	"name": 	"Ecobee Suite Manager",
 	"author": 	"Barry A. Burke (storageanarchy@gmail.com)",
-	"description": 	"PLEASE UNINSTALL v1.3.0!!!! Free Suite of SmartApps and Device Handlers to integrate your Ecobee Thermostats and Sensors with SmartThings.",
+	"description": 	"Free Suite of  Device Handlers and SmartApps to integrate your Ecobee Thermostats and Sensors with SmartThings.",
 	"category": 	"My Apps",
 	"bannerUrl": 	"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/Ecobee_Suite_banner.png", 
 	"forumUrl": 	"https://community.smartthings.com/t/release-updated-ecobee-suite-v1-4-0-free/118597",
@@ -16,14 +16,14 @@
 		"thermostat", 
 		"hvac"
 	],
-	"notes": 	"NOTICE: PLEASE DE-INSTALL v1.3.0 and replace with 1.4.* below. Renamed 'Ecobee Suite' and moved to the 'sandood' namespace to allow coexistence with the SmartThings-provided Ecobee support. This will require a COMPLETE NEW INSTALLATION for users of versions prior to 1.3.0 (Feb 2018 release).",
+	"notes": 	"1.4.x automatically recovers from transient SmartThings/Ecobee API errors and can now be installed without disturbing other Ecobee DTH providers. This will require a COMPLETE NEW INSTALLATION for users of versions prior to 1.4.0 (Feb 2018 release).",
 	"smartApps": {
 		"parent": {
 			"name": 	"Ecobee Suite Manager",
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.4.06",
+			"version": 	"1.4.07",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
