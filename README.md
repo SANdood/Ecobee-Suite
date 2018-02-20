@@ -185,11 +185,11 @@ Once you have both of the Ecobee Suite Device Handlers added and published in yo
 
 12. Click on the **`My SmartApps`** tab
 13. Click **`Update from Repo`** and select the **`**Ecobee-Suite**`** repository we added earlier
-14. Select the checkboxes next to **`ecobee-suite-manager.groovy`**, **`ecobee-suite-routines.groovy`**, **`ecobee-suite-open-contacts.groovy`**, **`ecobee-suite-smart-circulation.groovy`**, **`ecobee-suite-smart-mode.groovy`**, **`ecobee-suite-smart-room.groovy`**, **`ecobee-suite-smart-switches.groovy`**, **`ecobee-suite-smart-vents.groovy`**, and **`ecobee-suite-smart-zones.groovy`** (all 8 SmartApps listed)
+14. Select the checkboxes next to **`ecobee-suite-manager.groovy`**, **`ecobee-suite-routines.groovy`**, **`ecobee-suite-open-contacts.groovy`**, **`ecobee-suite-smart-circulation.groovy`**, **`ecobee-suite-smart-mode.groovy`**, **`ecobee-suite-smart-room.groovy`**, **`ecobee-suite-smart-switches.groovy`**, **`ecobee-suite-smart-vents.groovy`**, and **`ecobee-suite-smart-zones.groovy`** (all 9 SmartApps listed)
 15. Select **`Publish`**(bottom right of screen near the `Cancel` button)
 16. Click **`Execute Update`**
 	- Again, note the response at the top of the My SmartApps page. It should be something like "**`Updated 0 and created 8 SmartApps, 8 published`**"
-	- Verify that all 8 of the SmartApps show up in the list and are marked with Status **`Published`**
+	- Verify that all 9 of the SmartApps show up in the list and are marked with Status **`Published`**
 
 ### <a name="github-oauth">Enabling oAuth for `Ecobee Suite Manager`</a>
 Finally, we must enable oAuth for the connector SmartApp as follows:
