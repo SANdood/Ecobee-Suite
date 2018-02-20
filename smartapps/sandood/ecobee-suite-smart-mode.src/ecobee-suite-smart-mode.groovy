@@ -13,8 +13,9 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  *	1.4.0 -	Initial release
+ *	1.4.01- Added unschedule() to updated()
  */
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 
@@ -22,7 +23,7 @@ definition(
 	name: "ecobee Suite Smart Mode",
 	namespace: "sandood",
 	author: "Justin J. Leonard & Barry A. Burke",
-	description: "Set Ecobee Heat/Cool/Auto mode based on (outside) temperature",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets Ecobee Heat/Cool/Auto mode based on (outside) temperature.",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -104,20 +105,23 @@ def mainPage() {
 }
 
 def installed() {
+	LOG("installed() entered", 3, "", 'trace')
 	initialize()  
 }
 
 def updated() {
+	LOG("updated() entered", 3, "", 'trace')
 	unsubscribe()
+    unschedule()
     initialize()
 }
 
 def initialize() {
-	if(tempDisable == true) {
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+	if(settings.tempDisable) {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
-    LOG("Initializing...",2,null,'info')
     
     Double tempNow
 	switch( settings.tempSource) {

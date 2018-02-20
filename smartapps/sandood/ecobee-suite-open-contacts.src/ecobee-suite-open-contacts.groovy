@@ -29,17 +29,18 @@
  *	1.2.4	-	Fix typo in turnOffHVAC
  *	1.3.0   -   Major Release: renamed and moved to "sandood" namespace
  *	1.4.0	-	Renamed parent Ecobee Suite Manager
+ *  1.4.01	-	Updated description
  *
  */
  
-def getVersionNum() { return "1.4.0" }
+def getVersionNum() { return "1.4.01" }
 private def getVersionLabel() { return "Ecobee Suite Open Contacts, version ${getVersionNum()}" }
 
 definition(
 	name: "ecobee Suite Open Contacts",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "Turn HVAC on/off based on status of contact sensors or switches",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nTurn HVAC on/off based on status of contact sensors or switches (e.g. doors, windows, or fans)",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -127,7 +128,7 @@ def updated() {
 }
 
 def initialize() {
-	LOG("initialize() entered")
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	if(tempDisable == true) {
 		LOG("Teporarily Disabled as per request.", 2, null, "warn")
 		return true
