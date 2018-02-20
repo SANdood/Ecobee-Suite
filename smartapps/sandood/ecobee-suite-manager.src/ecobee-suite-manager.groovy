@@ -56,10 +56,11 @@
  *  1.4.05- Improved timeout handling
  *	1.4.06- Added new Smart Mode helper SmartApp
  *	1.4.07- Trap & avoid errors where no resp.data is returned; fix null+null in SmartRecovery calculations
+ *	1.4.08-	Fix the inevitable typo that prevented clean initial install
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.07" }
+def getVersionNum() { return "1.4.08" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1108,7 +1109,7 @@ private def createChildrenThermostats() {
 		}
 		return d
 	}
-    LOG("Created/Updated ${devices.size()} thermostats", null, 'trace')    
+    LOG("Created/Updated ${devices.size()} thermostats", 4, null, 'trace')    
     return true
 }
 
@@ -1130,7 +1131,7 @@ private def createChildrenSensors() {
 		}
 		return d
 	}
-	LOG("Created/Updated ${sensors.size()} sensors.", null, 'trace')
+	LOG("Created/Updated ${sensors.size()} sensors.", 4, null, 'trace')
     return true
 }
 
@@ -1146,7 +1147,7 @@ def appHandler(evt) {
 
 // NOTE: For this to work correctly getEcobeeThermostats() and getEcobeeSensors() should be called prior
 private def deleteUnusedChildren() {
-	LOG("deleteUnusedChildren() entered", 5)    
+	LOG("deleteUnusedChildren() entered", 5, null, 'trace')    
     
     if (settings.thermostats?.size() == 0) {
     	// No thermostats, need to delete all children
@@ -3151,10 +3152,10 @@ private refreshAuthToken(child=null) {
                         atomicState.action = ''
                         if (action) { // && atomicState.action != "") {
                             LOG("Token refreshed. Rescheduling aborted action: ${action}", 4, child, 'trace')
-                            runIn( 5, "${action}", [overwrite: true]) // this will collapse multiple threads back into just one
+                            runIn( 2, "${action}", [overwrite: true]) // this will collapse multiple threads back into just one
                         } else {
                         	// Assume we had to re-authorize during a pollEcobeeAPI session
-                            runIn(5, "pollChildren", [overwrite: true])
+                            runIn( 2, "pollChildren", [overwrite: true])
                         }
                     } else {
                     	LOG("No jsonMap??? ${jsonMap}", 2, child, 'trace')
