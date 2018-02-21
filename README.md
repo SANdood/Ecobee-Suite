@@ -82,35 +82,39 @@ The following components are part of the Suite:
 - **Ecobee Suite Smart Switches Helper SmartApp**: Child Helper SmartApp that will turn on/off one or more switches, and/or set the level on one or more dimmers (also works for vents), all based on changes to the Operating State of one or more thermostats. Intended to turn on vent booster fans when HVAC is pushing air, and (optionally) turn them off when they return to idle state. Can also be used to control lights and dimmers; dimmer control can be used to operate vents (see also Smart Vents Helper, below).
 - **Ecobee Suite Smart Vents Helper SmartApp**: Child Helper SmartApp that will open and close one or more SmartThings-controlled HVAC vents based on room temperature in relation to specified heating/cooling target setpoint, or the setpoint of the specified thermostat.
 - **Ecobee Suite Smart Zones Helper SmartApp**: CChild Helper SmartApp that attempts to synchronize fan on time between two zones. Intended for use on multi-zones HVAC systems; running the fan on all the zones simultaneously could help reduce electricity consumption vs. having each zone run the fan independently.
-- **Ecobee Thermostat Device Handler**: This implements the Device Handler for the Ecobee Thermostat functions and attributes. Now includes indicators for current thermostat Program, buttons that allow adding/removing the zone from specific Programs (Home, Away, Sleep only), and indicators that appear when Smart Room is configured for the room.
-- **Ecobee Sensor Device Handler**: This implements the Device Handler for the Ecobee Sensor attributes. This is also used to expose the internal sensors on the Thermostat to allow the actual temperature values (instead of only the average) to also be available. This is critically important for some applications such as smart vents.
+- **Ecobee Thermostat Device Handler (DTH)**: The Device Handler for the Ecobee Thermostat functions and attributes. Presents a much more detailed view of the thermostat/HVAC system status, including heat/cool stages, humidification & dehumidification status, fan circulation control, and active/inactive icons for many modes and states. Designed using icons representative of the Ecobee web and mobile apps. Also supports a broad suite of extended attributes and commands to allow WebCOrE and SmartThings apps to monitor and control the thermostat, allowing customization and integration within a users' Smart Home. 
+- **Ecobee Sensor Device Handler (DTH**: This implements the Device Handler for the Ecobee Sensor attributes. Includes indicators for current thermostat Program, buttons that allow adding/removing the zone from specific Programs (Home, Away, Sleep only), and indicators that appear when Smart Room is configured for the room. This is also used to expose the internal sensors on the Thermostat to allow the actual temperature values (instead of only the average) to also be available. This is critically important for some applications such as smart vents.
 
-Here are links to the working version of the repository being developed and maintained by Barry A. Burke [(on GitHub)](https://github.com/SANdood/Ecobee-Suite) and [(on SmartThings Community)](https://community.smartthings.com/t/release-free-ecobee-suite-version-1-2-0/94841).
+Here are links to the working version of the repository being developed and maintained by Barry A. Burke [(on GitHub)](https://github.com/SANdood/Ecobee-Suite) and [(on SmartThings Community)](https://community.smartthings.com/t/release-updated-ecobee-suite-v1-4-0-free/118597).
 
 --------------------------------
 ### <a name="motivation">Motivation</a>
 
 I maintain the original intent as defined by Sean:
 
-The intent is to provide an Open Source DTH and SmartApps for Ecobee thermostats that can be used by the SmartThings community of users free of charge and without fear of the device disappearing in the future. This will help ensure accessibility for all users and provide for an easy mechanism for the community to help maintain/drive the functionality.
+The intent is to provide an Open Source DTH and SmartApps for Ecobee thermostats that can be used by the SmartThings community of users ***free of charge*** and ***without fear of the device disappearing in the future***. This will help ensure accessibility for all users and provide for an easy mechanism for the community to help maintain/drive the functionality.
 
 Let me be clear: this is not a competition. I am not trying to replace or outdo any other version, and I personally have nothing against people making money off of their efforts. I have invested my time in this as Open Source so as to meet my own wants and desires, and I offer the result back to the community with no strings attached.
 
 Please feel free to try any version you want, and pick the one that best fits your own use case and preference.
 
+If you like this version and are so inclined, post a brief message of support on the SmartThings Community link above. And if you **don't** like it, or have any problems with the installation or operation of the suite, please also post on the link above. I strive for total transparency, and your use of this Suite does not require you to post positive reviews, nor are you prohibited in any way from posting negative reviews. 
+
 -------------------------
 ### <a name="donations">Donations</a>
 
-As noted, this work is fully Open Source, and available for use at no charge. However, if you would like to make a donation, you can send it to me at <https://paypal.me/BarryABurke>
+This work is fully Open Source, and available for use at no charge.
+
+While not required, I do humbly accept donations. If you would like to make an *optional* donation, I will be most grateful. You can make donations to me on PayPal at <https://paypal.me/BarryABurke>
 
 -------------------------------
-### <a name="whazzup">What's New</a>
+## <a name="whazzup">What's New</a>
 
-As mentioned, the most significant enhancement with the release of 1.3.* is the separation from the SmartThings Ecobee support, as well as from all prior versions of both @StrykerSKS' and my own Ecobee integration. Users of these prior versions should review the [Upgrading from Prior Releases](#upgrading) section below for more IMPORTANT information before installing this version.
+As mentioned, the most significant enhancement with the release of 1.4.* is the separation from the SmartThings Ecobee support, as well as from all prior versions of both @StrykerSKS' and my own Ecobee integration. Users of these prior versions should review the [Upgrading from Prior Releases](#upgrading) section below for more IMPORTANT information before installing this version.
 
-#### Key enhancements in release 1.4.0
-- ***Significantly improved handling of connection errors.*** While I cannot yet guaranteed non-stop operation during all SmartThings and/or Ecobee Cloud issues, the code now silently recovers from most error conditions;
-- Addition of the new [Smart Mode](#smart-mode-sa) Helper SmartApp
+### Key enhancements in release 1.4.0
+- ***Significantly improved handling of API connection errors.*** While I cannot yet guarantee non-stop operation during all SmartThings and/or Ecobee Cloud issues, the code now silently recovers from most error conditions;
+- Addition of the new [Smart Mode](#smart-mode-sa) Helper SmartApp, to automatically change your thermostat(s) mode based on (external) temperature changes
 - Enhanced setpoint adjustments, including using the Up/Down arrows on the main tile;
 - Enhanced UI, with the addition of
   - Current & target humidity levels (the latter only when humidifier or dehumidifier is enabled;
@@ -118,7 +122,7 @@ As mentioned, the most significant enhancement with the release of 1.3.* is the 
  <sp>
 
 - Better (complete?) support for Celsius; 
-- A cornucopia of performance optimizations to improve both initial installations and running performance
+- A cornucopia of performance optimizations to improve both initial installation and running performance
 - Improved API status display (last row in the Thermostat UI) - now shows "WARN" status when a call to the Ecobee API times out
 
 -------------------------
