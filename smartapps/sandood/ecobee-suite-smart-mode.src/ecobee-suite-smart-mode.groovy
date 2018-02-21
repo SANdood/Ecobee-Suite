@@ -14,8 +14,9 @@
  *
  *	1.4.0 -	Initial release
  *	1.4.01- Added unschedule() to updated()
+ *	1.4.02- Shortened LOG and NOTIFY strings when reporting on multiple thermostats
  */
-def getVersionNum() { return "1.4.01" }
+def getVersionNum() { return "1.4.02" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 
@@ -181,16 +182,22 @@ def temperatureUpdate( Double temp ) {
 		desiredMode = settings.betweenMode
 	}
 	if (desiredMode != null) {
+    	String changeNames = ""
+        String sameNames = ""
 		settings.thermostats.each { 
 			if (it.currentValue('thermostatMode') != desiredMode) {
 				it.setThermostatMode(desiredMode)
-                LOG("Temp is ${temp}, changed ${it.displayName}'s mode to ${desiredMode}",2,null,'info')
-				NOTIFY("${app.label} Temp changed to ${temp}, changed ${it.displayName} to mode: ${desiredMode}")
+                changeNames += changeNames ? ", ${it.displayName}" : it.displayName
 			} else {
-            	LOG("Temp is ${temp}, found ${it.displayName} is already in ${desiredMode} mode",3,null,'info')
-            	// NOTIFY("${app.label} Temp changed to ${temp}, found ${it.displayName} is already in ${desiredMode} mode")
+                sameNames += sameNames ? ", ${it.displayName}" : it.displayName
             }
 		}
+        def multi=0
+        if (changeNames) {
+        	LOG("Temp is ${temp}°, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
+        	NOTIFY("${app.label}: The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
+        }
+        if (sameNames) LOG("Temp is ${temp}°, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
 }
 
