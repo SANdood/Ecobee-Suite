@@ -57,10 +57,11 @@
  *	1.4.06- Added new Smart Mode helper SmartApp
  *	1.4.07- Trap & avoid errors where no resp.data is returned; fix null+null in SmartRecovery calculations
  *	1.4.08-	Fix the inevitable typo that prevented clean initial install
+ *	1.4.09- Trapped another exception (org.apache.http.conn.HttpHostConnectException)
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.08" }
+def getVersionNum() { return "1.4.09" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1676,7 +1677,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
        	result = false
     //
     // These appear to be transient errors, treat them all as if a Timeout...
-    } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+    } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
     	LOG("checkThermostatSummary() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
         if (apiConnected != 'warn') {
         	atomicState.connected = 'warn'
@@ -1992,11 +1993,10 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
 				if (resp.status == 500 && resp.data.status.code == 14) {
 					LOG("${preText}Resp.status: ${resp.status} Status Code: ${resp.data.status.code}. Unable to recover", 1, null, "error")
                     // Should not be possible to recover from a code 14 but try anyway?
-                    
                     apiLost("pollEcobeeAPI() - Resp.status: ${resp.status} Status Code: ${resp.data.status.code}. Unable to recover.")
 				}
 				else {
-					LOG("pollEcobeeAPI() - Other responses received. Resp.status: ${resp.status} Status Code: ${resp.data.status.code}.", 1, null, "error")
+					LOG("pollEcobeeAPI() - Unexpected response Resp.status: ${resp.status} Status Code: ${resp.data.status.code}.", 1, null, "error")
 				}
 			}
 		}
@@ -2004,10 +2004,9 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
 	} catch (groovyx.net.http.HttpResponseException e) {  
     	result = false  // this thread failed
     	if ((e.statusCode == 500) && (e.response.data.status.code == 14)) {
-           	if (debugLevelThree) LOG("pollEcobeAPI() - HttpResponseException occurred: Auth_token has expired", 3, null, "warn")
+           	if (debugLevelThree) LOG("pollEcobeAPI() - Auth_token has expired", 3, null, "warn")
            	atomicState.action = "pollChildren"
             if (debugLevelFour) LOG( "pollEcobeeAPI() - Refreshing your auth_token!", 4, null, 'info')
-            atomicState.action = "pollChildren"
             if ( refreshAuthToken() ) { 
             	// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
                 LOG( 'pollEcobeeAPI() - Auth_token refreshed', 2, null, 'info')
@@ -2024,7 +2023,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
         // Do not add an else statement to run immediately as this could cause an long looping cycle if the API is offline
         runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true]) 
         result = false
-    } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+    } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
     	LOG("pollEcobeeAPI() - ${e}.",1,null,'warn') 	// Just log it, and hope for better next time...
         if (apiConnected != 'warn') {
         	atomicState.connected = 'warn'
@@ -3199,7 +3198,7 @@ private refreshAuthToken(child=null) {
 			// Likely bad luck and network overload, move on and let it try again
             if(canSchedule()) { runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) } else { refreshAuthToken(child) }            
             return false
-        } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+        } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
     		LOG("refreshAuthToken() - ${e}.",1,child,'warn')  // Just log it, and hope for better next time...
         	if (apiConnected != 'warn') {
         		atomicState.connected = 'warn'
@@ -3705,7 +3704,7 @@ private def sendJson(child=null, String jsonBody) {
         	LOG("sendJson() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} || ${e.response.data.status.code}", 1, null, "error")
         }
     // These appear to be transient errors, treat them all as if a Timeout...
-    } catch (org.apache.http.conn.ConnectTimeoutException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+    } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
     	LOG("sendJson() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
         if (apiConnected != 'warn') {
         	atomicState.connected = 'warn'
