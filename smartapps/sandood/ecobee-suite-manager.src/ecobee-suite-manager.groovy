@@ -58,10 +58,11 @@
  *	1.4.07- Trap & avoid errors where no resp.data is returned; fix null+null in SmartRecovery calculations
  *	1.4.08-	Fix the inevitable typo that prevented clean initial install
  *	1.4.09- Trapped another exception (org.apache.http.conn.HttpHostConnectException)
+ *	1.4.10- Fixed sendJson LOG error
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.09" }
+def getVersionNum() { return "1.4.10" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -3633,7 +3634,7 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 // API Helper Functions
 private def sendJson(child=null, String jsonBody) {
 	def debugLevelFour = debugLevel(4)
-    LOG("sendJson() - ${jsonBody}",2,child?.displayName,'debug')
+    LOG("sendJson() - ${jsonBody}",2,child,'debug')
 	def returnStatus
     def result = false
     
