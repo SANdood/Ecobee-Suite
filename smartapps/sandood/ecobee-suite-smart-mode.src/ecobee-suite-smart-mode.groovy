@@ -15,8 +15,10 @@
  *	1.4.0 -	Initial release
  *	1.4.01- Added unschedule() to updated()
  *	1.4.02- Shortened LOG and NOTIFY strings when reporting on multiple thermostats
+ *	1.4.03-	Fix frequency enum translations
+ *	1.4.04- Fixed notifications
  */
-def getVersionNum() { return "1.4.02" }
+def getVersionNum() { return "1.4.04" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 
@@ -38,8 +40,8 @@ preferences {
 
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Mode Handler") {
-        	label title: "Name thisHandler", required: true, defaultValue: "Smart Mode"
+    	section(title: "Name for Smart Mode Helper") {
+        	label title: "Name this Helper", required: true, defaultValue: "Smart Mode"
         }
         section(title: "${settings.tempDisable?'':'Select Thermostat(s)'}") {
         	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."}
@@ -51,7 +53,7 @@ def mainPage() {
 				if (tempSource) {
 					if (tempSource == 'Weather for Location') {
                         input(name: "zipCode", type: 'text', title: 'Zipcode (Default is location Zip code)', defaultValue: getZIPcode(), required: true, submitOnChange: true )
-						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, description: 'Tap to choose...', options:[1,5,10,15,30,60,180])
+						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', options:['1','5','10','15','30','60','180'])
 					} else if (tempSource == 'SmartThings Temperature Sensor') {
 						input(name: 'thermometer', type: 'capability.temperatureMeasurement', title: "Which Temperature Sensor?", description: 'Tap to choose...', required: true, multiple: false)
 					} else if (tempSource == "Thermostat's Weather Temperature") {
@@ -68,34 +70,37 @@ def mainPage() {
              				required: false, style:'embedded',             
              				url: (location.latitude && location.longitude)? "http://www.wunderground.com/cgi-bin/findweather/hdfForecast?query=${location.latitude},${location.longitude}" :
              		 		"http://www.wunderground.com/q/${location.zipCode}")
-                        input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, description: 'Tap to choose...', options:[1,5,10,15,30,60,180])
+                        input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', options:['1','5','10','15','30','60','180'])
 					}
 				}
 			}
-			section(title: "Mode Thresholds (Range: ${getThermostatRange()})") {
+			section(title: "Temperature Thresholds (Range: ${getThermostatRange()})") {
 				// need to set min & max - get from thermostat range
-       			input(name: "aboveTemp", title: "When the temperature is at or above", type: 'decimal', description: 'Enter decimal temperature (optional)', range: getThermostatRange(), required: false, submitOnChange: true)
+       			input(name: "aboveTemp", title: "When the temperature is at or above...", type: 'decimal', description: "Enter decimal temperature (${settings.belowTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.belowTemp, submitOnChange: true)
 				if (aboveTemp) {
 					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes())
 				}
      	  	}
     	   	section(title: '') {
-            	input(name: "belowTemp", title: 'When the temperature is at or below...', type: 'number', description: 'Enter decimal temperature (optional)', range: getThermostatRange(), required: false, submitOnChange: true)
+            	input(name: "belowTemp", title: 'When the temperature is at or below...', type: 'number', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
 				if (belowTemp) {
 					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes())
 				}
-				if ((belowTemp && aboveTemp) && (belowTemp != aboveTemp)) {
-					input(name: 'betweenMode', title: "Between ${belowTemp}° and ${aboveTemp}° set thermostat mode to", type: 'enum', description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes())
+            }
+			if ((belowTemp && aboveTemp) && (belowTemp != aboveTemp)) {
+            	section(title: '') {
+					input(name: 'betweenMode', title: "When the temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes())
 				}
 			}
-      		section("Smart Modes Notifications (optional)") {
-        		input(name: "notify", type: "boolean", title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
+      		section("Notifications (optional)") {
+        		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
+                log.debug "Notify ${settings.notify}"
             	if (settings.notify) {
         			input(name: "recipients", type: "contact", title: "Send notifications to", required: notify) {
                			input(name: "pushNotify", type: "boolean", title: "Send push notifications?", required: true, defaultValue: false)
                		}
             	}
-            	paragraph("(A notification is always sent to the Hello Home log whenever a Smart Room is activated or de-activated)")
+            	paragraph("(A notification is always sent to the Hello Home Notifications log whenever Ecobee Suite Smart Mode changes a thermostat's Mode)")
         	}
         }
         section(title: "Temporary Disable") {
@@ -124,14 +129,14 @@ def initialize() {
     	return true
     }
     
-    Double tempNow
+    Double tempNow = 0.0
 	switch( settings.tempSource) {
 		case 'Weather for Location':
-			if (locFreq < 60) {
-            	"runEvery${locFreq}Minute${locFreq!=1?'s':''}"( 'getZipTemp' )
+			if (settings.locFreq.toInteger() < 60) {
+            	"runEvery${settings.locFreq}Minute${settings.locFreq!='1'?'s':''}"( 'getZipTemp' )
             } else {
-            	locHours = settings.locFreq / 60
-                "runEvery${locHours}Hours"( 'getZipTemp' )
+            	def locHours = settings.locFreq.toInteger() / 60
+                "runEvery${locHours}Hour${locHours!=1?'s':''}"( 'getZipTemp' )
             }
             tempNow = getZipTemp()
 			break;
@@ -150,11 +155,11 @@ def initialize() {
 			break;
 		
 		case 'WeatherUnderground Station':
-			if (settings.pwsFreq < 60) {
-            	"runEvery${pwsFreq}Minute${pwsFreq!=1?'s':''}"( 'getPwsTemp' )
+			if (settings.pwsFreq.toInteger() < 60) {
+            	"runEvery${settings.pwsFreq}Minute${settings.pwsFreq!='1'?'s':''}"( 'getPwsTemp' )
             } else {
-            	pwsHours = settings.pwsFreq / 60
-                "runEvery${pwsHours}Hours"( 'getPwsTemp' )
+            	def pwsHours = settings.pwsFreq.toInteger() / 60
+                "runEvery${pwsHours}Hour${pwsHours!=1?'s':''}"( 'getPwsTemp' )
             }
             tempNow = getPwsTemp()
 			break;
@@ -194,10 +199,10 @@ def temperatureUpdate( Double temp ) {
 		}
         def multi=0
         if (changeNames) {
-        	LOG("Temp is ${temp}°, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
-        	NOTIFY("${app.label}: The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
+        	LOG("Temp is ${temp}∞, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
+        	NOTIFY("${app.label}: The temperature is ${temp}∞, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
         }
-        if (sameNames) LOG("Temp is ${temp}°, ${sameNames} already in ${desiredMode} mode",3,null,'info')
+        if (sameNames) LOG("Temp is ${temp}∞, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
 }
 
@@ -215,7 +220,7 @@ private def getWUTemp(type) {
     def source = (type == 'zip') ? settings.zipCode : "pws:"+settings.stationID
 	Map wdata = getWeatherFeature('conditions', source)
     if (wdata && wdata.response) {
-    	LOG("conditions: ${wdata.response}",4,null,'trace')
+    	//LOG("conditions: ${wdata.response}",4,null,'trace')
 		if (wdata.response.containsKey('error')) {
         	if (wdata.response.error.type != 'invalidfeature') {
     			LOG("Please check ${type=='zip'?'Zipcode':'WU Station'} setting, error:\n${wdata.response.error.type}: ${wdata.response.error.description}" ,1,null,'error')
