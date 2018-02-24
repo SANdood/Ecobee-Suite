@@ -164,7 +164,7 @@ def initialize() {
             tempNow = getPwsTemp()
 			break;
 	}
-    LOG("Initialization complete...current temperature is ${tempNow}",2,null,'info')
+    LOG("Initialization complete...current temperature is ${tempNow}°",2,null,'info')
 }
 
 def tempChangeHandler(evt) {
@@ -199,8 +199,8 @@ def temperatureUpdate( Double temp ) {
 		}
         def multi=0
         if (changeNames) {
-        	LOG("Temp is ${temp}∞, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
-        	NOTIFY("${app.label}: The temperature is ${temp}∞, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
+        	LOG("Temp is ${temp}°, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
+        	NOTIFY("${app.label}: The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
         }
         if (sameNames) LOG("Temp is ${temp}∞, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
