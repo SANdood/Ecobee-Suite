@@ -876,19 +876,19 @@ Map getEcobeeSensors() {
 			if (it.type == "ecobee3_remote_sensor") {
             	LOG("Adding an ecobee3_remote_sensor: ${it}", 4, null, "trace")
 				def value = "${it?.name}"
-				def key = "ecobee_suite-sensor-" + tid + "." + it?.id + "-" + it?.code
+				def key = "ecobee_suite-sensor-" + it?.id + "-" + it?.code
 				sensorMap["${key}"] = value
 			} else if ( (it.type == "thermostat") && (settings.showThermsAsSensor == true) ) {            	
 				LOG("Adding a Thermostat as a Sensor: ${it}", 4, null, "trace")
            	    def value = "${it?.name}"
-				def key = "ecobee_suite-sensor_tstat-" + tid + "." + it?.id + "-" + it?.name
+				def key = "ecobee_suite-sensor_tstat-" + it?.id + "-" + it?.name
        	       	LOG("Adding a Thermostat as a Sensor: ${it}, key: ${key}  value: ${value}", 4, null, "trace")
 				sensorMap["${key}"] = value + " (Thermostat)"
        	   	} else if ( it.type == "control_sensor" && it.capability[0]?.type == "temperature") {
        	   		// We can add this one as it supports temperature
        	      	LOG("Adding a control_sensor: ${it}", 4, null, "trace")
 				def value = "${it?.name}"
-				def key = "ecobee_suite-control_sensor-" + tid + "." + it?.id
+				def key = "ecobee_suite-control_sensor-" + it?.id
 				sensorMap["${key}"] = value
             } else if (it.type == "monitor_sensor" && it.capability[0]?.type == "temperature" && it?.name != "") {
             	LOG("Adding a monitor_sensor: ${it}", 4, null, "trace")
@@ -2302,15 +2302,15 @@ def updateSensorData() {
         	switch (it.type) {
             	case 'ecobee3_remote_sensor':
                 	// Ecobee3 remote temp/occupancy sensor
-                	sensorDNI = "ecobee_suite-sensor-" + tid + "." + it?.id + "-" + it?.code
+                	sensorDNI = "ecobee_suite-sensor-" + it?.id + "-" + it?.code
                     break;
                 case 'control_sensor':
                 	// SmartSI style control sensor (temp or humidity)
-                	sensorDNI = "ecobee_suite-control_sensor-" + tid + "." + it?.id
+                	sensorDNI = "ecobee_suite-control_sensor-" + it?.id
                     break;
                 case 'thermostat':
                 	// The thermostat itself
-                	sensorDNI = "ecobee_suite-sensor_tstat-" + tid + "." + it?.id + "-" + it?.name
+                	sensorDNI = "ecobee_suite-sensor_tstat-" + it?.id + "-" + it?.name
                     break;
                 case 'monitor_sensor':
                 	// Smart style remote sensor (temp or humidity)
