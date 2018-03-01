@@ -59,10 +59,11 @@
  *	1.4.08-	Fix the inevitable typo that prevented clean initial install
  *	1.4.09- Trapped another exception (org.apache.http.conn.HttpHostConnectException)
  *	1.4.10- Fixed sendJson LOG error
+ *  1.4.10a- Added support for legacy Ecobee Smart thermostats with remote sensors.  Fixed bug with multi-thermostat enumeration of remote sensors.
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.10" }
+def getVersionNum() { return "1.4.10a" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -875,20 +876,25 @@ Map getEcobeeSensors() {
 			if (it.type == "ecobee3_remote_sensor") {
             	LOG("Adding an ecobee3_remote_sensor: ${it}", 4, null, "trace")
 				def value = "${it?.name}"
-				def key = "ecobee_suite-sensor-"+ it?.id + "-" + it?.code
+				def key = "ecobee_suite-sensor-" + tid + "." + it?.id + "-" + it?.code
 				sensorMap["${key}"] = value
 			} else if ( (it.type == "thermostat") && (settings.showThermsAsSensor == true) ) {            	
 				LOG("Adding a Thermostat as a Sensor: ${it}", 4, null, "trace")
            	    def value = "${it?.name}"
-				def key = "ecobee_suite-sensor_tstat-"+ it?.id + "-" + it?.name
+				def key = "ecobee_suite-sensor_tstat-" + tid + "." + it?.id + "-" + it?.name
        	       	LOG("Adding a Thermostat as a Sensor: ${it}, key: ${key}  value: ${value}", 4, null, "trace")
 				sensorMap["${key}"] = value + " (Thermostat)"
        	   	} else if ( it.type == "control_sensor" && it.capability[0]?.type == "temperature") {
        	   		// We can add this one as it supports temperature
        	      	LOG("Adding a control_sensor: ${it}", 4, null, "trace")
 				def value = "${it?.name}"
-				def key = "ecobee_suite-control_sensor-"+ it?.id
-				sensorMap["${key}"] = value    
+				def key = "ecobee_suite-control_sensor-" + tid + "." + it?.id
+				sensorMap["${key}"] = value
+            } else if (it.type == "monitor_sensor" && it.capability[0]?.type == "temperature" && it?.name != "") {
+            	LOG("Adding a monitor_sensor: ${it}", 4, null, "trace")
+				def value = "${it?.name}"
+				def key = "ecobee_suite-monitor_sensor-" + tid + "." + it?.id
+				sensorMap["${key}"] = value
            	} else {
            		LOG("Did NOT add: ${it}. settings.showThermsAsSensor=${settings.showThermsAsSensor}", 4, null, "trace")
            	}
@@ -2296,16 +2302,19 @@ def updateSensorData() {
         	switch (it.type) {
             	case 'ecobee3_remote_sensor':
                 	// Ecobee3 remote temp/occupancy sensor
-                	sensorDNI = "ecobee_suite-sensor-" + it?.id + "-" + it?.code
+                	sensorDNI = "ecobee_suite-sensor-" + tid + "." + it?.id + "-" + it?.code
                     break;
                 case 'control_sensor':
                 	// SmartSI style control sensor (temp or humidity)
-                	sensorDNI = "ecobee_suite-control_sensor-" + it?.id
+                	sensorDNI = "ecobee_suite-control_sensor-" + tid + "." + it?.id
                     break;
                 case 'thermostat':
                 	// The thermostat itself
-                	sensorDNI = "ecobee_suite-sensor_tstat-"+ it?.id + "-" + it?.name
+                	sensorDNI = "ecobee_suite-sensor_tstat-" + tid + "." + it?.id + "-" + it?.name
                     break;
+                case 'monitor_sensor':
+                	// Smart style remote sensor (temp or humidity)
+                    sensorDNI = "ecobee_suite-monitor_sensor-" + tid + "." + it?.id
      		} 
 			if (debugLevelFour) LOG("updateSensorData() - Sensor ${it.name}, sensorDNI == ${sensorDNI}", 4)
             	              
@@ -2318,7 +2327,7 @@ def updateSensorData() {
 					if (cap.type == "temperature") {
                    		if (debugLevelFour) LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
                        	if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
-							temperature = cap.value as Double
+							temperature = cap.value as Double                           
 							temperature = (temperature / 10).toDouble()  //.round(precision) // wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
                        	} else if (cap.value == 'unknown') {
                        		// TODO: Do something here to mark the sensor as offline?
