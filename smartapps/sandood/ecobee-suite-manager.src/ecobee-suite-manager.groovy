@@ -51,19 +51,20 @@
  *	1.4.00- Renamed devices and manager, removed watchdogDevices
  *	1.4.01- Fix sensor device naming bug
  *	1.4.02- Handle javax.net.ssl.SSLPeerUnverifiedException; fixed poll daemon recovery
- *  1.4.03- Fixed internal mentions of "Ecobee (Connect)"
+ *      1.4.03- Fixed internal mentions of "Ecobee (Connect)"
  *	1.4.04- Handle javax.net.ssl.SSLHandshakeException & java.net.SocketTimeoutException
- *  1.4.05- Improved timeout handling
+ *      1.4.05- Improved timeout handling
  *	1.4.06- Added new Smart Mode helper SmartApp
  *	1.4.07- Trap & avoid errors where no resp.data is returned; fix null+null in SmartRecovery calculations
  *	1.4.08-	Fix the inevitable typo that prevented clean initial install
  *	1.4.09- Trapped another exception (org.apache.http.conn.HttpHostConnectException)
  *	1.4.10- Fixed sendJson LOG error
- *  1.4.10a- Added support for legacy Ecobee Smart thermostats with remote sensors.  Fixed bug with multi-thermostat enumeration of remote sensors.
+ *      1.4.10a- Added support for legacy Ecobee Smart thermostats with remote sensors.  Fixed bug with multi-thermostat enumeration of remote sensors.
+ *      1.4.10b- Resolved potential issue with adding TID info to key name for existing sensors which would force re-configuration
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.10a" }
+def getVersionNum() { return "1.4.10b" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
