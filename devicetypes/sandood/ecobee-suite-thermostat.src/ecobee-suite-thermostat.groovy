@@ -2630,6 +2630,8 @@ private Integer howManyHours() {
 }
 
 private debugLevel(level=3) {
+    // TODO: Fix parent.settings.debugLevel
+    return 3
 	Integer dbg = device.currentValue('debugLevel')?.toInteger()
 	Integer debugLvlNum = dbg ? dbg : (parent.settings.debugLevel ? parent.settings.debugLevel.toInteger() : 3)
     return ( debugLvlNum >= level?.toInteger() )

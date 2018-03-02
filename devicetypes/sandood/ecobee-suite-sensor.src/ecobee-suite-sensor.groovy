@@ -391,13 +391,14 @@ private String getSensorId() {
 }
 
 private debugLevel(level=3) {
+    return 3
 	Integer debugLvlNum = parent.settings.debugLevel?.toInteger() ?: 3
     return ( debugLvlNum >= level?.toInteger() )
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=false, displayEvent=false) {
 	def prefix = ""
-	if ( parent.settings.debugLevel?.toInteger() == 5 ) { prefix = "LOG: " }
+	//if ( parent.settings.debugLevel?.toInteger() == 5 ) { prefix = "LOG: " }
 	if ( debugLevel(level) ) { 
     	log."${logType}" "${prefix}${message}"
         if (event) { debugEvent(message, displayEvent) }        

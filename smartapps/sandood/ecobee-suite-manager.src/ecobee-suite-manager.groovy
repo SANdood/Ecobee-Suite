@@ -59,10 +59,16 @@
  *	1.4.08-	Fix the inevitable typo that prevented clean initial install
  *	1.4.09- Trapped another exception (org.apache.http.conn.HttpHostConnectException)
  *	1.4.10- Fixed sendJson LOG error
+ 
+ *  Updates by mattw01 2018
+ *  Modify OAUTH to use PIN registration
+ *  Modify methods to be compatible with current Hubitat syntax
+ *  See Github Changelog for complete change history
  */  
+ 
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.10" }
+def getVersionNum() { return "1.4.10.H" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -121,6 +127,7 @@ preferences {
     page(name: "pollChildrenPage")
     page(name: "updatedPage")
     page(name: "refreshAuthTokenPage")    
+    page(name: "finalizePIN")
 }
 
 mappings {
@@ -139,10 +146,14 @@ def mainPage() {
         
     // Only create the dummy devices if we aren't initialized yet
     if (!atomicState.initialized) {
+        log.debug "Not initialized... checking for device handlers"
     	deviceHandlersInstalled = testForDeviceHandlers()
+        log.debug "deviceHandlersInstalled ${deviceHandlersInstalled}"
     	readyToInstall = deviceHandlersInstalled
 	}
-    if (atomicState.initialized) { readyToInstall = true }
+    if (atomicState.initialized) { 
+        log.debug "state initialized"
+        readyToInstall = true }
     
 	dynamicPage(name: "mainPage", title: "Welcome to ${getVersionLabel()}", install: readyToInstall, uninstall: false, submitOnChange: true) {
     	def ecoAuthDesc = (atomicState.authToken != null) ? "[Connected]\n" :"[Not Connected]\n"        
@@ -222,7 +233,7 @@ def mainPage() {
 			label name: "name", title: "Assign a name", required: false, defaultValue: app.name, description: app.name, submitOnChange: true
 		}
      
-		section (getVersionLabel())
+		//section (getVersionLabel())
 	}
 }
 
@@ -237,25 +248,6 @@ def removePage() {
 def authPage() {
 	LOG("authPage() --> Begin", 3, null, 'trace')
 
-	if(!atomicState.accessToken) { //this is an access token for the 3rd party to make a call to the connect app
-		try {
-			atomicState.accessToken = createAccessToken()
-       	} catch(Exception e) {
-    		LOG("authPage() --> OAuth Exception: ${e}", 1, null, "error")
-            LOG("authPage() --> Probable Cause: OAuth not enabled in SmartThings IDE for the 'Ecobee Suite Manager' SmartApp", 1, null, 'info')
-        	if (!atomicState.accessToken) {
-            	LOG("authPage() --> No OAuth Access token", 3, null, 'error')
-        		return dynamicPage(name: "authPage", title: "OAuth Initialization Failure", nextPage: "", uninstall: true) {
-            		section() {
-                		paragraph "Error initializing Ecobee Authentication: could not get the OAuth access token.\n\nPlease verify that OAuth has been enabled in " +
-                    		"the SmartThings IDE for the 'Ecobee Suite Manager' SmartApp, and then try again.\n\nIf this error persists, view Live Logging in the IDE for " +
-                        	"additional error information."
-                	}
-            	}
-    		}
-        }
-	}
-
 	def description = ''
 	def uninstallAllowed = false
 	def oauthTokenProvided = false
@@ -268,13 +260,33 @@ def authPage() {
 	} else {
 		description = "Tap to enter ecobee Credentials"
 	}
-
-	def redirectUrl = buildRedirectUrl //"${serverUrl}/oauth/initialize?appId=${app.id}&access_token=${atomicState.accessToken}"
-    
+   
 	// get rid of next button until the user is actually auth'd
 	if (!oauthTokenProvided) {
-        LOG("authPage() --> Valid OAuth Access token, need OAuth token", 3, null, 'trace')
-        LOG("authPage() --> RedirectUrl = ${redirectUrl}", 3, null, 'info')
+        def oauthParams = [
+                response_type: "ecobeePin",
+                client_id: smartThingsClientId,			
+                scope: "smartRead,smartWrite"		
+        ]
+		def authURI = "${apiEndpoint}/authorize?${toQueryString(oauthParams)}"
+        LOG("oauthInitUrl - Before getting PIN: ${authURI}", 3, null, 'trace')
+        httpGet(uri: authURI) { resp -> 
+            log.debug "oauthData: ${resp}"
+            log.debug "ecobeePin: ${resp.data.ecobeePin}"
+            log.debug "code: ${resp.data.code}"
+            log.debug "scope: ${resp.data.scope}"
+            
+            state.ecobeePin = resp.data.ecobeePin
+            state.oauthCode = resp.data.code
+        }        
+        return dynamicPage(name: "authPage", title: "OAuth Initialization", nextPage: "", uninstall: true) {
+            section() {
+                paragraph "ecobee PIN generated. Please login on the ecobee site and enter the following PIN to authorize:<br/><h2>PIN: <strong>${state.ecobeePin}</strong></h2>"
+                paragraph "Adding adding the PIN, click the button below"
+                href ("finalizePIN", description: "Tap to continue after adding PIN to account", title: "Finish Authorization")
+            }
+        }
+
 		return dynamicPage(name: "authPage", title: "ecobee Setup", nextPage: "", uninstall: uninstallAllowed) {
 			section() {
 				paragraph "Tap below to log in to the ecobee service and authorize SmartThings access. Be sure to press the 'Allow' button on the 2nd page."
@@ -292,6 +304,70 @@ def authPage() {
 	}
 }
 
+def finalizePIN() {
+    log.debug "finalizePIN() start"
+    if (state.ecobeePin) {
+        log.debug "ecobeePin: ${state.ecobeePin}"
+        def oauthParams = [
+                grant_type: "ecobeePin",
+            	code: state.oauthCode,
+                client_id: smartThingsClientId	
+        ]
+		def authURI = "${apiEndpoint}/token?${toQueryString(oauthParams)}"
+        LOG("finalizePIN - Before finializing PIN: ${authURI}", 3, null, 'trace')
+        try {
+            httpPost(uri: authURI) { resp -> 
+                if (resp.status == 200) {
+                    log.debug "oauthData: ${resp}"
+                    log.debug "access_token: ${resp.data.access_token}"
+                    log.debug "refresh_token: ${resp.data.refresh_token}"
+                    log.debug "scope: ${resp.data.scope}"
+                    state.authToken = resp.data.access_token
+                    state.refreshToken = resp.data.refresh_token
+                    state.ecobeePin = resp.data.ecobeePin
+                    state.oauthCode = resp.data.code
+                }
+                else {
+                    LOG("finalizePIN - ERROR in response: ${resp.status} data: ${resp.data}", 3, null, 'trace')
+                    return dynamicPage(name: "finalizePIN", title: "Finalize PIN", nextPage: "", uninstall: true) {
+                        section() {
+                            paragraph "Error: ecobee PIN was not authenicated. Please go back and generate new PIN or try again"
+                            href ("finalizePIN", description: "Try authorizing PIN again", title: "Try Again")
+                            href ("authPage", description: "Return to generate PIN", title: "New PIN Generation")
+                        }
+                    }
+                }
+            }
+        }
+        catch(e) {
+            LOG("finalizePIN - ERROR in httpPost: ${e}", 3, null, 'trace')
+            return dynamicPage(name: "finalizePIN", title: "Finalize PIN", nextPage: "", uninstall: true) {
+                section() {
+                    paragraph "Error: ecobee PIN was not authenicated. Please go back and generate new PIN or try again"
+                    href ("finalizePIN", description: "Try authorizing PIN again", title: "Try Again")
+                    href ("authPage", description: "Return to generate PIN", title: "New PIN Generation")  
+                }
+            }
+        }
+        return dynamicPage(name: "finalizePIN", title: "Finalize PIN", nextPage: "mainPage", uninstall: true) {
+            section() {
+                paragraph "ecobeePIN was sucessfully added! Click Next/Done to finish"
+            }
+        }
+        
+    }
+    else {
+    log.debug "finalizePIN() ERROR ecobeePin does not exist"
+        		return dynamicPage(name: "finalizePIN", title: "Finalize PIN", nextPage: "", uninstall: true) {
+                    section() {
+                    paragraph "ecobee PIN was not created. Please go back and try again"
+                    href ("authPage", description: "Return to generate PIN", title: "PIN Generation")
+                	}
+                }
+    }
+    
+}
+
 // Select which Thermostats are to be used
 def thermsPage(params) {
 	LOG("=====> thermsPage() entered", 5)        
@@ -306,7 +382,7 @@ def thermsPage(params) {
 			if (atomicState.settingsCurrentTherms != settings.thermostats) {
 				LOG("atomicState.settingsCurrentTherms != settings.thermostats determined!!!", 4, null, "trace")		
 			} else { LOG("atomicState.settingsCurrentTherms == settings.thermostats: No changes detected!", 4, null, "trace") }
-			input(name: "thermostats", title:"Select Thermostats", type: "enum", required:false, multiple:true, description: "Tap to choose", params: params, metadata:[values:stats], submitOnChange: true)        
+			input(name: "thermostats", title:"Select Thermostats", type: "enum", required:false, multiple:true, description: "Tap to choose", options:[stats], submitOnChange: true)        
         }
         section("NOTE:\n\nThe temperature units (F or C) is determined by your Location settings automatically. Please update your Hub settings " + 
         	"(under My Locations) to change the units used.\n\nThe current value is ${getTemperatureScale()}.") {
@@ -332,7 +408,7 @@ def sensorsPage() {
 				if (atomicState.settingsCurrentSensors != settings.ecobeesensors) {
 					LOG("atomicState.settingsCurrentSensors != settings.ecobeesensors determined!!!", 4, null, "trace")					
 				} else { LOG("atomicState.settingsCurrentSensors == settings.ecobeesensors: No changes detected!", 4, null, "trace") }
-				input(name: "ecobeesensors", title:"Select Ecobee Sensors (${numFound} found)", type: "enum", required:false, description: "Tap to choose", multiple:true, metadata:[values:options])
+				input(name: "ecobeesensors", title:"Select Ecobee Sensors (${numFound} found)", type: "enum", required:false, description: "Tap to choose", multiple:true, options:[options])
 			}
             if (settings.showThermsAsSensor) { 
             	section("NOTE: Thermostats are included as an available sensor to allow for actual temperature values to be used.") { }
@@ -384,10 +460,10 @@ def askAlexaPage() {
 def preferencesPage() {
     LOG("=====> preferencesPage() entered. settings: ${settings}", 5)
     dynamicPage(name: "preferencesPage", title: "Update Ecobee Suite Manager Preferences", nextPage: "") {
-		section("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour. You can have them sent ${location.contactBookEnabled?'to selected Contacts':'via SMS'} or as a Push notification (default).") {
-            input(name: 'recipients', title: 'Send notifications to', descriptions: 'Contacts', type: 'contact', required: false, multiple: true) {
-            	input "phone", "phone", title: "Send SMS notifications to", description: "Phone Number", required: false }
-        }
+		//section("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour. You can have them sent ${location.contactBookEnabled?'to selected Contacts':'via SMS'} or as a Push notification (default).") {
+        //    input(name: 'recipients', title: 'Send notifications to', descriptions: 'Contacts', type: 'contact', required: false, multiple: true) {
+        //    	input "phone", "phone", title: "Send SMS notifications to", description: "Phone Number", required: false }
+        //}
       	section("How long do you want Hold events to last?") {
             input(name: "holdType", title:"Select Hold Type", type: "enum", required:false, multiple:false, defaultValue: "Until I Change", submitOnChange: true, description: "Until I Change", 
             	metadata:[values:["Until I Change", "Until Next Program", "2 Hours", "4 Hours", "Specified Hours", "Thermostat Setting"]])
@@ -536,21 +612,22 @@ def helperSmartAppsPage() {
 
 // Preference Pages Helpers
 private def Boolean testForDeviceHandlers() {
-	if (atomicState.runTestOnce != null) { return atomicState.runTestOnce }
-    
+    log.debug "testForDeviceHandlers() runTestOnce: ${atomicState.runTestOnce}"
+	//if (atomicState.runTestOnce != null) { return atomicState.runTestOnce }
+    log.debug "testForDeviceHandlers() NS: ${namespace()}"
     def DNIAdder = now().toString()
     def d1
     def d2
     def success = true
     
 	try {    	
-		d1 = addChildDevice(app.namespace, getChildThermostatName(), "dummyThermDNI-${DNIAdder}", null, ["label":"Ecobee Suite Thermostat:TestingForInstall", completedSetup:true])
-		d2 = addChildDevice(app.namespace, getChildSensorName(), "dummySensorDNI-${DNIAdder}", null, ["label":"Ecobee Suite Sensor:TestingForInstall", completedSetup:true])
-	} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
+		d1 = addChildDevice(namespace(), getChildThermostatName(), "dummyThermDNI-${DNIAdder}", null, ["label":"Ecobee Suite Thermostat:TestingForInstall", completedSetup:true])
+		d2 = addChildDevice(namespace(), getChildSensorName(), "dummySensorDNI-${DNIAdder}", null, ["label":"Ecobee Suite Sensor:TestingForInstall", completedSetup:true])
+	} catch (e) {
 		LOG("You MUST add the ${getChildThermostatName()} and ${getChildSensorName()} Device Handlers to the IDE BEFORE running the setup.", 1, null, "error")
 		success = false
 	}
-    
+    log.debug "testForDeviceHandlers() success: ${success}"
     atomicState.runTestOnce = success
     
     if (d1) deleteChildDevice("dummyThermDNI-${DNIAdder}") 
@@ -641,146 +718,6 @@ def acknowledgeEcobeeAlert( String deviceId, String ackRef ) {
 }
 // End of Ask Alexa Helpers
 
-// OAuth Init URL
-def oauthInitUrl() {
-	LOG("oauthInitUrl with callback: ${callbackUrl}", 5)
-	atomicState.oauthInitState = UUID.randomUUID().toString()
-
-	def oauthParams = [
-			response_type: "code",
-			client_id: smartThingsClientId,			
-			scope: "smartRead,smartWrite",
-			redirect_uri: callbackUrl, //"https://graph.api.smartthings.com/oauth/callback"
-			state: atomicState.oauthInitState			
-	]
-
-	LOG("oauthInitUrl - Before redirect: location: ${apiEndpoint}/authorize?${toQueryString(oauthParams)}", 4)
-	redirect(location: "${apiEndpoint}/authorize?${toQueryString(oauthParams)}")
-}
-
-// OAuth Callback URL and helpers
-def callback() {
-	LOG("callback()>> params: $params, params.code ${params.code}, params.state ${params.state}, atomicState.oauthInitState ${atomicState.oauthInitState}", 4)
-	def code = params.code
-	def oauthState = params.state
-
-	//verify oauthState == atomicState.oauthInitState, so the callback corresponds to the authentication request
-	if (oauthState == atomicState.oauthInitState){
-    	LOG("callback() --> States matched!", 4)
-		def tokenParams = [
-			grant_type: "authorization_code",
-			code      : code,
-			client_id : smartThingsClientId,
-			state	  : oauthState,
-			redirect_uri: callbackUrl //"https://graph.api.smartthings.com/oauth/callback"
-		]
-
-		def tokenUrl = "${apiEndpoint}/token?${toQueryString(tokenParams)}"
-        LOG("callback()-->tokenURL: ${tokenUrl}", 2)
-
-		httpPost(uri: tokenUrl) { resp ->
-			atomicState.refreshToken = resp.data.refresh_token
-			atomicState.authToken = resp.data.access_token
-            
-            LOG("Expires in ${resp?.data?.expires_in} seconds")
-            atomicState.authTokenExpires = now() + (resp.data.expires_in * 1000)
-            LOG("swapped token: $resp.data; atomicState.refreshToken: ${atomicState.refreshToken}; atomicState.authToken: ${atomicState.authToken}", 2)
-		}
-
-		if (atomicState.authToken) { success() } else { fail() }
-
-	} else {
-    	LOG("callback() failed oauthState != atomicState.oauthInitState", 1, null, "warn")
-	}
-}
-
-def success() {
-	def message = """
-    <p>Your ecobee Account is now connected to SmartThings!</p>
-    <p>Click 'Done' to finish setup.</p>
-    """
-	connectionStatus(message)
-}
-
-def fail() {
-	def message = """
-        <p>The connection could not be established!</p>
-        <p>Click 'Done' to return to the menu.</p>
-    """
-	connectionStatus(message)
-}
-
-def connectionStatus(message, redirectUrl = null) {
-	def redirectHtml = ""
-	if (redirectUrl) {
-		redirectHtml = """
-			<meta http-equiv="refresh" content="3; url=${redirectUrl}" />
-		"""
-	}
-
-	def html = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=640">
-<title>Ecobee & SmartThings connection</title>
-<style type="text/css">
-        @font-face {
-                font-family: 'Swiss 721 W01 Thin';
-                src: url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-thin-webfont.eot');
-                src: url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-thin-webfont.eot?#iefix') format('embedded-opentype'),
-                         url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-thin-webfont.woff') format('woff'),
-                         url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-thin-webfont.ttf') format('truetype'),
-                         url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-thin-webfont.svg#swis721_th_btthin') format('svg');
-                font-weight: normal;
-                font-style: normal;
-        }
-        @font-face {
-                font-family: 'Swiss 721 W01 Light';
-                src: url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-light-webfont.eot');
-                src: url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-light-webfont.eot?#iefix') format('embedded-opentype'),
-                         url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-light-webfont.woff') format('woff'),
-                         url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-light-webfont.ttf') format('truetype'),
-                         url('https://s3.amazonaws.com/smartapp-icons/Partner/fonts/swiss-721-light-webfont.svg#swis721_lt_btlight') format('svg');
-                font-weight: normal;
-                font-style: normal;
-        }
-        .container {
-                width: 90%;
-                padding: 4%;
-                /*background: #eee;*/
-                text-align: center;
-        }
-        img {
-                vertical-align: middle;
-        }
-        p {
-                font-size: 2.2em;
-                font-family: 'Swiss 721 W01 Thin';
-                text-align: center;
-                color: #666666;
-                padding: 0 40px;
-                margin-bottom: 0;
-        }
-        span {
-                font-family: 'Swiss 721 W01 Light';
-        }
-</style>
-</head>
-<body>
-        <div class="container">
-                <img src="https://s3.amazonaws.com/smartapp-icons/Partner/ecobee%402x.png" alt="ecobee icon" />
-                <img src="https://s3.amazonaws.com/smartapp-icons/Partner/support/connected-device-icn%402x.png" alt="connected device icon" />
-                <img src="https://s3.amazonaws.com/smartapp-icons/Partner/support/st-logo%402x.png" alt="SmartThings logo" />
-                ${message}
-        </div>
-</body>
-</html>
-"""
-
-	render contentType: 'text/html', data: html
-}
-// End OAuth Callback URL and helpers
 
 // Get the list of Ecobee Thermostats for use in the settings pages
 def getEcobeeThermostats() {	
@@ -1100,8 +1037,8 @@ private def createChildrenThermostats() {
 		def d = getChildDevice(dni)
 		if(!d) {        	
             try {
-				d = addChildDevice(app.namespace, getChildThermostatName(), dni, null, ["label":"EcobeeTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
-			} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
+				d = addChildDevice(namespace(), getChildThermostatName(), dni, null, ["label":"EcobeeTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
+			} catch (e) {
             	LOG("You MUST add the ${getChildSensorName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
                 return false
             }
@@ -1122,8 +1059,8 @@ private def createChildrenSensors() {
 		def d = getChildDevice(dni)
 		if(!d) {        	
             try {
-				d = addChildDevice(app.namespace, getChildSensorName(), dni, null, ["label":"EcobeeSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
-			} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
+				d = addChildDevice(namespace(), getChildSensorName(), dni, null, ["label":"EcobeeSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
+			} catch (e) {
             	LOG("You MUST add the ${getChildSensorName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
                 return false
             }
@@ -3099,7 +3036,6 @@ private refreshAuthToken(child=null) {
 		LOG('Performing a refreshAuthToken()', 4, null, 'trace')
         
         def refreshParams = [
-                method: 'POST',
                 uri   : apiEndpoint,
                 path  : '/token',
                 query : [grant_type: 'refresh_token', code: "${atomicState.refreshToken}", client_id: smartThingsClientId],
@@ -3752,8 +3688,8 @@ private def sendJsonRetry() {
 
 private def getChildThermostatName() { return "Ecobee Suite Thermostat" }
 private def getChildSensorName()     { return "Ecobee Suite Sensor" }
-private def getServerUrl()           { return "https://graph.api.smartthings.com" }
-private def getShardUrl()            { return getApiServerUrl() }
+private def getServerUrl()           { return getFullLocalApiServerUrl() }
+private def getShardUrl()            { return getFullLocalApiServerUrl() }
 private def getCallbackUrl()         { return "${serverUrl}/oauth/callback" }
 private def getBuildRedirectUrl()    { return "${serverUrl}/oauth/initialize?appId=${app.id}&access_token=${atomicState.accessToken}&apiServerUrl=${shardUrl}" }
 private def getApiEndpoint()         { return "https://api.ecobee.com" }
@@ -3763,10 +3699,16 @@ private def getTrace()				 { return 'trace' }
 private def getDebug()				 { return 'debug' }
 private def getError()				 { return 'error' }
 
+private def namespace()              { return 'sandood' }
+
+private def canSchedule()            { return true } // Override ST canSchedule() method for now
+                                                     // http://docs.smartthings.com/en/latest/ref-docs/smartapp-ref.html#canschedule
+
 // This is the API Key from the Ecobee developer page. Can be provided by the app provider or use the appSettings
 private def getSmartThingsClientId() { 
+    return "E8m0dza4HT1KAYDCqpDSioaARnXVyf0k"	
 	if(!appSettings.clientId) {
-		return "obvlTjUuuR2zKpHR6nZMxHWugoi5eVtS"		
+		return "E8m0dza4HT1KAYDCqpDSioaARnXVyf0k"		
 	} else {
 		return appSettings.clientId 
     }
