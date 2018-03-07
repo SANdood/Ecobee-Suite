@@ -59,10 +59,11 @@
  *	1.4.08-	Fix the inevitable typo that prevented clean initial install
  *	1.4.09- Trapped another exception (org.apache.http.conn.HttpHostConnectException)
  *	1.4.10- Fixed sendJson LOG error
+ *	1.4.11-	Added monitor_sensor support, now handles duplicate sensor names
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.10" }
+def getVersionNum() { return "1.4.11" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -838,7 +839,7 @@ def getEcobeeThermostats() {
 // NOTE: getEcobeeThermostats() should be called prior to getEcobeeSensors to refresh the full data of all thermostats
 Map getEcobeeSensors() {	
     LOG("====> getEcobeeSensors() entered. thermostats: ${thermostats}", 5)
-
+	def debugLevelFour = debugLevel(4)
 	def sensorMap = [:]
     def foundThermo = null
 	// TODO: Is this needed?
@@ -850,20 +851,22 @@ Map getEcobeeSensors() {
 	
 	atomicState.thermostatData.thermostatList.each { singleStat ->
         def tid = singleStat.identifier
-		LOG("thermostat loop: singleStat.identifier == ${tid} -- singleStat.remoteSensors == ${singleStat.remoteSensors} ", 4)   
+		if (debugLevelFour) LOG("thermostat loop: singleStat.identifier == ${tid} -- singleStat.remoteSensors == ${singleStat.remoteSensors} ", 4)   
         def tempSensors = atomicState.remoteSensors
     	if (!settings.thermostats.findAll{ it.contains(tid) } ) {
         	// We can skip this thermostat as it was not selected by the user
-            LOG("getEcobeeSensors() --> Skipping this thermostat: ${tid}", 5)
+            if (debugLevelFour) LOG("getEcobeeSensors() --> Skipping this thermostat: ${tid}", 4)
         } else {
-        	LOG("getEcobeeSensors() --> Entering the else... we found a match. singleStat == ${singleStat.name}", 4)
+        	if (debugLevelFour) LOG("getEcobeeSensors() --> Entering the else... we found a match. singleStat == ${singleStat.name}", 4)
                         
         	// atomicState.remoteSensors[tid] = atomicState.remoteSensors[tid] ? (atomicState.remoteSensors[tid] + singleStat.remoteSensors) : singleStat.remoteSensors
             tempSensors[tid] = tempSensors[tid] ? tempSensors[tid] + singleStat.remoteSensors : singleStat.remoteSensors
-            LOG("After atomicState.remoteSensors setup...", 5)	        
+            if (debugLevelFour) LOG("After atomicState.remoteSensors setup...", 5)	        
                         
-            LOG("getEcobeeSensors() - singleStat.remoteSensors: ${singleStat.remoteSensors}", 4)
-            LOG("getEcobeeSensors() - atomicState.remoteSensors: ${atomicState.remoteSensors}", 4)
+            if (debugLevelFour) {
+            	LOG("getEcobeeSensors() - singleStat.remoteSensors: ${singleStat.remoteSensors}", 4)
+            	LOG("getEcobeeSensors() - atomicState.remoteSensors: ${atomicState.remoteSensors}", 4)
+            }
 		}
         atomicState.remoteSensors = tempSensors
         
@@ -871,31 +874,37 @@ Map getEcobeeSensors() {
 		// 		 This is needed to work around the dynamic enum "bug" which prevents proper deletion
         LOG("remoteSensors all before each loop: ${atomicState.remoteSensors}", 5, null, "trace")
 		atomicState.remoteSensors[tid].each {
-        	LOG("Looping through each remoteSensor. Current remoteSensor: ${it}", 5, null, "trace")
-			if (it.type == "ecobee3_remote_sensor") {
-            	LOG("Adding an ecobee3_remote_sensor: ${it}", 4, null, "trace")
-				def value = "${it?.name}"
-				def key = "ecobee_suite-sensor-"+ it?.id + "-" + it?.code
+        	if (debugLevelFour) LOG("Looping through each remoteSensor. Current remoteSensor: ${it}", 5, null, "trace")
+			if (it?.type == "ecobee3_remote_sensor") {
+            	if (debugLevelFour) LOG("Adding an ecobee3_remote_sensor: ${it}", 4, null, "trace")
+				def value = "${it?.name} (${it?.code})"
+				def key = "ecobee_suite-sensor-${it?.id}-${it?.code}"
 				sensorMap["${key}"] = value
-			} else if ( (it.type == "thermostat") && (settings.showThermsAsSensor == true) ) {            	
-				LOG("Adding a Thermostat as a Sensor: ${it}", 4, null, "trace")
+			} else if ( (it?.type == "thermostat") && (settings.showThermsAsSensor == true) ) {            	
+				if (debugLevelFour) LOG("Adding a Thermostat as a Sensor: ${it}", 4, null, "trace")
            	    def value = "${it?.name}"
-				def key = "ecobee_suite-sensor_tstat-"+ it?.id + "-" + it?.name
-       	       	LOG("Adding a Thermostat as a Sensor: ${it}, key: ${key}  value: ${value}", 4, null, "trace")
+				def key = "ecobee_suite-sensor_tstat-${it?.id}-${it?.name}"
+       	       	if (debugLevelFour) LOG("Adding a Thermostat as a Sensor: ${it}, key: ${key}  value: ${value}", 4, null, "trace")
 				sensorMap["${key}"] = value + " (Thermostat)"
-       	   	} else if ( it.type == "control_sensor" && it.capability[0]?.type == "temperature") {
+       	   	} else if ( it?.type == "control_sensor" && it?.capability[0]?.type == "temperature") {
        	   		// We can add this one as it supports temperature
-       	      	LOG("Adding a control_sensor: ${it}", 4, null, "trace")
+       	      	if (debugLevelFour) LOG("Adding a control_sensor: ${it}", 4, null, "trace")
 				def value = "${it?.name}"
-				def key = "ecobee_suite-control_sensor-"+ it?.id
-				sensorMap["${key}"] = value    
+				// def key = "ecobee_suite-control_sensor-${it?.id}"			// old DNI format
+                def key = "ecobee_suite-control_sensor-${tid}.${it?.id}"		// New format include Thermostat ID
+				sensorMap["${key}"] = value
+            } else if (it?.type == "monitor_sensor" && it?.capability[0]?.type == "temperature" && it?.name != "") {
+            	if (debugLevelFour) LOG("Adding a monitor_sensor: ${it}", 4, null, "trace")
+				def value = "${it?.name}"
+				def key = "ecobee_suite-monitor_sensor-${tid}.${it?.id}"
+				sensorMap["${key}"] = value
            	} else {
-           		LOG("Did NOT add: ${it}. settings.showThermsAsSensor=${settings.showThermsAsSensor}", 4, null, "trace")
+           		if (debugLevelFour) LOG("Did NOT add: ${it}. settings.showThermsAsSensor=${settings.showThermsAsSensor}", 4, null, "trace")
            	}
 		}
 	} // end thermostats.each loop
 	
-    LOG("getEcobeeSensors() - remote sensor list: ${sensorMap}", 4)
+    if (debugLevelFour) LOG("getEcobeeSensors() - remote sensor list: ${sensorMap}", 4)
     sensorMap = sensorMap.sort { it.value }
     atomicState.eligibleSensors = sensorMap
     atomicState.numAvailSensors = sensorMap.size() ?: 0
@@ -2293,21 +2302,29 @@ def updateSensorData() {
     
 		atomicState.remoteSensors[tid].each {
         	String sensorDNI = ''
-        	switch (it.type) {
+        	switch (it?.type) {
             	case 'ecobee3_remote_sensor':
                 	// Ecobee3 remote temp/occupancy sensor
-                	sensorDNI = "ecobee_suite-sensor-" + it?.id + "-" + it?.code
+                	sensorDNI = "ecobee_suite-sensor-${it?.id}-${it?.code}"
+                    break;
+       			case 'thermostat':
+                	// The thermostat itself
+                	sensorDNI = "ecobee_suite-sensor_tstat-${it?.id}-${it?.name}"
                     break;
                 case 'control_sensor':
                 	// SmartSI style control sensor (temp or humidity)
-                	sensorDNI = "ecobee_suite-control_sensor-" + it?.id
+                	sensorDNI = "ecobee_suite-control_sensor-${tid}.${it?.id}"		// New DNI format includes Thermostat ID
+                    if (!settings.ecobeesensors?.contains(sensorDNI)) sensorDNI = "ecobee_suite-monitor_sensor-${it?.id}" // If not selected, try the old DNI format
                     break;
-                case 'thermostat':
-                	// The thermostat itself
-                	sensorDNI = "ecobee_suite-sensor_tstat-"+ it?.id + "-" + it?.name
+				case 'monitor_sensor':
+                	// Smart style remote sensor (temp or humidity)
+                    sensorDNI = "ecobee_suite-monitor_sensor-${tid}.${it?.id}"
+                    break;
+                default:
+					LOG("Unknown sensor type reported: ${it}",2,null,'warn')
                     break;
      		} 
-			if (debugLevelFour) LOG("updateSensorData() - Sensor ${it.name}, sensorDNI == ${sensorDNI}", 4)
+			if (debugLevelFour) LOG("updateSensorData() - Sensor ${it?.name}, sensorDNI == ${sensorDNI}", 4)
             	              
             if (sensorDNI && settings.ecobeesensors?.contains(sensorDNI)) {		// only process the selected/configured sensors
 				def temperature = ''
@@ -2315,7 +2332,7 @@ def updateSensorData() {
                 Integer humidity = null
                             
 				it.capability.each { cap ->
-					if (cap.type == "temperature") {
+					if (cap.type == 'temperature') {
                    		if (debugLevelFour) LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
                        	if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
 							temperature = cap.value as Double
@@ -2327,7 +2344,7 @@ def updateSensorData() {
                            		LOG("${preText}Sensor ${it.name} temperature is 'unknown'. Perhaps it is unreachable?", 1, null, 'warn')
                             }
                            	// Need to mark as offline somehow
-                           	temperature = "unknown"   
+                           	temperature = 'unknown'   
                        	} else {
                        		LOG("${preText}Sensor ${it.name} (DNI: ${sensorDNI}) returned ${cap.value}.", 1, null, "error")
                        	}
@@ -2357,7 +2374,7 @@ def updateSensorData() {
                 if (forcePoll) sensorData << [ thermostatId: tid /*, vents: 'default'*/ ] 		// belt, meet suspenders
                     
                 // temperature usually changes every time, goes in *List[0]
-                def currentTemp = ((temperature == 'unknown') ? 'unknown' : myConvertTemperatureIfNeeded(temperature, "F", precision+1))
+                def currentTemp = ((temperature == 'unknown') ? 'unknown' : myConvertTemperatureIfNeeded(temperature, 'F', precision+1))
 				if (forcePoll || (lastList[0] != currentTemp)) { sensorData << [ temperature: currentTemp ] }
                 def sensorList = [currentTemp]
                     
