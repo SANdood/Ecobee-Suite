@@ -60,7 +60,7 @@
 				"name": 	"ecobee Suite Smart Mode",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.4.04",
+				"version": 	"1.4.05",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
 				"optional": 	false
