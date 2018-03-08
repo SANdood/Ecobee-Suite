@@ -17,8 +17,9 @@
  *	1.4.02- Shortened LOG and NOTIFY strings when reporting on multiple thermostats
  *	1.4.03-	Fix frequency enum translations
  *	1.4.04- Fixed notifications
+ *	1.4.05- Change the mode only ONCE when crossing a configured threshold (for coexistence with other Helpers/Instances)
  */
-def getVersionNum() { return "1.4.04" }
+def getVersionNum() { return "1.4.05" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 
@@ -144,7 +145,6 @@ def initialize() {
 		case 'SmartThings Temperature Sensor':
 			subscribe( settings.thermometer, 'temperature', tempChangeHandler)
             tempNow = settings.thermometer.currentValue('temperature').toDouble()
-            temperatureUpdate(tempNow)
 			break;
 		
 		case "Thermostat's Weather Temperature":
@@ -164,6 +164,8 @@ def initialize() {
             tempNow = getPwsTemp()
 			break;
 	}
+    temperatureUpdate(tempNow)
+    
     LOG("Initialization complete...current temperature is ${tempNow}°",2,null,'info')
 }
 
@@ -180,11 +182,26 @@ def tempChangeHandler(evt) {
 def temperatureUpdate( Double temp ) {
 	def desiredMode = null
 	if (settings.aboveTemp && (temp >= settings.aboveTemp)) {
-		desiredMode = settings.aboveMode
+    	if (!atomicState.aboveChanged) {
+			desiredMode = settings.aboveMode
+            atomicState.aboveChanged = true
+            atomicState.betweenChanged = false
+            atomicState.belowChanged = false
+        }
 	} else if (settings.belowTemp && (temp <= settings.belowTemp)) {
-		desiredMode = settings.belowMode
+    	if (!atomicState.belowChanged) {
+			desiredMode = settings.belowMode
+            atomicState.aboveChanged = false
+            atomicState.betweenChanged = false
+            atomicState.belowChanged = true
+        }
 	} else if (settings.aboveTemp && settings.belowTemp && settings.betweenMode) {
-		desiredMode = settings.betweenMode
+    	if (!atomicState.betweenChanged) {
+			desiredMode = settings.betweenMode
+            atomicState.aboveChanged = false
+            atomicState.betweenChanged = true
+            atomicState.belowChanged = false
+        }
 	}
 	if (desiredMode != null) {
     	String changeNames = ""
