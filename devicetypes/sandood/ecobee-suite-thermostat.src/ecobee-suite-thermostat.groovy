@@ -51,9 +51,11 @@
  *	1.4.0  - Major release: Renamed device files
  *	1.4.01 - Don't display apiConnected status changes in device log unless in Debug Level 4 or 5
  *	1.4.02 - Fixed display of fanMinOnTime in device log
+ *	1.4.03 - Fixed race condition when ST Routine sets both heatingSetpoint() and coolingSetpoint() in rapid succession
+ *	1.4.04 - Optimized setProgram to avoid "Hold: Away", resumeProgram, "Hold: Away" redundancies
  */
 
-def getVersionNum() { return "1.4.02" }
+def getVersionNum() { return "1.4.04" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -196,6 +198,7 @@ metadata {
         attribute "thermostatTime", "string"
         attribute "statHoldAction", "string"
         attribute "setpointDisplay", "string"
+        attribute "lastHoldType", "string"
 		
 		// attribute "debugLevel", "number"
 		
@@ -306,8 +309,8 @@ metadata {
 		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
-            //state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
+			//state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
+            state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
 		}
         
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
@@ -797,9 +800,10 @@ def generateEvent(Map results) {
             	case 'forced':
                 	forceChange = sendValue as Boolean
                     break;
+                    
 				case 'heatingSetpoint':
-                	LOG("heatingSetpoint: ${sendValue}",3,null,'info')
                 	if (isChange || forceChange) {
+                    	LOG("heatingSetpoint: ${sendValue}",2,null,'info')
                     	sendEvent(name: 'heatingSetpointDisplay', value: sendValue, descriptionText: "Heating setpoint is ${sendValue}°", /* isStateChange: isChange,*/ displayed: true) // for the slider
                         objectsUpdated++        
                         if (tMode == 'heat') {
@@ -820,10 +824,14 @@ def generateEvent(Map results) {
                         event = eventFront + [value: sendValue, /*descriptionText: "Heating setpoint is ${sendValue}°", isStateChange: isChange,*/ displayed: false]
                     }
                     break;
-                    
+                
+                case 'heatingSetpointDisplay':
+                	event = eventFront + [value: sendValue, descriptionText: "Heating setpoint is ${sendValue}°", displayed: true]
+                    break;
+                        
 				case 'coolingSetpoint':
-                	LOG("coolingSetpoint: ${sendValue}",3,null,'info')
                 	if (isChange || forceChange) {
+                		LOG("coolingSetpoint: ${sendValue}",2,null,'info')                    
                 		sendEvent(name: 'coolingSetpointDisplay', value: sendValue, descriptionText: "Cooling setpoint is ${sendValue}°", /* isStateChange: true, */ displayed: true) // for the slider
                         objectsUpdated++                       
                         if (tMode == 'cool') {
@@ -845,9 +853,13 @@ def generateEvent(Map results) {
                     }
                     break;
                     
+                case 'coolingSetpointDisplay': 
+                	event = eventFront + [value: sendValue, descriptionText: "Cooling setpoint is ${sendValue}°", displayed: true]
+                    break;
+                    
                 case 'thermostatSetpoint':
-                	LOG("thermostatSetpoint: ${sendValue}",2,null,'info')
                 	if (isChange || forceChange) {
+                    	LOG("thermostatSetpoint: ${sendValue}",2,null,'info')
                     	def displayValue = isMetric ? sendValue : ((value.toInteger() == value.toFloat()) ?	value.toInteger().toString() : sendValue)	// Truncate the decimal point
                     	if (isChange) event = eventFront + [value: displayValue,  descriptionText: "Thermostat setpoint is ${sendValue}°", isStateChange: true, displayed: true]
                     }
@@ -1307,6 +1319,16 @@ def generateEvent(Map results) {
                         event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
                     }
                     break;
+                    
+				case 'holdEndsAt':
+                	if (isChange) {
+                    	if (sendValue.startsWith('Hold ends a l' /*ong time from now*/)){
+                        	// Record the lastHoldType for permanent holds effected through the Thermostat itself, the WebApp, or the Ecobee Mobile app
+                        	sendEvent(name: 'lastHoldType', value: 'indefinite', isStateChange: true, displayed: false)
+                            objectsUpdated++
+                        }
+                        event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
+                    }
                 
                 // New attribute: supportedThermostatModes
                	case 'heatMode':
@@ -1338,10 +1360,10 @@ def generateEvent(Map results) {
 				case 'coolDifferential':
                 case 'heatCoolMinDelta':
                 case 'programsList':
-                case 'holdEndsAt':
                 case 'temperatureScale':
                 case 'checkInterval':
                 case 'statHoldAction':
+                case 'lastHoldType':
 					if (isChange) event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
 					break;
 				
@@ -1590,8 +1612,9 @@ void setHeatingSetpoint(Double setpoint) {
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType, sendHoldHours)) {
   		//def precision = device.currentValue('decimalPrecision')
     	//if (precision == null) precision = isMetric ? 1 : 0
-        def updates = [	'coolingSetpoint': coolingSetpoint.toDouble().round(1),
-        				'heatingSetpoint': heatingSetpoint.toDouble().round(1),
+        def updates = [	'coolingSetpointDisplay': coolingSetpoint.toDouble().round(1),
+        				'heatingSetpointDisplay': heatingSetpoint.toDouble().round(1),
+                        'lastHoldType': sendHoldType,
         				/*'currentProgramName': 'Hold: Temp'*/ ]
         generateEvent(updates)
 		LOG("Done setHeatingSetpoint> coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}, thermostatSetpoint: ${device.currentValue('thermostatSetpoint')}",4,null,'trace')
@@ -1622,7 +1645,7 @@ void setCoolingSetpoint(Double setpoint) {
    	def temperatureScale = isMetric ? 'C' : 'F'
 	LOG("setCoolingSetpoint() request with setpoint value = ${setpoint}, temperature scale is ${temperatureScale}", 2, null, 'info')
     
-    if (isMetric && (setpoint < 35.0)) {
+    if (!isMetric && (setpoint < 35.0)) {
     	setpoint = cToF(setpoint).toDouble().round(1)	// Hello, Google hack - seems to request C when stat is in Auto mode
         LOG ("setCoolingSetpoint() converted apparent C setpoint value to ${setpoint} F", 2, null, 'info')
     }
@@ -1662,8 +1685,9 @@ void setCoolingSetpoint(Double setpoint) {
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType, sendHoldHours)) {
       	//def precision = device.currentValue('decimalPrecision')
     	//if (precision == null) precision = isMetric ? 1 : 0
-        def updates = [	'coolingSetpoint': coolingSetpoint.toDouble().round(1),
-        				'heatingSetpoint': heatingSetpoint.toDouble().round(1),
+        def updates = [	'coolingSetpointDisplay': coolingSetpoint.toDouble().round(1),
+        				'heatingSetpointDisplay': heatingSetpoint.toDouble().round(1),
+                        'lastHoldType': sendHoldType,
         				/*'currentProgramName': 'Hold: Temp'*/ ]
         generateEvent(updates)
 		LOG("Done setCoolingSetpoint> coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}, thermostatSetpoint: ${device.currentValue('thermostatSetpoint')}",4,null,'trace') 
@@ -2006,28 +2030,41 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
     def currentProgramName = device.currentValue('currentProgramName')
     def scheduledProgram = device.currentValue('scheduledProgram')
     
-    if ((currentProgram == program) && (sendHoldType == 'nextTransition')) {
-    	if (currentProgram == currentProgramName) {
+    if (currentProgram == program) {
+    	if ((currentProgram == currentProgramName) && (sendHoldType == 'nextTransition')) {
+        	// Already running desired program, not in a hold, and Program will change at next transition as requested
         	LOG("Thermostat Program is ${program} (already)", 2, this, 'info')
             return
         } else if ((currentProgramName == "Hold: ${currentProgram}") || (currentProgramName == "Auto ${currentProgram}")) {
-        	if (scheduledProgram == program) {
+        	// We are already in a Hold for the requested program
+        	if ((scheduledProgram == program) && (sendHoldType == 'nextTransition')) {
+            	// The scheduled program is the same as the requested one, and caller wants next transition, so we can just resume that program
+                // This really should not occur, but we essentially just want to pop the stack of Holds if it does
             	LOG("Thermostat Program is ${program} (resumed)", 2, this, 'info')
             	resumeProgramInternal(true)
+                runIn(5, refresh, [overwrite: false])
                 generateProgramEvent(program,'')		// this may be redundant - resumeProgramInternal does this also
-                runIn(5, refresh, [overwrite: true])
                 return
+            } else {
+            	// Otherwise (already in a hold for the desired program), do nothing if we can verify that the holdType is the same
+                def lastHoldType = device.currentValue('lastHoldType')
+                if (lastHoldType && (sendHoldType == lastHoldType) && (sendHoldType != 'holdHours')) {	// we have to reset the timer on an Hourly hold
+                    LOG("Thermostat Program is already Hold: ${program} (${sendHoldType})", 2, this, 'info')
+                    return
+                }
             }
         }
     }
 	
-	// if the requested program is the same as the one that is supposed to be running, then just resumeProgram
+    // if the requested program is the same as the one that is supposed to be running, then just resumeProgram
 	if (scheduledProgram == program) {
 		if (resumeProgramInternal(true)) {							// resumeAll so that we get back to scheduled program
         	LOG("Thermostat Program is ${program} (resumed)", 2, this, 'info')
 			if (sendHoldType == 'nextTransition') {					// didn't want a permanent hold, so we are all done (don't need to set a new hold)
+            runIn(3, refresh, [overwrite: false])
            		generateProgramEvent(program,'')
-            	runIn(5, refresh, [overwrite: true])
+                def updates = [ 'lastHoldType': sendHoldType ]
+        		generateEvent(updates)
            		return
         	}
         }
@@ -2036,14 +2073,17 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
     }
   
     if ( parent.setProgram(this, program, deviceId, sendHoldType, sendHoldHours) ) {
+     	runIn(3, refresh, [overwrite: true])
+
     	LOG("Thermostat Program is Hold: ${program}",2,this,'info')
 		generateProgramEvent('Hold: '+program)
+        def updates = [ 'lastHoldType': sendHoldType ]
+        generateEvent(updates)
 	} else {
     	LOG("Error setting Program to ${program}", 2, this, "warn")
 		// def priorProgram = device.currentState("currentProgramId")?.value
 		// generateProgramEvent(priorProgram, program) // reset the tile back
 	}
- 	runIn(5, refresh, [overwrite: true]) 
 }
 void present(){
 	// Change the Comfort Setting to Home (Nest compatibility)
@@ -2090,12 +2130,11 @@ void resumeProgram(resumeAll=true) {
     	//def updates = ['thermostatOperatingState':'idle','equipmentOperatingState':'idle']
         //log.debug updates
         //generateEvent(updates)
-        runIn(5,forceRefresh,[overwrite:true])
+        runIn(5, refresh, [overwrite:false])
     }
 }
 private def resumeProgramInternal(resumeAll=true) {
 	def result = true
-    
 	String thermostatHold = device.currentValue('thermostatHold')
 	if (thermostatHold == '') {
 		LOG('resumeProgram() - No current hold', 2, null, 'info')
@@ -2110,6 +2149,7 @@ private def resumeProgramInternal(resumeAll=true) {
 	}
 	
 	sendEvent(name: 'thermostatStatus', value: 'Resuming scheduled Program...', displayed: false, isStateChange: true)
+    
 	def deviceId = getDeviceId()
     sendEvent(name: 'thermostatStatus', value: 'Program updating...', displayed: false, isStateChange: true)
 	if (parent.resumeProgram(this, deviceId, resumeAll)) {
@@ -2119,12 +2159,12 @@ private def resumeProgramInternal(resumeAll=true) {
         sendEvent(name: "holdStatus", value: '', descriptionText: 'Hold finished', displayed: true, isStateChange: true)
         sendEvent(name: 'thermostatHold', value: '', displayed: false, isStateChange: true)
         LOG("resumeProgram(${resumeAll}) - succeeded", 2,null,'info')
+        runIn(3, refresh, [overwrite:true])
 	} else {
 		sendEvent(name: "thermostatStatus", value: "Resume Program failed..", description:statusText, displayed: false, isStateChange: true)
 		LOG("resumeProgram() - failed (parent.resumeProgram(this, ${deviceId}, ${resumeAll}))", 1, null, "error")
         result = false
 	}
-    runIn(5, refresh, [overwrite: true])
     sendEvent(name: 'thermostatStatus', value: '', displayed: false, isStateChange: true)
     return result
 }
