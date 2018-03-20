@@ -53,9 +53,10 @@
  *	1.4.02 - Fixed display of fanMinOnTime in device log
  *	1.4.03 - Fixed race condition when ST Routine sets both heatingSetpoint() and coolingSetpoint() in rapid succession
  *	1.4.04 - Optimized setProgram to avoid "Hold: Away", resumeProgram, "Hold: Away" redundancies
+ *	1.4.05 - Revision number correction
  */
 
-def getVersionNum() { return "1.4.04" }
+def getVersionNum() { return "1.4.05" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
