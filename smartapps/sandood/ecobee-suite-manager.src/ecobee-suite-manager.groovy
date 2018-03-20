@@ -60,10 +60,12 @@
  *	1.4.09- Trapped another exception (org.apache.http.conn.HttpHostConnectException)
  *	1.4.10- Fixed sendJson LOG error
  *	1.4.11-	Added monitor_sensor support, now handles duplicate sensor names
+ *	1.4.12- fixed sendJson calls;
+ *	1.4.13- Optimized updates for setpoint changes
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.11" }
+def getVersionNum() { return "1.4.13" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -637,7 +639,8 @@ def acknowledgeEcobeeAlert( String deviceId, String ackRef ) {
     // 					   {"functions":[{"type":"resumeProgram","params":{"resumeAll":"'+allStr+'"}}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
     def jsonRequestBody = '{"functions":[{"type":"acknowledge","params":{"thermostatIdentifier":"' + deviceId + '","ackRef":"' + ackRef + '","ackType":"accept"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	LOG("acknowledgeEcobeeAlert(${deviceId},${ackRef}): jsonRequestBody = ${jsonRequestBody}", 4, child)
-	result = sendJson(jsonRequestBody)
+    // need to get child from the deviceId
+	result = sendJson(null, jsonRequestBody)
     if (result) LOG("Acknowledged Ecobee Alert ${ackRef} for thermostat ${deviceId})",2,null,'info')
 }
 // End of Ask Alexa Helpers
@@ -2503,8 +2506,8 @@ def updateThermostatData() {
     // Handle things that only change when runtime object is updated)
         def occupancy = 'not supported'
         Double tempTemperature
-        Double tempHeatingSetpoint
-        Double tempCoolingSetpoint
+        Double tempHeatingSetpoint = 0.0
+        Double tempCoolingSetpoint = 999.0
         def tempWeatherTemperature
         
         if (forcePoll || runtimeUpdated) {
@@ -2828,7 +2831,7 @@ def updateThermostatData() {
             	if (runtime.actualHumidity > dehumidity) {
                 	if ((tempTemperature < tempCoolingSetpoint) && (tempTemperature >= (tempCoolingSetpoint - (statSettings?.dehumidifyOvercoolOffset?.toDouble()/10.0)))) {
                     	overCool = true
-                        LOG("Over Cooling (${tid}), temp: ${tempTemperature}, setpoint: ${tempHeatingSetpoint}",3,null,'info')
+                        LOG("Over Cooling (${tid}), temp: ${tempTemperature}, setpoint: ${tempCoolingSetpoint}",3,null,'info')
                     } else {
                     	dehumidifying = true
                     }
@@ -2837,7 +2840,7 @@ def updateThermostatData() {
 			if (!overCool && ((statSettings?.disablePreCooling == false) && (tempTemperature < (tempCoolingSetpoint /* - 0.1 */)))) {
             	smartRecovery = true
             	equipStatus = equipStatus + ',smartRecovery'
-                LOG("Smart Recovery (${tid}), temp: ${tempTemperature}, setpoint: ${tempHeatingSetpoint}",3,null,'info')
+                LOG("Smart Recovery (${tid}), temp: ${tempTemperature}, setpoint: ${tempCoolingSetpoint}",3,null,'info')
             }
         }
         
@@ -3033,7 +3036,7 @@ def updateThermostatData() {
         // MOVED TO THE BOTTOM because these values are dependent upon changes to states above when they get to the thermostat DTH
         // Runtime stuff that changes most frequently - we test them 1 at a time, and send only the ones that change
         // Send these first, as they generally are the reason anything else changes (so the thermostat's notification log makes sense)
-		if (forcePoll || runtimeUpdated) {
+		if (forcePoll || runtimeUpdated || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
         	String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
             def oftenList = [tempTemperature,occupancy,runtime.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,humiditySetpoint,userPrecision]
             def lastOList = []
@@ -3271,9 +3274,9 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
     def jsonRequestBody = '{"functions":[{"type":"resumeProgram","params":{"resumeAll":"' + allStr + '"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 4, child)
     
-	result = sendJson(jsonRequestBody)
+	result = sendJson(child, jsonRequestBody)
     LOG("resumeProgram(${resumeAll}) returned ${result}", 2, child,'info')
-
+	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3285,7 +3288,7 @@ def setHVACMode(child, deviceId, mode) {
 	
     def result = sendJson(child, jsonRequestBody)
     LOG("setHVACMode(${mode}) returned ${result}", 3, child,'info')    
-
+	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
     return result
 }
 def setMode(child, mode, deviceId) {
@@ -3295,7 +3298,7 @@ def setMode(child, mode, deviceId) {
     //                     {"selection":{"selectionType":"thermostats","selectionMatch":"XXX"},             "thermostat":{"settings":{"hvacMode":"cool"}}}    
 	LOG("Mode Request Body = ${jsonRequestBody}", 4, child, 'trace')
     
-	def result = sendJson(jsonRequestBody)
+	def result = sendJson(child, jsonRequestBody)
     LOG("setMode to ${mode} with result ${result}", 4, child, 'trace')
 	if (result) {
     	LOG("setMode(${mode}) returned ${result}", 4, child, "info")
@@ -3303,7 +3306,7 @@ def setMode(child, mode, deviceId) {
     } else {
     	LOG("setMode(${mode}) - Failed", 1, child, "warn")
     }
-
+	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
 	return result
 }
 
@@ -3321,7 +3324,7 @@ def setFanMinOnTime(child, deviceId, howLong) {
 	
     def result = sendJson(child, jsonRequestBody)
     LOG("setFanMinOnTime(${howLong}) returned ${result}", 4, child,'trace')    
-
+	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3358,7 +3361,7 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
     
     def result = sendJson(child, jsonRequestBody)
     LOG("setVacationFanMinOnTime(${howLong}) returned ${result}", 4, child, 'info') 
-
+	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
     return result
     }
 }
@@ -3407,7 +3410,7 @@ def deleteVacation(child, deviceId, vacationName=null ) {
     	resumeProgram(child, deviceId, true)		// force back to previously scheduled program
         pollChildren(deviceId,true) 				// and finally, update the state of everything (hopefully)
     }
-	
+	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3440,6 +3443,7 @@ def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHo
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setHold() returned ${result}", 4, child,'info')
+    if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3459,8 +3463,8 @@ def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite'
     // Per this thread: http://developer.ecobee.com/api/topics/qureies-related-to-setfan
     // def extraParams = [isTemperatureRelative: "false", isTemperatureAbsolute: "false"]
     // And then these values are ignored when setting only the fan
-    def h = child.device.currentValue('heatingSetpoint')			// use the device's values, not the ones from our last API refresh
-    def c = child.device.currentValue('coolingSetpoint')		// BUT- IF changing Fan Mode while in a Hold, maybe we should be overloading the hold instead of cancelling it?
+    def h = child.device.currentValue('heatingSetpointDisplay')			// use the device's values, not the ones from our last API refresh
+    def c = child.device.currentValue('coolingSetpointDisplay')		// BUT- IF changing Fan Mode while in a Hold, maybe we should be overloading the hold instead of cancelling it?
     
     def theHoldType = sendHoldType // ? sendHoldType : whatHoldType(child)
     if (theHoldType == 'holdHours') {
@@ -3502,7 +3506,7 @@ def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite'
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setFanMode(${fanMode}) returned ${result}", 4, child, 'info')
-    
+    if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
     return result    
 }
 
@@ -3553,7 +3557,8 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
         			   'coolingSetpoint':String.format("%.${userPrecision}f", tempCoolingSetpoint?.toDouble().round(userPrecision)),
                        'currentProgramId':climateRef]
         LOG("setProgram() ${updates}",2,null,'info')
-        child.generateEvent(updates)	// force-update the calling device attributes that it can't see
+        child.generateEvent(updates)			// force-update the calling device attributes that it can't see
+        atomicState.runtimeUpdated = true 		// force next poll to get runtime data
 	}
     return result
 }
@@ -3730,6 +3735,9 @@ private def sendJson(child=null, String jsonBody) {
         	atomicState.lastPollDate = getTimestamp()
 			generateEventLocalParams()
         }
+        // If no cached calls, retry 8 times
+        // if cached calls already, or if retries failed, then queue the call
+        //    Cache Map by thermostat, order, (child & jsonBody)
         def inTimeoutRetry = atomicState.inTimeoutRetry
         if (inTimeoutRetry == null) inTimeoutRetry = 0
         if (inTimeoutRetry < 8) {
