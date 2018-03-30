@@ -54,7 +54,7 @@
  *	1.4.03 - Fixed race condition when ST Routine sets both heatingSetpoint() and coolingSetpoint() in rapid succession
  *	1.4.04 - Optimized setProgram to avoid "Hold: Away", resumeProgram, "Hold: Away" redundancies
  *	1.4.05 - Revision number correction
- *	1.4.06 - Overhauled setHeating/CoolingSetpoint API calls (collapse consecutive calls)
+ *	1.4.06 - Remove erroneous "Hold: program" 
  */
 
 def getVersionNum() { return "1.4.06" }
@@ -312,8 +312,8 @@ metadata {
 		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
-            //state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
+			//state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
+            state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
 		}
         
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
@@ -942,7 +942,8 @@ def generateEvent(Map results) {
                     	event = eventFront + [value: realValue, descriptionText: "Thermostat is ${realValue}", isStateChange: true, displayed: false]
                         
                         // Keep track of whether we were last heating or cooling
-                        if ((realValue == 'idle') || (realValue == 'fan only')) sendEvent( name: 'lastOpState', value: device.currentValue('thermostatOperatingState'), displayed: false)
+                        def lastOpState = device.currentValue('thermostatOperatingState')
+                        if (lastOpState.contains('ea') || lastOpState.contains('oo')) sendEvent(name: 'lastOpState', value: lastOpState, displayed: false)
                     }
                 	break;
 				
@@ -955,7 +956,7 @@ def generateEvent(Map results) {
                     	if (sendValue == 'off') {
                        		// force thermostat to appear idle when it is off
                             def lastOpState = device.currentValue('thermostatOperatingState')
-                            if (lastOpState.contains('he') || lastOpState.contains('oo')) sendEvent(name: 'lastOpState', value: lasOpState, displayed: false)
+                            if (lastOpState.contains('ea') || lastOpState.contains('oo')) sendEvent(name: 'lastOpState', value: lastOpState, displayed: false)
                        		sendEvent(name: 'thermostatOperatingState', value: 'idle', descriptionText: 'Thermostat is off', displayed: true /*, isStateChange: true */)
                         	sendEvent(name: 'thermostatOperatingStateDisplay', value: 'off', descriptionText: 'Thermostat is off', displayed: false, /* isStateChange: true */)
                         	objectsUpdated += 2
@@ -1002,6 +1003,7 @@ def generateEvent(Map results) {
                     break;
 				
 				case 'currentProgramName':
+                log.debug "currentProgramName: ${currentProgramName}"
                 	String progText = ''
                     if (sendValue == 'Vacation') {
                     	if (device.currentValue('currentProgramName') == 'Offline') disableVacationButtons() // not offline any more
@@ -1028,6 +1030,7 @@ def generateEvent(Map results) {
 					break;
                     
                 case 'currentProgram':
+                log.debug "currentProgram: ${sendValue}"
                 	switch (sendValue) {
                     	case 'Home':
                         	disableHomeButton()
@@ -1723,6 +1726,7 @@ def updateThermostatSetpoints() {
 
 // raiseSetpoint: called by tile when user hit raise temperature button on UI
 void raiseSetpoint() {
+log.debug 'raiseSetpoint'
 	// Cannot change setpoint while in Vacation mode
     if (device.currentValue('thermostatHold') == 'vacation') {
     	LOG("Cannot change the set point while thermostat is in Vacation mode, ignoring request",2,null,'warn')
@@ -1783,6 +1787,7 @@ void raiseSetpoint() {
 
 // lowerSetpoint: called by tile when user hit lower temperature button on UI
 void lowerSetpoint() {
+log.debug 'lowerSetpoint'
 	// Cannot change setpoint while in Vacation mode
     if (device.currentValue('thermostatHold') == 'vacation') {
     	LOG("Cannot change the set point while thermostat is in Vacation mode, ignoring request",2,null,'warn')
@@ -2102,7 +2107,7 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
      	runIn(3, refresh, [overwrite: true])
 
     	LOG("Thermostat Program is Hold: ${program}",2,this,'info')
-		generateProgramEvent('Hold: '+program)
+		generateProgramEvent(program, program)				// ('Hold: '+program)
         def updates = [ 'lastHoldType': sendHoldType ]
         generateEvent(updates)
 	} else {
