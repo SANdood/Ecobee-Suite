@@ -62,10 +62,11 @@
  *	1.4.11-	Added monitor_sensor support, now handles duplicate sensor names
  *	1.4.12- fixed sendJson calls;
  *	1.4.13- Optimized updates for setpoint changes
+ *	1.4.14- First pass at fixing currentProgram problems
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.13" }
+def getVersionNum() { return "1.4.14" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1747,8 +1748,12 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
 	
 	if (forcePoll) {
     	// if it's a forcePoll, and thermostatIdString specified, we check only the specified thermostat, else we check them all
-        checkTherms = thermostatIdsString ? thermostatIdsString : allMyChildren
-        if (checkTherms == allMyChildren) atomicState.hourlyForcedUpdate = 0		// reset the hourly check counter if we are forcePolling ALL the thermostats
+        if (thermostatIdsString) {
+        	checkTherms = thermostatIdsString
+        } else {
+        	// checkTherms = allMyChildren
+        	atomicState.hourlyForcedUpdate = 0		// reset the hourly check counter if we are forcePolling ALL the thermostats
+        }
         somethingChanged = true
     } else if (atomicState.lastRevisions != atomicState.latestRevisions) {
         // we already know there are changes
@@ -3276,7 +3281,7 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
     
 	result = sendJson(child, jsonRequestBody)
     LOG("resumeProgram(${resumeAll}) returned ${result}", 2, child,'info')
-	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3288,7 +3293,7 @@ def setHVACMode(child, deviceId, mode) {
 	
     def result = sendJson(child, jsonRequestBody)
     LOG("setHVACMode(${mode}) returned ${result}", 3, child,'info')    
-	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result
 }
 def setMode(child, mode, deviceId) {
@@ -3306,7 +3311,7 @@ def setMode(child, mode, deviceId) {
     } else {
     	LOG("setMode(${mode}) - Failed", 1, child, "warn")
     }
-	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
 	return result
 }
 
@@ -3324,7 +3329,7 @@ def setFanMinOnTime(child, deviceId, howLong) {
 	
     def result = sendJson(child, jsonRequestBody)
     LOG("setFanMinOnTime(${howLong}) returned ${result}", 4, child,'trace')    
-	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3361,7 +3366,7 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
     
     def result = sendJson(child, jsonRequestBody)
     LOG("setVacationFanMinOnTime(${howLong}) returned ${result}", 4, child, 'info') 
-	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result
     }
 }
@@ -3410,7 +3415,7 @@ def deleteVacation(child, deviceId, vacationName=null ) {
     	resumeProgram(child, deviceId, true)		// force back to previously scheduled program
         pollChildren(deviceId,true) 				// and finally, update the state of everything (hopefully)
     }
-	if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3443,7 +3448,7 @@ def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHo
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setHold() returned ${result}", 4, child,'info')
-    if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
+    if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3506,7 +3511,7 @@ def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite'
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setFanMode(${fanMode}) returned ${result}", 4, child, 'info')
-    if (result) atomicState.runtimeUpdated = true 		// force next poll to get updated runtime data
+    if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result    
 }
 
@@ -3558,7 +3563,7 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
                        'currentProgramId':climateRef]
         LOG("setProgram() ${updates}",2,null,'info')
         child.generateEvent(updates)			// force-update the calling device attributes that it can't see
-        atomicState.runtimeUpdated = true 		// force next poll to get runtime data
+        atomicState.forcePoll = true 		// force next poll to get runtime data
 	}
     return result
 }
