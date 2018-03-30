@@ -54,10 +54,10 @@
  *	1.4.03 - Fixed race condition when ST Routine sets both heatingSetpoint() and coolingSetpoint() in rapid succession
  *	1.4.04 - Optimized setProgram to avoid "Hold: Away", resumeProgram, "Hold: Away" redundancies
  *	1.4.05 - Revision number correction
- *	1.4.06 - Remove erroneous "Hold: program" 
+ *	1.4.07 - Remove erroneous "Hold: program" 
  */
 
-def getVersionNum() { return "1.4.06" }
+def getVersionNum() { return "1.4.07" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
