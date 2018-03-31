@@ -18,8 +18,9 @@
  *	1.4.03-	Fix frequency enum translations
  *	1.4.04- Fixed notifications
  *	1.4.05- Change the mode only ONCE when crossing a configured threshold (for coexistence with other Helpers/Instances)
+ *	1.4.06- Added more data validation around outside temp sources
  */
-def getVersionNum() { return "1.4.05" }
+def getVersionNum() { return "1.4.06" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 
@@ -40,7 +41,7 @@ preferences {
 }
 
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for Smart Mode Helper") {
         	label title: "Name this Helper", required: true, defaultValue: "Smart Mode"
         }
@@ -130,7 +131,7 @@ def initialize() {
     	return true
     }
     
-    Double tempNow = 0.0
+    Double tempNow = -99.0
 	switch( settings.tempSource) {
 		case 'Weather for Location':
 			if (settings.locFreq.toInteger() < 60) {
@@ -139,19 +140,22 @@ def initialize() {
             	def locHours = settings.locFreq.toInteger() / 60
                 "runEvery${locHours}Hour${locHours!=1?'s':''}"( 'getZipTemp' )
             }
-            tempNow = getZipTemp()
+            def t = getZipTemp()					// calls temperatureUpdate()
+            if (t.isNumber()) tempNow = t.toDouble()
 			break;
 		
 		case 'SmartThings Temperature Sensor':
 			subscribe( settings.thermometer, 'temperature', tempChangeHandler)
-            tempNow = settings.thermometer.currentValue('temperature').toDouble()
+            def t = settings.thermometer.currentValue('temperature')
+            if (t.isNumber()) { tempNow = t.toDouble(); temperatureUpdate(tempNow) }
 			break;
 		
 		case "Thermostat's Weather Temperature":
 			def theStat = []
 			theStat = settings.thermostats.size() == 1 ? settings.thermostats : [settings.tstatTemp]
 			subscribe(theStat, 'weatherTemperature', tempChangeHandler)
-            tempNow = theStat.currentValue('weatherTemperature').toDouble()
+            def t = theStat.currentValue('weatherTemperature')
+            if (t.isNumber()) { tempNow = t.toDouble(); temperatureUpdate(tempnow) }
 			break;
 		
 		case 'WeatherUnderground Station':
@@ -161,12 +165,17 @@ def initialize() {
             	def pwsHours = settings.pwsFreq.toInteger() / 60
                 "runEvery${pwsHours}Hour${pwsHours!=1?'s':''}"( 'getPwsTemp' )
             }
-            tempNow = getPwsTemp()
+            def t = getPwsTemp()					// calls temperatureUpdate*()
+            if (t.isNumber()) tempNow = t.toDouble()
 			break;
 	}
-    temperatureUpdate(tempNow)
-    
-    LOG("Initialization complete...current temperature is ${tempNow}°",2,null,'info')
+    if (tempNow && (tempNow > -90)) {
+    	LOG("Initialization complete...current temperature is ${tempNow}°",2,null,'info')
+        return true
+    } else {
+    	LOG("Initialization error...invalid temperature: ${tempNow}° - please check settings and retry", 2, null, 'error')
+        return false
+    }
 }
 
 def tempChangeHandler(evt) {
@@ -180,7 +189,12 @@ def tempChangeHandler(evt) {
 }   
 							  
 def temperatureUpdate( Double temp ) {
-	def desiredMode = null
+    if (!temp || !temp.isNumber()) {
+    	LOG("Ignoring invalid temperature: ${temp}°", 2, null, 'warn')
+        return false
+    }
+    
+    def desiredMode = null
 	if (settings.aboveTemp && (temp >= settings.aboveTemp)) {
     	if (!atomicState.aboveChanged) {
 			desiredMode = settings.aboveMode
@@ -219,7 +233,7 @@ def temperatureUpdate( Double temp ) {
         	LOG("Temp is ${temp}°, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
         	NOTIFY("${app.label}: The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
         }
-        if (sameNames) LOG("Temp is ${temp}∞, ${sameNames} already in ${desiredMode} mode",3,null,'info')
+        if (sameNames) LOG("Temp is ${temp}°, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
 }
 
