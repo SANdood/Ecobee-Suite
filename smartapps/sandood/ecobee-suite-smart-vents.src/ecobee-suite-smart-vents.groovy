@@ -26,8 +26,9 @@
  *	1.3.0 - Major Release: renamed and moved to "sandood" namespace
  *	1.4.0 - Renamed parent Ecobee Suite Manager
  *	1.4.01- Select ventState when disabling, better temperature validation
+ *	1.4.02- Added configurable heat & cool offsets when following thermostat setpoints
  */
-def getVersionNum() { return "1.4.01" }
+def getVersionNum() { return "1.4.02" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -49,7 +50,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for Smart Vents Helper") {
         	label title: "Name this Smart Vents Helper", required: true, defaultValue: "Smart Vents"      
         }
@@ -92,6 +93,10 @@ def mainPage() {
 				if (!settings.useThermostat) {
 					input(name: "heatingSetpoint", type: "decimal", title: "Target heating setpoint?", description: 'Tap to choose...', required: true)
 					input(name: "coolingSetpoint", type: "decimal", title: "Target cooling setpoint?", description: 'Tap to choose...', required: true)
+				} else {
+                	input(name: "heatOffset", type: "decimal", title: "Heating differential?", defaultValue: 0.0, description: "0.0", required: true, range: "-10..10")
+					input(name: "coolOffset", type: "decimal", title: "Cooling differential?", defaultValue: 0.0, description: "0.0", required: true, range: "-10..10")
+
 				}
 			}
         } else { 
@@ -170,16 +175,19 @@ private String checkTemperature() {
 	def cOpState = theThermostat.currentValue('thermostatOperatingState')
     LOG("Current Operating State ${cOpState}",3,null,'info')
 	Double cTemp = getCurrentTemperature()
+    Double offset 
 	def vents = ''			// if not heating/cooling/fan, then no change to current vents
     if (cTemp != null) {	// only if valid temperature readings (Ecosensors can return "unknown")
     	if (cOpState == 'heating') {
-    		Double heatTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature.toDouble() : theThermostat.currentValue('heatingSetpoint').toDouble()) : settings.heatingSetpoint.toDouble()
+        	offset = heatOffset ? heatOffset.toDouble() : 0.0
+    		Double heatTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature.toDouble() + offset : theThermostat.currentValue('heatingSetpoint').toDouble() + offset) : settings.heatingSetpoint.toDouble()
         	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential').toDouble()
 			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
     	} else if (cOpState == 'cooling') {
-    		Double coolTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature.toDouble() : theThermostat.currentValue('coolingSetpoint').toDouble()) : settings.coolingSetpoint.toDouble()
-        	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
+        	offset = coolOffset ? coolOffset.toDouble() : 0.0
+    		Double coolTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature.toDouble() + offset : theThermostat.currentValue('coolingSetpoint').toDouble() + offset) : settings.coolingSetpoint.toDouble()
+        	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential').toDouble()
 			vents = (coolTarget >= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
 		} else if (cOpState == 'idle') {
