@@ -31,10 +31,11 @@
  *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
  *	1.4.0  - Major Release: renamed devices also
  *	1.4.01 - Added VersionLabel display
+ *	1.4.02 - Fixed getMyId so that add/delete works properly
  *
  */
 
-def getVersionNum() { return "1.4.01" }
+def getVersionNum() { return "1.4.02" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -387,7 +388,7 @@ void disableSmartRoom() {
 private String getSensorId() {
 	def myId = []
     myId = device.deviceNetworkId.split('-') as List
-    return (myId[1])
+    return (myId[2])
 }
 
 private debugLevel(level=3) {
