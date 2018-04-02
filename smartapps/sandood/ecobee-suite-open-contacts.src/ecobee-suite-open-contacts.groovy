@@ -30,10 +30,11 @@
  *	1.3.0   -   Major Release: renamed and moved to "sandood" namespace
  *	1.4.0	-	Renamed parent Ecobee Suite Manager
  *  1.4.01	-	Updated description
+ *	1.4.02 	-	Fixed contact open/closed notification
  *
  */
  
-def getVersionNum() { return "1.4.01" }
+def getVersionNum() { return "1.4.02" }
 private def getVersionLabel() { return "Ecobee Suite Open Contacts, version ${getVersionNum()}" }
 
 definition(
@@ -54,7 +55,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for this Contact/Switch Handler") {
         	label title: "Name this Handler", required: true, defaultValue: "Contact/Switch Handler"
         }
@@ -281,7 +282,7 @@ def turnOffHVAC() {
     		if (contactSensors) {
         		def sensorNames = []
             	contactSensors.each { 
-            		if (it.currentContact == (contactOpen?true:false)) sensorNames << [it.device.displayName]
+            		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorNames << [it.device.displayName]
             	}
         		if (delay != 0) {
     				sendNotification("${app.label}: ${sensorNames} left ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'turning':'you should turn'} ${tstatNames} off.")
