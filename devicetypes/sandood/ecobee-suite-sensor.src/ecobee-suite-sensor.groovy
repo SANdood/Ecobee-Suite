@@ -110,8 +110,8 @@ metadata {
         valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true)
-            //state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
+			//state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true)
+            state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
 		}
         
         standardTile("motion", "device.motion", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
