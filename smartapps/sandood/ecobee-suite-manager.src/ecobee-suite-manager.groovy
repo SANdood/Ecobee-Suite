@@ -20,34 +20,7 @@
  *	Updates by Barry A. Burke (storageanarchy@gmail.com) 2016, 2017, & 2018
  *
  *  See Github Changelog for complete change history
- *	1.1.1 -	Preparations for Ecobee Alerts support and Ask Alexa integrations
- *	1.1.2 - Split data collection and event generation into 2 threads to support more tstats & more sensors (within the 20ms limit)
- *	1.1.3 -	Now supports Ask Alexa Message Queues for thermostat alerts/reminders, API connectivity & Network connectivity reporting
- *	1.1.4 - Minor scheduling adjustments
- *	1.1.5 - Minor cleanup for Ask Alexa integration
- *	1.1.6 - Minor tweaks for updated Thermostat device
- *	1.1.7 - Beginnings of support for holdHours (latent - not yet enabled)
- *	1.1.8 -	Added support for greying out current Programs also
- *	1.1.9 - Fixed notifications, cleaned up preferences UI
- *	1.1.10-	Fixed Offline reporting (when thermostat loses connection to Ecobee Cloud)
- *	1.1.11-	Finished support for Hourly holds and Thermsotat Default holds
- *	1.2.0 -	Release of holdHours and thermostat holdAction support
- *	1.2.2 - Fixes for Auto Away/Auto Home
- *	1.2.3 - Added overcool equipment operating state support
- *	1.2.3a- Tweaked dehumidification support
- *	1.2.4 -	Catch OAuth initialization error and suggest probable cause in Log and UI
- *	1.2.5 - Clean up & optimize OAuth error detection and logging
- *	1.2.6 - Repaired add/deleteSensorFromProgram (Ecobee API requires both schedule & climate)
- *	1.2.7 - Repaired setHold while in an existing Hold: or Auto
- *	1.2.8 - Updates to fix logging for child.devices
- *	1.2.9 - Protect against LOG type errors
- *	1.2.10- Handle postalCode=0, display correct icon for emergency heat (with heat pump)
- *	1.2.11- Optimize prior fix
- *	1.2.12- Added minDelta handling (for setting heat/cool setpoints)
- *	1.2.13- Minor performance optimizations
- *	1.2.14- Improved handling of locations & zipodes WRT sunrise/sunset calculations
- *	1.3.0 - Major Release: renamed and move to "sandood" namespace 
- *	1.3.01- Sort lists of Thermostat and Sensor names in LOG displays
+ * 	<snip>
  *	1.4.00- Renamed devices and manager, removed watchdogDevices
  *	1.4.01- Fix sensor device naming bug
  *	1.4.02- Handle javax.net.ssl.SSLPeerUnverifiedException; fixed poll daemon recovery
@@ -63,10 +36,12 @@
  *	1.4.12- fixed sendJson calls;
  *	1.4.13- Optimized updates for setpoint changes
  *	1.4.14- First pass at fixing currentProgram problems
+ *	1.4.15- Moved recent debug LOGs to debugLevel 3
+ *	1.4.16- 2nd pass at fixing currentProgram problems
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.14" }
+def getVersionNum() { return "1.4.16" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1526,7 +1501,7 @@ def pollChildren(deviceId=null,force=false) {
     		if (alertsUpdated) {
         		if (prepTime > 11000) { runIn(2, 'generateAlertsAndEvents', [overwrite: true]) } else { generateAlertsAndEvents() }
         	} else {
-        		if (prepTime > 11000) { runIn(5, 'generateTheEvents', [overwrite: true]) } else { generateTheEvents() }
+        		if (prepTime > 11000) { runIn(2, 'generateTheEvents', [overwrite: true]) } else { generateTheEvents() }
         	}
         } else {
         	LOG('pollEcobeeAPI returned false',1,null,'warn')
@@ -1753,7 +1728,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
         } else {
         	// checkTherms = allMyChildren
         	atomicState.hourlyForcedUpdate = 0		// reset the hourly check counter if we are forcePolling ALL the thermostats
-        }
+        } 
         somethingChanged = true
     } else if (atomicState.lastRevisions != atomicState.latestRevisions) {
         // we already know there are changes
@@ -2764,7 +2739,7 @@ def updateThermostatData() {
                 currentClimate = ''
         	}
 		}
-        if (debugLevelFour) LOG("updateThermostatData() - currentClimateName set = ${currentClimateName}  currentClimateId set = ${currentClimateId}", 4, null, 'info')
+        if (debugLevelFour) LOG("updateThermostatData(${tid}) - currentClimate: ${currentClimate}, currentClimateName: ${currentClimateName}, currentClimateId: ${currentClimateId}", 4, null, 'trace')
 
         // Note that fanMode == 'auto' might be changedby the Thermostat DTH to 'off' or 'circulate' dependent on  HVACmode and fanMinRunTime
         if (runningEvent) {
@@ -3011,7 +2986,7 @@ def updateThermostatData() {
                     }
                 }
             }
-         	def rarelyList = [fanMinOnTime,isConnected,thermostatHold,holdEndsAt,statusMsg,currentClimateName,currentClimateId,scheduledClimateName,
+         	def rarelyList = [fanMinOnTime,isConnected,thermostatHold,holdEndsAt,statusMsg,currentClimate,currentClimateName,currentClimateId,scheduledClimateName,
             					scheduledClimateId,currentFanMode]
 		    if (forcePoll || (changeRarely == [:]) || !changeRarely.containsKey(tid) || (changeRarely[tid] != rarelyList)) { 
             	data += [
@@ -3264,10 +3239,11 @@ private refreshAuthToken(child=null) {
 }
 
 def resumeProgram(child, String deviceId, resumeAll=true) {
-	LOG("Entered resumeProgram for deviceId: ${deviceId} with child: ${child.device?.displayName}", 2, child, 'trace')
+	
 	def result = true
     boolean debugLevelFour = debugLevel(4)
     boolean debugLevelThree = debugLevel(3)
+    if (debugLevelThree) LOG("Entered resumeProgram for deviceId: ${deviceId} with child: ${child.device?.displayName}", 3, child, 'trace')
     
 	String allStr = resumeAll ? 'true' : 'false'
 
@@ -3280,8 +3256,8 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
 	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 4, child)
     
 	result = sendJson(child, jsonRequestBody)
-    LOG("resumeProgram(${resumeAll}) returned ${result}", 2, child,'info')
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+    if (debugLevelThree) LOG("resumeProgram(${resumeAll}) returned ${result}", 3, child,'info')
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated data
     return result
 }
 
@@ -3311,7 +3287,7 @@ def setMode(child, mode, deviceId) {
     } else {
     	LOG("setMode(${mode}) - Failed", 1, child, "warn")
     }
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated data
 	return result
 }
 
@@ -3366,7 +3342,7 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
     
     def result = sendJson(child, jsonRequestBody)
     LOG("setVacationFanMinOnTime(${howLong}) returned ${result}", 4, child, 'info') 
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated data
     return result
     }
 }
@@ -3415,7 +3391,7 @@ def deleteVacation(child, deviceId, vacationName=null ) {
     	resumeProgram(child, deviceId, true)		// force back to previously scheduled program
         pollChildren(deviceId,true) 				// and finally, update the state of everything (hopefully)
     }
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+	if (result) atomicState.forcePoll = true 		// force next poll to get updated data
     return result
 }
 
@@ -3448,7 +3424,21 @@ def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHo
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setHold() returned ${result}", 4, child,'info')
-    if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+    if (result) { 
+    	// send the new heat/cool setpoints and ProgramId to the DTH - it will update the rest of the related displayed values itself
+    	Integer apiPrecision = usingMetric ? 2 : 1					// highest precision available from the API
+    	Integer userPrecision = getTempDecimals()						// user's requested display precision
+   		Double tempHeatAt = h.toDouble()
+        Double tempCoolAt = c.toDouble()
+        def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (tempHeatAt / 10.0), 'F', apiPrecision)
+       	def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (tempCoolAt / 10.0), 'F', apiPrecision)
+    	def updates = ['heatingSetpoint':String.format("%.${userPrecision}f", tempHeatingSetpoint?.toDouble().round(userPrecision)),
+        			   'coolingSetpoint':String.format("%.${userPrecision}f", tempCoolingSetpoint?.toDouble().round(userPrecision)),
+                       'currentProgramId':climateRef]
+        LOG("setHold() ${updates}",3,null,'info')
+        child.generateEvent(updates)			// force-update the calling device attributes that it can't see
+        atomicState.forcePoll = true 			// force next poll to get updated data
+	}
     return result
 }
 
@@ -3511,13 +3501,13 @@ def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite'
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setFanMode(${fanMode}) returned ${result}", 4, child, 'info')
-    if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+    if (result) atomicState.forcePoll = true 		// force next poll to get updated data
     return result    
 }
 
 def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendHoldHours=2) {
 	// NOTE: Will use only the first program if there are two with the same exact name
-	LOG("setProgram(${program}) for ${deviceId} (${child.device?.displayName})", 2, child, 'info')    
+	LOG("setProgram(${program}) for ${deviceId} (${child.device?.displayName})", 3, child, 'info')    
     // def climateRef = program.toLowerCase()   
     
 //    def currentThermostatHold = child.device.currentValue('thermostatHold') 
@@ -3561,9 +3551,9 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
     	def updates = ['heatingSetpoint':String.format("%.${userPrecision}f", tempHeatingSetpoint?.toDouble().round(userPrecision)),
         			   'coolingSetpoint':String.format("%.${userPrecision}f", tempCoolingSetpoint?.toDouble().round(userPrecision)),
                        'currentProgramId':climateRef]
-        LOG("setProgram() ${updates}",2,null,'info')
+        LOG("setProgram() ${updates}",3,null,'info')
         child.generateEvent(updates)			// force-update the calling device attributes that it can't see
-        atomicState.forcePoll = true 		// force next poll to get runtime data
+        atomicState.forcePoll = true 		// force next poll to get updated data
 	}
     return result
 }
@@ -3661,7 +3651,7 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 // API Helper Functions
 private def sendJson(child=null, String jsonBody) {
 	def debugLevelFour = debugLevel(4)
-    LOG("sendJson() - ${jsonBody}",2,child,'debug')
+    LOG("sendJson() - ${jsonBody}",3,child,'debug')
 	def returnStatus
     def result = false
     
