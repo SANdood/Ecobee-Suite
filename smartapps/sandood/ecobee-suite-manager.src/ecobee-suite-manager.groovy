@@ -38,10 +38,11 @@
  *	1.4.14- First pass at fixing currentProgram problems
  *	1.4.15- Moved recent debug LOGs to debugLevel 3
  *	1.4.16- 2nd pass at fixing currentProgram problems
+ *	1.4.17- Round 3 currentProgram fixes plus resumeProgram optimization
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.16" }
+def getVersionNum() { return "1.4.17" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1584,9 +1585,11 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 				statusCode = resp.data.status.code
 				if (statusCode == 0) { 
                     def revisions = resp.data.revisionList
-					def thermostatUpdated = false
-                    def alertsUpdated = false
-					def runtimeUpdated = false
+                    // log.debug "${atomicState.thermostatUpdated}, ${atomicState.runtimeUpdated}, ${atomicState.alertsUpdated}"
+					def thermostatUpdated = atomicState.thermostatUpdated	// false
+                    def alertsUpdated = atomicState.alertsUpdated			// false
+					def runtimeUpdated = atomicState.runtimeUpdated			// false
+                    def getAllStats = (runtimeUpdated || thermostatUpdated || alertsUpdated )
                     tstatsStr = ""
                     def latestRevisions = [:]
 						
@@ -1598,7 +1601,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 
                         def lastRevisions = atomicState.lastRevisions
                         if (lastRevisions && !(lastRevisions instanceof Map)) lastRevisions = [:]			// hack to switch from List to Map for revision cache
-                        def lastDetails = lastRevisions && lastRevisions.containsKey(tstat) ? lastRevisions[tstat] : []			// lastDetails should be the prior 4 timestamps
+                        def lastDetails = ( lastRevisions && lastRevisions.containsKey(tstat)) ? lastRevisions[tstat] : []			// lastDetails should be the prior 4 timestamps
                             
                         // check if the current tstat is updated
                         def tru = false
@@ -1616,14 +1619,16 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 
                         // update global flags (we update the superset of changes for all requested tstats)
                         if (tru || tau || ttu) {
-                            runtimeUpdated = (runtimeUpdated || tru || atomicState.runtimeUpdated)
-                            alertsUpdated = (alertsUpdated || tau || atomicState.alertsUpdated)
-                            thermostatUpdated = (thermostatUpdated || ttu || atomicState.thermostatUpdated)
+                            runtimeUpdated = (runtimeUpdated || tru) 		// || atomicState.runtimeUpdated)
+                            alertsUpdated = (alertsUpdated || tau) 			//  || atomicState.alertsUpdated)
+                            thermostatUpdated = (thermostatUpdated || ttu) 	// || atomicState.thermostatUpdated)
                             result = true
-                            tstatsStr = (tstatsStr=="") ? tstat : (tstatsStr.contains(tstat)) ? tstatsStr : tstatsStr + ",${tstat}"
+                            if (!getAllStats) tstatsStr = (tstatsStr=="") ? tstat : (tstatsStr.contains(tstat)) ? tstatsStr : tstatsStr + ",${tstat}"
                         }
+                        if (getAllStats) tstatsStr = (tstatsStr=="") ? tstat : (tstatsStr.contains(tstat)) ? tstatsStr : tstatsStr + ",${tstat}"
                         latestRevisions[tstat] = latestDetails			// and, log the new timestamps
 					}
+                    
 					atomicState.latestRevisions = latestRevisions		// let pollEcobeeAPI update last with latest after it finishes the poll
                     atomicState.thermostatUpdated = thermostatUpdated	// Revised: settings, program, event, device
                     atomicState.alertsUpdated = alertsUpdated			// Revised: alerts
@@ -1962,7 +1967,10 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
                 atomicState.lastRevisions = atomicState.latestRevisions		// copy the Map
                	if (forcePoll) atomicState.forcePoll = false				// it's ok to clear the flag now
                 if (runtimeUpdated) atomicState.runtimeUpdated = false
-                if (thermostatUpdated) { atomicState.thermostatUpdated = false; /* atomicState.hourlyForcedUpdate = 0 */ }
+                // if (thermostatUpdated) { atomicState.thermostatUpdated = false }
+                def needPrograms = atomicState.needPrograms
+                atomicState.thermostatUpdated = thermostatUpdated ? false : needPrograms
+                if (!thermostatUpdated && needPrograms) LOG("Need settings, programs & events next time", 2, null, 'info')
                 if (runtimeUpdated && getWeather) atomicState.getWeather = false
                 if (alertsUpdated) atomicState.alertsUpdated = false
                 
@@ -2625,8 +2633,8 @@ def updateThermostatData() {
         	LOG("${tstatName} is not connected!",1,null,'warn')
         	// Ecobee Cloud lost connection with the thermostat - device, wifi, power or network outage
             currentClimateName = 'Offline'
-            currentClimate = currentClimateName
-            currentClimateId = 'offline'
+            // currentClimate = currentClimateName
+            // currentClimateId = 'offline'
             occupancy = 'unknown'
             
             // Oddly, the runtime.lastModified is returned in UTC, so we have to convert it to the time zone of the thermostat
@@ -2993,9 +3001,14 @@ def updateThermostatData() {
           			thermostatHold: thermostatHold,
                 	holdEndsAt: holdEndsAt,
                		holdStatus: statusMsg,
- 					currentProgramName: currentClimateName,
-					currentProgramId: currentClimateId,
-					currentProgram: currentClimate,
+                ]
+                // currentProgramName: currentClimateName,
+                // don't send null values
+                if (currentClimateName != '') 	data += [ currentProgramName: currentClimateName, ]
+                if (currentClimateId != '') 	data += [ currentProgramId: currentClimateId, ]
+				if (currentClimate != '') 		data += [ currentProgram: currentClimate, ]
+                
+                data += [
 					scheduledProgramName: scheduledClimateName,
 					scheduledProgramId: scheduledClimateId,
 					scheduledProgram: scheduledClimateName,
@@ -3028,12 +3041,17 @@ def updateThermostatData() {
             if (lastOList[2] != runtime.actualHumidity) data += [humidity: runtime.actualHumidity,]
             if (lastOList[7] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint,]
             // send these next two also when the userPrecision changes
-            if ((lastOList[3] != tempHeatingSetpoint) || (lastOList[8] != userPrecision)) data += [heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint?.round(userPrecision)),]
-            if ((lastOList[4] != tempCoolingSetpoint) || (lastOList[8] != userPrecision)) data += [coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint?.round(userPrecision)),]
+            def needPrograms = false
+            if ((lastOList[3] != tempHeatingSetpoint) || (lastOList[8] != userPrecision)) { needPrograms = true; data += [heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint?.round(userPrecision)),] }
+            if ((lastOList[4] != tempCoolingSetpoint) || (lastOList[8] != userPrecision)) { needPrograms = true; data += [coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint?.round(userPrecision)),] }
             if (lastOList[5] != wSymbol) data += [weatherSymbol: wSymbol]
             if ((lastOList[6] != tempWeatherTemperature)|| (lastOList[8] != userPrecision)) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", tempWeatherTemperature?.round(userPrecision)),]
            	changeOften[tid] = oftenList
             atomicState.changeOften = changeOften
+            // If the setpoints change, then double-check to see if the currently running Program has changed.
+            // We do this by ensuring that the rest of the thermostat datasets (settings, program, events) are 
+            // collected on the next poll, if they weren't collected in this poll.
+            atomicState.needPrograms = (needPrograms && (!thermostatUpdated && !forcePoll))
 		}
         
         if (debugLevelFour) LOG("updateThermostatData() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
@@ -3246,37 +3264,49 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
     if (debugLevelThree) LOG("Entered resumeProgram for deviceId: ${deviceId} with child: ${child.device?.displayName}", 3, child, 'trace')
     
 	String allStr = resumeAll ? 'true' : 'false'
-
-    // the following makes no sense because we are about to resumeProgram...which will change all of these current settings
-    //if (debugLevelThree) LOG("resumeProgram() - atomicState.previousHVACMode = ${previousHVACMode}, currentHVACMode = ${currentHVACMode} atomicState.previousFanMinOnTime = ${previousFanMinOnTime} current (${currentFanMinOnTime})", 3, child, 'info')	
-
-        
-    // 					   {"functions":[{"type":"resumeProgram","params":{"resumeAll":"'+allStr+'"}}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
     def jsonRequestBody = '{"functions":[{"type":"resumeProgram","params":{"resumeAll":"' + allStr + '"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 4, child)
     
 	result = sendJson(child, jsonRequestBody)
     if (debugLevelThree) LOG("resumeProgram(${resumeAll}) returned ${result}", 3, child,'info')
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated data
+	if (result) {
+    	def program = atomicState.program[deviceId]
+        if ( program ) {
+    		def climateId = program?.currentClimateRef 
+        	def climate = program.climates?.find { it.climateRef == climateId }
+        	def climateName = climate?.name
+
+    		// send the new heat/cool setpoints and ProgramId to the DTH - it will update the rest of the related displayed values itself
+    		Integer apiPrecision = usingMetric ? 2 : 1					// highest precision available from the API
+    		Integer userPrecision = getTempDecimals()						// user's requested display precision
+   			Double tempHeatAt = climate.heatTemp.toDouble()
+        	Double tempCoolAt = climate.coolTemp.toDouble()
+        	def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (tempHeatAt / 10.0), 'F', apiPrecision)
+       		def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (tempCoolAt / 10.0), 'F', apiPrecision)
+    		def updates = [	'heatingSetpoint':String.format("%.${userPrecision}f", tempHeatingSetpoint?.toDouble().round(userPrecision)),
+        					'coolingSetpoint':String.format("%.${userPrecision}f", tempCoolingSetpoint?.toDouble().round(userPrecision)),
+                            'currentProgramName': climateName,
+                            'currentProgram': climateName,
+                       		'currentProgramId':climateId ]
+        	LOG("setProgram() ${updates}",2,null,'info')
+        	child.generateEvent(updates)			// force-update the calling device attributes that it can't see
+        }
+        atomicState.forcePoll = true 		// force next poll to get updated data
+    }
     return result
 }
 
 def setHVACMode(child, deviceId, mode) {
 	LOG("setHVACMode(${mode})", 4, child)
-    def thermostatSettings = ',"thermostat":{"settings":{"hvacMode":"'+mode+'"}}'
-    def thermostatFunctions = ''
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
-	
-    def result = sendJson(child, jsonRequestBody)
+    def result = setMode(child, mode, deviceId)
     LOG("setHVACMode(${mode}) returned ${result}", 3, child,'info')    
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+	// if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result
 }
 def setMode(child, mode, deviceId) {
 	LOG("setMode(${mode}) for ${deviceId}", 5, child)
         
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"hvacMode":"'+"${mode}"+'"}}}'
-    //                     {"selection":{"selectionType":"thermostats","selectionMatch":"XXX"},             "thermostat":{"settings":{"hvacMode":"cool"}}}    
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"hvacMode":"'+"${mode}"+'"}}}'  
 	LOG("Mode Request Body = ${jsonRequestBody}", 4, child, 'trace')
     
 	def result = sendJson(child, jsonRequestBody)
@@ -3305,7 +3335,7 @@ def setFanMinOnTime(child, deviceId, howLong) {
 	
     def result = sendJson(child, jsonRequestBody)
     LOG("setFanMinOnTime(${howLong}) returned ${result}", 4, child,'trace')    
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+	// if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
     return result
 }
 
@@ -3342,7 +3372,7 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
     
     def result = sendJson(child, jsonRequestBody)
     LOG("setVacationFanMinOnTime(${howLong}) returned ${result}", 4, child, 'info') 
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated data
+	// if (result) atomicState.forcePoll = true 		// force next poll to get updated data
     return result
     }
 }
@@ -3391,7 +3421,7 @@ def deleteVacation(child, deviceId, vacationName=null ) {
     	resumeProgram(child, deviceId, true)		// force back to previously scheduled program
         pollChildren(deviceId,true) 				// and finally, update the state of everything (hopefully)
     }
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated data
+	// if (result) atomicState.forcePoll = true 		// force next poll to get updated data
     return result
 }
 
@@ -3501,7 +3531,7 @@ def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite'
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setFanMode(${fanMode}) returned ${result}", 4, child, 'info')
-    if (result) atomicState.forcePoll = true 		// force next poll to get updated data
+    // if (result) atomicState.forcePoll = true 		// force next poll to get updated data
     return result    
 }
 
