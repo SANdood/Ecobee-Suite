@@ -55,9 +55,10 @@
  *	1.4.04 - Optimized setProgram to avoid "Hold: Away", resumeProgram, "Hold: Away" redundancies
  *	1.4.05 - Revision number correction
  *	1.4.07 - Remove erroneous "Hold: program" 
+ *	1.4.08 - Cleanup around currentProgram & lastOpState
  */
 
-def getVersionNum() { return "1.4.07" }
+def getVersionNum() { return "1.4.08" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -194,7 +195,7 @@ metadata {
         attribute "coolDifferential", "number"
         attribute "heatCoolMinDelta", "number"
         attribute "fanMinOnTime", "number"
-        attribute "programsList", "enum"				// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
+        attribute "programsList", "string"				// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
         attribute "thermostatOperatingStateDisplay", "string"
         attribute "thermostatFanModeDisplay", "string"
         attribute "thermostatTime", "string"
@@ -731,8 +732,12 @@ def doRefresh() {
 	// Pressing refresh within 6 seconds of the prior refresh completing will force a complete poll of the Ecobee cloud - otherwise changes only
     refresh(state.lastDoRefresh?((now()-state.lastDoRefresh)<6000):false)
     sendEvent(name: 'doRefresh', value: 'refresh', isStateChange: true, displayed: false)
+    runIn(2, 'resetRefreshButton', [overwrite: true])
     resetUISetpoints()
     state.lastDoRefresh = now()	// reset the timer after the UI has been updated
+}
+def resetRefreshButton() {
+	sendEvent(name: 'doRefresh', value: 'refresh', isStateChange: true, displayed: false)
 }
 def forceRefresh() {
 	refresh(true)
@@ -943,7 +948,7 @@ def generateEvent(Map results) {
                         
                         // Keep track of whether we were last heating or cooling
                         def lastOpState = device.currentValue('thermostatOperatingState')
-                        if (lastOpState.contains('ea') || lastOpState.contains('oo')) sendEvent(name: 'lastOpState', value: lastOpState, displayed: false)
+                        if (lastOpState && (lastOpState.contains('ea') || lastOpState.contains('oo'))) sendEvent(name: 'lastOpState', value: lastOpState, displayed: false)
                     }
                 	break;
 				
@@ -1003,7 +1008,8 @@ def generateEvent(Map results) {
                     break;
 				
 				case 'currentProgramName':
-                log.debug "currentProgramName: ${currentProgramName}"
+                    LOG("currentProgramName: ${sendValue}", 2, null, 'info')
+                	// always update the button states, even if the value didn't change
                 	String progText = ''
                     if (sendValue == 'Vacation') {
                     	if (device.currentValue('currentProgramName') == 'Offline') disableVacationButtons() // not offline any more
@@ -1016,11 +1022,11 @@ def generateEvent(Map results) {
                     	progText = 'Program is '+sendValue.trim().replaceAll(':','')
                         def buttonValue = (sendValue.startsWith('Hold') || sendValue.startsWith('Auto ')) ? 'resume' : 'resume dis'
                         sendEvent(name: 'resumeProgram', value: buttonValue, displayed: false, isStateChange: true)	// change the button to Resume Program
-                    	def currentProgram = device.currentValue('currentProgramName')
-                        if (currentProgram) {
+                    	def previousProgramName = device.currentValue('currentProgramName')
+                        if (previousProgramName) {
                         	// update the button states
-                    		if (currentProgram == 'Offline') enableAllButtons() // not offline any more
-                            if (currentProgram.contains('acation')) updateModeButtons() 	// turn the mode buttons back on if we just exited a Vacation Hold
+                    		if (previousProgramName == 'Offline') enableAllButtons() 			// not offline any more
+                            if (previousProgramName.contains('acation')) updateModeButtons() 	// turn the mode buttons back on if we just exited a Vacation Hold
                         }	
                     }
 					if (isChange) {
@@ -1030,7 +1036,8 @@ def generateEvent(Map results) {
 					break;
                     
                 case 'currentProgram':
-                log.debug "currentProgram: ${sendValue}"
+                	LOG("currentProgram: ${sendValue}", 2, null, 'info')
+                	// always update the button states, even if the value didn't change
                 	switch (sendValue) {
                     	case 'Home':
                         	disableHomeButton()
@@ -2182,21 +2189,21 @@ private def resumeProgramInternal(resumeAll=true) {
 	sendEvent(name: 'thermostatStatus', value: 'Resuming scheduled Program...', displayed: false, isStateChange: true)
     
 	def deviceId = getDeviceId()
-    sendEvent(name: 'thermostatStatus', value: 'Program updating...', displayed: false, isStateChange: true)
-	if (parent.resumeProgram(this, deviceId, resumeAll)) {
-		
-        if (resumeAll) generateProgramEvent(device.currentValue('scheduledProgramName'))
+    sendEvent(name: 'thermostatStatus', value: 'Resuming Scheduled Program', displayed: false, isStateChange: true)
+	if (parent.resumeProgram(this, deviceId, resumeAll)) {	
+        // if (resumeAll) generateProgramEvent(device.currentValue('scheduledProgramName'))
         sendEvent(name: "resumeProgram", value: "resume dis", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
         sendEvent(name: "holdStatus", value: '', descriptionText: 'Hold finished', displayed: true, isStateChange: true)
         sendEvent(name: 'thermostatHold', value: '', displayed: false, isStateChange: true)
+        sendEvent(name: 'thermostatStatus', value: 'Resume Program succeeded', displayed: false, isStateChange: true)
         LOG("resumeProgram(${resumeAll}) - succeeded", 2,null,'info')
         runIn(3, refresh, [overwrite:true])
 	} else {
-		sendEvent(name: "thermostatStatus", value: "Resume Program failed..", description:statusText, displayed: false, isStateChange: true)
+		sendEvent(name: "thermostatStatus", value: "Resume Program failed...", displayed: false, isStateChange: true)
 		LOG("resumeProgram() - failed (parent.resumeProgram(this, ${deviceId}, ${resumeAll}))", 1, null, "error")
         result = false
 	}
-    sendEvent(name: 'thermostatStatus', value: '', displayed: false, isStateChange: true)
+    // sendEvent(name: 'thermostatStatus', value: '', displayed: false, isStateChange: true)
     return result
 }
 def generateProgramEvent(String program, String failedProgram='') {
