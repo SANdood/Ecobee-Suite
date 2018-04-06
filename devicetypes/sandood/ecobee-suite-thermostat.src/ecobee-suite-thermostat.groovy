@@ -56,9 +56,11 @@
  *	1.4.05 - Revision number correction
  *	1.4.07 - Remove erroneous "Hold: program" 
  *	1.4.08 - Cleanup around currentProgram & lastOpState
+ *	1.4.09 - Fixed replaceAll calls ("", not '')
+ *	1.4.10 - Fixed setpoint up/down arrows
  */
 
-def getVersionNum() { return "1.4.08" }
+def getVersionNum() { return "1.4.10" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -229,7 +231,7 @@ metadata {
 			tileAttribute("device.thermostatSetpoint", key: "VALUE_CONTROL") {
             	attributeState("VALUE_UP", action: "raiseSetpoint")
         		attributeState("VALUE_DOWN", action: "lowerSetpoint")
-                attributeState("default", label: '${currentValue}°', defaultState:true)
+//                attributeState("default", label: '${currentValue}°', defaultState:true)
 //                attributeState("default", action: "setTemperature")
 			}
             tileAttribute("device.humidity", key: "SECONDARY_CONTROL") {
@@ -1013,13 +1015,13 @@ def generateEvent(Map results) {
                 	String progText = ''
                     if (sendValue == 'Vacation') {
                     	if (device.currentValue('currentProgramName') == 'Offline') disableVacationButtons() // not offline any more
-                    	progText = 'Program is Vacation'
+                    	progText = 'Climate is Vacation'
                         sendEvent(name: 'resumeProgram', value: 'cancel', displayed: false, isStateChange: true)	// change the button to Cancel Vacation
                     } else if (sendValue == 'Offline') {
                     	progText = 'Thermostat is Offline'
                         if (device.currentValue('currentProgramName') != 'Offline') disableAllButtons() // just went offline
                     } else {
-                    	progText = 'Program is '+sendValue.trim().replaceAll(':','')
+                    	progText = 'Climate is '+sendValue.trim().replaceAll(":","")
                         def buttonValue = (sendValue.startsWith('Hold') || sendValue.startsWith('Auto ')) ? 'resume' : 'resume dis'
                         sendEvent(name: 'resumeProgram', value: buttonValue, displayed: false, isStateChange: true)	// change the button to Resume Program
                     	def previousProgramName = device.currentValue('currentProgramName')
@@ -1307,7 +1309,7 @@ def generateEvent(Map results) {
                     	
                 case 'heatRange':
                 	if (isChange) {
-                        def newValue = sendValue.toString().replaceAll("[\\(\\)]",'')
+                        def newValue = sendValue.toString().replaceAll("[\\(\\)]","")
                         def idx = newValue.indexOf('..')
                 		def low = newValue.take(idx).toFloat()
                     	def high = newValue.drop(idx+2).toFloat()
@@ -1320,7 +1322,7 @@ def generateEvent(Map results) {
                     
                 case 'coolRange':
                 	if (isChange) {
-                        def newValue = sendValue.toString().replaceAll("[\\(\\)]",'')
+                        def newValue = sendValue.toString().replaceAll("[\\(\\)]","")
                         def idx = newValue.indexOf('..')
                 		def low = newValue.take(idx).toFloat()
                     	def high = newValue.drop(idx+2).toFloat()
@@ -1726,8 +1728,8 @@ def updateThermostatSetpoints() {
 	} else {
 		LOG("Error updateThermostatSetpoints()", 2, null, "error") //This error is handled by the connect app (huh???)
 	}
-	state.heatingSetpoint = null
-	state.coolingSetpoint = null
+	state.newHeatingSetpoint = null
+	state.newCoolingSetpoint = null
 	runIn(5, 'refresh', [overwrite: true])
 }
 
