@@ -58,9 +58,10 @@
  *	1.4.08 - Cleanup around currentProgram & lastOpState
  *	1.4.09 - Fixed replaceAll calls ("", not '')
  *	1.4.10 - Fixed setpoint up/down arrows
+ *	1.4.11 - Fixed "Fan Only" green
  */
 
-def getVersionNum() { return "1.4.10" }
+def getVersionNum() { return "1.4.11" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -239,7 +240,7 @@ metadata {
 			}
 			tileAttribute('device.thermostatOperatingStateDisplay', key: "OPERATING_STATE") {
 				attributeState('idle', backgroundColor:"#d28de0")			// ecobee purple/magenta
-                attributeState('fan only', backgroundColor:"66cc00")		// ecobee green
+                attributeState('fan only', backgroundColor:"#66cc00")		// ecobee green
 				attributeState('heating', backgroundColor:"#ff9c14")		// ecobee flame orange
 				attributeState('cooling', backgroundColor:"#2db9e7")		// ecobee snowflake blue
                 attributeState('heating (smart recovery)', backgroundColor:"#ff9c14")		// ecobee flame orange
