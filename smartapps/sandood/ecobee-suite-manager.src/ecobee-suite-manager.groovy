@@ -41,10 +41,12 @@
  *	1.4.17- Round 3 currentProgram fixes plus resumeProgram optimization
  *	1.4.18-	Display thermostat & sensor names in the log wherever possible
  *	1.4.19- setHold/nextTransition to currentClimate setpoints is same as resumeProgram
+ *	1.4.20- Added setHumidifierMode() & setDehumidifierMode()
+ *	1.4.21- Queue add/delete program updates to effect only a single API call
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.19" }
+def getVersionNum() { return "1.4.21" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -2763,10 +2765,13 @@ def updateThermostatData() {
 		// HUMIDITY
 		def humiditySetpoint = 0
         def humidity = runtime.desiredHumidity
+        def humidifierMode = statSettings?.humidifierMode
+        def dehumidifierMode = statSettings?.dehumidifierMode
         def dehumidity = runtime.desiredDehumidity
+        def dehumidifyOvercoolOffset = statSettings?.dehumidifyOvercoolOffset
         def hasHumidifier = (statSettings?.hasHumidifier && (statSettings?.humidifierMode != 'off'))
         def hasDehumidifier = ((statSettings?.dehumidifierMode == 'on') && (statSettings?.hasDehumidifier || 
-        						(statSettings?.dehumidifyWithAC && (statSettings?.dehumidifyOvercoolOffset != 0)))) // fortunately, we can hide the details from the device handler
+        						(statSettings?.dehumidifyWithAC && (dehumidifyOvercoolOffset != 0)))) // fortunately, we can hide the details from the device handler
         if (hasHumidifier && (extendedRuntime && extendedRuntime.desiredHumidity && extendedRuntime.desiredHumidity[2])) {
         	humidity = extendedRuntime.desiredHumidity[2]		// if supplied, extendedRuntime gives the actual target (Frost Control)
         }
@@ -2953,7 +2958,8 @@ def updateThermostatData() {
         	
             // Thermostat configuration stuff that almost never changes - if any one changes, send them all
         	def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,/*heatHigh,heatLow,coolHigh,coolLow,*/heatRange,coolRange,climatesList,
-        						hasHeatPump,hasForcedAir,hasElectric,hasBoiler,auxHeatMode,hasHumidifier,hasDehumidifier,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
+        						hasHeatPump,hasForcedAir,hasElectric,hasBoiler,auxHeatMode,hasHumidifier,humidifierMode,hasDehumidifier,dehumidifierMode,dehumidifyOvercoolOffset,
+                                dehumidity,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
  			if (forcePoll || (changeNever == [:]) || !changeNever.containsKey(tid) || (changeNever[tid] != neverList)) {  
             	data += [
 					coolMode: (coolStages > 0),
@@ -2976,7 +2982,11 @@ def updateThermostatData() {
             		hasBoiler: hasBoiler,
 					auxHeatMode: auxHeatMode,
             		hasHumidifier: hasHumidifier,
+                    humidifierMode: humidifierMode,
 					hasDehumidifier: hasDehumidifier,
+                    dehumidifierMode: dehumidifierMode,
+                    dehumiditySetpoint: dehumidity,
+                    dehumidifyOvercoolOffset: dehumidifyOvercoolOffset,
                 	heatDifferential: String.format("%.${apiPrecision}f", tempHeatDiff.toDouble().round(apiPrecision)),
                 	coolDifferential: String.format("%.${apiPrecision}f", tempCoolDiff.toDouble().round(apiPrecision)),
                     heatCoolMinDelta: String.format("%.${apiPrecision}f", tempHeatCoolMinDelta.toDouble().round(apiPrecision)),
@@ -3303,7 +3313,7 @@ def setHVACMode(child, deviceId, mode) {
     return result
 }
 def setMode(child, mode, deviceId) {
-	LOG("setMode(${mode}) for ${deviceId}", 5, child)
+	LOG("setMode(${mode}) for ${deviceId}", 5, child, 'trace')
         
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"hvacMode":"'+"${mode}"+'"}}}'  
 	LOG("Mode Request Body = ${jsonRequestBody}", 4, child, 'trace')
@@ -3312,11 +3322,41 @@ def setMode(child, mode, deviceId) {
     LOG("setMode to ${mode} with result ${result}", 4, child, 'trace')
 	if (result) {
     	LOG("setMode(${mode}) returned ${result}", 4, child, "info")
-    	// child.generateQuickEvent("thermostatMode", mode, 15)
+    	atomicState.forcePoll = true 		// force next poll to get updated data
     } else {
     	LOG("setMode(${mode}) - Failed", 1, child, "warn")
     }
-	if (result) atomicState.forcePoll = true 		// force next poll to get updated data
+	return result
+}
+
+def setHumidifierMode(child, mode, deviceId) {
+	LOG ("setHumidifierMode(${mode}) for ${deviceId}", 5, child, 'trace')
+    
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"humidifierMode":"'+"${mode}"+'"}}}'  
+    def result = sendJson(child, jsonRequestBody)
+    LOG("setHumidifierMode to ${mode} with result ${result}", 4, child, 'trace')
+	if (result) {
+    	LOG("setHumidifierMode(${mode}) - Succeeded", 2, child, 'info')
+        atomicState.forcePoll = true 		// force next poll to get updated data
+    } else {
+    	LOG("setHumidifierMode(${mode}) - Failed", 1, child, 'warn')
+    }
+	return result
+}
+
+def setDehumidifierMode(child, mode, deviceId) {
+	LOG ("setDehumidifierMode(${mode}) for ${deviceId}", 5, child, 'trace')
+                        
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"dehumidifierMode":"'+"${mode}"+'"}}}'  
+	LOG("dehumidifierMode Request Body = ${jsonRequestBody}", 4, child, 'trace')
+    def result = sendJson(child, jsonRequestBody)
+    LOG("setDehumidifierMode to ${mode} with result ${result}", 4, child, 'trace')
+	if (result) {
+    	LOG("setDehumidifierMode(${mode}) - Succeeded", 2, child, 'info')
+        atomicState.forcePoll = true 		// force next poll to get updated data
+    } else {
+    	LOG("setDehumidifierMode(${mode}) - Failed", 1, child, 'warn')
+    }
 	return result
 }
 
@@ -3607,19 +3647,26 @@ def addSensorToProgram(child, deviceId, sensorId, programId) {
 	String statName = getThermostatName( deviceId )
     String sensName = child.device?.displayName
 	LOG("addSensorToProgram(${sensName},${statName},${sensorId},${programId})",4,child,'trace')
-	String preText = getDebugLevel() <= 2 ? '' : 'addSensorToProgram() - '
     
     // we basically have to edit the program object in place, and then return the entire thing back to the Ecobee API
-	def program = atomicState.program[deviceId]
+    def program
+    def climateChange = atomicState.climateChange
+    if (climateChange && climateChange[deviceId]) {
+    	program = climateChange[deviceId]			// already have some edits underway
+    } else {
+    	if (!climateChange) climateChange = [:]
+		program = atomicState.program[deviceId]		// starting new edits
+    }
     if (!program) {
     	return false
     }
-    def result = false
+    
+    String tempSensor = "${sensorId}:1"
     int c = 0
     int s = 0
     while ( program.climates[c] ) {	
     	if (program.climates[c].climateRef == programId) {
-        	String tempSensor = "${sensorId}:1"
+        	s = 0
         	while (program.climates[c].sensors[s]) {
             	if (program.climates[c].sensors[s].id == tempSensor ) {
 					LOG("addSensorToProgram() - ${sensName} is already in the ${programId.capitalize()} program on thermostat ${statName}",4,child,'info')
@@ -3627,65 +3674,54 @@ def addSensorToProgram(child, deviceId, sensorId, programId) {
             	}
                 s++
             }
-            program.climates[c].sensors << [id:"${tempSensor}"] // add this sensor to the sensors list
-            result = true
-        }
-        if (result) {
-        	def programJson = JsonOutput.toJson(program)
-            def thermostatSettings = ',"thermostat":{"program":' + programJson +'}'
-    		def thermostatFunctions = ''
-    		def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
-    		LOG("jsonRequest: ${jsonRequestBody}",4,child,'trace')
-            result = sendJson(child, jsonRequestBody)
-    		LOG("addSensorToProgram() returned ${result}", 4, child,'trace') 
-        	if (result) {
-        		LOG("${preText}Added sensor ${sensName} to the ${programId.capitalize()} program on thermostat ${statName}",3,child,'info')
-            	return true
-            }
-            break
+            def remoteSensors = atomicState.remoteSensors[deviceId]
+            String sensorName = remoteSensors.find{it.id == sensorId}?.name
+            program.climates[c].sensors << [id: tempSensor, name: sensorName] // add this sensor to the sensors list
+            climateChange[deviceId] = program
+            atomicState.climateChange = climateChange
+            runIn(2, 'updateClimates', [data: [deviceId: deviceId]])
+            LOG("addSensorToProgram() - ${sensName} addition to ${programId.capitalize()} program on thermostat ${statName} queued successfully",4,child,'info')
+            return true
         }
         c++
     }
-    LOG('addSensorToProgram() - Something went wrong',4,child,'trace')
+    LOG("addSensorToProgram() - couldn't find ${programId.capitalize()} program for thermostat ${statName}",2,child,'warn')
     return false
 }
 
 def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 	String statName = getThermostatName( deviceId )
     String sensName = child.device?.displayName
-	LOG("deleteSensorFromProgram(${sensName},${statName},${sensorId},${programId})",4,child,'trace')
-    String preText = getDebugLevel() <= 2 ? '' : 'deleteSensorFromProgram() - '
+	LOG("deleteSensorFromProgram(${sensName},${statName},${sensorId},${programId})",2,child,'trace')
     
-	def program = atomicState.program[deviceId]
+	def program
+    def climateChange = atomicState.climateChange
+    if (climateChange && climateChange[deviceId]) {
+    	program = climateChange[deviceId]			// already have some edits underway
+    } else {
+    	if (!climateChange) climateChange = [:]
+		program = atomicState.program[deviceId]		// starting new edits
+    }
     if (!program) {
     	return false
     }
+    
+    String tempSensor = "${sensorId}:1"
     int c = 0
     int s = 0
     while ( program.climates[c] ) {	
     	if (program.climates[c].climateRef == programId) { // found the program we want to delete from
-        	String tempSensor = "${sensorId}:1"
             def currentSensors = program.climates[c].sensors
+            s = 0
         	while (program.climates[c].sensors[s]) {
             	if (program.climates[c].sensors[s].id == tempSensor ) {
-                
                 	// found it, now we need to delete it - subtract it from the list of sensors                    
                     program.climates[c].sensors = program.climates[c].sensors - program.climates[c].sensors[s]   
-        			def programJson = JsonOutput.toJson(program)
-            		def thermostatSettings = ',"thermostat":{"program":' + programJson +'}'
-                    def thermostatFunctions = ''
-    				def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
-                    LOG("jsonRequestBody: ${jsonRequestBody}",4,child,'trace')
-                    def result = sendJson(child, jsonRequestBody)
-    				LOG("deleteSensorFromProgram() returned ${result}", 4, child,'trace') 
-        			if (result) {
-        				LOG("${preText}Deleted sensor ${sensName} from the ${programId.capitalize()} program on thermostat ${statName}",3,child,'info')
-            			return true
-            		} else {
-                    	LOG("${preText}Could not delete sensor ${sensName} from the ${programId.capitalize()} program on thermostat ${statName}",3,child,'warn')
-                        return false
-                    }
-           			break  
+					climateChange[deviceId] = program
+					atomicState.climateChange = climateChange		// save for later 
+                    runIn(2, 'updateClimates', [data: [deviceId: deviceId]])
+                    LOG("deleteSensorFromProgram() - ${sensName} deletion from ${programId.capitalize()} program on thermostat ${statName} queued successfully", 4, child, 'info')
+           			return true
             	}
                 s++
             }
@@ -3693,8 +3729,29 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
         c++
     }
     // didn't find the specified climate
-    LOG("${preText}Sensor ${sensName} not found in the ${programId.capitalize()} program on thermostat ${statName}",4,child,'info') // didn't find sensor in the specified climate: Success!
+    LOG("deleteSensorFromProgram() - Sensor ${sensName} not found in the ${programId.capitalize()} program on thermostat ${statName}", 2, child, 'warn') // didn't find sensor in the specified climate: Success!
     return true
+}
+
+def updateClimates(data) {
+	def deviceId = data.deviceId
+    def statName = getThermostatName( deviceId )
+	LOG("Updating Program Sensors for ${statName}", 4, null, 'info')
+    def climateChange = atomicState.climateChange
+    def program
+	if (climateChange && climateChange[deviceId]) program = climateChange[deviceId]
+
+    if (program) {
+    	def programJson = JsonOutput.toJson(program)
+        def thermostatSettings = ',"thermostat":{"program":' + programJson +'}'
+    	def thermostatFunctions = ''
+    	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
+        def result = sendJson(null, jsonRequestBody)
+    	LOG("Updating Program Sensors for ${statName}) returned ${result}", 2, null, result?'info':'warn')
+        climateChange[deviceId] = null
+        atomicState.climateChange = climateChange
+    }
+    atomicState.forcePoll = true
 }
 
 // API Helper Functions
