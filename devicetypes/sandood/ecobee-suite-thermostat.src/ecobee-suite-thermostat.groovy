@@ -59,9 +59,11 @@
  *	1.4.09 - Fixed replaceAll calls ("", not '')
  *	1.4.10 - Fixed setpoint up/down arrows
  *	1.4.11 - Fixed "Fan Only" green
+ *	1.4.12 - Better error messages around missing programsList
+ *	1.4.13 - Initial support for setting humidifier/dehumidifier mode
  */
 
-def getVersionNum() { return "1.4.11" }
+def getVersionNum() { return "1.4.13" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -101,6 +103,8 @@ metadata {
         command "setThermostatFanMode"
         command "setFanMinOnTime"
         command "setFanMinOnTimeDelay"
+        command	"setHumidifierMode"
+        command "setDehumidifierMode"
         command "setVacationFanMinOnTime"
         command "deleteVacation"
         command "cancelVacation"
@@ -154,6 +158,7 @@ metadata {
         attribute "supportedThermostatFanModes", "JSON_OBJECT" // USAGE: List theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(", ")
 		attribute "equipmentStatus", "string"
         attribute "humiditySetpoint", "string"
+        attribute "dehumiditySetpoint", "string"
         attribute "weatherTemperature", "number"
 		attribute "decimalPrecision", "number"
 		attribute "temperatureDisplay", "string"
@@ -169,6 +174,9 @@ metadata {
         attribute "hasBoiler", "string"
         attribute "hasHumidifier", "string"
         attribute "hasDehumidifier", "string"
+        // attribute "dehumidifyOvercoolOffset", "number"
+        attribute "humidifierMode", "string"
+        attribute "dehumidifierMode", "string"
 		attribute "auxHeatMode", "string"
         attribute "motion", "string"
 		attribute "heatRangeHigh", "number"
@@ -239,16 +247,16 @@ metadata {
 				attributeState("default", label:'${currentValue}%', unit:"Humidity", defaultState: true)
 			}
 			tileAttribute('device.thermostatOperatingStateDisplay', key: "OPERATING_STATE") {
-				attributeState('idle', backgroundColor:"#d28de0")			// ecobee purple/magenta
-                attributeState('fan only', backgroundColor:"#66cc00")		// ecobee green
-				attributeState('heating', backgroundColor:"#ff9c14")		// ecobee flame orange
-				attributeState('cooling', backgroundColor:"#2db9e7")		// ecobee snowflake blue
-                attributeState('heating (smart recovery)', backgroundColor:"#ff9c14")		// ecobee flame orange
-                attributeState('cooling (smart recovery)', backgroundColor:"#2db9e7")		// ecobee snowflake blue
-                attributeState('cooling (overcool)', backgroundColor:"#2db9e7") 
-                attributeState('offline', backgroundColor:"#ff4d4d")
-                attributeState('off', backGroundColor:"#cccccc")			// grey
-                attributeState('default', /* label: 'idle', */ backgroundColor:"#d28de0", defaultState: true) 
+				attributeState('idle', 						backgroundColor:"#d28de0")		// ecobee purple/magenta
+                attributeState('fan only', 					backgroundColor:"#66cc00")		// ecobee green
+				attributeState('heating', 					backgroundColor:"#ff9c14")		// ecobee flame orange
+				attributeState('cooling', 					backgroundColor:"#2db9e7")		// ecobee snowflake blue
+                attributeState('heating (smart recovery)', 	backgroundColor:"#ff9c14")		// ecobee flame orange
+                attributeState('cooling (smart recovery)', 	backgroundColor:"#2db9e7")		// ecobee snowflake blue
+                attributeState('cooling (overcool)', 		backgroundColor:"#2db9e7") 
+                attributeState('offline', 					backgroundColor:"#ff4d4d")
+                attributeState('off', 						backGroundColor:"#cccccc")		// grey
+                attributeState('default', 		 			backgroundColor:"#d28de0", defaultState: true) 
 			}
 			tileAttribute("device.thermostatMode", key: "THERMOSTAT_MODE") {
 				attributeState("off", label:'${name}')
@@ -754,6 +762,7 @@ def updated() {
 	LOG("${getVersionLabel()} updated",1,null,'trace')
     sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
     resetUISetpoints()
+    runIn(2, 'forceRefresh', [overwrite: true])
 }
 
 void poll() {
@@ -1367,6 +1376,9 @@ def generateEvent(Map results) {
 				case 'hasElectric':
 				case 'hasBoiler':
                 case 'hasHumidifier':
+                //case 'humidifierMode':
+                //case 'dehumidifierMode':
+                //case 'dehumiditySetpoint':
                 case 'hasDehumidifier':                  
 				// These are ones we don't need to display or provide descriptionText for (mostly internal or debug use)
 				case 'debugLevel':
@@ -2043,10 +2055,16 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
     }
     
     def programsList = []
-    programsList = new JsonSlurper().parseText(device.currentValue('programsList'))
+    def programs = device.currentValue('programsList')
+    if (!programs) {
+    	LOG("Supported programs list not initialized, possible installation error", 1, this, 'error')
+        programs = ["Away","Home","Sleep"]		// Just use the default list
+    }
+    
+    programsList = new JsonSlurper().parseText(programs)
     if (!programsList.contains(program)) {
-    	LOG("setThermostatProgram(${program}) - invalid argument",2,this,'warn')
-        return
+    	LOG("setThermostatProgram(${program}) not found in (${programsList})", 2, this, 'warn')
+       	return
     }
    	
 	def deviceId = getDeviceId()    
@@ -2412,6 +2430,55 @@ void setFanMinOnTime(minutes=20) {
         }
     } else {
     	LOG("setFanMinOnTime(${minutes}) - invalid argument",1,null, 'error')
+    }
+}
+
+void setHumidifierMode(String value) {
+    // verify thermostat hasHumidifier first
+    def hasHumidifier = device.currentValue('hasHumidifier')
+    if (!hasHumidifier || (hasHumidifier == 'false')) {
+    	LOG("${device.displayName} is not controlling a humidifier", 1, null, 'warn')
+        return
+    }
+	if (!value  || ((value != 'auto')  && (value != 'off') && (value != 'manual') && (value != 'on'))) {
+    	LOG("setHumidifierMode(${value}) - unsupported humidifier mode requested")
+        return
+    }
+    if (value == 'on') value = 'manual'
+    if (device.currentValue('humidifierMode') == value) {
+    	LOG("${device.displayName}'s humidifier is already set to ${value}", 2, null, 'info')
+        return
+    }
+	def result = parent.setHumidifierMode(this, value, getDeviceId())
+    if (result) {
+    	LOG("${device.displayName}'s humidifier is now set to ${value}", 2, null, 'info')
+        // generate events to update the device's display here (if any)
+    } else {
+    	LOG("Changing ${device.displayName}'s humidifier to ${value} failed, humidifier is still ${device.currentValue('humidifierMode')}", 1, null, 'warn')
+    }
+}
+
+void setDehumidifierMode(String value) {
+    // verify that the stat either hasDehumidifer or dehumidifyOvercoolOffset > 0 
+    def hasDehumidifier = device.currentValue('hasDehumidifier')
+    if (!hasDehumidifier || (hasDehumidifier == 'false')) {
+    	LOG("${deviceId.displayName} is not controlling a dehumidifier or overcooling", 1, child, 'warn')
+        return
+    }
+    
+    if (!value || (value != 'off') && (value != 'on')) {
+        LOG("setHumidifierMode(${value}) - unsupported dehumidifier mode requested")
+        return
+    }
+    if (device.currentValue('dehumidifierMode') == value) {
+    	LOG("${device.displayName}'s dehumidifier is already set to ${value}", 2, null, 'info')
+    }
+	def result = parent.setDehumidifierMode(this, value, getDeviceId())
+    if (result) {
+    	LOG("${device.displayName}'s dehumidifier is now set to ${value}", 2, null, 'info')
+        // generate events to update the device's display here (if any)
+    } else {
+    	LOG("Changing ${device.displayName}'s dehumidifier to ${value} failed, dehumidifier is still ${device.currentValue('humidifierMode')}", 1, null, 'warn')
     }
 }
 
