@@ -32,10 +32,12 @@
  *	1.4.0  - Major Release: renamed devices also
  *	1.4.01 - Added VersionLabel display
  *	1.4.02 - Fixed getMyId so that add/delete works properly
+ *	1.4.03 - Fixed a typo
+ *	1.4.04 - Updated for delayed add/delete function
  *
  */
 
-def getVersionNum() { return "1.4.02" }
+def getVersionNum() { return "1.4.04" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -328,12 +330,12 @@ def addSensorToProgram(programId) {
 	if (programIdList().contains(programId.toLowerCase())) {
     	if (device.currentValue(programId.capitalize()) != 'on') {
     		result = parent.addSensorToProgram(this, device.currentValue('thermostatId'), getSensorId(), programId.toLowerCase())
-            if (result) {
-    			sendEvent(name: "${programId.capitalize()}", value: 'on', isStateChange: true, displayed: false)
+			if (result) {
+    			sendEvent(name: "${programId.capitalize()}", value: 'on', descriptionText: "Sensor added to ${programId.capitalize()} program", isStateChange: true, displayed: true)
+                runIn(5, refresh, [overwrite: true])
             } else {
             	sendEvent(name: "${programId.capitalize()}", value: 'off', isStateChange: true, displayed: false)
             }
-            runIn(5, refresh, [overwrite: true])
        	} else {
        		result = true
     	}
@@ -359,8 +361,8 @@ def deleteSensorFromProgram(programId) {
 	if (programIdList().contains(programId.toLowerCase())) {
     	if (device.currentValue(programId.capitalize()) != 'off') {
     		result = parent.deleteSensorFromProgram(this, device.currentValue('thermostatId'), getSensorId(), programId.toLowerCase())
-           	if (result) {	
-    			sendEvent(name: "${programId.capitalize()}", value: 'off', isStateChange: true, displayed: false)
+			if (result) {	
+    			sendEvent(name: "${programId.capitalize()}", value: 'off', desciptionText: "Sensor removed from ${programId.capitalize()} program", isStateChange: true, displayed: true)
             } else {
             	sendEvent(name: "${programId.capitalize()}", value: 'on', isStateChange: true, displayed: false)
             }
