@@ -34,10 +34,11 @@
  *	1.4.02 - Fixed getMyId so that add/delete works properly
  *	1.4.03 - Fixed a typo
  *	1.4.04 - Updated for delayed add/delete function
+ *	1.4.05 - Fixed add/deleteSensorFromProgram
  *
  */
 
-def getVersionNum() { return "1.4.04" }
+def getVersionNum() { return "1.4.05" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
