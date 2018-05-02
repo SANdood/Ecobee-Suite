@@ -27,8 +27,9 @@
  *	1.4.0 - Renamed parent Ecobee Suite Manager
  *	1.4.01- Select ventState when disabling, better temperature validation
  *	1.4.02- Added configurable heat & cool offsets when following thermostat setpoints
+ *	1.4.03- Fixed a type converstion typo
  */
-def getVersionNum() { return "1.4.02" }
+def getVersionNum() { return "1.4.03" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -194,7 +195,7 @@ private String checkTemperature() {
     		LOG("${theThermostat.displayName} is idle, room temperature is ${cTemp}°",3,null,'info')
         	def currentMode = theThermostat.currentValue('thermostatMode')
         	if (currentMode == 'cool') {
-        		def coolTarget = useThermostat ? theThermostat.currentValue('coolingSetpoint').toDOuble() : settings.coolingSetpoint.toDouble()
+        		def coolTarget = useThermostat ? theThermostat.currentValue('coolingSetpoint').toDouble() : settings.coolingSetpoint.toDouble()
             	vents = (coolTarget >= cTemp) ? 'closed' : 'open'
         	} 
     	} else if (vents == '' && (cOpState == 'fan only')) {
