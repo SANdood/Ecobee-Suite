@@ -61,6 +61,7 @@
  *	1.4.11 - Fixed "Fan Only" green
  *	1.4.12 - Better error messages around missing programsList
  *	1.4.13 - Initial support for setting humidifier/dehumidifier mode
+ *	1.4.14 - Removed extra "inactiveLabel" and changed main() to main([])
  */
 
 def getVersionNum() { return "1.4.13" }
@@ -345,7 +346,7 @@ metadata {
         	state("fanMinOnTime", label: '${currentValue}′', backgroundColor: "#808080", defaultState: true)
         }
 		
-		standardTile("mode", "device.thermostatMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+		standardTile("mode", "device.thermostatMode", width: 2, height: 2, decoration: "flat") {
 			state "off", action:"heat", label: "Mode: Off", nextState: "updating", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_label.png"
 			state "heat", action:"cool",  label: "Mode: Heat", nextState: "updating", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_heat.png"
 			state "cool", action:"auto",  label: "Mode: Cool", nextState: "updating", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_cool.png"
@@ -355,7 +356,7 @@ metadata {
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
         
-        standardTile("modeShow", "device.thermostatMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("modeShow", "device.thermostatMode", width: 2, height: 2, decoration: "flat") {
 			state "off", 			action:"noOp", 	label: "Off",	nextState: "off",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_label.png"
 			state "heat", 			action:"noOp",  label: "Heat", 	nextState: "heat", 	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_heat.png"
 			state "cool", 			action:"noOp",  label: "Cool", 	nextState: "cool", 	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_cool.png"
@@ -367,29 +368,29 @@ metadata {
 			state "updating", 						label: 'Working', 					icon: "st.motion.motion.inactive"
 		}
         
-		standardTile("setModeHeat", "device.setModeHeat", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {			
+		standardTile("setModeHeat", "device.setModeHeat", width: 2, height: 2, decoration: "flat") {			
 			state "heat", action:"heat",  label: "Heat", nextState: "updating", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_heat.png"
             state "heat dis", action:"noOp",  label: "Heat", nextState: "heat dis", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_heat_grey.png"
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
-		standardTile("setModeCool", "device.setModeCool", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {			
+		standardTile("setModeCool", "device.setModeCool", width: 2, height: 2, decoration: "flat") {			
 			state "cool", action:"cool",  label: "Cool", nextState: "updating", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_cool.png"
             state "cool dis", action:"noOp",  label: "Cool", nextState: "cool dis", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_cool_grey.png"
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}        
-		standardTile("setModeAuto", "device.setModeAuto", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {			
+		standardTile("setModeAuto", "device.setModeAuto", width: 2, height: 2, decoration: "flat") {			
 			state "auto", action:"auto",  label: "Auto", nextState: "updating", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_auto.png"
 			state "auto dis", action:"noOp",  label: "Auto", nextState: "auto dis", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_auto_grey.png"
             state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
-		standardTile("setModeOff", "device.setModeOff", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {			
+		standardTile("setModeOff", "device.setModeOff", width: 2, height: 2, decoration: "flat") {			
 			state "off", action:"off", label: "HVAC Off", nextState: "updating", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_label.png"
             state "off dis", action:"noOp", label: "HVAC Off", nextState: "off dis", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_label_grey.png"
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
         
         // This one is the one that will control the icon displayed in device Messages log - but we don't actually use it
-        standardTile("fanMode", "device.thermostatFanMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("fanMode", "device.thermostatFanMode", width: 2, height: 2, decoration: "flat") {
 			state "on", 		label:'Fan: On', 		action:"fanAuto", 	nextState: "updating",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid.png"
             state "auto", 		label:'Fan: Auto', 		action:"fanOn", 	nextState: "updating", 	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on.png"
             state "off", 		label:'Fan: Off', 		action:"fanAuto", 	nextState: "updating", 	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan.png"
@@ -397,7 +398,7 @@ metadata {
             state "updating", 	label:"Working", 													icon: "st.motion.motion.inactive"
 		}
 
-		standardTile("fanModeLabeled", "device.thermostatFanModeDisplay", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+		standardTile("fanModeLabeled", "device.thermostatFanModeDisplay", width: 2, height: 2, decoration: "flat") {
 			state "on", 			label:'Fan: On', 		action:"fanCirculate", 	nextState: "updating", 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid.png"
             state "auto", 			label:'Fan: Auto', 		action:"fanOn", 		nextState: "updating", 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on.png"
             state "off", 			label:'Fan: Off', 		action:"fanAuto", 		nextState: "updating", 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan.png"
@@ -409,18 +410,18 @@ metadata {
             state "updating", 		label:"Working", 															icon: "st.motion.motion.inactive"
 		}
         
-        standardTile("fanOffButton", "device.setFanOff", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("fanOffButton", "device.setFanOff", width: 2, height: 2, decoration: "flat") {
 			state "off", label:"Fan Off", action:"fanOff", nextState: "updating", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan.png"
             state "off dis", label:"Fan Off", action:"fanOffDisabled", nextState: "off dis", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_grey.png"
             state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
 
-		standardTile("fanCirculate", "device.setFanCirculate", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+		standardTile("fanCirculate", "device.setFanCirculate", width: 2, height: 2, decoration: "flat") {
 			state "circulate", label:"Fan Circulate", action:"fanCirculate", nextState: "updating", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_big_solid_nolabel.png"
             state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
         
-		standardTile("fanModeCycler", "device.thermostatFanModeDisplay", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+		standardTile("fanModeCycler", "device.thermostatFanModeDisplay", width: 2, height: 2, decoration: "flat") {
 			state "auto", 			action:"fanOn", 		label: "Fan On", 		nextState: "updating", 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid.png"
             state "on", 			action:"fanCirculate",	label: "Fan Circulate",	nextState: "updating", 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on-1.png"
             state "off", 			action:"fanAuto", 		label: "Fan Auto", 		nextState: "updating", 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on.png"
@@ -431,16 +432,16 @@ metadata {
 			state "circulate dis",	action:"noOp", 			label: "Fan Auto", 		nextState: "circulate dis",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_grey.png"            
             state "updating", 								label:"Working", 									icon: "st.motion.motion.inactive"
 		}
-//        standardTile("fanModeAutoSlider", "device.thermostatFanMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+//        standardTile("fanModeAutoSlider", "device.thermostatFanMode", width: 2, height: 2, decoration: "flat") {
 //        	state "on", action:"fanAuto", nextState: "auto", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_auto_slider_off.png"
 //            state "auto", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/fanmode_auto_slider_on.png"
 //        }
-//		standardTile("fanModeOnSlider", "device.thermostatFanMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+//		standardTile("fanModeOnSlider", "device.thermostatFanMode", width: 2, height: 2, decoration: "flat") {
 //        	state "auto", action:"fanOn", nextState: "auto", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_on_slider_off.png"
 //            state "on", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/fanmode_on_slider_on.png"
 //        }
         
-		standardTile("upButtonControl", "device.thermostatSetpoint", width: 2, height: 1, inactiveLabel: false, decoration: "flat") {
+		standardTile("upButtonControl", "device.thermostatSetpoint", width: 2, height: 1, decoration: "flat") {
 			state "setpoint", action:"raiseSetpoint", icon:"st.thermostat.thermostat-up", defaultState: true
 		}
 		valueTile("thermostatSetpoint", "device.thermostatSetpoint", width: 2, height: 2, decoration: "flat") {
@@ -449,7 +450,7 @@ metadata {
 		valueTile("currentStatus", "device.thermostatStatus", height: 2, width: 4, decoration: "flat") {
 			state "thermostatStatus", label:'${currentValue}', backgroundColor:"#ffffff", defaultState: true
 		}
-		standardTile("downButtonControl", "device.thermostatSetpoint", height: 1, width: 2, inactiveLabel: false, decoration: "flat") {
+		standardTile("downButtonControl", "device.thermostatSetpoint", height: 1, width: 2, decoration: "flat") {
 			state "setpoint", action:"lowerSetpoint", icon:"st.thermostat.thermostat-down", defaultState: true
 		}
 		controlTile("circSliderControl", "device.fanMinOnTime", "slider", height: 1, width: 4, inactiveLabel: false, range: "(0..55)" ) {
@@ -458,28 +459,28 @@ metadata {
 		controlTile("heatSliderControl", "device.heatingSetpointDisplay", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setHeatingSetpoint", action:"setHeatingSetpointDelay",  backgroundColor:"#ff9c14", unit: '°', defaultState: true
 		}
-		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 1, inactiveLabel: false, decoration: "flat") {
+		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 1, decoration: "flat") {
 			state "heat", label:'${currentValue}°', defaultState: true//, unit:"F", backgroundColor:"#ff9c14"
 		}
 		controlTile("coolSliderControl", "device.coolingSetpointDisplay", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setCoolingSetpoint", action:"setCoolingSetpointDelay", backgroundColor:"#2db9e7", unit: '°', defaultState: true
 		}
-		valueTile("coolingSetpoint", "device.coolingSetpoint", width: 1, height: 1, inactiveLabel: false, decoration: "flat") {
+		valueTile("coolingSetpoint", "device.coolingSetpoint", width: 1, height: 1, decoration: "flat") {
 			state "cool", label:'${currentValue}°', defaultState: true //, unit:"F", backgroundColor:"#2db9e7"
 		}
-		standardTile("refresh", "device.doRefresh", width: 2, height: 2,inactiveLabel: false, decoration: "flat") {
+		standardTile("refresh", "device.doRefresh", width: 2, height: 2,decoration: "flat") {
             state "refresh", action:"doRefresh", nextState: 'updating', label: "Refresh", defaultState: true, icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/ecobee_refresh_green.png"
             state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
         
-        standardTile("resumeProgram", "device.resumeProgram", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("resumeProgram", "device.resumeProgram", width: 2, height: 2, decoration: "flat") {
 			state "resume", action:"resumeProgram", nextState: "updating", label:'Resume', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/action_resume_program.png"
             state "resume dis", action: 'noOp', nextState: 'resume dis', label: 'Resume', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/action_resume_program_grey.png"
             state "cancel", action:"cancelVacation", nextState: "updating", label:'Cancel', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_vacation_airplane_yellow.png"
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
         
-        standardTile("currentProgramIcon", "device.currentProgramName", height: 2, width: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("currentProgramIcon", "device.currentProgramName", height: 2, width: 2, decoration: "flat") {
 			state "Home", 				action:"noOp", nextState:'Home', 				label: 'Home', 				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue.png"
 			state "Away", 				action:"noOp", nextState:'Away', 				label: 'Away', 				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue.png"
             state "Sleep", 				action:"noOp", nextState:'Sleep', 				label: 'Sleep', 			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue.png"
@@ -505,23 +506,23 @@ metadata {
             state "default", 			action:"noOp", nextState: 'default', 			label: '${currentValue}', 	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png", defaultState: true
 		}        
         
-        valueTile("currentProgram", "device.currentProgramName", height: 2, width: 4, inactiveLabel: false, decoration: "flat") {
+        valueTile("currentProgram", "device.currentProgramName", height: 2, width: 4, decoration: "flat") {
 			state "default", label:'Comfort Setting:\n${currentValue}', defaultState: true 
 		}
         
-		standardTile("setHome", "device.setHome", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+		standardTile("setHome", "device.setHome", width: 2, height: 2, decoration: "flat") {
 			state "home", action:"home", nextState: "updating", label:'Home', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue.png"
             state "home dis", action:"homeDisabled", nextState: "home dis", label:'Home', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_grey.png"
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
         
-        standardTile("setAway", "device.setAway", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("setAway", "device.setAway", width: 2, height: 2, decoration: "flat") {
 			state "away", action:"away", nextState: "updating", label:'Away', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue.png"
             state "away dis", action:"awayDisabled", nextState: "away dis", label:'Away', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_grey.png"
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
 
-        standardTile("setSleep", "device.setSleep", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("setSleep", "device.setSleep", width: 2, height: 2, decoration: "flat") {
 			// state "sleep", action:"sleep", nextState: "updating", label:'Set Sleep', icon:"st.Bedroom.bedroom2"
 			// can't call "sleep()" because of conflict with internal definition (it silently fails)
             state "sleep", action:"night", nextState: "updating", label:'Sleep', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue.png"
@@ -529,7 +530,7 @@ metadata {
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
 
-        standardTile("operatingState", "device.thermostatOperatingState", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("operatingState", "device.thermostatOperatingState", width: 2, height: 2, decoration: "flat") {
             state "idle", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_idle_purple.png"
             state "fan only", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_fan_on_solid.png"
 			state "heating", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat.png"
@@ -538,7 +539,7 @@ metadata {
             state "default", label: '${currentValue}', defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png"
 		}
         
-       	standardTile("operatingStateDisplay", "device.thermostatOperatingStateDisplay", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+       	standardTile("operatingStateDisplay", "device.thermostatOperatingStateDisplay", width: 2, height: 2, decoration: "flat") {
             state "idle", 						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_idle_purple.png"
             state "fan only", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_fan_on_solid.png"
 			state "heating", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat.png"
@@ -551,7 +552,7 @@ metadata {
             state "default", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", label: '${currentValue}', defaultState: true
 		}
 			
-		standardTile("equipmentState", "device.equipmentOperatingState", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+		standardTile("equipmentState", "device.equipmentOperatingState", width: 2, height: 2, decoration: "flat") {
 			state "idle", 				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_idle_purple.png"
             state "fan only", 			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_fan_on_solid.png"
 			state "emergency", 			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_emergency.png"
@@ -583,20 +584,20 @@ metadata {
             state "default",	 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", action:"noOp", label: '${currentValue}', defaultState: true
 		}
 
-        valueTile("humidity", "device.humidity", inactiveLabel: false, decoration: "flat", width: 1, height: 1) {
+        valueTile("humidity", "device.humidity", decoration: "flat", width: 1, height: 1) {
 			state("default", label: '${currentValue}%', unit: "%", defaultState: true, backgroundColors: [ //#d28de0")
           		[value: 10, color: "#0033cc"],
                 [value: 60, color: "#ff66ff"]
             ] )
 		}
-		valueTile('humiditySetpoint', 'device.humiditySetpoint', inactiveLabel: false, decoration: 'flat', width: 1, height: 1) {
+		valueTile('humiditySetpoint', 'device.humiditySetpoint', decoration: 'flat', width: 1, height: 1) {
         	state("default", label: '${currentValue}%', unit: "%", defaultState: true, backgroundColors: [ //#d28de0")
           		[value: 10, color: "#0033cc"],
                 [value: 60, color: "#ff66ff"]
             ] )
         }
         
-        standardTile("motionState", "device.motion", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+        standardTile("motionState", "device.motion", width: 2, height: 2, decoration: "flat") {
 			state "active", action:"noOp", nextState: "active", label:"Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_motion.png"
 			state "inactive", action: "noOp", nextState: "inactive", label:"No Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_nomotion.png"
             state "not supported", action: "noOp", nextState: "not supported", label: "N/A", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/notsupported_x.png"
@@ -604,7 +605,7 @@ metadata {
 		}
 
         // Weather Tiles and other Forecast related tiles
-		standardTile("weatherIcon", "device.weatherSymbol", inactiveLabel: false, width: 2, height: 2, decoration: "flat") {
+		standardTile("weatherIcon", "device.weatherSymbol", width: 2, height: 2, decoration: "flat") {
 			state "-2",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/weather_updating_-2_fc.png" // , label: 'updating...',	action: 'noOp'
 			state "0",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/weather_sunny_00_fc.png" // , label: 'Sunny', action: 'noOp'			
 			state "1",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/weather_partly_cloudy_02_fc.png" // , label: 'Msly Sun',	action: 'noOp'
@@ -662,10 +663,10 @@ metadata {
 		valueTile("holdStatus", "device.holdStatus", height: 1, width: 4, decoration: "flat") {
 			state "default", label:'${currentValue}', defaultState: true //, backgroundColor:"#000000", foregroudColor: "#ffffff"
 		}		
-        standardTile("ecoLogo", "device.logo", inactiveLabel: false, width: 1, height: 1) {
+        standardTile("ecoLogo", "device.logo", width: 1, height: 1) {
 			state "default", defaultState: true,  icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"			
 		}
-        standardTile("oneBuffer", "device.logo", inactiveLabel: false, width: 1, height: 1, decoration: "flat") {
+        standardTile("oneBuffer", "device.logo", width: 1, height: 1, decoration: "flat") {
         	state "default", defaultState: true
         }
         valueTile("fanMinOnTime", "device.fanMinOnTime", width: 1, height: 1, decoration: "flat") {
@@ -677,23 +678,23 @@ metadata {
         valueTile("tstatTime", "device.tstatTime", width: 1, height: 1, decoration: "flat") {
         	state "default", /*"default",  action: "noOp", nextState: "default", */ label: '${currentValue}', defaultState: true
         }
-        standardTile("commandDivider", "device.logo", inactiveLabel: false, width: 4, height: 1, decoration: "flat") {
+        standardTile("commandDivider", "device.logo", width: 4, height: 1, decoration: "flat") {
         	state "default", defaultState: true, icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/command_divider.png"			
         } 
-        standardTile("circulating", "device.thermostatFanModeDisplay", inactiveLabel: false, width:1, height:1, decoration: "flat") {
+        standardTile("circulating", "device.thermostatFanModeDisplay", width:1, height:1, decoration: "flat") {
         	state "default", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_fan_on-1_grey.png"
         	state "circulating", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_fan_on_solid-1_grey.png"
         }
-        standardTile("cooling", "device.coolLogo", inactiveLabel: false, width:1, height:1, decoration: "flat") {
+        standardTile("cooling", "device.coolLogo", width:1, height:1, decoration: "flat") {
         	state "disabled",  icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool_grey.png"
         	state "default", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool.png"
         }
-        standardTile("heating", "device.heatLogo", inactiveLabel: false, width:1, height:1, decoration: "flat") {
+        standardTile("heating", "device.heatLogo", width:1, height:1, decoration: "flat") {
         	state "disabled", icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_grey.png"
         	state "default", defaultState: true, icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat.png"
         }
     
-		main('temperature') // Display current temperature in the things & room lists
+		main(['temperature']) // Display current temperature in the things & room lists
 		details([
         	// Use this if you are on a fully operational device OS (such as iOS or Android)
         	"temperatureDisplay",
