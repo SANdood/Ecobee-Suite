@@ -691,7 +691,7 @@ The SmartThings IDE also provides helpful insights related to the current state 
 ----------------------------------------------
 
 ## <a name="reporting-issues">Reporting Issues</a>
-All issues or feature requests should be submitted to the latest release thread on the SmartThings Community. For the major release version 1.3.0, please use this thread: https://community.smartthings.com/t/release-free-ecobee-suite-version-1-3/118319
+All issues or feature requests should be submitted to the latest release thread on the SmartThings Community. For the major release version 1.5.0, please use this thread: https://community.smartthings.com/t/release-free-ecobee-suite-version-1-5/128146
 
 If you have complaints, please email them to me directly at either [storageanarchy@gmail.com](mailto://storageanarchy@gmail.com) or to @storageanarchy on the SmartThings Community.
 
