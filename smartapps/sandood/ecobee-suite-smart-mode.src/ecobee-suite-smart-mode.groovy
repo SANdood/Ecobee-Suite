@@ -12,16 +12,19 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	1.4.0 -	Initial release
- *	1.4.01- Added unschedule() to updated()
- *	1.4.02- Shortened LOG and NOTIFY strings when reporting on multiple thermostats
- *	1.4.03-	Fix frequency enum translations
- *	1.4.04- Fixed notifications
- *	1.4.05- Change the mode only ONCE when crossing a configured threshold (for coexistence with other Helpers/Instances)
- *	1.4.06- Added more data validation around outside temp sources
+ *	1.4.0  - Initial release
+ *	1.4.01 - Added unschedule() to updated()
+ *	1.4.02 - Shortened LOG and NOTIFY strings when reporting on multiple thermostats
+ *	1.4.03 - Fix frequency enum translations
+ *	1.4.04 - Fixed notifications
+ *	1.4.05 - Change the mode only ONCE when crossing a configured threshold (for coexistence with other Helpers/Instances)
+ *	1.4.06 - Added more data validation around outside temp sources
+ *	1.4.07 - Added inside temperature Mode change options
+ *	1.4.08 - Tweaked inside temp change - don't switch to auto if mode is already the correct one (cool/heat)
+ *	1.5.00 - Release number synchronization
  */
-def getVersionNum() { return "1.4.06" }
-private def getVersionLabel() { return "Ecobee Suite Smart Mode, version ${getVersionNum()}" }
+def getVersionNum() { return "1.5.00" }
+private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 
 definition(
@@ -33,7 +36,8 @@ definition(
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-	singleInstance: false
+	singleInstance: false,
+    pausable: true
 )
 
 preferences {
@@ -76,27 +80,34 @@ def mainPage() {
 					}
 				}
 			}
-			section(title: "Temperature Thresholds (Range: ${getThermostatRange()})") {
+			section(title: "Outdoors Temperature Thresholds (Required, range: ${getThermostatRange()})") {
 				// need to set min & max - get from thermostat range
-       			input(name: "aboveTemp", title: "When the temperature is at or above...", type: 'decimal', description: "Enter decimal temperature (${settings.belowTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.belowTemp, submitOnChange: true)
-				if (aboveTemp) {
-					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes())
+       			input(name: "aboveTemp", title: "When the outdoor temperature is at or above...", type: 'decimal', description: "Enter decimal temperature (${settings.belowTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.belowTemp, submitOnChange: true)
+				if (settings.aboveTemp) {
+					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes(), submitOnChange: true)
 				}
-     	  	}
-    	   	section(title: '') {
-            	input(name: "belowTemp", title: 'When the temperature is at or below...', type: 'number', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
-				if (belowTemp) {
+            	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'number', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
+				if (settings.belowTemp) {
 					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes())
 				}
-            }
-			if ((belowTemp && aboveTemp) && (belowTemp != aboveTemp)) {
-            	section(title: '') {
-					input(name: 'betweenMode', title: "When the temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes())
+				if ((settings.belowTemp && settings.aboveTemp) && (settings.belowTemp != settings.aboveTemp)) {
+					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes())
 				}
+            }
+            section(title: "Indoors Temperature Controls (Optional)") {
+            	if (getThermostatModes().contains('cool') && !settings.insideAuto) {
+            		input(name: 'aboveCool', title: 'Set thermostat Mode to Cool if its temperature is above its Cooling Setpoint (optional)?', type: 'bool', defaultValue: false, submitOnChange: true)
+                }
+                if (getThermostatModes().contains('heat') && !settings.insideAuto) {
+                	input(name: 'belowHeat', title: 'Set thermostat Mode to Heat if its temperature is below its Heating Setpoint (optional)?', type: 'bool', defaultValue: false, submitOnChange: true)
+                }
+                if (getThermostatModes().contains('auto') && !(settings.aboveCool || settings.belowHeat)) {
+                	input(name: 'insideAuto', title: 'Set thermostat Mode to Auto if its temperature is above or below its Setpoints (optional)?', type: 'bool', defaultValue: false, submitOnChange: true)
+                }
 			}
+            
       		section("Notifications (optional)") {
         		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
-                log.debug "Notify ${settings.notify}"
             	if (settings.notify) {
         			input(name: "recipients", type: "contact", title: "Send notifications to", required: notify) {
                			input(name: "pushNotify", type: "boolean", title: "Send push notifications?", required: true, defaultValue: false)
@@ -131,6 +142,9 @@ def initialize() {
     	return true
     }
     
+    if (settings.aboveCool || settings.belowHeat || settings.insideAuto) {
+    	subscribe(thermostats, 'temperature', insideChangeHandler)
+    }
     Double tempNow = -99.0
 	switch( settings.tempSource) {
 		case 'Weather for Location':
@@ -175,6 +189,42 @@ def initialize() {
     } else {
     	LOG("Initialization error...invalid temperature: ${tempNow}° - please check settings and retry", 2, null, 'error')
         return false
+    }
+}
+
+def insideChangeHandler(evt) {
+	def theTemp = evt.doubleValue
+    def newMode = null
+    if (theTemp.isNumber()) {
+    	def coolSP = evt.device.currentValue('coolingSetpointDisplay')
+        if (coolSP.isNumber()) {
+        	if (theTemp > coolSP) {
+            	if (settings.aboveCool) {
+                	newMode = 'cool'
+                } else if (settings.insideAuto && (evt.device.currentValue('thermostatMode') != 'cool')) {
+                	newMode = 'auto'
+                }
+            }
+        }
+        if (newMode == null) {
+       		def heatSP = evt.device.currentValue('heatingSetpointDisplay')
+            if (heatSP.isNumber()) {
+				if (theTemp < heatSP) {
+                	if (settings.belowHeat) {
+                    	newMode = 'heat'
+                    } else if (settings.insideAuto && (evt.device.currentValue('thermostatMode') != 'heat')) {
+                    	newMode = 'auto'
+                    }
+                }
+            }
+        }
+        if (newMode != null) {
+        	if (evt.device.currentValue('thermostatMode') != newMode) {
+            	evt.device.setThermostatMode(newMode)
+                LOG("${evt.device.displayName} temp is ${theTemp}°, changed thermostat to ${newMode} mode",3,null,'trace')
+        		NOTIFY("${app.label}: Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
+            }
+        }
     }
 }
 
