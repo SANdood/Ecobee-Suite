@@ -1,21 +1,14 @@
-Free Ecobee Suite, version: 1.4.* 
+Free Ecobee Suite, version: 1.5.* 
 ======================================================
-Latest: Version 1.4.0 Released February 11, 2018
+Latest: Version 1.5.0 Released June 8, 2018
 
-REALLY IMPORTANT!!!
-=====================================================
-Early morning February 11, 2018, I realized a significant issue with release 1.3.0 that caused conflicts with the installation of this release in SmartThings locations that had prior releases already installed and nut fully released. The fix has necessitated a complete new re-release as version 1.4.*. 
-
-***Users who have already installed v1.3.0 should immeditaely remove it and install this new version. If you have any issues with this, please PM me directly.***
-
-<b>The significant changes to 1.4.0 include:</b>
-- Ecobee Suite (Connect) has been renamed to <b>Ecobee Suite Manager</b>
-- Created devices now named "EcobeeSensor: (ecobee sensor name)" and "Ecobee Thermostat: (ecobee thermostat name)" to distinguish from prior versions
-- Created Sensors' SmartThings Network ID will be different from prior releases (this is what caused most of the issues with the 1.3.0 release)
-
-Important Notice!
------------------
->*The Ecobee Suite version you find here (in SANdood/Ecobee-Suite) has been renamed from prior versions and moved into my private namespace (sandood), to allow it to be installed alongside the stock SmartThings device (instead of replacing it). Users of prior versions of my suite (or of @StrykerSKS version) **MUST** install this completely from scratch. Please see the [Upgrading from Prior Releases](#upgrading) section below for more information.*
+## Highlights
+The most significant changes to 1.5.0 include:
+- <b>Ecobee Suite Thermostat</b> Device Handler now implements UI/API control and display of Humidifier and Dehumidifier (if configured/attached), with a newly reorganized section for the 5 adjustable parameters (heating & cooling setpoints, circulation time, desired humidifier and dehumidifier humidity targets).
+- New **Ecobee Suite Quiet Time** Helper will turn off fan, circulation, humidifiers, dehumidifiers, or the entire thermostat based on one (or more) switches (real or virtual). Useful to eliminate noise while watching movies, for example (at the expense of some - or all - climate control).
+- **Ecobee Suite Smart Circulation** Helper now integrates with new Quiet Time Helper so that circulation time isn't adjusted if any of the Quiet Time switches is enabled.
+- **Ecobee Suite Smart Mode** Helper now supports mode changes based on internal temperatures as well
+- **Ecobee Suite Smart Zones** Helper now supports 'sharing' of heating/cooling from the Master Zone (thermostat) to one or more Slave Zones when the Slave Zone's temperature is above/below the appropriate heating/cooling setpoint.
 
 ## <a name="top">Table Of Contents</a>
 - [Introduction](#intro)
@@ -47,14 +40,15 @@ Important Notice!
 	  - [Operational Enhancements](#operational)
   - [Screenshots](#screenshots)
   - [Ecobee Suite Manager SmartApp](#features-manager-sa)
-  - [ecobee Suite Routines SmartApp](#features-routines-sa)
-  - [ecobee Suite Open Contacts SmartApp](#features-opencontact-sa)
-  - [ecobee Suite Smart Circulation SmartApp](#features-smart-circ-sa)
-  - [ecobeeSuite Smart Mode](#smart-mode-sa) ***(NEW!)***
+  - [ecobee Suite Contacts & Switches Helper](#features-opencontact-sa) ***Updated!***
+  - [ecobee Suite Mode/Routine/Program Helper](#features-routines-sa)
+  - [ecobee Suite Quiet Time Helper](#features-quiet-time-sa) ***New!***
+  - [ecobee Suite Smart Circulation Helper](#features-smart-circ-sa) ***Updated!***
+  - [ecobee Suite Smart Mode](#smart-mode-sa)
   - [ecobee Suite Smart Room SmartApp](#features-smart-room-sa)
   - [ecobee Suite Smart Switches SmartApp](#features-smart-switches-sa)
   - [ecobee Suite Smart Vents SmartApp](#features-smart-vents-sa)
-  - [ecobee Suite Smart Zones SmartApp](#features-smart-zone-sa)
+  - [ecobee Suite Smart Zones SmartApp](#features-smart-zone-sa) ***Updated!***
 - [Troubleshooting](#troubleshooting)
   - [Reporting Issues](#reporting-issues)
 - - [Quick Links](#quicklinks)
@@ -71,26 +65,41 @@ Important Notice!
 This document describes the various features related to the Ecobee Suite of Device Handlers and supporting Helper SmartApps for Ecobee thermostats and sensors. 
 
 The following components are part of the Suite:
+#### SmartApps
+
 - **Ecobee Suite Manager SmartApp**: This SmartApp provides a single interface for Ecobee Installation, Authorization, Device Setup (both Thermostats **and** Sensors), Behavioral Settings and even a Debug Dashboard. Additional features can be added over time as well thanks to built in support for Child SmartApps, keeping everything nicely integrated into one app. 
 
    ***IMPORTANT**: This is the "parent" SmartApp to the entire Ecobee Suite - **users should not install any instances of the other SmartApps or devices**, neither on their mobile devices nor in the IDE.*
- 
-- **ecobee Suite Routines Helper SmartApp**: Child Helper SmartApp that lets you trigger settings changes on your Ecobee thermostats based on the SmartThings Hello Modes and/or Routines. This version also supports changing SmartThings Mode or executing a Routine when the thermostat enters a new Program or Vacation. Settings include the Ecobee Program (Comfort Settings), Fan Modes and Hold Types. In additional to SmartThings Hello Modes, sunrise/sunset triggers are also support. Multiple instances of this SmartApp are also supported for maximum flexibility.
-- **Ecobee Suite Smart Circulation Helper SmartApp**: Child Helper SmartApp that adjusts hourly circulation time (fan on minimum minutes) trying to get (and keep) 2 or more rooms (temperature sensors, either Ecobee or SmartThings) to within a configurable temperature difference.
-- **Ecobee Suite Smart Mode Helper SmartApp** ***New***: Automatically change the thermostat(s) Mode (Auto, Cool, Heat, Off, etc.) based on an external (outdoor) weather temperature.
-- **Ecobee Suite Smart Room Helper SmartApp**: Child Helper SmartApp that automates a "Smart Room." Intended for rooms that are normally not used (doors, windows and automated vents closed), this app will Activate a "Smart Room" when the door is left open for a configurable period (defalt 5 minutes). Once active, the room's Ecobee Sensor is added to any of the user-selected default 3 Programs (Home, Away, Sleep), and (optionally) the automated vent (EcoNet or Keene) is opened. If the door is closed, after a configurable number of hours (default 12), it will De-activate the Smart Room, removing the Ecobee sensor from specified Programs and closing the vent. While active, opening a window will temporarily de-activate the room until the window is closed. If motion is detected while the door is closed, the automated de-activation will be cancelled until the next time the door is closed (and no motion is detected. Requires: Ecobee thermostat(s) with Ecobee Temp/Occupancy Sensor and Door contact sensor. Optional: Window contact sensor(s), EcoNet or Keene smart vents.
-- **Ecobee Suite Smart Switches Helper SmartApp**: Child Helper SmartApp that will turn on/off one or more switches, and/or set the level on one or more dimmers (also works for vents), all based on changes to the Operating State of one or more thermostats. Intended to turn on vent booster fans when HVAC is pushing air, and (optionally) turn them off when they return to idle state. Can also be used to control lights and dimmers; dimmer control can be used to operate vents (see also Smart Vents Helper, below).
-- **Ecobee Suite Smart Vents Helper SmartApp**: Child Helper SmartApp that will open and close one or more SmartThings-controlled HVAC vents based on room temperature in relation to specified heating/cooling target setpoint, or the setpoint of the specified thermostat.
-- **Ecobee Suite Smart Zones Helper SmartApp**: CChild Helper SmartApp that attempts to synchronize fan on time between two zones. Intended for use on multi-zones HVAC systems; running the fan on all the zones simultaneously could help reduce electricity consumption vs. having each zone run the fan independently.
-- **Ecobee Thermostat Device Handler (DTH)**: The Device Handler for the Ecobee Thermostat functions and attributes. Presents a much more detailed view of the thermostat/HVAC system status, including heat/cool stages, humidification & dehumidification status, fan circulation control, and active/inactive icons for many modes and states. Designed using icons representative of the Ecobee web and mobile apps. Also supports a broad suite of extended attributes and commands to allow WebCOrE and SmartThings apps to monitor and control the thermostat, allowing customization and integration within a users' Smart Home. 
-- **Ecobee Sensor Device Handler (DTH**: This implements the Device Handler for the Ecobee Sensor attributes. Includes indicators for current thermostat Program, buttons that allow adding/removing the zone from specific Programs (Home, Away, Sleep only), and indicators that appear when Smart Room is configured for the room. This is also used to expose the internal sensors on the Thermostat to allow the actual temperature values (instead of only the average) to also be available. This is critically important for some applications such as smart vents.
+- **ecobee Suite Contacts & Switches**:
+
+- **ecobee Suite Mode/Routine/Program**: Child Helper SmartApp that lets you trigger settings changes on your Ecobee thermostats based on the SmartThings Hello Modes and/or Routines. This version also supports changing SmartThings Mode or executing a Routine when the thermostat enters a new Program or Vacation. Settings include the Ecobee Program (Comfort Settings), Fan Modes and Hold Types. In additional to SmartThings Hello Modes, sunrise/sunset triggers are also support. Multiple instances of this SmartApp are also supported for maximum flexibility.
+
+- **ecobee Suite Quiet Time**: ***New*** Child Helper SmartApp that will turn off your selection of the fan, circulation, humidifier, dehumidifier and even the whole HVAC whenever a speficied switch (real or virtual) is turned on or off (selectable). Reverses the actions when the switch is reset.
+
+- **ecobee Suite Smart Circulation**: Child Helper SmartApp that adjusts hourly circulation time (fan on minimum minutes) trying to get (and keep) 2 or more rooms (temperature sensors, either Ecobee or SmartThings) to within a configurable temperature difference.
+
+- **ecobee Suite Smart Mode**: ***Enhanced*** Child Helper SmartApp that will automatically change the thermostat(s) Mode (Auto, Cool, Heat, Off, etc.) based on an external (outdoor) weather temperature.
+
+- **ecobee Suite Smart Room**: Child Helper SmartApp that automates a "Smart Room." Intended for rooms that are normally not used (doors, windows and automated vents closed), this app will Activate a "Smart Room" when the door is left open for a configurable period (defalt 5 minutes). Once active, the room's Ecobee Sensor is added to any of the user-selected default 3 Programs (Home, Away, Sleep), and (optionally) the automated vent (EcoNet or Keene) is opened. If the door is closed, after a configurable number of hours (default 12), it will De-activate the Smart Room, removing the Ecobee sensor from specified Programs and closing the vent. While active, opening a window will temporarily de-activate the room until the window is closed. If motion is detected while the door is closed, the automated de-activation will be cancelled until the next time the door is closed (and no motion is detected. Requires: Ecobee thermostat(s) with Ecobee Temp/Occupancy Sensor and Door contact sensor. Optional: Window contact sensor(s), EcoNet or Keene smart vents.
+
+- **ecobee Suite Smart Switch/Dimmer/Vent**: Child Helper SmartApp that will turn on/off one or more switches, and/or set the level on one or more dimmers (also works for vents), all based on changes to the Operating State of one or more thermostats. Intended to turn on vent booster fans when HVAC is pushing air, and (optionally) turn them off when they return to idle state. Can also be used to control lights and dimmers; dimmer control can be used to operate vents (see also Smart Vents Helper, below).
+
+- **ecobee Suite Smart Vents**: Child Helper SmartApp that will open and close one or more SmartThings-controlled HVAC vents based on room temperature in relation to specified heating/cooling target setpoint, or the setpoint of the specified thermostat.
+
+- **ecobee Suite Smart Zone**: Child Helper SmartApp that attempts to synchronize fan on time between two zones. Intended for use on multi-zones HVAC systems; running the fan on all the zones simultaneously could help reduce electricity consumption vs. having each zone run the fan independently.
+
+#### Device Handlers
+
+- **Ecobee Thermostat**: The Device Handler for the Ecobee Thermostat functions and attributes. Presents a much more detailed view of the thermostat/HVAC system status, including heat/cool stages, humidification & dehumidification status, fan circulation control, and active/inactive icons for many modes and states. Designed using icons representative of the Ecobee web and mobile apps. Also supports a broad suite of extended attributes and commands to allow WebCOrE and SmartThings apps to monitor and control the thermostat, allowing customization and integration within a users' Smart Home. 
+
+- **Ecobee Sensor**: This implements the Device Handler for the Ecobee Sensor attributes. Includes indicators for current thermostat Program, buttons that allow adding/removing the zone from specific Programs (Home, Away, Sleep only), and indicators that appear when Smart Room is configured for the room. This is also used to expose the internal sensors on the Thermostat to allow the actual temperature values (instead of only the average) to also be available. This is critically important for some applications such as smart vents.
 
 Here are links to the working version of the repository being developed and maintained by Barry A. Burke [(on GitHub)](https://github.com/SANdood/Ecobee-Suite) and [(on SmartThings Community)](https://community.smartthings.com/t/release-updated-ecobee-suite-v1-4-0-free/118597).
 
 --------------------------------
 ### <a name="motivation">Motivation</a>
 
-I maintain the original intent as defined by Sean:
+I maintain the original intent as was previously defined by Sean:
 
 The intent is to provide an Open Source DTH and SmartApps for Ecobee thermostats that can be used by the SmartThings community of users ***free of charge*** and ***without fear of the device disappearing in the future***. This will help ensure accessibility for all users and provide for an easy mechanism for the community to help maintain/drive the functionality.
 
@@ -110,20 +119,17 @@ While not required, I do humbly accept donations. If you would like to make an *
 -------------------------------
 ## <a name="whazzup">What's New</a>
 
-As mentioned, the most significant enhancement with the release of 1.4.* is the separation from the SmartThings Ecobee support, as well as from all prior versions of both @StrykerSKS' and my own Ecobee integration. Users of these prior versions should review the [Upgrading from Prior Releases](#upgrading) section below for more IMPORTANT information before installing this version.
+The most significant enhancement with the release of 1.4.* (and continued with 1.5.*) is the separation from the SmartThings Ecobee support, as well as from all prior versions of both @StrykerSKS' and my own Ecobee integration. Users of these prior versions should review the [Upgrading from Prior Releases](#upgrading) section below for more IMPORTANT information before installing this version.
 
-### Key enhancements in release 1.4.0
-- ***Significantly improved handling of API connection errors.*** While I cannot yet guarantee non-stop operation during all SmartThings and/or Ecobee Cloud issues, the code now silently recovers from most error conditions;
-- Addition of the new [Smart Mode](#smart-mode-sa) Helper SmartApp, to automatically change your thermostat(s) mode based on (external) temperature changes
-- Enhanced setpoint adjustments, including using the Up/Down arrows on the main tile;
-- Enhanced UI, with the addition of
-  - Current & target humidity levels (the latter only when humidifier or dehumidifier is enabled;
-  - New slider to manually adjust fan circulation time (fanMinOnTime);
- <sp>
+#### *Note that release 1.5.\* CAN be installed on top of an existing 1.4.\* installation.*
 
-- Better (complete?) support for Celsius; 
-- A cornucopia of performance optimizations to improve both initial installation and running performance
-- Improved API status display (last row in the Thermostat UI) - now shows "WARN" status when a call to the Ecobee API times out
+### Key enhancements in release 1.5.0
+- ***Significantly improved handling of API connection errors.*** While I cannot yet guarantee non-stop operation during all SmartThings and/or Ecobee Cloud issues, the code now silently recovers from almost all error conditions;
+- Addition of the new [Quiet Time](#quiet-time-sa) Helper SmartApp, to automatically turn off/adjust HVAC settings when a specified (real or virtual) switch is turned off or on.
+- Enhanced Thermostat UI, with the addition of
+  - Sliders switched from horizontal to vertical orientation, to reduce screen space and make room for 2 more sliders (humidity setpoint and dehumidity setpoint)
+  - Now clearly displays the heat/cool setpoint offsets, the Heat/Cool At and the Heat/Cool To setpoints, as well as the heat/cool minimum differential so that it is clearer how each number is applied.
+- A cornucopia of internal performance and UI display optimizations to improve both initial installation and operational performance and improve the overall User Experience (UX).
 
 -------------------------
 # <a name="installation">Installation</a>
@@ -189,11 +195,11 @@ Once you have both of the Ecobee Suite Device Handlers added and published in yo
 
 12. Click on the **`My SmartApps`** tab
 13. Click **`Update from Repo`** and select the **`**Ecobee-Suite**`** repository we added earlier
-14. Select the checkboxes next to **`ecobee-suite-manager.groovy`**, **`ecobee-suite-routines.groovy`**, **`ecobee-suite-open-contacts.groovy`**, **`ecobee-suite-smart-circulation.groovy`**, **`ecobee-suite-smart-mode.groovy`**, **`ecobee-suite-smart-room.groovy`**, **`ecobee-suite-smart-switches.groovy`**, **`ecobee-suite-smart-vents.groovy`**, and **`ecobee-suite-smart-zones.groovy`** (all 9 SmartApps listed)
+14. Select the checkboxes next to **`ecobee-suite-manager.groovy`**, **`ecobee-suite-routines.groovy`**, **`ecobee-suite-open-contacts.groovy`**, **`ecobee-suite-smart-circulation.groovy`**, **`ecobee-suite-quiet-time.groovy`**, **`ecobee-suite-smart-mode.groovy`**, **`ecobee-suite-smart-room.groovy`**, **`ecobee-suite-smart-switches.groovy`**, **`ecobee-suite-smart-vents.groovy`**, and **`ecobee-suite-smart-zones.groovy`** (all 9 SmartApps listed)
 15. Select **`Publish`**(bottom right of screen near the `Cancel` button)
 16. Click **`Execute Update`**
-	- Again, note the response at the top of the My SmartApps page. It should be something like "**`Updated 0 and created 8 SmartApps, 8 published`**"
-	- Verify that all 9 of the SmartApps show up in the list and are marked with Status **`Published`**
+	- Again, note the response at the top of the My SmartApps page. It should be something like "**`Updated 0 and created 10 SmartApps, 10 published`**"
+	- Verify that all 10 of the SmartApps show up in the list and are marked with Status **`Published`**
 
 ### <a name="github-oauth">Enabling oAuth for `Ecobee Suite Manager`</a>
 Finally, we must enable oAuth for the connector SmartApp as follows:
@@ -296,13 +302,14 @@ Follow these steps to add the Helper SmartApps to your IDE, one at a time (links
 
 Repeat the above steps (20-32) for the each of the available Helper SmartApps (click each link for the raw source code):
 A. [`ecobee Suite Open Contacts`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy)
-B. [`ecobee Suite Routines`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy) 
-C. [`ecobee Suite Smart Circulation`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy) 
-D. [`ecobee Suite Smart Mode`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy) 
-E. [`ecobee Suite Smart Room`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy)
-F. [`ecobee Suite Smart Switches`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy)
-G. [`ecobee Suite Smart Vents`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy)
-H. [`ecobee Suite Smart Zones`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy)
+B. [`ecobee Suite Routines`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy)
+C. [`ecobee Suite Routines`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy) 
+D. [`ecobee Suite Smart Circulation`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy) 
+E. [`ecobee Suite Smart Mode`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy) 
+F. [`ecobee Suite Smart Room`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy)
+G. [`ecobee Suite Smart Switches`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy)
+H. [`ecobee Suite Smart Vents`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy)
+I. [`ecobee Suite Smart Zones`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy)
 
 Once completed, you can delete the OLD SmartApps (the ones that appear under the `SmartThings` namespace) if you prefer. To do so, you can select the Edit Properties icon next to each of the old SmartApps (the ones NOT in the "sandood" namespace) and select Delete.
 
@@ -443,13 +450,13 @@ The primary user interface on a day-to-day basis will be two different types of 
 #### <a name="operational">Operational Enhancements</a>
 
   - **Operational Efficiency**
-    - Redesigned to do only lightweight polls of the Ecobee Cloud before requesting updates
+    - Designed to do only lightweight polls of the Ecobee Cloud before requesting updates
     - If updates are available, then only requests those updated objects, and only for the thermostats with updates
     - From the updated Ecobee objects, only the data that has changed is sent to the individual devices
-    - As a result of the above, it is possible to run will polling Frequency less than the recommended 3 minutes (as low as 1 minute)
+    - As a result of the above, it is possible to run with polling Frequency less than the recommended 3 minutes (as low as 1 minute)
 <br>
 
-  - **Timeout Handling.**
+  - **Timeout Handling**
 Releases prior to 1.3.0 did not handle connection timeouts to the Ecobee servers very well. That is a gross understatement, because the "handling" was limited to sending notifications every hour nagging that the user needed to reauthorize with Ecobee.<br>
 Beginning with 1.3.0, this Ecobee Suite will silently retry connection timeouts without sending any notifications (it will report warnings in Live Logging). Usually such timeouts are transient, and the side effect is only a delayed update. For lengthy outages, the code *should automatically reconnect* once the SmartThings to Ecobee linkage is restored.<br>
 Thus, if you receive a notification that you need to re-authorize, you probably really do need to reauthorize.
@@ -474,11 +481,11 @@ NOTE: You will not be able to configure Ask Alexa support until you have fully i
 ## <a name="screenshots">Screenshots</a> 
 
 
-Ecobee Thermostat Device |  Ecobee Thermostat Device with Annotation
+Ecobee Thermostat v1.5.0 |  Ecobee Thermostat Device v1.4.0 w/Annotation
 :-------------------------:|:-------------------------:
-<img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0%20Tstat.png" border="1" height="1200" /> | <img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0-Tstat-annotated.png" border="1" height="1200" />
+<img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.5.0%20Tstat.png" border="1" height="1200" /> | <img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0-Tstat-annotated.png" border="1" height="1200" />
 
-Ecobee Sensor Device |  <nbsp;> 
+Ecobee Sensor Device |  <sp> 
 :-------------------------:|:-------------------------:
 <img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0-sensor.jpg" border="1" width="295" /> | 
 
@@ -494,7 +501,7 @@ Ecobee Sensor Device |  <nbsp;>
 - **Hold/Vacation Status** displays when current hold or vacation is scheduled to end. Occaisionally reports other status of interest
 - **Thermostat Date & Time** date and time as of the last completed poll of the Ecobee API
 - **Command Center** Most every tile below this is active, unless the tile is greyed out. Tiles are greyed if the action is not currently allowed because of some state (e.g., cannot change the Program when the thermostat is in Vacation mode).
-- 
+
 
 ## <a name="features-manager-sa">`Ecobee Suite Manager` SmartApp</a>
 The **`Ecobee Suite Manager`** SmartApp provides a single SmartApp interface for accessing installation, updates, Child SmartApps and even debugging tools. The interface uses dynamic pages to guide the user through the installation process in order simplify the steps as much as possible.
@@ -518,8 +525,25 @@ The SmartApp provides the following capabilities:
 - Debug Dashboard (if Debug Level is set to 5)
 
 
-## <a name="features-routines-sa">`Mode/Routine/Program` Handler</a>
-The `ecobee Suite Routines` SmartApp provides the ability to change the running Program (Comfort Setting) when a SmartThings Mode is changed (for example, by running a Routine) or a Routine is run. 
+## <a name="features-opencontact-sa">`Contacts & Switches` Helper</a> *Updated!*
+The `ecobee Suite Open Contacts` SmartApp can detect when one (or more) contact sensors (such as doors and windows) are left open for a configurable amount of time and can automatically turn off the HVAC and/or send a notification when it is detected. 
+
+This Helper also supports switches/dimmers/vents, with configurable selection of whether contact open or close, switch on or off will turn off the HVAC. This enhancement allows (for example) automatically turning off the HVAC when the attic fan is running.
+
+Beginning with Ecobee Suite release 1.5.*, this Helper now also integrates with the new Quiet Time Helper SmartApp - instead of turning off the HVAC, this Helper can turn on/off the Virtual Switch that a Quiet Time Helper instance uses as its trigger. Quiet Time offers additional flexibility over the actions taken on the HVAC system (see documentation below).
+
+<b>Features:</b>
+- Change one or multiple thermostats
+- Trigger based on one or multiple contact sensors and/or switches
+- Configurable delay timers (for trigger and reset)
+- Configurable actions: Notify Only, HVAC Only or Both
+- Support for Contact Book or simply SMS for notifications
+- **New!** Integrates with the Quiet Time Helper (via Virtual Switch) 
+- Temporarily Disable app without having to delete and recreate!
+
+
+## <a name="features-routines-sa">`Mode/Routine/Program` Helper</a>
+The `ecobee Suite Routines` Helper SmartApp provides the ability to change the running Program (Comfort Setting) when a SmartThings Mode is changed (for example, by running a Routine) or a Routine is run. 
 
 <b>Features:</b>
 - Change one or multiple thermostats
@@ -532,21 +556,25 @@ The `ecobee Suite Routines` SmartApp provides the ability to change the running 
   - Change the Location Mode or execute a Routine when the thermostat Program Changes - including Vacations!
 - Temporarily Disable app without having to delete and recreate!
 
-## <a name="features-opencontact-sa">`Contacts & Switches` Handler</a>
-The `ecobee Suite Open Contacts` SmartApp can detect when one (or more) contact sensors (such as doors and windows) are left open for a configurable amount of time and can automatically turn off the HVAC and/or send a notification when it is detected. 
 
-This Handler also supports switches/dimmers/vents, with configurable selection of whether contact open or close, switch on or off will turn off the HVAC. This enhancement allows (for example) automatically turning off the HVAC when the attic fan is running.
+## <a name="features-quiet-time-sa">`Quiet Time` Helper</a> *New!*
+The `ecobee Suite Quiet Time` Helper SmartApp allows you to automatically turn off or change some or all of the following HVAC system settings, based on the (configurable) off/on state of a specific (real or virtual) Switch:
+- Turn Off HVAC altogether
+- Change the HVAC Mode (auto, cool, heat)
+- Turn off the HVAC Fan
+- Adjust the heating/cooling setpoints
+- Turn off the HVAC's humidifier
+- Turn off the HVAC's dehumidifier
 
-<b>Features:</b>
-- Change one or multiple thermostats
-- Trigger based on one or multiple contact sensors and/or switches
-- Configurable delay timers (for trigger and reset)
-- Configurable actions: Notify Only, HVAC Only or Both
-- Support for Contact Book or simply SMS for notifications
-- Temporarily Disable app without having to delete and recreate!
+When the aforementioned Quiet Time switch state changes back to (on/off), some or all of the above changes are reverted.
 
-## <a name="features-smart-circ-sa">`Smart Circulation` Handler</a>
-The `Ecobee Suite Smart Ciculation` SmartApp will adjust fan mininum on time of an Ecobee thermostat as it tries to get two or more temperature sensors to converge.
+N.B., The use case for this new Helper came from a user whose HVAC system is rather noisy when the humidifier runs - enough so that it was hard to hear the TV on "movie night." He asked for the ability to automatically turn off the humidifier when the TV was turned on; from that was born the notion of this new Quiet Time Helper. I'm sure there are several other use cases that can leverage `Quiet Time.`
+
+
+## <a name="features-smart-circ-sa">`Smart Circulation` Helper</a> *Updated!*
+The `Ecobee Suite Smart Ciculation` Helper SmartApp will adjust fan mininum on time of an Ecobee thermostat as it tries to get two or more temperature sensors to converge.
+
+Beginning with Ecobee Suite release 1.5.*, Smart Circulation can be configured to disable circulation altogether (sets `fanMinOnTime` to 0) when the specified (Quiet Time) (real or virtual) Switch is turned off/on. If you want Quiet Time to really stop everything, then you need to enable this feature, otherwise Smart Circulation will override Quiet Time by setting the minimum on time to a non-zero number.
 
 <b>Features:</b>
 - Monitor/synchronize two or more temperature sensors (Ecobee or any SmartThings temperature sensor)
@@ -559,7 +587,7 @@ The `Ecobee Suite Smart Ciculation` SmartApp will adjust fan mininum on time of 
 - Enable during specific Location Modes or when thermostat is in specific Program
 - Temporarily Disable app without having to delete and recreate!
 
-## <a name="smart-mode-sa">`Smart Mode` Handler</a> (NEW!)
+## <a name="smart-mode-sa">`Smart Mode` Helper</a>
 This (new) Helper will automatically change Ecobee Thermostats' Mode based on external temperature changes. Generally, the intention is to run Cool or Heat only modes when the outside temperatures might otherwise cause cycling between Heat/Cool if "Auto" were selected. Can also be used to turn the HVAC off when outdoor temperatures warrant leaving the windows open.
 
 **Features**
@@ -574,7 +602,7 @@ This (new) Helper will automatically change Ecobee Thermostats' Mode based on ex
 
 Many thanks to @JustinL for the original idea, the starting code base, and beta testing for this new Smart Mode Helper.
 
-## <a name="features-smart-room-sa">`Smart Room` Handler</a>
+## <a name="features-smart-room-sa">`Smart Room` Helper</a>
 The `ecobee Suite Smart Room` Helper SmartApp will automate a normally unused room, Activating it one or more of the Doors associated with the Smart Room are left open for a configurable number of minutes, and Deactivating it when all the Doors are closed for a configurable number of hours.
 
 <b>Requirements:</b>
@@ -606,14 +634,21 @@ The `ecobee Suite Smart Room` Helper SmartApp will automate a normally unused ro
   - Optionally notify on Activations via Push, using Contact List or default Push
   - Temporarily Disable app without having to delete and recreate!
     
-## <a name="features-smart-switches-sa">`Smart Switches/Dimmer/Vent` Handler</a>
+## <a name="features-smart-switches-sa">`Smart Switches/Dimmer/Vent` Helper</a>
 `ecobee Suite Smart Switches` Helper SmartApp enables activating switches or dimmers based upon the Operating State of a thermostat.
 
-## <a name="features-smart-vents-sa">`Smart Vents` Handler</a>
+## <a name="features-smart-vents-sa">`Smart Vents` Helper</a>
 `ecobee Suite Smart Vents` automates one or more vents to reach/maintain a target temperature that you specify or from a specified thermostat. It uses one or more temperature devices, and opens/closes vents based upon current temperature, target temperature and thermostat operating state.
 
-## <a name="features-smart-zone-sa">`Smart Zones` Handler</a>
-`ecobee Suite Smart Zones` Documentation coming soon.
+## <a name="features-smart-zone-sa">`Smart Zones` Helper</a> *Updated!*
+`ecobee Suite Smart Zones` Provides functionality to allow one or more "slave" zones to leverage the operating state of a "master" zone. This is designed for multi-zoned HVAC systems with only a single air handler. In this configuration, running only 1 zone (e.g., to cool) can cause the other zone's temperature to increase a few 10ths of a degree. This Helper seeks to address that by turning on the Slave zones' fan, thereby allowing some of the cooled (or heated) air into the slave zone.
+- Slaves can be configured to turn on the fan any time the Master thermostat is running 'fan only'. 
+- Slaves can be configured to *leech* (share) the heat/cool when the Master is heating and/or cooling. Specifically,
+  - If the Master is cooling and the Slave zone's current temperature is higher than the 'Cool To' setpoint but lower than the 'Cool At' setpoint, the Slave's fan will be turned on. 
+  - When the Master returns to 'idle' or 'fan only', the Slave(s) will turn off their fans (return them to 'auto'). 
+  - The Slave will also turn off its fan once the Slave thermostat's temperature reaches the 'Cool To' setpoint.
+
+In most cases, the Slave will properly reset any program Holds that are in effect when it starts 'leeching'.
 
 
 -------------------------
@@ -625,10 +660,9 @@ The `ecobee Suite Smart Room` Helper SmartApp will automate a normally unused ro
 | Receive error similar to "error java.lang.NullPointerException: Cannot get property 'authorities' on null object"        	| This indicates that you have not turned on OAuth for the SmartApp. Please review the installation instructions and complete the OAuth steps.                  	|
 | "You are not authorized to perform the requested operation."        	|  This indicates that you have not turned on OAuth for the SmartApp. Please review the installation instructions and complete the OAuth steps.                 	|
 | Irregular behavior after an update to the SmartApp or Device Handler code| It is possible that after updating the codebase that you may experience strange behavior, including possible app crashes. This seems to be a general issue with updates on SmartThings. Try the following steps: <br/> 1) Re-run the `Ecobee Suite Manager` SmartApp to re-initialize the devices <br/> 2) If that does not solve the problem, remove and re-install the SmartApp |
-|         	|                   	|
+| physicalgraph.exception.ConflictException: Device still in use. Remove from any SmartApps or Dashboards, then try again @line -1 (doCall)	| The initial installation failed for some reason, and it was unable to delete the temporary devices it creates. Try removing everything that you can again, and then go to the on-line IDE. There, list your devices, and delete ANY that have “Ecobee-Suite” (or any form of that text) in their device ID. Then rerun Ecobee Suite Manager from the SmartApps Marketplace.                  	|
 |         	|                   	|
 
-"You are not authorized to perform the requested operation."
 
 ### Debug Level in SmartApp
 The `Ecobee Suite Manager` SmartApp allows the end user to config the Debug Level they wish to use (ranging from 1-5). The higher the level the more debug information is fed into the `Live Logging` on the SmartThings IDE.
@@ -696,84 +730,88 @@ Because the current SmartThings defined capabilities do not fully expose ALL of 
 
 -----------------------------
 
-### <a name="attributes">Supported Device Attributes (States)</a>
-Here is the complete list of attributes (states) that the DTH maintains and exposes (items marked with asterisks are added, and/or have overloaded meanings from the SmartThings definitions):
+### <a name="attributes">Annotated List of Supported Device Attributes (States)</a>
+Here is the complete list of attributes (states) that the DTH maintains and exposes:
     
-    *apiConnected: full*
-    *autoMode: true*
-    *auxHeatMode: false*
-    checkInterval: 960
-    *coolAtSetpoint: 74.5*
-    *coolDifferential: 0.5*
-    coolingSetpoint: 74.5
-    *coolingSetpointDisplay: 74.0*
-    coolingSetpointMax: 92.0
-    coolingSetpointMin: 65.0
-    coolingSetpointRange: [65.0, 92.0]
-    *coolMode: true*
-    coolRange: (65..92)
-    coolRangeHigh: 92.0
-    coolRangeLow: 65.0
-    *coolStages: 1*
-    *currentProgram: Home*
-    *currentProgramId: home*
-    *currentProgramName: Hold: Home*
-    *debugEventFromParent: setProgram(Home) for EcoTherm: Downstairs)**decimalPrecision: 1*
-    *ecobeeConnected: true*
-    *equipmentOperatingState: idle*
-    *equipmentStatus: idle*
-    *fanMinOnTime: 50*
-    *hasBoiler: false*
-    *hasDehumidifier: true*
-    *hasElectric: false*
-    *hasForcedAir: true*
-    *hasHeatPump: false*
-    *hasHumidifier: true*
-    *heatAtSetpoint: 68.5*
-    *heatCoolMinDelta: 4.0*
-    *heatDifferential: 0.5*
-    *heatingSetpoint: 68.5*
-    *heatingSetpointDisplay: 69.0*
-    heatingSetpointMax: 78.0
-    heatingSetpointMin: 45.0
-    heatingSetpointRange: [45.0, 78.0]
-    *heatMode: true*
-    *heatRange: (45..78)*
-    heatRangeHigh: 78.0
-    heatRangeLow: 45.0
-    *heatStages: 2*
-    *holdStatus: Hold ends today at 6:30pm*
-    humidity: 41
-    *humiditySetpoint: 42*
-    *lastPoll: Succeeded*
-    motion: inactive
-    *newCoolSetpoint: 0.0*
-    *newHeatSetpoint: 0.0*
-    programsList: ["Away", "Home", "Sleep", "Awake"]
-    *scheduledProgram: Away*
-    *scheduledProgramId: away*
-    *scheduledProgramName: Away*
-    *setpointDisplay: 68.0°*
-    *statHoldAction: nextPeriod*
-    supportedThermostatFanModes: [on, auto, circulate, off]
-    supportedThermostatModes: [off, heat, auto, cool]
-    temperature: 68.7
-    *temperatureDisplay: 68.7°*
-    *temperatureScale: F*
-    thermostatFanMode: auto
-    *thermostatFanModeDisplay: circulate*
-    *thermostatHold: hold*
-    thermostatMode: heat
-    thermostatOperatingState: idle
-    *thermostatOperatingStateDisplay: idle*
-    thermostatSetpoint: 69.0
-    thermostatSetpointMax: 78.0
-    thermostatSetpointRange: [null, 78.0]
-    *thermostatStatus: Setpoint updating...*
-    *thermostatTime: 2018-02-09 17:00:23*
-    *timeOfDay: day*
-    *weatherSymbol: 0*
-    *weatherTemperature: 27.9*
+    temperature: 70.5			// Temp shown on thermostat
+    humidity: 44				// Current humidity at thermostat
+    motion: inactive			// Thermostat motion/presence detector
+    heatingSetpoint: 68.5			// Actual temp that demand for heat will be made
+    coolingSetpoint: 74.5			// Ditto - demand for cool
+    thermostatSetpoint: 71.5		// Heat/Cool setpoint (average of the 2 if in Auto)
+    thermostatMode: auto			// See supportedThermostatModes
+    thermostatFanMode: auto			// See supportedThermostatFanModes
+    thermostatOperatingState: idle		// Current Operating State (heat, cool, idle, fan only, offline)
+    coolingSetpointRange: [65.0, 92.0]	// Valid cooling range
+    heatingSetpointRange: [45.0, 78.0]	// Valid heating range
+    supportedThermostatFanModes:		// Supported fan modes 
+        [on, auto, circulate, off]
+    supportedThermostatModes:		// Supported thermostat modes (based on actual stat configuration)
+        [off, heat, auto, cool]		// Heat Pump also has auxheat
+    checkInterval: 960			// For SmartThings Health Check
+    temperatureScale: F			// F or C, based on thermostat configuration
+    thermostatStatus: Setpoint updating...	// Recent status message
+    apiConnected: full			// Ecobee Cloud connection status
+    ecobeeConnected: true			// Is thermostat communicating with Ecobee Cloud servers
+    currentProgramName: Hold: Home		// Detailed display of current program
+    currentProgramId: home			// Internal ID of current program
+    currentProgram: Home			// Real name of current program
+    scheduledProgramName: Away		// Detailed display of scheduled program
+    scheduledProgramId: away		// Scheduled program ID
+    scheduledProgram: Away			// Scheduled program name
+    weatherSymbol: 2			// Coded icon number for the weather tile
+    debugEventFromParent: setDehumiditySetpoint (60) - Succeeded	// Internal debug LOG entry
+    timeOfDay: day				// Day or Night (for weather icons)
+    lastPoll: Succeeded			// Status of last poll to Ecobee Cloud 
+    equipmentStatus: idle			// Detailed status of Ecobee-controlled equipment
+    humiditySetpoint: 50			// Target humidity (if hasHumidifier == true)
+    dehumiditySetpoint: 60			// Target dehumification level (if hasDehumidifier or dehumidifyWithAC)
+    weatherTemperature: 63.6		// Outside temperature from Ecobee
+    decimalPrecision: 1			// Number of decimal places to display
+    temperatureDisplay: 70.5°		// Temperature displayed in main thermostat tile
+    equipmentOperatingState: idle		// Detailed operating state for UI Tile 
+    coolMode: true				// Thermostat configured for HVAC Cooling
+    heatMode: true				// Thermostat configured for HVAC Heating
+    autoMode: true				// HVAC supports Auto
+    heatStages: 2				// Number of HVAC Heating stages
+    coolStages: 1				// Number of HVAC Cooling stages
+    hasHeatPump: false			// HVAC is a Heat Pump
+    hasForcedAir: true			// HVAC is a forced air system
+    hasElectric: false			// HVAC is Electric (Resistive heat)
+    hasBoiler: false			// HVAC is a forced hot water or steam system
+    hasHumidifier: true			// Ecobee is controlling a HVAC Humidifier
+    hasDehumidifier: true			// Ecobee is controlling a HVAC dehumidifier, or is using AC to dehumidify
+    humidifierMode: off			// Current mode of humidifier (off, on, auto)
+    dehumidifierMode: on			// Current mode of dehumidifer (off, on)
+    auxHeatMode: false			// HVAC has auxiliary heating (usually for Heat Pumps)
+    heatRangeHigh: 78.0			// Max heatingSetpoint
+    heatRangeLow: 45.0			// Min heatingSetpoint
+    coolRangeHigh: 92.0			// Max coolingSetpoint
+    coolRangeLow: 65.0			// Min coolingSetpoint
+    heatingSetpointMin: 45.0		// Ditto above (SmartThings changed the attribute names)
+    heatingSetpointMax: 78.0		// Ditto
+    coolingSetpointMin: 65.0		// Ditto
+    coolingSetpointMax: 92.0		// Ditto
+    heatAtSetpoint: 68.5			// Temperature at which demand for heat is made
+    coolAtSetpoint: 74.5			// Ditto... demand for cool
+    heatingSetpointDisplay: 69.0		// Actual setpoint display (matches thermostat)
+    coolingSetpointDisplay: 74.0		// Ditto
+    heatRange: (45..78)			// Yet another version of the Min/Max heating setpoints
+    coolRange: (65..92)			// Ditto
+    thermostatHold: hold			// Type of hold thermostat is in currently (hold, auto, null)
+    holdStatus: Hold ends today at 6:00pm	// Text displayed on UI Tile
+    heatDifferential: 0.5			// Degrees below heatingSetpoint for heat demand (configured at thermostat)
+    coolDifferential: 0.5			// Degrees above coolingSetpoint for cool demand
+    heatCoolMinDelta: 4.0			// Minimum difference between heating & cooling setpoints (enforced by code)
+    fanMinOnTime: 0				// Minutes per hour fan should run (heat time + cool time + fan only time)
+    programsList: ["Home", "Sleep", "Awake", "Away"]	// Configured program names
+    thermostatOperatingStateDisplay: idle	// Keyword for text at bottom of main UI tile
+    thermostatFanModeDisplay: auto		// Fan mode that is displayed in UI (off, on, auto, circulate)
+    humiditySetpointDisplay: 50- 60		// Humidity/dehumidity setpoints displayed in UI
+    thermostatTime: 2018-06-06 12:57:45	// Thermostat's time as reported in last poll of Ecobee Cloud
+    statHoldAction: nextPeriod		// Default Hold type configured at thermostat
+    lastHoldType: nextTransition		// Actual hold type used for current hold
+    lastOpState: heating			// The previous thing that the thermostatOperatingState reported
     
 ---------------------------------------------------
 
@@ -809,13 +847,17 @@ Calling any of the above will initiate a Hold for the requested program for the 
 - **fanOn** - runs the fan continuously
 
 #### <a name="complex">Complex Commands Requiring Arguments</a>
-The following command entry points require multiple arguments, and so are most optimally utilized by SmartApps that can construct the required arguments. Specifically, I have not heard of anyone successfully utilizing these from WebCoRE. If you want to try using them, I suggest you review the DTH code directly to understand the required argument structure.
+The following command entry points require multiple arguments, and so are most optimally utilized by SmartApps that can construct the required arguments, including WebCoRE (link-to-example-here). If you want to try using them, I suggest you review the DTH code directly to understand the required argument structure.
 
 - **setCoolingSetpoint** - change the cooling setpoint (will create a Temperature Hold); specify temperature in F or C, based on how you have configured the Ecobee Suite and Thermostat (both should agree)
 - **setHeatingSetpoint** - ditto, but for heating setpoint
 - **setThermostatProgram** - use to change to custom Programs/Climates other than the ones defined above
 - **setFanMinOnTime** - used to set a custom number of minutes for the Fan Minimum On Time circulation mode
 - **setVacationFanMinOnTime** - ditto, but for a vacation
+- **setHumidifierMode**	- set humidification mode
+- **setHumiditySetpoint** - set humidification target (cannot change if humidifierMode == 'auto')
+- **setDehumidifierMode** - ditto for dehumidification
+- **setDehumiditySetpoint**	- ditto for dehumidification
 - **scheduleVacation** - define a vacation programmatically 
 - **deleteVacation** - delete a previously defined vacation
 - **cancelVacation** - cancel the currently active vacation (if any)
