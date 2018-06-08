@@ -12,17 +12,18 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	1.0.1 - Initial Release
- *	1.0.2 - Added option to limit operation to certain SmartThings Modes
- *	1.0.3 - Updated settings and TempDisable handling
- *	1.2.0 - Sync version number with new holdHours/holdAction support
- *	1.2.1 - Protect agsinst LOG type errors
- *	1.3.0 - Major Release: renamed and moved to "sandood" namespace
- *	1.4.0 - Renamed parent Ecobee Suite Manager
- *	1.4.01- Updated description
+ *	1.0.1  - Initial Release
+ *	1.0.2  - Added option to limit operation to certain SmartThings Modes
+ *	1.0.3  - Updated settings and TempDisable handling
+ *	1.2.0  - Sync version number with new holdHours/holdAction support
+ *	1.2.1  - Protect agsinst LOG type errors
+ *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
+ *	1.4.0  - Renamed parent Ecobee Suite Manager
+ *	1.4.01 - Updated description
+ *	1.5.00 - Release number synchronization
  */
-def getVersionNum() { return "1.4.01" }
-private def getVersionLabel() { return "Ecobee Suite Smart Switches, version ${getVersionNum()}" }
+def getVersionNum() { return "1.5.00" }
+private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()}" }
 
 definition(
 	name: "ecobee Suite Smart Switches",
@@ -33,7 +34,8 @@ definition(
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-	singleInstance: false
+	singleInstance: false,
+    pausable: true
 )
 
 preferences {
@@ -42,9 +44,9 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Switches Helper App") {
-        	label title: "Name this Smart Switches Handler", required: true, defaultValue: "Smart Switches"      
+	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+    	section(title: "Name for Smart Switch/Dimmer/Vent Helper App") {
+        	label title: "Name this Helper", required: true, defaultValue: "Smart Switch/Dimmer/Vent"      
         }
         
         section(title: "Smart Switches: Thermostat(s)") {
