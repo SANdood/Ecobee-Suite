@@ -12,24 +12,21 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	0.1.0 -	Initial Release
- *	0.1.1 -	Implementation Complete
- *	0.1.2 -	Added NOTIFYcations, trimmed settings texts
- *	0.1.3 -	Added ability to manually enable/disable Smart Room by clicking on the tile
- *	1.0.0 - Final prep for General Release
- *	1.0.1 - Edit LOG and setup for consistency
- *	1.0.2 - Fixed initialization
- *	1.0.3 - Updated settings and TempDisable handling
- *	1.2.0 - Sync version number with new holdHours/holdAction support
- *	1.2.1 - Protect against LOG type errors
- *	1.3.0 - Major Release: reanmed and moved to "sandood" namespace
- *	1.4.0 - Major release: renamed devices & manager
- *	1.4.01- Updated description
- *	1.4.02- Updated for delayed add/delete function
- *	1.4.03- Typo squashed, LOG cleanup
+ *	1.0.0  - Final prep for General Release
+ *	1.0.1  - Edit LOG and setup for consistency
+ *	1.0.2  - Fixed initialization
+ *	1.0.3  - Updated settings and TempDisable handling
+ *	1.2.0  - Sync version number with new holdHours/holdAction support
+ *	1.2.1  - Protect against LOG type errors
+ *	1.3.0  - Major Release: reanmed and moved to "sandood" namespace
+ *	1.4.0  - Major release: renamed devices & manager
+ *	1.4.01 - Updated description
+ *	1.4.02 - Updated for delayed add/delete function
+ *	1.4.03 - Typo squashed, LOG cleanup
+ *	1.5.00 - Release number synchronization
  */
-def getVersionNum() { return "1.4.03" }
-private def getVersionLabel() { return "Ecobee Suite Smart Room, version ${getVersionNum()}" }
+def getVersionNum() { return "1.5.00" }
+private def getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
 definition(
@@ -41,7 +38,8 @@ definition(
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-	singleInstance: false
+	singleInstance: false,
+    pausable: true
 )
 
 preferences {
@@ -51,8 +49,8 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Room Handler") {
-        	label title: "Name this Smart Room Handler", required: true, defaultValue: "Smart Room"      
+    	section(title: "Name for Smart Room Helper") {
+        	label title: "Name this Helper", required: true, defaultValue: "Smart Room"      
         }
         
         section(title: "Smart Room Ecobee Sensor(s)") {
