@@ -43,10 +43,11 @@
  *	1.4.19- setHold/nextTransition to currentClimate setpoints is same as resumeProgram
  *	1.4.20- Added setHumidifierMode() & setDehumidifierMode()
  *	1.4.21- Queue add/delete program updates to effect only a single API call
+ *	1.5.00 - Release number synchronization
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.4.21" }
+def getVersionNum() { return "1.5.00" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -55,7 +56,10 @@ private def getHelperSmartApps() {
             title: "New Contacts & Switches Helper..."],
     	[name: "ecobeeRoutinesChild", appName: "ecobee Suite Routines",  
             namespace: "sandood", multiple: true, 
-            title: "New Mode/Routine/Program Helper..."], 
+            title: "New Mode/Routine/Program Helper..."],
+        [name: "ecobeeQuietTimeChild", appName: "ecobee Suite Quiet Time",
+        	namespace: "sandood", multiple: true,
+            title: "New Quiet Time Helper..."],
         [name: "ecobeeCirculationChild", appName: "ecobee Suite Smart Circulation",
 			 namespace: "sandood", multiple: true,
 			 title: "New Smart Circulation Helper..."],
@@ -73,7 +77,7 @@ private def getHelperSmartApps() {
             title: "New Smart Vents Helper..."],
 		[name: "ecobeeZonesChild", appName: "ecobee Suite Smart Zones",
 			 namespace: "sandood", multiple: true,
-			 title: "New Smart Zone Handler..."]
+			 title: "New Smart Zones Helper..."]
 	]
 }
  
@@ -85,7 +89,8 @@ definition(
 	category: "My Apps",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-	singleInstance: true
+	singleInstance: true,
+    pausable: false
 ) {
 	appSetting "clientId"
 }
@@ -506,8 +511,8 @@ def helperSmartAppsPage() {
 
 	LOG("SmartApps available are ${getHelperSmartApps()}", 5, null, "info")
 	
- 	dynamicPage(name: "helperSmartAppsPage", title: "Helper Smart Apps", install: true, uninstall: false, submitOnChange: true) { 
-    	section("Available Helper Smart Apps") {
+ 	dynamicPage(name: "helperSmartAppsPage", title: "Configured Helper SmartApps", install: true, uninstall: false, submitOnChange: true) { 
+    	section("Avalable Helper SmartApps") {
 			getHelperSmartApps().each { oneApp ->
 				LOG("Processing the app: ${oneApp}", 4, null, "trace")            
             	def allowMultiple = oneApp.multiple.value
@@ -2763,32 +2768,32 @@ def updateThermostatData() {
 		}
 		
 		// HUMIDITY
-		def humiditySetpoint = 0
-        def humidity = runtime.desiredHumidity
+        def humiditySetpoint = runtime.desiredHumidity
         def humidifierMode = statSettings?.humidifierMode
+        def dehumiditySetpoint = runtime.desiredDehumidity
         def dehumidifierMode = statSettings?.dehumidifierMode
-        def dehumidity = runtime.desiredDehumidity
+        
         def dehumidifyOvercoolOffset = statSettings?.dehumidifyOvercoolOffset
-        def hasHumidifier = (statSettings?.hasHumidifier && (statSettings?.humidifierMode != 'off'))
-        def hasDehumidifier = ((statSettings?.dehumidifierMode == 'on') && (statSettings?.hasDehumidifier || 
-        						(statSettings?.dehumidifyWithAC && (dehumidifyOvercoolOffset != 0)))) // fortunately, we can hide the details from the device handler
+        def hasHumidifier = statSettings?.hasHumidifier
+        def hasDehumidifier = statSettings?.hasDehumidifier || (statSettings?.dehumidifyWithAC && (statSettings?.dehumidifyOvercoolOffset != 0)) // fortunately, we can hide the details from the device handler
         if (hasHumidifier && (extendedRuntime && extendedRuntime.desiredHumidity && extendedRuntime.desiredHumidity[2])) {
-        	humidity = extendedRuntime.desiredHumidity[2]		// if supplied, extendedRuntime gives the actual target (Frost Control)
+        	humiditySetpoint = extendedRuntime.desiredHumidity[2]		// if supplied, extendedRuntime gives the actual target (Frost Control)
         }
         if (hasDehumidifier && (extendedRuntime && extendedRuntime.desiredDehumidity && extendedRuntime.desiredDehumidity[2])) {
-        	dehumidity = extendedRuntime.desiredDehumidity[2]	
+        	dehumiditySetpoint = extendedRuntime.desiredDehumidity[2]	
 		}
+        def humiditySetpointDisplay = 0
 		switch (statMode) {
 			case 'heat':
-				if (hasHumidifier) humiditySetpoint = humidity
+				if (hasHumidifier) humiditySetpointDisplay = humiditySetpoint
 				break;
 			case 'cool':
-            	if (hasDehumidifier) humiditySetpoint = dehumidity
+            	if (hasDehumidifier) humiditySetpointDisplay = dehumiditySetpoint
 				break;
 			case 'auto':
-				if (hasHumidifier && hasDehumidifier) { humiditySetpoint = "${humidity}-${dehumidity}" }
-                else if (hasHumidifier) { humiditySetpoint = humidity }
-                else if (hasDehumidifier) { humiditySetpoint = dehumidity }
+				if (hasHumidifier && hasDehumidifier) { humiditySetpointDisplay = "${humiditySetpoint}-${dehumiditySetpoint}" }
+                else if (hasHumidifier) { humiditySetpointDisplay = humiditySetpoint }
+                else if (hasDehumidifier) { humiditySetpointDisplay = dehumiditySetpoint }
 				break;
 		}
         
@@ -2825,7 +2830,7 @@ def updateThermostatData() {
             }
             // Check if humidity > humidity setPoint, and tempTemperature > (coolingSetpoint - 0.1)
             if (hasDehumidifier) {
-            	if (runtime.actualHumidity > dehumidity) {
+            	if (runtime.actualHumidity > dehumiditySetpoint) {
                 	if ((tempTemperature < tempCoolingSetpoint) && (tempTemperature >= (tempCoolingSetpoint - (statSettings?.dehumidifyOvercoolOffset?.toDouble()/10.0)))) {
                     	overCool = true
                         LOG("${tstatName} is Over Cooling (${tid}), temp: ${tempTemperature}, setpoint: ${tempCoolingSetpoint}",3,null,'info')
@@ -2958,8 +2963,8 @@ def updateThermostatData() {
         	
             // Thermostat configuration stuff that almost never changes - if any one changes, send them all
         	def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,/*heatHigh,heatLow,coolHigh,coolLow,*/heatRange,coolRange,climatesList,
-        						hasHeatPump,hasForcedAir,hasElectric,hasBoiler,auxHeatMode,hasHumidifier,humidifierMode,hasDehumidifier,dehumidifierMode,dehumidifyOvercoolOffset,
-                                dehumidity,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
+        						hasHeatPump,hasForcedAir,hasElectric,hasBoiler,auxHeatMode,hasHumidifier,humidifierMode,humidtySetpoint,hasDehumidifier,dehumidifierMode,dehumidifyOvercoolOffset,
+                                dehumiditySetpoint,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
  			if (forcePoll || (changeNever == [:]) || !changeNever.containsKey(tid) || (changeNever[tid] != neverList)) {  
             	data += [
 					coolMode: (coolStages > 0),
@@ -2982,10 +2987,11 @@ def updateThermostatData() {
             		hasBoiler: hasBoiler,
 					auxHeatMode: auxHeatMode,
             		hasHumidifier: hasHumidifier,
+                    humiditySetpoint: humiditySetpoint,
                     humidifierMode: humidifierMode,
 					hasDehumidifier: hasDehumidifier,
                     dehumidifierMode: dehumidifierMode,
-                    dehumiditySetpoint: dehumidity,
+                    dehumiditySetpoint: dehumiditySetpoint,
                     dehumidifyOvercoolOffset: dehumidifyOvercoolOffset,
                 	heatDifferential: String.format("%.${apiPrecision}f", tempHeatDiff.toDouble().round(apiPrecision)),
                 	coolDifferential: String.format("%.${apiPrecision}f", tempCoolDiff.toDouble().round(apiPrecision)),
@@ -3045,7 +3051,7 @@ def updateThermostatData() {
         // Send these first, as they generally are the reason anything else changes (so the thermostat's notification log makes sense)
 		if (forcePoll || runtimeUpdated || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
         	String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
-            def oftenList = [tempTemperature,occupancy,runtime.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,humiditySetpoint,userPrecision]
+            def oftenList = [tempTemperature,occupancy,runtime.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,humiditySetpointDisplay,userPrecision]
             def lastOList = []
             lastOList = changeOften[tid]
             if (forcePoll || !lastOList || (lastOList.size() < 9)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1]
@@ -3053,7 +3059,7 @@ def updateThermostatData() {
             if (lastOList[0] != tempTemperature) data += [temperature: String.format("%.${apiPrecision}f", tempTemperature?.round(apiPrecision)),]
             if (lastOList[1] != occupancy) data += [motion: occupancy,]
             if (lastOList[2] != runtime.actualHumidity) data += [humidity: runtime.actualHumidity,]
-            if (lastOList[7] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint,]
+            if (lastOList[7] != humiditySetpointDisplay) data += [humiditySetpointDisplay: humiditySetpointDisplay,]
             // send these next two also when the userPrecision changes
             def needPrograms = false
             if ((lastOList[3] != tempHeatingSetpoint) || (lastOList[8] != userPrecision)) { needPrograms = true; data += [heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint?.round(userPrecision)),] }
@@ -3344,6 +3350,22 @@ def setHumidifierMode(child, mode, deviceId) {
 	return result
 }
 
+def setHumiditySetpoint(child, value, deviceId) {
+	LOG ("setHumiditySetpoint${value}) for ${deviceId}", 5, child, 'trace')
+                        
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"humidity":"'+"${value}"+'"}}}'  
+	LOG("setHumiditySetpoint Request Body = ${jsonRequestBody}", 4, child, 'trace')
+    def result = sendJson(child, jsonRequestBody)
+    LOG("setHumiditySetpoint to ${value} with result ${result}", 4, child, 'trace')
+	if (result) {
+    	LOG("setHumiditySetpoint (${value}) - Succeeded", 2, child, 'info')
+        atomicState.forcePoll = true 		// force next poll to get updated data
+    } else {
+    	LOG("setHumiditySetpoint (${mode}) - Failed", 1, child, 'warn')
+    }
+	return result	
+}
+
 def setDehumidifierMode(child, mode, deviceId) {
 	LOG ("setDehumidifierMode(${mode}) for ${deviceId}", 5, child, 'trace')
                         
@@ -3358,6 +3380,22 @@ def setDehumidifierMode(child, mode, deviceId) {
     	LOG("setDehumidifierMode(${mode}) - Failed", 1, child, 'warn')
     }
 	return result
+}
+
+def setDehumiditySetpoint(child, value, deviceId) {
+	LOG ("setDehumiditySetpoint${value}) for ${deviceId}", 5, child, 'trace')
+                        
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"dehumidifierLevel":"'+"${value}"+'"}}}'  
+	LOG("setDehumiditySetpoint Request Body = ${jsonRequestBody}", 4, child, 'trace')
+    def result = sendJson(child, jsonRequestBody)
+    LOG("setDehumiditySetpoint to ${value} with result ${result}", 4, child, 'trace')
+	if (result) {
+    	LOG("setDehumiditySetpoint (${value}) - Succeeded", 2, child, 'info')
+        atomicState.forcePoll = true 		// force next poll to get updated data
+    } else {
+    	LOG("setDehumiditySetpoint (${mode}) - Failed", 1, child, 'warn')
+    }
+	return result	
 }
 
 def setFanMinOnTime(child, deviceId, howLong) {
