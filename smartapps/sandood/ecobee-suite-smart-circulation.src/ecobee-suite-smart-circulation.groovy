@@ -12,36 +12,33 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	0.1.1 -	Initial Release
- *	0.1.2 -	Beta Release
- *	0.1.3 -	Added configurable support for overriding fanMinOnTime during Vacation holds
- *	0.1.4 -	Added ability to specify both modes and programsList for when a handler should/can run
- *	0.1.5 -	Android fix (bad range in min/maxFanOnTime settings)
- *	0.1.6 - Minor logic tweaking - is now Mode *OR* Program
- *	1.0.0 - Final prep for General Release
- *	1.0.1 - Tweaked LOG and setup for consistency
- *	1.0.2 - Better null variable handling
+ *	1.0.0  - Final prep for General Release
+ *	1.0.1  - Tweaked LOG and setup for consistency
+ *	1.0.2  - Better null variable handling
  *	1.0.3a - Updated settings and Disabled handling (fixed file)
  *	1.0.4a - Enabled min/max to be 0 w/related optimizations
- *	1.0.5 - Fixed currentProgram issues
- *	1.0.6 - Fixed tempDisable loophole
- *	1.0.6a-	Minor updates
- *  1.0.7 - More minor updates
- *	1.0.8 - Added execution filter on Thermostat Mode
- *	1.2.0 - Sync version number with new holdHours/holdAction support
- *	1.2.1 - Development Iterations
- *  1.2.2 - Can now set adjustments based on temperature difference between inside (average) and outside
- *	1.2.3 - Protect against LOG type errors
- *	1.2.4 - Allow changes while thermostatMode is 'off' also
- *	1.3.0 - Major release: renamed and moved to "sandood" namespace
- *	1.4.0 - Renamed parent Ecobee Suite Manager
- *	1.4.01- Tweaked supportedThermostatModes handling
- *	1.4.02- Added install warning to description
- *	1.4.03-	Optimizations for multiple simultaneous updates
+ *	1.0.5  - Fixed currentProgram issues
+ *	1.0.6  - Fixed tempDisable loophole
+ *	1.0.6a - Minor updates
+ *  1.0.7  - More minor updates
+ *	1.0.8  - Added execution filter on Thermostat Mode
+ *	1.2.0  - Sync version number with new holdHours/holdAction support
+ *	1.2.1  - Development Iterations
+ *  1.2.2  - Can now set adjustments based on temperature difference between inside (average) and outside
+ *	1.2.3  - Protect against LOG type errors
+ *	1.2.4  - Allow changes while thermostatMode is 'off' also
+ *	1.3.0  - Major release: renamed and moved to "sandood" namespace
+ *	1.4.0  - Renamed parent Ecobee Suite Manager
+ *	1.4.01 - Tweaked supportedThermostatModes handling
+ *	1.4.02 - Added install warning to description
+ *	1.4.03 - Optimizations for multiple simultaneous updates
+ *	1.4.04 - Minor tweaks
+ *	1.4.05 - Added Quiet Time Helper integration
+ *	1.5.00 - Release number synchronization
  *
  */
-def getVersionNum() { return "1.4.03" }
-private def getVersionLabel() { return "Ecobee Suite Smart Circulation, version ${getVersionNum()}" }
+def getVersionNum() { return "1.5.00" }
+private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
@@ -54,7 +51,8 @@ definition(
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-	singleInstance: false
+	singleInstance: false,
+    pausable: true
 )
 
 preferences {
@@ -63,9 +61,9 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Circulation Handler") {
-        	label title: "Name this Smart Circulation Handler", required: true, defaultValue: "Smart Circulation"  
+	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+    	section(title: "Name for Smart Circulation Helper") {
+        	label title: "Name this Helper", required: true, defaultValue: "Smart Circulation"  
         }
         
         section(title: "Select Thermostat") {
@@ -116,6 +114,15 @@ def mainPage() {
                 input(name:"statModes",type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, options: getThermostatModesList())
             	input(name: "thePrograms", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Program is", multiple: true, required: false, options: getProgramsList())
         	}
+            
+            section(title: "'Quiet Time' Integration") {
+            	paragraph("You can configure this Helper to integrate with one or more instances of the Ecobee Suite Quiet Time Helper: This helper will stop updating circulation when one or more Quiet Time switch(es) are enabled.")
+            	input(name: "quietSwitches", type: "capability.switch", title: "Select Quiet Time control switch(es)", multiple: true, required: false, submitOnChange: true)
+                if (settings.quietSwitches) {
+                	paragraph("All selected Quiet Time switches must use the same state to turn on Quiet Time.")
+                	input(name: "qtOn", type: "enum", title: "Disable circulation when any of these Quiet Switches is:", defaultValue: 'on', required: true, multiple: false, options: ["on","off"])
+                }
+            }
 		}
         
 		section(title: "Temporarily Disable?") {
@@ -177,13 +184,21 @@ def initialize() {
     
     // Initialize as if we haven't checked in more than fanAdjustMinutes
     atomicState.lastAdjustmentTime = now() // - (60001 * fanAdjustMinutes.toLong()).toLong() // make sure we run on next deltaHandler event    
-
     subscribe(theThermostat, "thermostatOperatingState", modeOrProgramHandler)		// so we can see when the fan runs
     if (thePrograms) subscribe(theThermostat, "currentProgram", modeOrProgramHandler)
     // subscribe(theThermostat, "thermostatHold", modeOrProgramHandler)
     subscribe(location, "routineExecuted", modeOrProgramHandler)    
     if (theModes) subscribe(location, "mode", modeOrProgramHandler)
     if (statModes) subscribe(theThermostat, "thermostatMode", modeOrProgramHandler)
+    
+    if (settings.quietSwitches) {
+    	subscribe(quietSwitches, "switch.${qtOn}", quietOnHandler)
+        def qtOff = settings.qtOn == 'on' ? 'off' : 'on'
+        subscribe(quietSwitches, "switch.${off}", quietOffHandler)
+        atomicState.quietNow = (settings.quietSwitches.currentSwitch.contains(settings.qtOn)) ? true : false
+    } else {
+    	atomicState.quietNow = false
+    }
     
     subscribe(theSensors, "temperature", deltaHandler)
     if (outdoorSensor) {
@@ -196,10 +211,11 @@ def initialize() {
         }
     }
 
-    Integer currentOnTime = theThermostat.currentValue('fanMinOnTime').isNumber() ? theThermostat.currentValue('fanMinOnTime').toInteger() : 0	
+	def fanOnTime = theThermostat.currentValue('fanMinOnTime')
+    int currentOnTime = fanOnTime?.isNumber() ? fanOnTime.toInteger() : 0
     boolean vacationHold = (theThermostat.currentValue("currentProgram") == "Vacation")
     
-	log.debug "settings ${theModes}, location ${location.mode}, programs ${thePrograms} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}, currentOnTime ${currentOnTime}"
+	// log.debug "settings ${theModes}, location ${location.mode}, programs ${thePrograms} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}, currentOnTime ${currentOnTime}, quietSwitch ${quietSwitches.displayName}, quietState ${quietState}"
    
 	// Allow adjustments if Location Mode or Thermostat Program or Thermostat Mode is currently as configured
     // Also allow if none are configured
@@ -209,11 +225,15 @@ def initialize() {
         			((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : 
                     	((statModes && statModes.contains(theThermostat.currentValue('thermostatMode'))) ? true : false))
     }
+    
+    if (isOK) {
+    	isOK = settings.quietSwitches ? (atomicState.quietNow == false) : true
+    }
     atomicState.isOK = isOK
     
     if (isOK) {	
 		if (currentOnTime < settings.minFanOnTime) {
-    		if (vacationHold && vacationOverride) {
+    		if (vacationHold && settings.vacationOverride) {
         		theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
             	currentOnTime = settings.minFanOnTime
                 atomicState.lastAdjustmentTime = now() 
@@ -223,7 +243,7 @@ def initialize() {
                 atomicState.lastAdjustmentTime = now() 
         	}
     	} else if (currentOnTime > settings.maxFanOnTime) {
-    		if (vacationHold && vacationOverride) {
+    		if (vacationHold && settings.vacationOverride) {
         		theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime)
         		currentOnTime = settings.maxFanOnTime
                 atomicState.lastAdjustmentTime = now() 
@@ -237,28 +257,67 @@ def initialize() {
 			deltaHandler()
             currentOnTime = -1
         }
+    } else if (atomicState.quietNow) {
+    	if (currentOnTime != 0) {
+    		if (vacationHold && settings.vacationOverride) {
+        		theThermostat.setVacationFanMinOnTime(0)
+        	} else if (!vacationHold) {
+    			theThermostat.setFanMinOnTime(0)
+        	}
+        }
     }
     if (currentOnTime > -1) {
     	def vaca = vacationHold ? " is in Vacation mode, " : " "    
     	LOG("thermostat ${theThermostat}${vaca}circulation time is now ${currentOnTime} min/hr",2,"",'info')
     }
-
     LOG("Initialization complete", 4, "", 'trace')
+}
+
+def quietOnHandler(evt) {
+	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
+	if (!atomicState.quietNow) {
+    	atomicState.quietNow = true
+        Integer currentOnTime = theThermostat.currentValue('fanMinOnTime').isNumber() ? theThermostat.currentValue('fanMinOnTime').toInteger() : 0	
+        atomicState.quietOnTime = currentOnTime
+        LOG("Quiet Time enabled, ${app.name} will stop updating circulation time", 3, null, 'info')
+    } else {
+    	LOG('Quiet Time already enabled', 3, null, 'info')
+    }
+}
+
+def quietOffHandler(evt) {
+	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
+    if (atomicState.quietNow) {
+    	if (!settings.quietSwitches.currentSwitch.contains(settings.qtOn)) {
+	    	// All the switches are "off"
+            atomicState.quietNow = false
+            LOG("Quiet Time disabled, ${app.name} will resume circulation time updates", 3, null, 'info')
+            modeOrProgramHandler(null)
+        } else {
+        	def qtOff = settings.qtOn == 'on' ? 'off' : 'on'
+        	LOG("All Quiet Time switches are not ${qtOff}, Quiet Time continues", 3, null, 'info')
+        }
+    } else {
+    	LOG("Weird, ${app.name} is not in Quiet Time", 1, null, 'warn')
+    }
 }
 
 def modeOrProgramHandler(evt=null) {
 	// Just exit if we are disabled...
 	if(settings.tempDisable == true) {
-    	LOG("temporarily disabled as per request.", 2, null, "warn")
+    	LOG("${app.name} temporarily disabled as per request.", 2, null, "warn")
     	return true
     }
     
 	// Allow adjustments if location.mode OR thermostat.currentProgram match configuration settings
-    def isOK = true
+    boolean isOK = true
     if (theModes || thePrograms  || statModes) {
     	isOK = (theModes && theModes.contains(location.mode)) ? true : 
         			((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : 
                     	((statModes && statModes.contains(theThermostat.currentValue('thermostatMode'))) ? true : false))
+    }
+    if (isOK ){
+    	isOK = settings.quietSwitches ? (atomicState.quietNow != true) : true
     }
     atomicState.isOK = isOK
     
@@ -275,15 +334,13 @@ def deltaHandler(evt=null) {
     	return true
     }
     
+    String currentProgram = theThermostat.currentValue('currentProgram')
+    boolean vacationHold = (currentProgram && (currentProgram == 'Vacation'))
+    
 	def isOK = atomicState.isOK
-    if ((isOK!=null) && (isOK==false)) {
-        return
-    }
-    
-    def currentProgram = theThermostat.currentValue('currentProgram')
-    
-	def vacationHold = ( currentProgram && (currentProgram == 'Vacation'))
-	if (!vacationOverride && vacationHold) {
+    if (!isOK) return
+
+	if (vacationHold && !settings.vacationOverride) {
     	LOG("${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
         return
     }
@@ -297,12 +354,16 @@ def deltaHandler(evt=null) {
         	LOG("Called with ${evt.device} ${evt.name} ${evt.value}",3,null,'trace')
         }
         if (settings.minFanOnTime == settings.maxFanOnTime) {
-        	if (theThermostat.currentValue('fanMinOnTime').toInteger() == settings.minFanOnTime.toInteger()) {
+        	if (theThermostat.currentValue('fanMinOnTime')?.toInteger() == settings.minFanOnTime.toInteger()) {
     			LOG('Configured min==max==fanMinOnTime, nothing to do, skipping...',2,null,'info')
         		return // nothing to do
             } else {
                 LOG("Configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
-                theThermostat.setFanMinOnTime(settings.minFanOnTime)
+                if (vacationHold && settings.vacationOverride) {
+        			theThermostat.setVacationFanMinOnTime(0)
+        		} else if (!vacationHold) {
+    				theThermostat.setFanMinOnTime(0)
+        		}
                 return
             }
     	}
@@ -409,8 +470,15 @@ def calcTemps() {
     atomicState.maxDelta = atomicState.maxDelta.toDouble() > delta ? atomicState.maxDelta: delta 
     atomicState.minDelta = atomicState.minDelta.toDouble() < delta ? atomicState.minDelta: delta
     
-    Integer currentOnTime = theThermostat.currentValue('fanMinOnTime') ? theThermostat.currentValue('fanMinOnTime').toInteger() : 0	// Ecobee (Connect) will populate this with Vacation.fanMinOnTime if necessary
-	Integer newOnTime = currentOnTime
+    Integer currentOnTime
+    if (atomicState.quietOnTime?.isNumber()) {
+    	// pick up where we left off at the start of Quiet Time
+    	currentOnTime = atomicState.quietOnTime.toInteger()
+        atomicState.quietOnTime = null
+    } else {
+    	currentOnTime = theThermostat.currentValue('fanMinOnTime') ? theThermostat.currentValue('fanMinOnTime').toInteger() : 0	// Ecobee (Connect) will populate this with Vacation.fanMinOnTime if necessary
+	}
+    int newOnTime = currentOnTime
 	
 	if (delta >= deltaTemp.toDouble()) {			// need to increase recirculation (fanMinOnTime)
 		newOnTime = currentOnTime + fanOnTimeDelta
