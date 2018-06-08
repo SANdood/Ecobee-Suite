@@ -36,11 +36,11 @@
  *	1.4.04 - Updated for delayed add/delete function
  *	1.4.05 - Fixed add/deleteSensorFromProgram
  *	1.4.06 - Removed extra 'inactiveLabel: false', changed main() definition
- *
+ *	1.5.00 - Release number synchronization
  */
 
-def getVersionNum() { return "1.4.06" }
-private def getVersionLabel() { return "Ecobee Suite Sensor, Version ${getVersionNum()}" }
+def getVersionNum() { return "1.5.00" }
+private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
@@ -114,8 +114,8 @@ metadata {
         valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			//state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true)
-            state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
+			state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true)
+            //state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
 		}
         
         standardTile("motion", "device.motion", width: 2, height: 2, decoration: "flat") {
