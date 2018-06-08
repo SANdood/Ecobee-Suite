@@ -14,30 +14,28 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *
- * 0.1.4 - Fix Custom Mode Handling
- * 0.1.5 - SendNotificationMessage so that the action shows up in Notification log after the mode/routine notices
- * 0.1.6 - Logic tweaks, fixed bad state.variableNames
- * 0.1.7 - Extended to support the inverse: Ecobee Program change (including Vacation) can change ST Mode or run Routine
- * 1.0.0 - Final preparation for General Release
- * 1.0.1 - Updated LOG and setup for consistency
- * 1.0.2 - Fixed Ecobee Program changes when using Permanent/Indefinite or Default holdType
- * 1.0.3 - Updated settings and Disabled handling
- * 1.0.4 - Added Cancel Vacation option
- * 1.0.5 - Added optional fanMinOnTime setting when changing Ecobee programs (because we can't change fMOT while in Hold:)
- * 1.0.5a- Double check fanMinutes settings is valid
- * 1.0.6 - Minor optimizations and LOGging fixups
- * 1.0.7 - Allow fanMinutes == 0
- * 1.0.8 - Allow override/cancellation of Vacation Hold (e.g., came home early)
- * 1.2.0 - Update to support holdHours and thermostat holdAction
- * 1.2.1 - Corrected setHold logic 
- * 1.2.2 - Protect against LOG type errors
- * 1.3.0 - Major Release: renamed and moved to "sandood" namespace
- * 1.4.0 - Renamed parent to Ecobee Suite Manager
- * 1.4.01- Updated description
+ * 	1.0.0 - Final preparation for General Release
+ * 	1.0.1 - Updated LOG and setup for consistency
+ * 	1.0.2 - Fixed Ecobee Program changes when using Permanent/Indefinite or Default holdType
+ * 	1.0.3 - Updated settings and Disabled handling
+ * 	1.0.4 - Added Cancel Vacation option
+ * 	1.0.5 - Added optional fanMinOnTime setting when changing Ecobee programs (because we can't change fMOT while in Hold:)
+ * 	1.0.5a- Double check fanMinutes settings is valid
+ * 	1.0.6 - Minor optimizations and LOGging fixups
+ * 	1.0.7 - Allow fanMinutes == 0
+ * 	1.0.8 - Allow override/cancellation of Vacation Hold (e.g., came home early)
+ * 	1.2.0 - Update to support holdHours and thermostat holdAction
+ * 	1.2.1 - Corrected setHold logic 
+ * 	1.2.2 - Protect against LOG type errors
+ * 	1.3.0 - Major Release: renamed and moved to "sandood" namespace
+ * 	1.4.0 - Renamed parent to Ecobee Suite Manager
+ * 	1.4.01- Updated description
+ * 	1.4.02- Fixed fanMode == Circulate handling
+ * 	1.4.03- Renamed display for consistency
+ *	1.5.00 - Release number synchronization
  */
-def getVersionNum() { return "1.4.01" }
-private def getVersionLabel() { return "Ecobee Suite Routines, version ${getVersionNum()}" }
+def getVersionNum() { return "1.5.00" }
+private def getVersionLabel() { return "Ecobee Suite Mode/Routine/Program Helper, version ${getVersionNum()}" }
 
 
 definition(
@@ -49,7 +47,8 @@ definition(
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-	singleInstance: false
+	singleInstance: false,
+    pausable: true
 )
 
 preferences {
@@ -58,9 +57,9 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Setup ${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Mode/Routine/Program Handler") {
-        	label title: "Name this Handler", required: true, defaultValue: "Mode|Routine|Program Handler"
+	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+    	section(title: "Name for Mode/Routine/Program Helper") {
+        	label title: "Name this Helper", required: true, defaultValue: "Mode/Routine/Program"
         }
         
         section(title: "Select Thermostats") {
@@ -115,9 +114,19 @@ def mainPage() {
                 		LOG("Found the following programs: ${programs}", 4)
                     
                     	input(name: "cancelVacation", title: "Cancel Vacation hold if active?", type: "bool", required: true, defaultValue: false)
-	               		input(name: "whichProgram", title: "Switch to this Ecobee Program:", type: "enum", required: true, multiple:false, description: "Tap to choose...", options: programs, submitOnChange: true)
-    	       	    	if (settings.whichProgram != 'Resume Program') input(name: "fanMode", title: "Select a Fan Mode (optional)", type: "enum", required: false, multiple: false, description: "Tap to choose...", metadata:[values:["On", "Auto", /* "Off", */ "default"]], submitOnChange: true)
-                        input(name: "fanMinutes", title: "Specify Fan Minimum Minutes per Hour (optional)", type: "number", required: false, multiple: false, description: "Tap to choose...", range:"0..55", submitOnChange: true)
+	               		input(name: "whichProgram", title: "Switch to this Ecobee Program:", type: "enum", required: true, multiple:false, description: "Tap to choose...", options: programs, 
+                        		submitOnChange: true)
+    	       	    	if (settings.whichProgram != 'Resume Program') input(name: "fanMode", title: "Select a Fan Mode (optional)", type: "enum", required: false, multiple: false, 
+                        														description: "Tap to choose...", options: getThermostatFanModes(), submitOnChange: true)
+                        if (settings.fanMode == 'Auto') {
+                        	paragraph('Note that the fan circulation time will also be set to 0')
+                        } else if (settings.fanMode == 'Off') {
+                        	input(name: 'statOff', title: 'Do you want to turn off the HVAC entirely?', type: 'bool', defaultValue: false)
+                        } else if ((settings.fanMode == null) || (settings.fanMode == 'Circulate')) {
+                        	input(name: "fanMinutes", title: "Specify Fan Minimum Minutes per Hour (optional)", type: "number", 
+                            		required: false, multiple: false, description: "Tap to choose...", range:"0..55", submitOnChange: true, 
+                                    defaultValue: (settings.fanMode==null?settings.fanMinutes:20))
+                        }
         	       		if (settings.whichProgram != "Resume Program") {
                         	input(name: "holdType", title: "Select the Hold Type (optional)", type: "enum", required: false, 
                         			multiple: false, description: "Tap to choose...", submitOnChange: true, defaultValue: "Parent Ecobee (Connect) Setting",
@@ -198,27 +207,6 @@ def initialize() {
     LOG("initialize() exiting")
 }
 
-// get the combined set of Ecobee Programs applicable for these thermostats
-private def getEcobeePrograms() {
-	def programs
-
-	if (myThermostats?.size() > 0) {
-		myThermostats.each { stat ->
-        	def DNI = stat.device.deviceNetworkId
-            LOG("Getting list of programs for stat (${stat}) with DNI (${DNI})", 4)
-        	if (!programs) {
-            	LOG("No programs yet, adding to the list", 5)
-                programs = parent.getAvailablePrograms(stat)
-            } else {
-            	LOG("Already have some programs, need to create the set of overlapping", 5)
-                programs = programs.intersect(parent.getAvailablePrograms(stat))
-            }
-        }
-	} 
-    LOG("getEcobeePrograms: returning ${programs}", 4)
-    return programs
-}
-
 private def normalizeSettings() {
 	if (settings.modeOrRoutine == "Ecobee Program") return		// no normalization required
     
@@ -239,23 +227,37 @@ private def normalizeSettings() {
     
     // fanMode
     state.fanCommand = null
-    if (settings.fanMode && (settings.fanMode != '')) {
-    	if (fanMode == 'On') {
-        	state.fanCommand = 'fanOn'
-        } else if (fanMode == 'Auto') {
-        	state.fanCommand = 'fanAuto'
-        } else if (fanMode == 'Off') {
-        	state.fanCommand = 'fanOff'		// to turn off the fan, we need: tstatMode==Off, fanMode==Auto, fanMinOnTime==0
-        } else {
-        	state.fanCommand = null		// default
-        }
-    }
-    
-    // fanMinutes
     state.fanMinutes = null
-    if ((settings.fanMinutes != null) && settings.fanMinutes.isNumber()) {
-    	state.fanMinutes = settings.fanMinutes.toInteger()
-   	}
+    switch (fanMode) {
+        case 'On': 
+        	state.fanCommand = 'fanOn'
+            if ((settings.fanMinutes != null) && settings.fanMinutes.isNumber()) {
+    			state.fanMinutes = settings.fanMinutes.toInteger()
+   			}
+            break;
+        case 'Auto':
+        	state.fanCommand = 'fanAuto'
+            state.fanMinutes = 0
+            break;
+        case 'Off': 
+            state.fanCommand = 'fanOff'		// to turn off the fan, we need: tstatMode==Off, fanMode==Auto, fanMinOnTime==0
+            state.fanMinutes = 0
+            break;
+    	case 'Circulate':
+            state.fanCommand = 'fanCirculate'
+            if (settings.fanMinutes == null) {
+                state.fanMinutes = 20
+            } else if (settings.fanMinutes.isNumber()) {
+                state.fanMinutes = settings.fanMinutes.toInteger()
+            }
+            break;
+        default : 
+        	state.fanCommand = null		// default
+            if ((settings.fanMinutes != null) && settings.fanMinutes.isNumber()) {
+    			state.fanMinutes = settings.fanMinutes.toInteger()
+                if (settings.fanMode == null) state.fanCommand = 'fanCirculate'	// for backwards compatibility
+   			}
+   }
     
     // holdType is now calculated at the time of the hold request
     state.holdTypeParam = null
@@ -383,7 +385,12 @@ def changeProgramHandler(evt) {
                     		stat."${state.fanCommand}"()					// set fan on/auto
                         	fanSet = true
                     	}
-                		sendNotificationEvent("And I verified that ${stat} is already in the ${state.programParam} program${fanSet?' with the requested fan settings.':'.'}")
+                        if (settings.statOff) {
+                        	stat.off()
+                            sendNotificationEvent("And I verified that ${stat.displayName} is already in the ${state.programParam} program, so I turned off the HVAC as requested.")
+                        } else {
+                			sendNotificationEvent("And I verified that ${stat.displayName} is already in the ${state.programParam} program${fanSet?' with the requested fan settings.':'.'}")
+                        }
                 		done = true
                     } else if ((thermostatHold == 'hold') || currentProgramName.startsWith('Hold')) { // (In case the Vacation hasn't cleared yet)
                     	// In a hold
@@ -400,7 +407,12 @@ def changeProgramHandler(evt) {
                         		fanSet = true
                     		}
                             if (whatHoldType(stat) == 'nextTransition') {
-                				sendNotificationEvent("And I resumed the scheduled ${state.programParam} on ${stat}${fanSet?' with the requested fan settings.':'.'}")
+                            	if (settings.statOff) {
+                            		stat.off()
+                                    sendNotificationEvent("And I resumed the scheduled ${state.programParam} on ${stat.displayName}, then I turned off the HVAC as requested.")
+                                } else {
+                					sendNotificationEvent("And I resumed the scheduled ${state.programParam} on ${stat.displayName}${fanSet?' with the requested fan settings.':'.'}")
+                                }
                 				done = true
                             }
             			} else { 
@@ -439,7 +451,12 @@ def changeProgramHandler(evt) {
                             	timeStr = " for ${sendHoldHours} hours"
                                 break;
                         }
-						sendNotificationEvent("And I set ${stat.displayName} to Hold: ${state.programParam}${timeStr}${fanSet?' with the requested fan settings.':'.'}")
+                        if (settings.statOff) {
+                        	stat.off()
+                            sendNotificationEvent("And I set ${stat.displayName} to Hold: ${state.programParam}${timeStr}, then I turned off the HVAC as requested.")
+                        } else {
+							sendNotificationEvent("And I set ${stat.displayName} to Hold: ${state.programParam}${timeStr}${fanSet?' with the requested fan settings.':'.'}")
+                        }
                		}
             	} // else { assert state.programParam == null; must have been 'Resume Program' or an old 'Cancel Vacation'  }
             }
@@ -520,6 +537,56 @@ def whatHoldType(statDevice) {
 }
 
 // Helper Functions
+// get the combined set of Ecobee Programs applicable for these thermostats
+private def getEcobeePrograms() {
+	def programs
+
+	if (myThermostats?.size() > 0) {
+		myThermostats.each { stat ->
+        	def DNI = stat.device.deviceNetworkId
+            LOG("Getting list of programs for stat (${stat}) with DNI (${DNI})", 4)
+        	if (!programs) {
+            	LOG("No programs yet, adding to the list", 5)
+                programs = parent.getAvailablePrograms(stat)
+            } else {
+            	LOG("Already have some programs, need to create the set of overlapping", 5)
+                programs = programs.intersect(parent.getAvailablePrograms(stat))
+            }
+        }
+	} 
+    LOG("getEcobeePrograms: returning ${programs}", 4)
+    return programs.sort(false)
+}
+
+// return all the modes that ALL thermostats support
+def getThermostatModes() {
+	def theModes = []
+    
+    settings.myThermostats.each { stat ->
+    	if (theModes == []) {
+        	theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", ")
+        } else {
+        	theModes = theModes.intersect(stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", "))
+        }   
+    }
+    return theModes.sort(false)
+}
+
+// return all the fan modes that ALL thermostats support
+def getThermostatFanModes() {
+	def theFanModes = []
+    
+    settings.myThermostats.each { stat ->
+    	if (theFanModes == []) {
+        	theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(", ")
+        } else {
+        	theFanModes = theFanModes.intersect(stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(", "))
+        }   
+    }
+    theFanModes = (theFanModes - ['off']) + ['default']		// off isn't fully implemented yet
+    return theFanModes*.capitalize()
+}
+
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	def messageLbl = "${app.label} ${message}"
 	if (logType == null) logType = 'debug'
