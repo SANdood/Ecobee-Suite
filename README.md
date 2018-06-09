@@ -140,7 +140,15 @@ It is highly recommended that you use the GitHub Integration that SmartThings of
 
 ## <a name="upgrading">Upgrading from Prior Releases</a>
 
-Since both the namespace and the name of the SmartApps & Devices has changed in this version, users will find that this release will install *alongside* instead of replacing their current installation. This means that you will be creating a completely new set of thermostat and sensor devices in SmartThings. And while you probably do not want to run two completely separate-but-similar devices, you may want to keep the old one around until you are satisfied that you have recreated your entire setup (including Helper SmartApps) within this new Suite.
+### First time users of Ecobee Suite
+Please proceed with the [installation instructions](#install-prep) below.
+
+### Users of version 1.4.\*
+
+If you are running my Ecobee Suite version 1.4.\*, you can simply install version 1.5.* on top of your existing release, just like you would any minor release of 1.4.\*. So, you too can Proceed with the [installation instructions](#install-prep) below.
+
+### Releases prior to 1.4.\*
+Since both the namespace and the name of the SmartApps & Devices has changed in 1.4 version, users of earlier versions will find that this release will install *alongside* instead of replacing their current installation. This means that you will be creating a completely new set of thermostat and sensor devices in SmartThings. And while you probably do not want to run two completely separate-but-similar devices, you may want to keep the old one around until you are satisfied that you have recreated your entire setup (including Helper SmartApps) within this new Suite.
 
 There is **one key recommendation** if you want to run both an old and this new version: you should first change the polling frequency of your existing installation to 5 minutes or longer. Both versions will be polling the same API from your username, and excess polling may cause undesired timeouts in one or both instances.
 
