@@ -41,8 +41,9 @@ The most significant changes to 1.5.0 include:
   - [Screenshots](#screenshots)
   - [Ecobee Suite Manager SmartApp](#features-manager-sa)
   - [ecobee Suite Contacts & Switches Helper](#features-opencontact-sa) ***Updated!***
-  - [ecobee Suite Mode/Routine/Program Helper](#features-routines-sa)
   - [ecobee Suite Quiet Time Helper](#features-quiet-time-sa) ***New!***
+	  - [Using a Virtual Switch with Quiet Time](#qt-virtual-switch)
+  - [ecobee Suite Mode/Routine/Program Helper](#features-routines-sa)
   - [ecobee Suite Smart Circulation Helper](#features-smart-circ-sa) ***Updated!***
   - [ecobee Suite Smart Mode](#smart-mode-sa)
   - [ecobee Suite Smart Room SmartApp](#features-smart-room-sa)
@@ -550,6 +551,24 @@ Beginning with Ecobee Suite release 1.5.*, this Helper now also integrates with 
 - Temporarily Disable app without having to delete and recreate!
 
 
+## <a name="features-quiet-time-sa">`Quiet Time` Helper</a> *New!*
+The `ecobee Suite Quiet Time` Helper SmartApp allows you to automatically turn off or change some or all of the following HVAC system settings, based on the (configurable) off/on state of a specific (real or virtual) Switch:
+- Turn Off HVAC altogether
+- Change the HVAC Mode (auto, cool, heat)
+- Turn off the HVAC Fan
+- Adjust the heating/cooling setpoints
+- Turn off the HVAC's humidifier
+- Turn off the HVAC's dehumidifier
+
+When the aforementioned Quiet Time switch state changes back to (on/off), some or all of the above changes are reverted.
+
+#### <a name="qt-virtual-switch">Using a Virtual Switch with Quiet Time</a>
+While `Quiet Time` can be triggered by any SmartThings Switch device, it is perhaps most useful to trigger it using a Virtual Switch. SmartThings now provides a standard `Virtual Device Creator` in the **SmartApps Marketplace**, int the "+ More" section. So you simply need to install and run this to create a Virtual Switch (I suggest naming it `Quiet Time`). Then simply configure this Helper to invoke Quiet Time actions when the virtual switch is turned on, and you're all set. Then add turning on this Virtual Switch to your Watch TV routine, or as an action for your SmartThings-integrated Harmony remote.
+
+If you have Alexa (or Google Home), you even say "Alexa, turn on Quiet Time" and smile when your HVAC shifts into peaceful existence!
+
+N.B., The use case for this new Helper came from a user whose HVAC system is rather noisy when the humidifier runs - enough so that it was hard to hear the TV on "movie night." He asked for the ability to automatically turn off the humidifier when the TV was turned on; from that was born the notion of this new Quiet Time Helper (and the ability to control the humidifier/dehumidifier). I'm sure there are several other use cases that can leverage `Quiet Time.`
+
 ## <a name="features-routines-sa">`Mode/Routine/Program` Helper</a>
 The `ecobee Suite Routines` Helper SmartApp provides the ability to change the running Program (Comfort Setting) when a SmartThings Mode is changed (for example, by running a Routine) or a Routine is run. 
 
@@ -564,19 +583,6 @@ The `ecobee Suite Routines` Helper SmartApp provides the ability to change the r
   - Change the Location Mode or execute a Routine when the thermostat Program Changes - including Vacations!
 - Temporarily Disable app without having to delete and recreate!
 
-
-## <a name="features-quiet-time-sa">`Quiet Time` Helper</a> *New!*
-The `ecobee Suite Quiet Time` Helper SmartApp allows you to automatically turn off or change some or all of the following HVAC system settings, based on the (configurable) off/on state of a specific (real or virtual) Switch:
-- Turn Off HVAC altogether
-- Change the HVAC Mode (auto, cool, heat)
-- Turn off the HVAC Fan
-- Adjust the heating/cooling setpoints
-- Turn off the HVAC's humidifier
-- Turn off the HVAC's dehumidifier
-
-When the aforementioned Quiet Time switch state changes back to (on/off), some or all of the above changes are reverted.
-
-N.B., The use case for this new Helper came from a user whose HVAC system is rather noisy when the humidifier runs - enough so that it was hard to hear the TV on "movie night." He asked for the ability to automatically turn off the humidifier when the TV was turned on; from that was born the notion of this new Quiet Time Helper. I'm sure there are several other use cases that can leverage `Quiet Time.`
 
 
 ## <a name="features-smart-circ-sa">`Smart Circulation` Helper</a> *Updated!*
