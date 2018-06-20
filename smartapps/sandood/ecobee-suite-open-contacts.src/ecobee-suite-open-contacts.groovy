@@ -25,9 +25,10 @@
  *	1.4.03 - Added Temp setpoint option, linkage to Quiet Time
  *	1.4.04 - Changed displayed name for consistency
  *	1.5.00 - Release number synchronization
+ *	1.5.01 - Fixed HVACOff
  */
  
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.5.01" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -352,7 +353,7 @@ def turnOffHVAC() {
                 LOG("${therm.displayName} Quiet Time enabled (${qtSwitch.displayName} turned ${settings.qtOn})",2,null,'info')
             } else if ((settings.hvacOff == null) || settings.hvacOff) {
             	// turn off the HVAC
-    			if (tmpThermSavedState[tid].mode != 'off') {
+    			if (therm.currentValue('thermostatMode') != 'off') {
                 	tmpThermSavedState[tid].mode = therm.currentValue('thermostatMode')
             		therm.setThermostatMode('off')
                 	tstatNames << [therm.device.displayName]		// only report the ones that aren't off already
