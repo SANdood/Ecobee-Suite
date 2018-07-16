@@ -66,6 +66,15 @@
 				"optional": 	false
 			},
 			{
+				"name": 	"ecobee Suite Smart Mode",
+				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+				"published": 	true,
+				"version": 	"1.5.00",
+				"appSettings": 	{ },
+				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-mode.groovy",
+				"optional": 	false
+			},
+			{
 				"name": 	"ecobee Suite Smart Room",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
