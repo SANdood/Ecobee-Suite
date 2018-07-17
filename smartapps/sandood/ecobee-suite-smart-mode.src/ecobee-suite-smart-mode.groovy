@@ -253,14 +253,14 @@ def temperatureUpdate( Double temp, Double dewpoint ) {
 
     def desiredMode = null
 	Double maxDewpoint = 65
-	if (settings.aboveTemp && (temp >= settings.aboveTemp)) {
-    	if (!atomicState.aboveChanged && (dewpoint < maxDewpoint)) {
+	if (settings.aboveTemp && ((temp >= settings.aboveTemp) || (dewpoint >= maxDewpoint))) {
+    	if (!atomicState.aboveChanged) {
 			desiredMode = settings.aboveMode
             atomicState.aboveChanged = true
             atomicState.betweenChanged = false
             atomicState.belowChanged = false
         }
-	} else if (settings.belowTemp && (temp <= settings.belowTemp)) {
+	} else if (settings.belowTemp && ((temp <= settings.belowTemp) && (dewpoint < maxDewpoint))) {
     	if (!atomicState.belowChanged) {
 			desiredMode = settings.belowMode
             atomicState.aboveChanged = false
