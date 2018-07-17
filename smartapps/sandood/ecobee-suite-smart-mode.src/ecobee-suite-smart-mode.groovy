@@ -145,6 +145,9 @@ def initialize() {
     if (settings.aboveCool || settings.belowHeat || settings.insideAuto) {
     	subscribe(thermostats, 'temperature', insideChangeHandler)
     }
+    atomicState.aboveChanged = false
+    atomicState.betweenChanged = false
+    atomicState.belowChanged = false
     Double tempNow = -99.0
 	Double dewpointNow = -1.0
 	switch( settings.tempSource) {
