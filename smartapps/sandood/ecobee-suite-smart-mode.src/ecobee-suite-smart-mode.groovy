@@ -146,6 +146,7 @@ def initialize() {
     	subscribe(thermostats, 'temperature', insideChangeHandler)
     }
     Double tempNow = -99.0
+	Double dewpointNow = -1.0
 	switch( settings.tempSource) {
 		case 'Weather for Location':
 			if (settings.locFreq.toInteger() < 60) {
@@ -154,8 +155,9 @@ def initialize() {
             	def locHours = settings.locFreq.toInteger() / 60
                 "runEvery${locHours}Hour${locHours!=1?'s':''}"( 'getZipTemp' )
             }
-            def t = getZipTemp()					// calls temperatureUpdate()
-            if (t.isNumber()) tempNow = t.toDouble()
+            def data = getZipTemp()					// calls temperatureUpdate()
+			if (data.tempNow.isNumber()) tempNow = data.tempNow.toDouble()
+			if (data.dewpointNow.isNumber()) dewpointNow = data.dewpointNow.toDouble()
 			break;
 		
 		case 'SmartThings Temperature Sensor':
@@ -179,12 +181,13 @@ def initialize() {
             	def pwsHours = settings.pwsFreq.toInteger() / 60
                 "runEvery${pwsHours}Hour${pwsHours!=1?'s':''}"( 'getPwsTemp' )
             }
-            def t = getPwsTemp()					// calls temperatureUpdate*()
-            if (t.isNumber()) tempNow = t.toDouble()
+            def data = getPwsTemp()					// calls temperatureUpdate*()
+            if (data.tempNow.isNumber()) tempNow = data.tempNow.toDouble()
+			if (data.dewpointNow.isNumber()) dewpointNow = data.dewpointNow.toDouble()
 			break;
 	}
-    if (tempNow && (tempNow > -90)) {
-    	LOG("Initialization complete...current temperature is ${tempNow}°",2,null,'info')
+    if (tempNow && (tempNow > -90) && (dewpointNow > -1)) {
+    	LOG("Initialization complete...current temperature is ${tempNow}°...dewpoint is ${dewpointNow}",2,null,'info')
         return true
     } else {
     	LOG("Initialization error...invalid temperature: ${tempNow}° - please check settings and retry", 2, null, 'error')
@@ -238,15 +241,20 @@ def tempChangeHandler(evt) {
     }
 }   
 							  
-def temperatureUpdate( Double temp ) {
+def temperatureUpdate( Double temp, Double dewpoint ) {
     if (!temp || !temp.isNumber()) {
     	LOG("Ignoring invalid temperature: ${temp}°", 2, null, 'warn')
         return false
     }
-    
+	if (!dewpoint || !dewpoint.isNumber()) {
+		LOG("Ignoring invalid dewpoint: ${dewpoint}°", 2, null, 'warn')
+		return false
+	}
+
     def desiredMode = null
+	Double maxDewpoint = 65
 	if (settings.aboveTemp && (temp >= settings.aboveTemp)) {
-    	if (!atomicState.aboveChanged) {
+    	if (!atomicState.aboveChanged && (dewpoint < maxDewpoint)) {
 			desiredMode = settings.aboveMode
             atomicState.aboveChanged = true
             atomicState.betweenChanged = false
@@ -280,10 +288,10 @@ def temperatureUpdate( Double temp ) {
 		}
         def multi=0
         if (changeNames) {
-        	LOG("Temp is ${temp}°, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
+        	LOG("Temp is ${temp}°, dewpoint is ${dewpoint}, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
         	NOTIFY("${app.label}: The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
         }
-        if (sameNames) LOG("Temp is ${temp}°, ${sameNames} already in ${desiredMode} mode",3,null,'info')
+        if (sameNames) LOG("Temp is ${temp}°, dewpoint is ${dewpoint}, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
 }
 
@@ -298,6 +306,7 @@ private def getPwsTemp() {
 private def getWUTemp(type) {
 	def isMetric = (getTemperatureScale() == "C")
     Double tempNow = 999.99
+	Double dewpointNow = -1.0
     def source = (type == 'zip') ? settings.zipCode : "pws:"+settings.stationID
 	Map wdata = getWeatherFeature('conditions', source)
     if (wdata && wdata.response) {
@@ -320,12 +329,14 @@ private def getWUTemp(type) {
     if (wdata.current_observation) { 
     	if (!isMetric) {
 			if (wdata.current_observation.temp_f.isNumber()) tempNow = wdata.current_observation.temp_f.toDouble()
+			if (wdata.current_observation.dewpoint_f.isNumber()) dewpointNow = wdata.current_observation.dewpoint_f.toDouble()
         } else {
         	if (wdata.current_observation.temp_c.isNumber()) tempNow = wdata.current_observation.temp_c.toDouble()
+			if (wdata.current_observation.dewpoint_c.isNumber()) dewpointNow = wdata.current_observation.dewpoint_c.toDouble()
         }
-        if (tempNow != 999.99) {
-        	temperatureUpdate(tempNow)
-            return tempNow
+        if (tempNow != 999.99 && dewpointNow != -1) {
+        	temperatureUpdate(tempNow, dewpointNow)
+            return [tempNow: tempNow, dewpointNow: dewpointNow]
         } else {
         	LOG("Invalid temp returned ${newTemp}, ignoring...",2,null,'warn')
             return null
