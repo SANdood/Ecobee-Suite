@@ -42,7 +42,7 @@
 				"name": 	"ecobee Suite Quiet Time",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.5.00",
+				"version": 	"1.5.02",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
 				"optional": 	false
