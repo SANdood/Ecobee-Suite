@@ -14,10 +14,12 @@
  *
  *	1.5.00a- Initial Release
  *	1.5.00 - Release number synchronization
+ *	1.5.01 - Allow Ecobee Suite Thermostats only
+ *	1.5.02 - Fixed statState error
  *
  */
  
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.5.02" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
 
 definition(
@@ -47,7 +49,7 @@ def mainPage() {
         section(title: "Select Thermostats") {
         	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn back on below to activate handler." }
         	else { 
-            	input(name: "theThermostats", type: "capability.Thermostat", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+            	input(name: "theThermostats", type: "device.ecobeeSuiteThermostat", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
             }          
 		}
     
@@ -198,7 +200,7 @@ def quietOnHandler(evt=null) {
 }
 
 def turnOnQuietTime() {
-	statState = atomicState.statState
+	def statState = atomicState.statState
 	settings.theThermostat.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
         if (settings.hvacOff) {
