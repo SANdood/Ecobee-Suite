@@ -26,9 +26,11 @@
  *	1.4.04 - Changed displayed name for consistency
  *	1.5.00 - Release number synchronization
  *	1.5.01 - Fixed HVACOff
+ *	1.5.02 - Allow Ecobee Suite Thermostats only
+ *	1.5.03 - Fixed qtOn capitalization error
  */
  
-def getVersionNum() { return "1.5.01" }
+def getVersionNum() { return "1.5.03" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -58,7 +60,7 @@ def mainPage() {
         section(title: "Select Thermostats") {
         	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn back on below to activate handler." }
         	else { 
-            	input(name: "myThermostats", type: "capability.Thermostat", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+            	input(name: "myThermostats", type: "device.ecobeeSuiteThermostat", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
                 input(name: 'defaultMode', type: 'enum',  title: "Default Mode for thermostat${((settings.myThermostats==null)||(settings.myThermostats.size()>1))?'s':''}", 
                 		multiple: false, required: true, metadata: [values: ['auto', 'cool', 'heat', 'off']], defaultValue: 'auto', submitOnChange: true)
             }          
@@ -72,8 +74,8 @@ def mainPage() {
                 if (settings.quietTime) {
                 	input(name: 'qtSwitch', type: 'capability.switch', required: true, title: 'Which switch controls Quiet Time?', multiple: false, submitOnChange: true)
                     if (settings.qtSwitch) {
-                        input(name: "qtOn", type: "enum", title: "Enable Quiet Time whe ${settings.qtSwitch.displayName} is:", defaultValue: 'on', required: true, multiple: false, options: ["on","off"])
-                        paragraph("${settings.qtSwitch.displayName} will be turned ${settings.qtOn.capitalize()} when HVAC Off Actions are taken.")
+                        input(name: "qtOn", type: "enum", title: "Enable Quiet Time when switch ${settings.qtSwitch.displayName} is:", required: true, multiple: false, options: ["on","off"], submitOnChange: true)
+                        if (settings.qtOn != null) paragraph("Switch ${settings.qtSwitch.displayName} will be turned ${settings.qtOn?'On':'Off'} when HVAC Off Actions are taken.")
                     }
                 } else {
                 	input(name: 'hvacOff', type: "bool", title: "Turn off HVAC?", required: true, defaultValue: true, submitOnChange: true)
