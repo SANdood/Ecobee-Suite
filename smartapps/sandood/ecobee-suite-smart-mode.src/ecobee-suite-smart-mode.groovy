@@ -86,6 +86,9 @@ def mainPage() {
 				if (settings.aboveTemp) {
 					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes(), submitOnChange: true)
 				}
+                if (settings.aboveTemp) {
+                    input(name: "aboveDewpoint", title: "When the outdoor dewpoint is at or above...", type: 'decimal', description: "Enter decimal dewpoint (required)", required: true, submitOnChange: true)
+                }
             	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'number', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
 				if (settings.belowTemp) {
 					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes())
@@ -255,15 +258,14 @@ def temperatureUpdate( Double temp, Double dewpoint ) {
 	}
 
     def desiredMode = null
-	Double maxDewpoint = 65
-	if (settings.aboveTemp && ((temp >= settings.aboveTemp) || (dewpoint >= maxDewpoint))) {
+	if (settings.aboveTemp && ((temp >= settings.aboveTemp) || (dewpoint >= settings.aboveDewpoint))) {
     	if (!atomicState.aboveChanged) {
 			desiredMode = settings.aboveMode
             atomicState.aboveChanged = true
             atomicState.betweenChanged = false
             atomicState.belowChanged = false
         }
-	} else if (settings.belowTemp && ((temp <= settings.belowTemp) && (dewpoint < maxDewpoint))) {
+	} else if (settings.belowTemp && ((temp <= settings.belowTemp) && (dewpoint < settings.aboveDewpoint))) {
     	if (!atomicState.belowChanged) {
 			desiredMode = settings.belowMode
             atomicState.aboveChanged = false
@@ -277,7 +279,9 @@ def temperatureUpdate( Double temp, Double dewpoint ) {
             atomicState.betweenChanged = true
             atomicState.belowChanged = false
         }
-	}
+	} else {
+        LOG("No between mode specified. No changes made.")
+    }
 	if (desiredMode != null) {
     	String changeNames = ""
         String sameNames = ""
@@ -292,7 +296,7 @@ def temperatureUpdate( Double temp, Double dewpoint ) {
         def multi=0
         if (changeNames) {
         	LOG("Temp is ${temp}°, dewpoint is ${dewpoint}, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
-        	NOTIFY("${app.label}: The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
+        	NOTIFY("${app.label}: The temperature is ${temp}°, dewpoint is ${dewpoint}, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
         }
         if (sameNames) LOG("Temp is ${temp}°, dewpoint is ${dewpoint}, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
@@ -392,7 +396,11 @@ private String getPWSID() {
     if (wdata && wdata.response && !wdata.response.containsKey('error')) {	// if we get good data
     	if (wdata.response.features.containsKey('geolookup') && (wdata.response.features.geolookup.toInteger() == 1) && wdata.location) {
         	log.debug "wdata ${wdata.location.nearby_weather_stations.pws}"
-    		PWSID = wdata.location.nearby_weather_stations.pws.station[0].id
+            if (wdata.location.nearby_weather_stations.pws.station.size() > 0) {
+                PWSID = wdata.location.nearby_weather_stations.pws.station[0].id
+            } else {
+                log.debug "nearby weather station could not be found"
+            }
     	}
     	else log.debug "bad response"
     }
