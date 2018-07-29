@@ -27,9 +27,10 @@
  *	1.5.03 - Added (optional) dewpoint override for belowTemp Off Mode
  *	1.5.04 - Added modeOff reservation support to avoid conflicts with other Helper Apps
  *	1.5.05 - Added multiple SMS support (Contacts being deprecated by ST)
- *	1.6.00- Release number synchronization
+ *	1.6.00 - Release number synchronization
+ *	1.6.01 - Fixed sendMessage()
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -409,7 +410,7 @@ def insideChangeHandler(evt) {
                     cancelReservation(evt.device, 'modeOff' )
             		evt.device.setThermostatMode(newMode)
                 	LOG("${evt.device.displayName} temp is ${theTemp}°, changed thermostat to ${newMode} mode",3,null,'trace')
-        			sendNotification("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
+        			sendMessage("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
                 }
             }
         }
@@ -591,7 +592,7 @@ def temperatureUpdate( BigDecimal temp ) {
                     		// somebody else has a 'modeOff' reservation so we can't turn it on, but we can cancel our reservation
                         	cancelReservation( it, 'modeOff')
                             LOG("Temp is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(it,'modeOff').toString()[1..-2]} hold 'modeOff' reservations",2,null,'warn')
-                            sendNotification("The temperature is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(it,'modeOff').toString()[1..-2]} hold 'modeOff' reservations")
+                            sendMessage("The temperature is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(it,'modeOff').toString()[1..-2]} hold 'modeOff' reservations")
                             // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
                     	}
                     } else {
@@ -608,7 +609,7 @@ def temperatureUpdate( BigDecimal temp ) {
         def multi=0
         if (changeNames) {
         	LOG("Temp is ${temp}°, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
-        	sendNotification("The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
+        	sendMessage("The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
         }
         if (sameNames) LOG("Temp is ${temp}°, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
@@ -792,7 +793,7 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
     log."${logType}" message
 }
 
-private def sendNotification(notificationMessage) {
+private def sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     
     if (settings.notify) {
