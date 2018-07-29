@@ -28,10 +28,15 @@
  *	1.5.01 - Fixed HVACOff
  *	1.5.02 - Allow Ecobee Suite Thermostats only
  *	1.5.03 - Fixed qtOn capitalization error
+ *	1.5.04 - Converted all math back to BigDecimal
+ *	1.5.05 - Added modeOff reservations support
+ *	1.5.06 - Added multiple SMS support (Contacts being deprecated by ST)
+ *	1.6.00- Release number synchronization
  */
- 
-def getVersionNum() { return "1.5.03" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
+
+import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Suite Open Contacts",
@@ -119,9 +124,15 @@ def mainPage() {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
                     	metadata: [values: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"]], defaultValue: "Notify Only", submitOnChange: true)
 					if (settings.whichAction != "HVAC Actions Only") {
-						input("recipients", "contact", title: "Send notifications to") {
-							input "phone", "phone", title: "Warn with text message (optional)", description: "Phone Number", required: false
-        				}                
+                    	input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true, submitOnChange: true) {
+            				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+            				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
+                        }
+                        if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone) {
+                        	input( name: 'sendPush', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
+                        }
+                        if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.sendPush) paragraph "WARNING: Notifications configured, but nobody to send them to!"
+                        paragraph("(A notification is also sent to the Hello Home log")
                 	}
             	}
             }          
@@ -140,12 +151,29 @@ def installed() {
 	LOG("installed() entered", 5)
 	initialize()  
 }
-
+def uninstalled () {
+	myThermostats.each {
+    	cancelReservation(it, 'modeOff') 
+	}   
+}
 def updated() {
 	LOG("updated() entered", 5)
 	unsubscribe()
 	unschedule()
 	initialize()
+    // tester()
+}
+
+def tester() {
+	myThermostats.each {
+    	makeReservation(it, 'fanOff' )
+        log.debug "haveReservation: ${haveReservation(it, 'fanOff')}"
+        log.debug "anyReservations: ${anyReservations(it, 'fanOff')}"
+        log.debug "countReservations: ${countReservations( it, 'fanOff')}"
+        cancelReservation(it, 'fanOff')
+        cancelReservation(it, 'modeOff')
+        log.debug "haveReservation: ${haveReservation(it, 'fanOff')}"
+    }
 }
 
 def initialize() {
@@ -154,6 +182,7 @@ def initialize() {
 		LOG("Teporarily Disabled as per request.", 2, null, "warn")
 		return true
 	}
+    subscribe(app, appTouch)
 
 	boolean contactOffState = false
 	if (contactSensors) {
@@ -247,7 +276,7 @@ def heatSPHandler( evt ) {
     tmpThermSavedState[tid].heatSP = evt.value
     
     if (atomicState.HVACModeState == 'off') {
-        Double h = evt.doubleValue + settings.heatAdjust.toDouble()
+        def h = (evt.value.isNumber()) evt.numberValue + settings.heatAdjust
         tmpThermSavedState[tid].heatAdj = h
         evt.device.setHeatingSetpoint( h, 'nextTransition')
         // Notify???
@@ -267,7 +296,7 @@ def coolSPHandler( evt ) {
     
     if (atomicState.HVACModeState == 'off') {
     	// adjust and change the actual heating setpoints
-        Double c = evt.doubleValue + settings.coolAdjust.toDouble()
+        def c = (evt.value.isNumber()) evt.numberValue + settings.coolAdjust
         tmpThermSaveState[tid].coolAdj = c
         evt.device.setCoolingSetpoint( c, 'nextTransition')
         // Notify?
@@ -355,6 +384,7 @@ def turnOffHVAC() {
                 LOG("${therm.displayName} Quiet Time enabled (${qtSwitch.displayName} turned ${settings.qtOn})",2,null,'info')
             } else if ((settings.hvacOff == null) || settings.hvacOff) {
             	// turn off the HVAC
+                makeReservation(therm, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
     			if (therm.currentValue('thermostatMode') != 'off') {
                 	tmpThermSavedState[tid].mode = therm.currentValue('thermostatMode')
             		therm.setThermostatMode('off')
@@ -368,8 +398,8 @@ def turnOffHVAC() {
                 // save the current values for when we turn back on
                 tmpThermSavedState[tid].heatSP = h
                 tmpThermSavedState[tid].coolSP = c
-                h = h.toDouble() + settings.heatAdjust.toDouble()
-                c = c.toDouble() + settings.coolAdjust.toDouble()
+                h = h + settings.heatAdjust
+                c = c + settings.coolAdjust
                 tmpThermSavedState[tid].heatAdj = h
                 tmpThermSavedState[tid].coolAdj = c
                 
@@ -403,9 +433,9 @@ def turnOffHVAC() {
             		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorNames << [it.device.displayName]
             	}
         		if (delay != 0) {
-    				sendNotification("${app.label}: ${sensorNames} left ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
+    				sendNotification("${sensorNames} left ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
             	} else {
-            		sendNotification("${app.label}: ${sensorNames} ${contactOpen?'opened':'closed'}, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
+            		sendNotification("${sensorNames} ${contactOpen?'opened':'closed'}, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
             	}
             	notified = true		// only send 1 notification
         	}
@@ -415,9 +445,9 @@ def turnOffHVAC() {
             		if (it.currentSwitch() == (switchOn?'on':'off')) switchNames << [it.device.displayName]
             	}
         		if (delay != 0) {
-    				sendNotification("${app.label}: ${switchNames} left ${switchOn?'on':'off'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
+    				sendNotification("${switchNames} left ${switchOn?'on':'off'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
             	} else {
-            		sendNotification("${app.label}: ${switchNames} turned ${switchOn?'on':'off'}, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
+            		sendNotification("${switchNames} turned ${switchOn?'on':'off'}, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
             	}
           		notified = true
         	}
@@ -425,7 +455,7 @@ def turnOffHVAC() {
     	}
     } else {
     	if (action.contains('Notify')) {
-        	sendNotification("${app.label}: ${settings.myThermostats} already off.")
+        	sendNotification("${settings.myThermostats} already off.")
             LOG('All thermostats are already off',2,null,'info')
         }
     }
@@ -438,6 +468,7 @@ def turnOnHVAC() {
     def action = settings.whichAction?:'Notify Only'
     def tstatNames = []
     def doHVAC = action.contains('HVAC')
+    def notReserved = true
 
     if (doHVAC) {
 	   	// Restore to previous state 
@@ -445,7 +476,7 @@ def turnOnHVAC() {
         
         settings.myThermostats.each { therm ->
 			// LOG("Working on thermostat: ${therm}", 5)
-            tstatNames << [therm.device.displayName]
+            tstatNames << [therm.displayName]
             def tid = getDeviceId(therm.deviceNetworkId)
             String priorMode = settings.defaultMode
             def tmpThermSavedState = atomicState.thermSavedState
@@ -457,12 +488,24 @@ def turnOnHVAC() {
                     LOG("${therm.displayName} Quiet Time disabled (${qtSwitch.displayName} turned ${onOff})",2,null,'info')
             	} else if ((settings.hvacOff == null) || settings.hvacOff) {
             		// turn on the HVAC
-                    if (tmpThermSavedState[tid].mode == '') {
-            			therm.setThermostatMode('on')
+                    def oldMode = therm.currentValue('thermostatMode')
+                    def newMode = (tmpThermSavedState[tid].mode == '') ? 'auto' : tmpThermSavedState[tid].mode
+                    if (newMode != oldMode) {
+                    	def i = therm.countReservations( 'modeOff' ) - (haveReservation(therm, 'modeOff') ? 1 : 0)
+                    	if ((oldMode == 'off') && (i > 0)) {
+                        	// Currently off, and somebody besides me has a reservation - just release my reservation
+                            cancelReservation(therm, 'modeOff')
+                            notReserved = false							
+                            LOG("Cannot change ${therm.device.displayName} to ${newMode.capitalize()} - ${getGuestList(therm, 'modeOff').toString()[1..-2]} hold 'modeOff' reservations",1,null,'warn')
+                        } else {
+                        	// Not off, or nobody else but me has a reservation
+                            cancelReservation(therm, 'modeOff')
+                        	therm.setThermostatMode( newMode )                            
+                			tstatNames << [therm.device.displayName]		// only report the ones that aren't off already
+                			LOG("${therm.device.displayName} ${newMode.capitalize()} Mode restored (was ${oldMode.capitalize()})",2,null,'info')
+                        } 
                     } else {
-                    	therm.setThermostatMode(tmpThermSavedState[tid].mode)
-                		tstatNames << [therm.device.displayName]		// only report the ones that aren't off already
-                		LOG("${therm.device.displayName} turned on (was ${tmpThermSavedState[tid].mode})",2,null,'info')
+                    	LOG("${therm.device.displayName} is already in ${newMode.capitalize()}",2,null,'info')
                     }
             	} else if (settings.adjustSetpoints) {
                 	// Restore the prior values
@@ -480,8 +523,8 @@ def turnOnHVAC() {
                         }
                     } else {
                     	// we were in some other sort of hold - so set a new hold to the original values
-                		Double h = tmpThermSavedState[tid].heatSP.toDouble()
-                		Double c = tmpThermSavedState[tid].coolSP.toDouble()
+                		def h = tmpThermSavedState[tid].heatSP
+                		def c = tmpThermSavedState[tid].coolSP
                 		tmpThermSavedState[tid].heatAdj = 999.0
                 		tmpThermSavedState[tid].coolAdj = 999.0
                 		therm.setHeatingSetpoint(h, holdType) // should probably be the current holdType
@@ -498,17 +541,21 @@ def turnOnHVAC() {
         def delay = (settings.onDelay?:5).toInteger()
     	if (contactSensors) {
         	if (delay != 0) {
-    			sendNotification("${app.label}: All Doors and Windows ${contactOpen?'closed':'opened'} for ${settings.onDelay} minutes, ${doHVAC?'running HVAC On actions for':'you could turn on'} ${tstatNames}.")
+    			sendNotification("All Doors and Windows ${contactOpen?'closed':'opened'} for ${settings.onDelay} minutes, " +
+                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn on'} ${tstatNames}.")
             } else {
-            	sendNotification("${app.label}: All Doors and Windows are ${contactOpen?'closed':'open'}, ${doHVAC?'running HVAC On actions for':'you could turn On'} ${tstatNames}.")
+            	sendNotification("All Doors and Windows are ${contactOpen?'closed':'open'}, " +
+                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
             }
             notified = true		// only send 1 notification
         }
         if (!notified && theSwitches) {
         	if (delay != 0) {
-    			sendNotification("${app.label}: ${(theSwitches.size()>1)?'All switches':'Switch'} left ${switchOn?'off':'on'} for ${settings.onDelay} minutes, ${doHVAC?'running HVAC On actions for':'you could turn On'} ${tstatNames}.")
+    			sendNotification("${(theSwitches.size()>1)?'All switches':'Switch'} left ${switchOn?'off':'on'} for ${settings.onDelay} minutes, " +
+                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
             } else {
-            	sendNotification("${app.label}: ${(theSwitches.size()>1)?'All switches':'Switch'} turned ${switchOn?'off':'on'}, ${doHVAC?'running HVAC On actions for':'you could turn On'} ${tstatNames}.")
+            	sendNotification("${(theSwitches.size()>1)?'All switches':'Switch'} turned ${switchOn?'off':'on'}, " +
+                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
             }
             notified = true
         }
@@ -545,6 +592,48 @@ private Boolean allClosed() {
     return response
 }
 
+// Reservation Management Functions
+// Make a reservation for me
+void makeReservation( stat, String type='modeOff' ) {
+	stat.makeReservation( app.id, type )
+}
+// Cancel my reservation
+void cancelReservation( stat, String type='modeOff') {
+	stat.cancelReservation( app.id, type )
+}
+// Do I have a reservation?
+Boolean haveReservation( stat, String type='modeOff') {
+def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	return (reservations?."${type}"?.contains(app.id))
+}
+// Do any Apps have reservations?
+Boolean anyReservations( stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
+}
+// How many apps have reservations?
+Integer countReservations(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))	
+	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
+}
+// Get the list of app IDs that have reservations
+List getReservations(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+    return (reservations?.containsKey(type)) ? reservations."${type}" : []
+}
+// Get the list of app Names that have reservations
+List getGuestList(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+    if (reservations?.containsKey(type)) {
+    	def guestList = []
+        reservations."${type}".each {
+        	guestList << parent.getChildAppName( it )
+        }
+        return guestList
+    }
+    return []
+}
+
 // Helper Functions
 private def getDeviceId(networkId) {
 	def deviceId = networkId.split(/\./).last()	
@@ -552,16 +641,28 @@ private def getDeviceId(networkId) {
     return deviceId
 }
 
-private def sendNotification(message) {	
-    if (location.contactBookEnabled && recipients) {
-        LOG("Contact Book enabled!", 5)
-        sendNotificationToContacts(message, recipients)
-    } else {
-        LOG("Contact Book not enabled", 5)
-        if (phone) {
-            sendSms(phone, message)
+private def sendNotification(notificationMessage) {
+	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
+
+    String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    if (location.contactBookEnabled && settings.recipients) {
+        sendNotificationToContacts(msg, settings.recipients, [event: false]) 
+    } else if (phone) { // check that the user did select a phone number
+        if ( phone.indexOf(";") > 0){
+            def phones = phone.split(";")
+            for ( def i = 0; i < phones.size(); i++) {
+                LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
+                sendSmsMessage(phones[i], msg)
+            }
+        } else {
+            LOG("Sending SMS to ${phone}",2,null,'info')
+            sendSmsMessage(phone, msg)
         }
+    } else if (settings.sendPush) {
+        LOG("Sending Push to everyone",2,null,'warn')
+        sendPushMessage(msg)
     }
+    sendNotificationEvent( notificationMessage )								// Always send to hello home
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
