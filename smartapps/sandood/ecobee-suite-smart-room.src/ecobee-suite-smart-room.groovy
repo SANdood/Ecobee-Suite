@@ -26,8 +26,9 @@
  *	1.5.00 - Release number synchronization
  *	1.5.01 - Added support for multiple SMS numbers (Contacts being deprecated by ST)
  *	1.6.00 - Release number synchronization
+ *	1.6.01 - Fixed sendMessage()
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -410,7 +411,7 @@ def activateRoom() {
     if (anyInactive) sensorData << [SmartRoom:'active']
     generateSensorsEvents( sensorData )
     
-    if (anyInactive) sendNotification("I just activated ${app.label} (Smart Room)")
+    if (anyInactive) sendMessage("I just activated ${app.label} (Smart Room)")
     LOG("Activated",3,null,'info')
 }
 
@@ -459,7 +460,7 @@ def deactivateRoom() {
     generateSensorsEvents(sensorData)
     atomicState.isRoomOccupied = false	// this gets turned on the first time motion is detected after the doors are closed
     
-    if (anyActive) sendNotification("I just deactivated ${app.label} (Smart Room)")
+    if (anyActive) sendMessage("I just deactivated ${app.label} (Smart Room)")
     LOG("Deactivated",3,null,'info',false,false)
 }
 
@@ -515,7 +516,7 @@ private def generateSensorsEvents( Map dataMap ) {
     }
 }
 
-private def sendNotification(notificationMessage) {
+private def sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     
     if (settings.notify) {
