@@ -22,8 +22,11 @@
  *	1.4.01 - Updated description
  *	1.4.02 - Added heat/cool "leeching", improved fan only sharing
  *	1.5.00 - Release number synchronization
+ *	1.5.01 - Allow Ecobee Suite Thermostats only
+ *	1.5.02 - Converted all math to BigDecimal
+ *	1.6.00- Release number synchronization
  */
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()}" }
 
 definition(
@@ -59,7 +62,7 @@ def mainPage() {
         	if (masterThermostat) {
         		section(title: "Select Slave Thermostats") {
         			// Settings option for using Mode or Routine
-            		input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "capability.Thermostat", required: true, multiple: true, submitOnChange: true)
+            		input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "device.ecobeeSuiteThermostat", required: true, multiple: true, submitOnChange: true)
 				}
                 if (slaveThermostats) {
             		section(title: "Slave Thermostat Actions") {
@@ -189,7 +192,7 @@ def theAdjuster() {
                             	if (temp.isNumber()) {
                             		def heatAt = stat.currentValue('heatingSetpoint')
                                 	if (heatAt.isNumber()) {
-                            			if ((temp.toDouble() >= heatTo.toDouble()) || (temp.toDouble() < heatAt.toDouble())) { 
+                            			if ((temp >= heatTo) || (temp < heatAt)) { 
                                         	// This Zone has reached its target, stop stealing heat
                                 			setFanAuto(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat
                                         }
@@ -204,7 +207,7 @@ def theAdjuster() {
                             if (temp.isNumber()) {
                             	def heatAt = stat.currentValue('heatingSetpoint')
                                 if (heatAt.isNumber()) {
-                            		if ((temp.toDouble() < heatTo.toDouble()) && (temp.toDouble() > heatAt.toDouble())) { 
+                            		if ((temp < heatTo) && (temp > heatAt)) { 
                                 		setFanOn(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat		
                                     }
                                 }
@@ -243,7 +246,7 @@ def theAdjuster() {
                             	if (temp.isNumber()) {
                             		def coolAt = stat.currentValue('coolingSetpoint')
                                 	if (coolAt.isNumber()) {
-                            			if ((temp.toDouble() <= coolTo.toDouble()) || (temp.toDouble() > coolAt.toDouble())) { 
+                            			if ((temp <= coolTo) || (temp > coolAt)) { 
                                         	// This Zone has reached its target, stop stealing cool
                                 			setFanAuto(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat
                                         }
@@ -259,7 +262,7 @@ def theAdjuster() {
                             if (temp.isNumber()) {
                             	def coolAt = stat.currentValue('coolingSetpoint')
                                 if (coolAt.isNumber()) {
-                            		if ((temp.toDouble() > coolSp.toDouble()) && (temp.toDouble() < coolAt.toDouble())) {
+                            		if ((temp > coolSp) && (temp < coolAt)) {
                                 	   	setFanOn(stat)
                                     }
                                 }
