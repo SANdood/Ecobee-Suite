@@ -31,9 +31,10 @@
  *	1.5.04 - Converted all math back to BigDecimal
  *	1.5.05 - Added modeOff reservations support
  *	1.5.06 - Added multiple SMS support (Contacts being deprecated by ST)
- *	1.6.00- Release number synchronization
+ *	1.6.00 - Release number synchronization
+ *	1.6.01 - Fixed sendMessage()
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.01" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 import groovy.json.JsonSlurper
@@ -433,9 +434,9 @@ def turnOffHVAC() {
             		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorNames << [it.device.displayName]
             	}
         		if (delay != 0) {
-    				sendNotification("${sensorNames} left ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
+    				sendMessage("${sensorNames} left ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
             	} else {
-            		sendNotification("${sensorNames} ${contactOpen?'opened':'closed'}, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
+            		sendMessage("${sensorNames} ${contactOpen?'opened':'closed'}, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
             	}
             	notified = true		// only send 1 notification
         	}
@@ -445,9 +446,9 @@ def turnOffHVAC() {
             		if (it.currentSwitch() == (switchOn?'on':'off')) switchNames << [it.device.displayName]
             	}
         		if (delay != 0) {
-    				sendNotification("${switchNames} left ${switchOn?'on':'off'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
+    				sendMessage("${switchNames} left ${switchOn?'on':'off'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
             	} else {
-            		sendNotification("${switchNames} turned ${switchOn?'on':'off'}, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
+            		sendMessage("${switchNames} turned ${switchOn?'on':'off'}, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
             	}
           		notified = true
         	}
@@ -455,7 +456,7 @@ def turnOffHVAC() {
     	}
     } else {
     	if (action.contains('Notify')) {
-        	sendNotification("${settings.myThermostats} already off.")
+        	sendMessage("${settings.myThermostats} already off.")
             LOG('All thermostats are already off',2,null,'info')
         }
     }
@@ -541,20 +542,20 @@ def turnOnHVAC() {
         def delay = (settings.onDelay?:5).toInteger()
     	if (contactSensors) {
         	if (delay != 0) {
-    			sendNotification("All Doors and Windows ${contactOpen?'closed':'opened'} for ${settings.onDelay} minutes, " +
+    			sendMessage("All Doors and Windows ${contactOpen?'closed':'opened'} for ${settings.onDelay} minutes, " +
                 					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn on'} ${tstatNames}.")
             } else {
-            	sendNotification("All Doors and Windows are ${contactOpen?'closed':'open'}, " +
+            	sendMessage("All Doors and Windows are ${contactOpen?'closed':'open'}, " +
                 					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
             }
             notified = true		// only send 1 notification
         }
         if (!notified && theSwitches) {
         	if (delay != 0) {
-    			sendNotification("${(theSwitches.size()>1)?'All switches':'Switch'} left ${switchOn?'off':'on'} for ${settings.onDelay} minutes, " +
+    			sendMessage("${(theSwitches.size()>1)?'All switches':'Switch'} left ${switchOn?'off':'on'} for ${settings.onDelay} minutes, " +
                 					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
             } else {
-            	sendNotification("${(theSwitches.size()>1)?'All switches':'Switch'} turned ${switchOn?'off':'on'}, " +
+            	sendMessage("${(theSwitches.size()>1)?'All switches':'Switch'} turned ${switchOn?'off':'on'}, " +
                 					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
             }
             notified = true
@@ -641,7 +642,7 @@ private def getDeviceId(networkId) {
     return deviceId
 }
 
-private def sendNotification(notificationMessage) {
+private def sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
 
     String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
