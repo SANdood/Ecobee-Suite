@@ -24,8 +24,10 @@
  *	1.4.02 - Updated for delayed add/delete function
  *	1.4.03 - Typo squashed, LOG cleanup
  *	1.5.00 - Release number synchronization
+ *	1.5.01 - Added support for multiple SMS numbers (Contacts being deprecated by ST)
+ *	1.6.00 - Release number synchronization
  */
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -99,13 +101,18 @@ def mainPage() {
         	}
         
       		section("Smart Room Notifications (optional)") {
-        		input(name: "notify", type: "boolean", title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
+        		input(name: "notify", type: "boolean", title: "Notify on Activations?", required: true, defaultValue: false, submitOnChange: true)
             	if (settings.notify) {
-        			input(name: "recipients", type: "contact", title: "Send notifications to", required: notify) {
-                		input(name: "pushNotify", type: "boolean", title: "Send push notifications?", required: true, defaultValue: false)
-                	}
-            	}
-            	paragraph("(A notification is always sent to the Hello Home log whenever a Smart Room is activated or de-activated)")
+        			input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true, submitOnChange: true) {
+            				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+            				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
+                    }
+                    if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone) {
+                        input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", /* defaultValue: false, */ required: true, submitOnChange: true)
+                    }
+                    if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.pushNotify) paragraph "WARNING: Notifications configured, but nobody to send them to!"
+                }
+                paragraph("A notification is always sent to the Hello Home log whenever a Smart Room is activated or de-activated")
         	}
         }
         	
@@ -403,7 +410,7 @@ def activateRoom() {
     if (anyInactive) sensorData << [SmartRoom:'active']
     generateSensorsEvents( sensorData )
     
-    if (anyInactive) NOTIFY("I activated the ${app.label}")
+    if (anyInactive) sendNotification("I just activated ${app.label} (Smart Room)")
     LOG("Activated",3,null,'info')
 }
 
@@ -452,7 +459,7 @@ def deactivateRoom() {
     generateSensorsEvents(sensorData)
     atomicState.isRoomOccupied = false	// this gets turned on the first time motion is detected after the doors are closed
     
-    if (anyActive) NOTIFY("I just deactivated the ${app.label}")
+    if (anyActive) sendNotification("I just deactivated ${app.label} (Smart Room)")
     LOG("Deactivated",3,null,'info',false,false)
 }
 
@@ -508,15 +515,30 @@ private def generateSensorsEvents( Map dataMap ) {
     }
 }
 
-// Helper Functions
-private def NOTIFY(message) {
-    if (location.contactBookEnabled && recipients) {
-        sendNotificationToContacts(message, recipients)		// notify contacts & hello home
-    } else if (pushNotify) {
-    	sendNotification(message)							// push and hello home
-    } else {
-        sendNotificationEvent(message)						// just hello home
+private def sendNotification(notificationMessage) {
+	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
+    
+    if (settings.notify) {
+        String msg = "${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+        if (location.contactBookEnabled && settings.recipients) {
+            sendNotificationToContacts(msg, settings.recipients, [event: false]) 	// only to contacts
+        } else if (phone) { // check that the user did select a phone number
+            if ( phone.indexOf(";") > 0){
+                def phones = phone.split(";")
+                for ( def i = 0; i < phones.size(); i++) {
+                    LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
+                    sendSmsMessage(phones[i], msg)									// Only to SMS contact
+                }
+            } else {
+                LOG("Sending SMS to ${phone}",2,null,'info')
+                sendSmsMessage(phone, msg)											// Only to SMS contact
+            }
+        } else if (settings.sendPush) {
+            LOG("Sending Push to everyone",2,null,'warn')
+            sendPushMessage(msg)													// Push to everyone
+        }
     }
+    sendNotificationEvent( notificationMessage )								// Always send to hello home
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
