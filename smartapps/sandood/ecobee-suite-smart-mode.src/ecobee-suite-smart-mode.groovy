@@ -22,10 +22,17 @@
  *	1.4.07 - Added inside temperature Mode change options
  *	1.4.08 - Tweaked inside temp change - don't switch to auto if mode is already the correct one (cool/heat)
  *	1.5.00 - Release number synchronization
+ *	1.5.01 - Allow Ecobee Suite Thermostats only
+ *	1.5.02 - Converted all math to BigDecimal
+ *	1.5.03 - Added (optional) dewpoint override for belowTemp Off Mode
+ *	1.5.04 - Added modeOff reservation support to avoid conflicts with other Helper Apps
+ *	1.5.05 - Added multiple SMS support (Contacts being deprecated by ST)
+ *	1.6.00- Release number synchronization
  */
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Suite Smart Mode",
@@ -51,69 +58,123 @@ def mainPage() {
         }
         section(title: "${settings.tempDisable?'':'Select Thermostat(s)'}") {
         	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."}
-        	else {input ("thermostats", "capability.Thermostat", title: "Pick Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)}            
+        	else {input ("thermostats", "device.ecobeeSuiteThermostat", title: "Pick Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)}            
 		}
         if (!settings.tempDisable) {
-			section(title: "Select Outdoor Temperature Source") {
-				input(name: 'tempSource', title: 'Monitor this temperature source', type: 'enum', required: true, multiple: false, description: 'Tap to choose...', options:['Weather for Location', 'SmartThings Temperature Sensor', "Thermostat's Weather Temperature", 'WeatherUnderground Station'], submitOnChange: true)
+			section(title: "Select Outdoor Weather Source") {
+				input(name: 'tempSource', title: 'Monitor this weather source', type: 'enum', required: true, multiple: false, description: 'Tap to choose...', 
+                	options:[
+                    	'ecobee':"Ecobee Thermostat's Weather", 
+                    	'location':'SmartThings Weather for Location', 
+                        'sensors':'SmartThings Sensors',
+                        'station':'SmartThings Weather Station',
+                        'wunder':'Weather Underground Station'
+                    ], submitOnChange: true
+                )
 				if (tempSource) {
-					if (tempSource == 'Weather for Location') {
-                        input(name: "zipCode", type: 'text', title: 'Zipcode (Default is location Zip code)', defaultValue: getZIPcode(), required: true, submitOnChange: true )
-						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', options:['1','5','10','15','30','60','180'])
-					} else if (tempSource == 'SmartThings Temperature Sensor') {
+					if (tempSource == 'location') {
+                    	paragraph "Using SmartThings weather for the current location (${location.name})."
+                        if (!settings.latLon) input(name: "zipCode", type: 'text', title: 'Zipcode (Default is location Zip code)', defaultValue: getZIPcode(), required: true, submitOnChange: true )
+                        if (location.latitude && location.longitude) input(name: "latLon", type: 'bool', title: 'Use SmartThings hub\'s GPS coordinates instead (better precision)?', submitOnChange: true)
+						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', 
+                        	options:['1','5','10','15','30','60','180'])
+					} else if (tempSource == 'sensors') {
+                    	paragraph "Using SmartThings sensors. Note: Both Temperature & Humidity sensors are required for dew point-based actions."
 						input(name: 'thermometer', type: 'capability.temperatureMeasurement', title: "Which Temperature Sensor?", description: 'Tap to choose...', required: true, multiple: false)
-					} else if (tempSource == "Thermostat's Weather Temperature") {
-						if (thermostats.size() > 1) {
-							input(name: 'tstatTemp', type: 'enum', title: "Which Thermostat?", description: 'Tap to choose...', required: true, multiple: false, options:thermostats.displayName)
+                        input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", description: 'Tap to choose...', 
+                        	required: (settings.dewBelowOverride), multiple: false) 
+					} else if (tempSource == "ecobee") {
+                    	paragraph "Using weather data from the (notoriously inaccurate) Ecobee thermostat${(settings.thermostats.size()==1)?' '+settings.thermostats.displayName:':'}"
+						if (settings.thermostats.size() > 1) {
+							input(name: 'tstatTemp', type: 'enum', title: "Which Ecobee thermostat?", description: 'Tap to choose...', required: true, multiple: false, submitOnChange: true,
+                            		options:thermostats.displayName)
 						}
-					} else if (tempSource == "WeatherUnderground Station") {
-						input(name: 'stationID', type: 'string', title: 'Enter WeatherUnderground PWS identifier', description: "Tap to choose...", defaultValue: getPWSID(), required: true)
-						
-                        input(name: 'nearestPWS', type: 'bool', title: 'Use nearest PWS', options: ['true', 'false'], defaultValue: true, submitOnChange: true)
-        				href(title: "Or, Search WeatherUnderground.com for your desired PWS ${nearestPWS}",
+					} else if (tempSource == 'station') {
+                    	paragraph "Using a SmartThings-based Weather Station - please select ONE from the list of available & supported Weather Station devices below..."
+                        input(name: "smartWeather", type: "device.smartWeatherStationTile", title: 'Which SmartWeather Station Tile?', description: "Tap to choose...", required: false, 
+                        		multiple: false, hideWhenEmpty: true)
+                        input(name: "smartWeather2", type: "device.smartWeatherStationTile2.0", title: 'Which SmartWeather Station Tile 2.0?', description: "Tap to choose...", required: false, 
+                        		multiple: false, hideWhenEmpty: true)
+                        input(name: "meteoWeather", type: "device.meteobridgeWeatherStation", title: 'Which Meteobridge Weather Station?', description: "Tap to choose...", required: false, 
+                        		multiple: false, hideWhenEmpty: true)
+                    } else if (tempSource == "wunder") {
+                    	paragraph "Using a specific Weather Underground Weather Station"
+						input(name: 'stationID', type: 'string', title: 'Enter WeatherUnderground Station identifier', description: "Tap to choose...", 
+                        		defaultValue: "${settings.nearestPWS?getPWSID():''}", required: true)
+                        input(name: 'nearestPWS', type: 'bool', title: 'Use nearest available station', options: ['true', 'false'], defaultValue: true, submitOnChange: true)
+        				href(title: "Or, Search WeatherUnderground.com for your desired PWS",
         					description: 'After page loads, select "Change Station" for a list of weather stations.  ' +
-        					'You will need to copy the station code into the PWS field above',
+        					'You will need to copy the station code into the PWS field above, in the form of "pws:STATIONID"',
              				required: false, style:'embedded',             
              				url: (location.latitude && location.longitude)? "http://www.wunderground.com/cgi-bin/findweather/hdfForecast?query=${location.latitude},${location.longitude}" :
              		 		"http://www.wunderground.com/q/${location.zipCode}")
-                        input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', options:['1','5','10','15','30','60','180'])
+                        input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', 
+                        	options:['1','5','10','15','30','60','180'])
 					}
 				}
 			}
-			section(title: "Outdoors Temperature Thresholds (Required, range: ${getThermostatRange()})") {
+			section(title: "Outdoor Temperature Thresholds\n(Required, range: ${getThermostatRange()})") {
 				// need to set min & max - get from thermostat range
-       			input(name: "aboveTemp", title: "When the outdoor temperature is at or above...", type: 'decimal', description: "Enter decimal temperature (${settings.belowTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.belowTemp, submitOnChange: true)
-				if (settings.aboveTemp) {
-					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes(), submitOnChange: true)
+       			input(name: "aboveTemp", title: "When the outdoor temperature is at or above...", type: 'decimal', description: "Enter decimal temperature (${settings.belowTemp?'optional':'required'})", 
+                		range: getThermostatRange(), required: !settings.belowTemp, submitOnChange: true)
+                input(name: "dewAboveTemp", title: "Or, (optionally) when the outdoor dewpoint is at or above...", type: 'decimal', description: "Enter decimal dewpoint", 
+                		required: false, submitOnChange: true)
+				if (settings.aboveTemp || settings.dewAboveTemp) {
+					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes(), 
+                    		submitOnChange: true)
+                    if (settings.aboveMode == 'off') {
+                    	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
+                    }
 				}
-            	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'number', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
+            	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'decimal', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", 
+                		range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
 				if (settings.belowTemp) {
-					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes())
+					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes(), 
+                    		submitOnChange: true)
+                    if (!(settings.aboveMode == 'off') && (settings.belowMode == 'off')) {
+                    	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
+                    }
 				}
+                if (settings.belowTemp && (settings.belowMode == 'off')) {
+                	input(name: 'dewBelowOverride', type: 'bool', title: 'Dewpoint overrides below temp Off Mode?', required: true, defaultValue: false, submitOnChange: true)
+                	if (settings.dewBelowOverride) {
+                    	input(name: 'dewBelowTemp', type: 'decimal', title: 'Override Off Mode when dew point is at or above...', description: "Enter decimal dew point", required: true, 
+                        		submitOnChange: true)       
+                	}
+            	}
 				if ((settings.belowTemp && settings.aboveTemp) && (settings.belowTemp != settings.aboveTemp)) {
-					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes())
+					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', 
+                    		description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
 				}
             }
-            section(title: "Indoors Temperature Controls (Optional)") {
+            section(title: "Indoor Temperature Controls (Optional)") {
             	if (getThermostatModes().contains('cool') && !settings.insideAuto) {
-            		input(name: 'aboveCool', title: 'Set thermostat Mode to Cool if its temperature is above its Cooling Setpoint (optional)?', type: 'bool', defaultValue: false, submitOnChange: true)
+            		input(name: 'aboveCool', title: 'Set thermostat Mode to Cool if its indoor temperature is above its Cooling Setpoint (optional)?', type: 'bool', defaultValue: false, 
+                    		submitOnChange: true)
                 }
                 if (getThermostatModes().contains('heat') && !settings.insideAuto) {
-                	input(name: 'belowHeat', title: 'Set thermostat Mode to Heat if its temperature is below its Heating Setpoint (optional)?', type: 'bool', defaultValue: false, submitOnChange: true)
+                	input(name: 'belowHeat', title: 'Set thermostat Mode to Heat if its indoor temperature is below its Heating Setpoint (optional)?', type: 'bool', defaultValue: false, 
+                    		submitOnChange: true)
                 }
                 if (getThermostatModes().contains('auto') && !(settings.aboveCool || settings.belowHeat)) {
-                	input(name: 'insideAuto', title: 'Set thermostat Mode to Auto if its temperature is above or below its Setpoints (optional)?', type: 'bool', defaultValue: false, submitOnChange: true)
+                	input(name: 'insideAuto', title: 'Set thermostat Mode to Auto if its indoor temperature is above or below its Setpoints (optional)?', type: 'bool', defaultValue: false, 
+                    		submitOnChange: true)
                 }
 			}
             
       		section("Notifications (optional)") {
         		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
             	if (settings.notify) {
-        			input(name: "recipients", type: "contact", title: "Send notifications to", required: notify) {
-               			input(name: "pushNotify", type: "boolean", title: "Send push notifications?", required: true, defaultValue: false)
-               		}
-            	}
-            	paragraph("(A notification is always sent to the Hello Home Notifications log whenever Ecobee Suite Smart Mode changes a thermostat's Mode)")
+                	input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true, submitOnChange: true) {
+            				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+            				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false, submitOnChange: true 
+                    }
+                    if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone) {
+                        input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
+                    }
+                    if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
+                }
+            	paragraph("A notification is always sent to the Hello Home log whenever Smart Mode changes a thermostat's Mode")
         	}
         }
         section(title: "Temporary Disable") {
@@ -125,13 +186,26 @@ def mainPage() {
 
 def installed() {
 	LOG("installed() entered", 3, "", 'trace')
+    atomicState.aboveChanged = false
+    atomicState.betweenChanged = false
+    atomicState.belowChanged = false
+    atomicState.dewpoint = null
+    atomicState.humidity = null
 	initialize()  
 }
 
+def uninstalled() {
+	thermostats.each {
+    	cancelReservation(it, 'modeOff' )
+    }
+}
+
 def updated() {
-	LOG("updated() entered", 3, "", 'trace')
+	LOG("updated() with settings: ${settings}", 3, "", 'trace')
 	unsubscribe()
     unschedule()
+    atomicState.dewpoint = null
+    atomicState.humidity = null
     initialize()
 }
 
@@ -145,45 +219,147 @@ def initialize() {
     if (settings.aboveCool || settings.belowHeat || settings.insideAuto) {
     	subscribe(thermostats, 'temperature', insideChangeHandler)
     }
-    Double tempNow = -99.0
+    
+    if (settings.aboveTemp || settings.belowTemp) {
+    	subscribe(thermostats, 'thermostatMode', thermostatModeHandler)
+    }
+    def tempNow
+    def gu = getTemperatureScale()
 	switch( settings.tempSource) {
-		case 'Weather for Location':
+		case 'location':
+        	def WUname = (settings.latLon) ? 'getGPSTemp' : 'getZipTemp'
 			if (settings.locFreq.toInteger() < 60) {
-            	"runEvery${settings.locFreq}Minute${settings.locFreq!='1'?'s':''}"( 'getZipTemp' )
+            	"runEvery${settings.locFreq}Minute${settings.locFreq!='1'?'s':''}"( "${WUname}" )
             } else {
             	def locHours = settings.locFreq.toInteger() / 60
-                "runEvery${locHours}Hour${locHours!=1?'s':''}"( 'getZipTemp' )
+                "runEvery${locHours}Hour${locHours!=1?'s':''}"( "${WUname}" )
             }
-            def t = getZipTemp()					// calls temperatureUpdate()
-            if (t.isNumber()) tempNow = t.toDouble()
+            def t = "${WUname}"()					// calls temperatureUpdate() & stores dewpoint
+            if (t.isNumber()) tempNow = t
 			break;
 		
-		case 'SmartThings Temperature Sensor':
-			subscribe( settings.thermometer, 'temperature', tempChangeHandler)
-            def t = settings.thermometer.currentValue('temperature')
-            if (t.isNumber()) { tempNow = t.toDouble(); temperatureUpdate(tempNow) }
+		case 'sensors':
+            if (settings.dewBelowOverride) {
+            	if (settings.humidistat) subscribe( settings.humidistat, 'relativeHumidity', humidityChangeHandler)
+            } else {
+            	log.error "Dewpoint override enabled, but no humidistat selected - initialization FAILED."
+                return false
+            }
+            subscribe( settings.thermometer, 'temperature', tempChangeHandler)
+            def latest = settings.thermometer.currentState("temperature")
+			def unit = latest.unit
+            def t 
+            if (latest.value.isNumber()) {
+            	t = roundIt(latest.numberValue, (unit=='C'?2:1))
+            	if (dewBelowOverride) {
+                	latest = settings.humidistat.currentState('humidity')
+            		if (latest.value.isNumber()) {
+                    	def h = latest.numberValue
+            			atomicState.humidity = h
+                        LOG("Humidity is: ${h}%",3,null,'info')
+                		def d = calculateDewpoint( t, h, unit )
+            			atomicState.dewpoint = d
+                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                   	}
+                }
+            	tempNow = t 
+                temperatureUpdate(tempNow) 
+            }
 			break;
+            
+        case 'station':
+        	if (settings.smartWeather) {
+            	subscribe(settings.smartWeather, 'temperature', tempChangeHandler)
+                def latest = settings.smartWeather.currentState('temperature')
+                def t = latest.value
+                def unit = latest.unit
+                if (t.isNumber()) {
+                	t = latest.numberValue
+                	if (dewBelowOverride) {
+                		subscribe(settings.smartWeather, 'relativeHumidity', humidityChangeHandler)
+                		latest = settings.smartWeather.currentState('relativeHumidity')
+                		if (latest.value.isNumber()) {
+                        	def h = roundIt(latest.numberValue, (unit=='C'?2:1))
+                        	LOG("Humidity is: ${h}%",3,null,'info')
+                			def d = calculateDewpoint( t, h, unit )
+                            atomicState.dewpoint = d
+                            LOG("Dewpoint is: ${d}°",3,null,'info')
+                        }
+                    }
+                	tempNow = t 
+                    temperatureUpdate(tempNow) 
+                }
+            } else if (settings.smartWeather2) {
+            	def latest
+                if (settings.dewBelowOverride) {
+                	subscribe(settings.smartWeather2, 'dewpoint', dewpointChangeHandler)
+                	latest = settings.smartWeather2.currentState('dewpoint')
+                    if (latest.value.isNumber()) {
+                    	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+                        atomicState.dewpoint = d
+                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                    }
+                }
+            	subscribe(settings.smartWeather2, 'temperature', tempChangeHandler)
+                latest = settings.smartWeather2.currentState('temperature')
+            	if (latest.value.isNumber()) { 
+                	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+                    temperatureUpdate(tempNow) 
+                }
+            } else if (settings.meteoWeather) {
+            	def latest
+                if (settings.dewBelowOverride) {
+                	subscribe(settings.meteoWeather, 'dewpoint', dewpointChangeHandler)
+                	latest = settings.meteoWeather.currentState('dewpoint')
+                    if (latest.value.isNumber()) {
+                    	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+                        atomicState.dewpoint = d
+                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                    }
+                }
+            	subscribe(settings.meteoWeather, 'temperature', tempChangeHandler)
+                latest = settings.meteoWeather.currentState('temperature')
+            	if (latest.value.isNumber()) { 
+                	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+                    temperatureUpdate(tempNow) 
+                }
+            }
+        	break;
 		
-		case "Thermostat's Weather Temperature":
+		case "ecobee":
 			def theStat = []
-			theStat = settings.thermostats.size() == 1 ? settings.thermostats : [settings.tstatTemp]
-			subscribe(theStat, 'weatherTemperature', tempChangeHandler)
-            def t = theStat.currentValue('weatherTemperature')
-            if (t.isNumber()) { tempNow = t.toDouble(); temperatureUpdate(tempnow) }
+            def latest
+			theStat = settings.thermostats.size() == 1 ? settings.thermostats[0] : settings.tstatTemp
+            if (dewBelowOverride) {
+            	subscribe(theStat, 'weatherDewpoint', dewpointChangeHandler)
+            	latest = theStat.currentState('weatherDewpoint')
+            	if (latest.value.isNumber()) {
+                	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+                	atomicState.dewpoint = d
+                    LOG("Dewpoint is: ${d}°",3,null,'info')
+                }
+            }
+            subscribe(theStat, 'weatherTemperature', tempChangeHandler)
+            latest = theStat.currentState('weatherTemperature')
+            if (latest.value.isNumber()) {
+            	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+                temperatureUpdate(tempnow) 
+            }
 			break;
 		
-		case 'WeatherUnderground Station':
+		case 'wunder':
 			if (settings.pwsFreq.toInteger() < 60) {
             	"runEvery${settings.pwsFreq}Minute${settings.pwsFreq!='1'?'s':''}"( 'getPwsTemp' )
             } else {
             	def pwsHours = settings.pwsFreq.toInteger() / 60
                 "runEvery${pwsHours}Hour${pwsHours!=1?'s':''}"( 'getPwsTemp' )
             }
-            def t = getPwsTemp()					// calls temperatureUpdate*()
-            if (t.isNumber()) tempNow = t.toDouble()
+            def t = getPwsTemp()					// calls temperatureUpdate() and updates atomicState.dewpoint
+            if (t.isNumber()) tempNow = t
 			break;
 	}
-    if (tempNow && (tempNow > -90)) {
+    if (tempNow) {
+    	atomicState.temperature = tempNow
     	LOG("Initialization complete...current temperature is ${tempNow}°",2,null,'info')
         return true
     } else {
@@ -193,11 +369,13 @@ def initialize() {
 }
 
 def insideChangeHandler(evt) {
-	def theTemp = evt.doubleValue
+    def theTemp = evt.value
     def newMode = null
     if (theTemp.isNumber()) {
+    	theTemp = evt.numberValue
     	def coolSP = evt.device.currentValue('coolingSetpointDisplay')
         if (coolSP.isNumber()) {
+        	coolSP = coolSP.toBigDecimal()
         	if (theTemp > coolSP) {
             	if (settings.aboveCool) {
                 	newMode = 'cool'
@@ -209,6 +387,7 @@ def insideChangeHandler(evt) {
         if (newMode == null) {
        		def heatSP = evt.device.currentValue('heatingSetpointDisplay')
             if (heatSP.isNumber()) {
+            	heatSP = heatSP.toBigDecimal()
 				if (theTemp < heatSP) {
                 	if (settings.belowHeat) {
                     	newMode = 'heat'
@@ -219,33 +398,123 @@ def insideChangeHandler(evt) {
             }
         }
         if (newMode != null) {
-        	if (evt.device.currentValue('thermostatMode') != newMode) {
-            	evt.device.setThermostatMode(newMode)
-                LOG("${evt.device.displayName} temp is ${theTemp}°, changed thermostat to ${newMode} mode",3,null,'trace')
-        		NOTIFY("${app.label}: Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
+        	def cMode = evt.device.currentValue('thermostatMode')
+        	if (cMode != newMode) {
+            	if ((cMode == 'off') && anyReservations( evt.device, 'modeOff' )) {
+                	// if ANYBODY (including me) has a reservation on this being off, I can't turn it back on)
+                    LOG("${evt.device.displayName} temp is ${theTemp}°, but Mode is Off with reservations, can't change to ${newMode}",2,null,'warn')
+                    // Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
+                } else {
+                	// not currently off or there are no modeOff reservations, change away!
+                    cancelReservation(evt.device, 'modeOff' )
+            		evt.device.setThermostatMode(newMode)
+                	LOG("${evt.device.displayName} temp is ${theTemp}°, changed thermostat to ${newMode} mode",3,null,'trace')
+        			sendNotification("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
+                }
             }
         }
     }
 }
 
+def thermostatModeHandler(evt) {
+	// if the mode changes but we didn't do it, reset the atomicState modes as appropriate
+    if ((settings.aboveTemp || settings.dewAboveTemp) && (evt.value == settings.aboveMode) && !atomicState.aboveChanged) {
+    	atomicState.belowChanged = false
+        atomicState.betweenChanged = false
+    }
+    else if (settings.belowTemp && (evt.value == settings.belowMode) && !atomicState.belowChanged) {
+    	atomicState.aboveChanged = false
+        atomicState.betweenChanged = false
+    }
+    else if (settings.aboveTemp && settings.belowTemp && settings.betweenMode && (evt.value == settings.betweenMode) && !atomicState.betweenChanged) {
+    	atomicState.aboveChanged = false
+        atomicState.belowChanged = false
+    }
+}
+
 def tempChangeHandler(evt) {
-	Double newTemp 
-    try { 
-    	newTemp = evt.doubleValue 
-		temperatureUpdate( newTemp )
-    } catch (e) {
-    	LOG("Invalid temp: ${e}",2,null,'warn')
+    if (evt.value?.isNumber()) {
+    	def t = roundIt(evt.numberValue, (evt.unit=='C'?2:1))
+    	atomicState.temperature = t
+        if (settings.dewBelowOverride || settings.dewAboveTemp) {
+        	// We have to update the dewpoint every time the temperature (or humidity) changes
+        	if (atomicState.humidity != null) {
+            	// Somebody is updating atomicState.humidity, so we need to calculate the dewpoint
+                // (Sources that provide dewpoint directly will not update atomicState.humidity)
+            	if (settings.tempSource == 'sensors') {    
+            		def latest = settings.humidistat.currentState('humidity')
+            		if (latest.value.isNumber()) {
+                    	def h = latest.numberValue
+            			atomicState.humidity = h
+                        LOG("Humidity is: ${h}%",3,null,'info')
+                		def d = calculateDewpoint( t, h, evt.unit )
+            			atomicState.dewpoint = d
+                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                        runIn(2, atomicTempUpdater, [overwrite: true] )		// humidity might be updated also
+                        return
+                   	}
+                } else if ((settings.tempSource == 'station') && settings.smartWeather) {
+                	def latest = settings.smartWeather.currentState('relativeHumidity')
+                    if (latest.value.isNumber()) {
+                    	h = latest.numberValue
+                        LOG("Humidity is: ${h}%",3,null,'info')
+                		def d = calculateDewpoint( t, h, unit )
+                        atomicState.dewpoint = d
+                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                        runIn(2, atomicTempUpdater, [overwrite: true] )		// humidity might be updated also
+                        return
+                    }
+                }
+            } else {
+            	runIn(2, atomicTempUpdater, [overwrite: true] )				// wait for dewpoint to be updated also
+                return
+            }
+        }
+        // Aren't doing dewpoint stuff, so we can just update the temp directly
+    	temperatureUpdate( t )
     }
 }   
-							  
-def temperatureUpdate( Double temp ) {
-    if (!temp || !temp.isNumber()) {
+
+def dewpointChangeHandler(evt) {
+	if (evt.value.isNumber()) {
+    	def d = roundIt(evt.numberValue, (evt.unit=='C'?2:1))
+    	atomicState.dewpoint = d
+        LOG("Dewpoint is: ${d}°",3,null,'info')
+        runIn(2, atomicTempUpdater, [overwrite: true]) 		// wait for temp to be updated also
+    }
+}
+
+def humidityChangeHandler(evt) {
+	if (evt.value.isNumber()) {
+    	t = atomicState.temperature
+        u = getTemperatureScale()
+        atomicState.humidity = evt.numberValue
+        LOG("Humidity is: ${evt.numberValue}%",3,null,'info')
+    	def d = calculateDewpoint(t, evt.numberValue, u)
+        atomicState.dewpoint = d
+        LOG("Dewpoint is: ${d}°",3,null,'info')
+        runIn(2, atomicTempUpdater, [overwrite: true])
+    }
+}
+
+def atomicTempUpdater() {
+	temperatureUpdate( atomicState.temperature )
+}
+
+def temperatureUpdate( temp ) {
+	if (temp?.isNumber()) temperatureUpdate(temp as BigDecimal)
+}
+def temperatureUpdate( BigDecimal temp ) {
+    if (!temp) {
     	LOG("Ignoring invalid temperature: ${temp}°", 2, null, 'warn')
         return false
     }
+    temp = roundIt(temp, (getTemperatureScale()=='C'?2:1))
+    atomicState.temperature = temp
+    LOG("Temperature is: ${temp}°",3,null,'info')
     
     def desiredMode = null
-	if (settings.aboveTemp && (temp >= settings.aboveTemp)) {
+	if ( (settings.aboveTemp && (temp >= settings.aboveTemp)) || (settings.dewAboveTemp && (atomicState.dewpoint >= settings.dewAboveTemp))) {
     	if (!atomicState.aboveChanged) {
 			desiredMode = settings.aboveMode
             atomicState.aboveChanged = true
@@ -254,12 +523,45 @@ def temperatureUpdate( Double temp ) {
         }
 	} else if (settings.belowTemp && (temp <= settings.belowTemp)) {
     	if (!atomicState.belowChanged) {
-			desiredMode = settings.belowMode
-            atomicState.aboveChanged = false
-            atomicState.betweenChanged = false
-            atomicState.belowChanged = true
+        	// We haven't already changed to belowMode
+        	if ((settings.belowMode != 'off') || !settings.dewBelowOverride || (settings.dewBelowTemp > atomicState.dewpoint)) {
+            	// not turning HVAC off or aren't overriding off at this time
+                desiredMode = settings.belowMode
+                // TBD: Should we save the prior mode so we have something to return to???
+                atomicState.aboveChanged = false
+                atomicState.betweenChanged = false
+                atomicState.belowChanged = true
+            } else {
+            	// not supposed to change the mode right now
+                // belowMode is 'off', and dewBelowOverride is true, and current dewpoint is >= dewBelowTemp setting.
+                // reset everything
+                desiredMode = null
+				atomicState.aboveChanged = false
+                atomicState.betweenChanged = false
+                atomicState.belowChanged = false
+            }
+        } else {
+        	// We have prior changed to the belowMode - now we have to check if dewpoint is still below the limit
+            if ((settings.belowMode == 'off') && settings.dewBelowOverride && (settings.dewBelowTemp <= atomicState.dewpoint)) {
+            	// Uh-oh, the dewpoint has risen into the bad land
+            	if (settings.betweenMode) {
+                	// We have a between mode - let's change back to that
+                	desiredMode = settings.betweenMode
+            		atomicState.aboveChanged = false
+            		atomicState.betweenChanged = true
+            		atomicState.belowChanged = false
+                } else if (settings.aboveMode) {
+                	// OK, now between mode. But we have an above mode - switch to that
+                	desiredMode = settings.aboveMode
+                    atomicState.aboveChanged = true
+                    atomicState.betweeChanged = false
+                    atomicState.belowChanged = false
+                }
+            } else {
+            	// No reason to change anything - 
+            }
         }
-	} else if (settings.aboveTemp && settings.belowTemp && settings.betweenMode) {
+	} else if ((settings.aboveTemp || (settings.dewAboveTemp && (atomicState.dewpoint < settings.dewAboveTemp))) && settings.belowTemp && settings.betweenMode) {
     	if (!atomicState.betweenChanged) {
 			desiredMode = settings.betweenMode
             atomicState.aboveChanged = false
@@ -271,17 +573,42 @@ def temperatureUpdate( Double temp ) {
     	String changeNames = ""
         String sameNames = ""
 		settings.thermostats.each { 
-			if (it.currentValue('thermostatMode') != desiredMode) {
-				it.setThermostatMode(desiredMode)
-                changeNames += changeNames ? ", ${it.displayName}" : it.displayName
-			} else {
+        	def cMode = it.currentValue('thermostatMode')
+			if ( cMode != desiredMode) {
+            	if (desiredMode == 'off') {
+                    it.setThermostatMode( 'off' )
+                    makeReservation(it, 'modeOff')
+                } else {
+                	// Desired mode IS NOT 'off'
+                	if (cMode == 'off') {
+                    	def i = countReservations(it, 'modeOff') - (haveReservation(it, 'modeOff')? 1 : 0)
+                    	if (i <= 0) {
+                    		// nobody else has a reservation on modeOff
+                            cancelReservation( it, 'modeOff')
+							it.setThermostatMode(desiredMode)
+                			changeNames += changeNames ? ", ${it.displayName}" : it.displayName
+						} else {
+                    		// somebody else has a 'modeOff' reservation so we can't turn it on, but we can cancel our reservation
+                        	cancelReservation( it, 'modeOff')
+                            LOG("Temp is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(it,'modeOff').toString()[1..-2]} hold 'modeOff' reservations",2,null,'warn')
+                            sendNotification("The temperature is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(it,'modeOff').toString()[1..-2]} hold 'modeOff' reservations")
+                            // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
+                    	}
+                    } else {
+                    	// Not off currently, so we can change freely
+                        cancelReservation(it, 'modeOff')	// just in case
+                    	it.setThermostatMode(desiredMode)
+                    }
+                }
+            } else {
+            	cancelReservation(it, 'modeOff')
                 sameNames += sameNames ? ", ${it.displayName}" : it.displayName
             }
 		}
         def multi=0
         if (changeNames) {
         	LOG("Temp is ${temp}°, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
-        	NOTIFY("${app.label}: The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
+        	sendNotification("The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
         }
         if (sameNames) LOG("Temp is ${temp}°, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
@@ -291,20 +618,25 @@ private def getZipTemp() {
 	return getWUTemp('zip')
 }
 
+private def getGPSTemp() {
+	return getWUTemp('gps')
+}
+
 private def getPwsTemp() {
 	return getWUTemp('pws')
 }
 
 private def getWUTemp(type) {
 	def isMetric = (getTemperatureScale() == "C")
-    Double tempNow = 999.99
-    def source = (type == 'zip') ? settings.zipCode : "pws:"+settings.stationID
+    def tempNow
+    def dewpointNow
+    def source = (type == 'zip') ? settings.zipCode : ((type == 'gps')?"${location.latitude},${location.longitude}":settings.stationID)
 	Map wdata = getWeatherFeature('conditions', source)
     if (wdata && wdata.response) {
     	//LOG("conditions: ${wdata.response}",4,null,'trace')
 		if (wdata.response.containsKey('error')) {
         	if (wdata.response.error.type != 'invalidfeature') {
-    			LOG("Please check ${type=='zip'?'Zipcode':'WU Station'} setting, error:\n${wdata.response.error.type}: ${wdata.response.error.description}" ,1,null,'error')
+    			LOG("Please check ${type=='zip'?'ZIPcode':((type=='gps')?'Location Lat/Lon':'WU Station')} setting, error:\n${wdata.response.error.type}: ${wdata.response.error.description}" ,1,null,'error')
         		return null
             } 
             else {
@@ -314,16 +646,20 @@ private def getWUTemp(type) {
 		}
     }
     else {
-    	LOG("Please check Zipcode/PWS setting, weather returned: null",2,null,'warn')
+    	LOG("Please check ZIPcode, Lat/Lon, or PWS setting, weather returned: null",2,null,'warn')
     	return null
     }
     if (wdata.current_observation) { 
     	if (!isMetric) {
-			if (wdata.current_observation.temp_f.isNumber()) tempNow = wdata.current_observation.temp_f.toDouble()
+			if (wdata.current_observation.temp_f?.isNumber()) tempNow = wdata.current_observation.temp_f.toBigDecimal()
+            if (wdata.current_observation.dewpoint_f?.isNumber()) dewpointNow = wdata.current_observation.dewpoint_f.toBigDecimal()
         } else {
-        	if (wdata.current_observation.temp_c.isNumber()) tempNow = wdata.current_observation.temp_c.toDouble()
+        	if (wdata.current_observation.temp_c?.isNumber()) tempNow = wdata.current_observation.temp_c.toBigDecimal()
+            if (wdata.current_observation.dewpoint_c?.isNumber()) dewpointNow = wdata.current_observation.dewpoint_c.toBigDecimal()
         }
-        if (tempNow != 999.99) {
+        if (tempNow?.isNumber()) {
+        	LOG("Dewpoint is: ${dewpointNow}°",2,null,'info')
+        	atomicState.dewpoint = dewpointNow
         	temperatureUpdate(tempNow)
             return tempNow
         } else {
@@ -333,6 +669,19 @@ private def getWUTemp(type) {
     }
     LOG("Current conditions unavailable",1,null,'error')
     return null
+}
+
+// Calculate a close approximation of Dewpoint based on Temp, Relative Humidity (need Units - algorithm only works for C values)
+def calculateDewpoint( temp, rh, units) {
+	def t = ((units == 'C') ? temp : (temp-32)/1.8) as BigDecimal
+	def dpC = 243.04*(Math.log(rh/100.0)+((17.625*t)/(243.04+t)))/(17.625-Math.log(rh/100.0)-((17.625*t)/(243.04+t)))
+    return (units == 'C') ? roundIt(dpC, 2) : roundIt(((dpC*1.8)+32), 1)
+}
+private roundIt( value, decimals=0 ) {
+	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
+}
+private roundIt( BigDecimal value, decimals=0) {
+    return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 
 // return all the modes that ALL thermostats support
@@ -351,11 +700,13 @@ def getThermostatModes() {
 
 // return the largest range that ALL thermostats will allow
 def getThermostatRange() {
-	Double low = 0.0
-	Double high = 99.0
+	def low = 0.0
+	def high = 99.0
 	settings.thermostats.each {
-		def l = it.currentValue('heatingSetpointMin') as Double
-		def h = it.currentValue('coolingSetpointMax') as Double
+		def latest = it.currentState('heatingSetpointMin')
+        def l = (latest.value.isNumber()) ? latest.numberValue : low
+        latest = it.currentState('coolingSetpointMax')
+		def h = (latest.value.isNumber()) ? latest.numberValue : high
 		if (l > low) low = l
 		if (h < high) high = h
 	}
@@ -374,11 +725,14 @@ private String getPWSID() {
 	String geoLocation = location.zipCode
 	// use coordinates, if available
 	if (location.latitude && location.longitude) geoLocation = "${location.latitude},${location.longitude}"
+    log.debug "Geolocation: ${geoLocation}"
     Map wdata = getWeatherFeature('geolookup', geoLocation)
     if (wdata && wdata.response && !wdata.response.containsKey('error')) {	// if we get good data
     	if (wdata.response.features.containsKey('geolookup') && (wdata.response.features.geolookup.toInteger() == 1) && wdata.location) {
-        	log.debug "wdata ${wdata.location.nearby_weather_stations.pws}"
-    		PWSID = wdata.location.nearby_weather_stations.pws.station[0].id
+        	//log.debug "wdata ${wdata.location.nearby_weather_stations.pws}"
+            log.debug "wdata ${wdata.location.nearby_weather_stations}"
+    		if (wdata.location.nearby_weather_stations?.pws?.station[0]?.id) PWSID = 'pws:' + wdata.location.nearby_weather_stations.pws.station[0].id
+            else if (wdata.location.nearby_weather_stations?.airport?.station[0]?.icao) PWSID = wdata.location.nearby_weather_stations.airport.station[0].icao
     	}
     	else log.debug "bad response"
     }
@@ -388,6 +742,49 @@ private String getPWSID() {
 	return PWSID
 }
 
+// Reservation Management Functions
+// Make a reservation for me
+void makeReservation( stat, String type='modeOff' ) {
+	stat.makeReservation( app.id, type )
+}
+// Cancel my reservation
+void cancelReservation( stat, String type='modeOff') {
+	stat.cancelReservation( app.id, type )
+}
+// Do I have a reservation?
+Boolean haveReservation( stat, String type='modeOff') {
+def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	return (reservations?."${type}"?.contains(app.id))
+}
+// Do any Apps have reservations?
+Boolean anyReservations( stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
+}
+// How many apps have reservations?
+Integer countReservations(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))	
+	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
+}
+// Get the list of app IDs that have reservations
+List getReservations(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+    return (reservations?.containsKey(type)) ? reservations."${type}" : []
+}
+// Get the list of app Names that have reservations
+List getGuestList(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+    if (reservations?.containsKey(type)) {
+    	def guestList = []
+        reservations."${type}".each {
+        	guestList << parent.getChildAppName( it )
+        }
+        return guestList
+    }
+    return []
+}
+
+// Helper Functions
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
 	if (logType == null) logType = 'debug'
@@ -395,14 +792,28 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
     log."${logType}" message
 }
 
-private def NOTIFY(message) {
-	if (settings.notify) {
-    	if (location.contactBookEnabled && settings.recipients) {
-        	sendNotificationToContacts(message, settings.recipients)// notify contacts & hello home
-    	} else if (settings.pushNotify) {
-    		sendNotification(message)								// push and hello home
-    	} else {
-        	sendNotificationEvent(message)							// just hello home
-    	}
+private def sendNotification(notificationMessage) {
+	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
+    
+    if (settings.notify) {
+        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+        if (location.contactBookEnabled && settings.recipients) {
+            sendNotificationToContacts(msg, settings.recipients, [event: false]) 	// only to contacts
+        } else if (phone) { // check that the user did select a phone number
+            if ( phone.indexOf(";") > 0){
+                def phones = phone.split(";")
+                for ( def i = 0; i < phones.size(); i++) {
+                    LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
+                    sendSmsMessage(phones[i], msg)									// Only to SMS contact
+                }
+            } else {
+                LOG("Sending SMS to ${phone}",2,null,'info')
+                sendSmsMessage(phone, msg)											// Only to SMS contact
+            }
+        } else if (settings.pushNotify) {
+            LOG("Sending Push to everyone",2,null,'warn')
+            sendPushMessage(msg)													// Push to everyone
+        }
     }
+    sendNotificationEvent( notificationMessage )								// Always send to hello home
 }
