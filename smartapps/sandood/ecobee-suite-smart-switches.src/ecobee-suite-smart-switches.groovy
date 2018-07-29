@@ -21,8 +21,10 @@
  *	1.4.0  - Renamed parent Ecobee Suite Manager
  *	1.4.01 - Updated description
  *	1.5.00 - Release number synchronization
+ *	1.5.01 - Allow Ecobee Suite Thermostats only
+ *	1.6.00- Release number synchronization
  */
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()}" }
 
 definition(
@@ -53,7 +55,7 @@ def mainPage() {
             if (settings.tempDisable) {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to enable handler."
             } else {
-				input(name: "theThermostats", type: "capability.thermostat", title: "Monitor these thermostat(s) for operating state changes", multiple: true, required: true, submitOnChange: true)
+				input(name: "theThermostats", type: "device.ecobeeSuiteThermostat", title: "Monitor these thermostat(s) for operating state changes", multiple: true, required: true, submitOnChange: true)
             }
 		}
         
