@@ -35,9 +35,13 @@
  *	1.4.04 - Minor tweaks
  *	1.4.05 - Added Quiet Time Helper integration
  *	1.5.00 - Release number synchronization
- *
+ *	1.5.01 - Allow Ecobee Suite Thermostats only
+ *	1.5.02 - Converted all math to BigDecimal
+ *	1.5.03 - Miscellaneous bug fixes
+ *	1.5.04 - Added 'circOff' and 'vacaCircOff' reservation handling (applies to quiet time only)
+ *	1.6.00 - Release number synchronization
  */
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -69,7 +73,7 @@ def mainPage() {
         section(title: "Select Thermostat") {
         	if(settings.tempDisable) {paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to activate handler."}
             else {
-        		input(name: "theThermostat", type:"capability.Thermostat", title: "Use which Ecobee Thermostat", required: true, multiple: false, 
+        		input(name: "theThermostat", type:"device.ecobeeSuiteThermostat", title: "Use which Ecobee Thermostat", required: true, multiple: false, 
                 submitOnChange: true)
             }
 		}
@@ -143,6 +147,11 @@ def installed() {
     atomicState.maxDelta = 0.0
     atomicState.minDelta = 100.0    
 	initialize()  
+}
+
+def uninstalled() {
+	cancelReservation( theThermostat, 'circOff' )
+    cancelReservation( theThermostat, 'vacaCircOff' )
 }
 
 def updated() {
@@ -234,20 +243,24 @@ def initialize() {
     if (isOK) {	
 		if (currentOnTime < settings.minFanOnTime) {
     		if (vacationHold && settings.vacationOverride) {
+            	cancelReservation( theThermostat, 'vacaCircOff')
         		theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
             	currentOnTime = settings.minFanOnTime
                 atomicState.lastAdjustmentTime = now() 
         	} else if (!vacationHold) {
+            	cancelReservation( theThermostat, 'circOff')
     			theThermostat.setFanMinOnTime(settings.minFanOnTime)
             	currentOnTime = settings.minFanOnTime
                 atomicState.lastAdjustmentTime = now() 
         	}
     	} else if (currentOnTime > settings.maxFanOnTime) {
     		if (vacationHold && settings.vacationOverride) {
+            	cancelReservation( theThermostat, 'vacaCircOff')
         		theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime)
         		currentOnTime = settings.maxFanOnTime
                 atomicState.lastAdjustmentTime = now() 
         	} else if (!vacationHold) {
+            	cancelReservation( theThermostat, 'circOff')
     			theThermostat.setFanMinOnTime(settings.maxFanOnTime)
         		currentOnTime = settings.maxFanOnTime
                 atomicState.lastAdjustmentTime = now() 
@@ -260,9 +273,11 @@ def initialize() {
     } else if (atomicState.quietNow) {
     	if (currentOnTime != 0) {
     		if (vacationHold && settings.vacationOverride) {
+            	makeReservation(theThermostat, 'vacaCircOff')
         		theThermostat.setVacationFanMinOnTime(0)
         	} else if (!vacationHold) {
-    			theThermostat.setFanMinOnTime(0)
+                makeReservation(theThermostat, 'circOff')
+                theThermostat.setFanMinOnTime(0)
         	}
         }
     }
@@ -280,6 +295,7 @@ def quietOnHandler(evt) {
         Integer currentOnTime = theThermostat.currentValue('fanMinOnTime').isNumber() ? theThermostat.currentValue('fanMinOnTime').toInteger() : 0	
         atomicState.quietOnTime = currentOnTime
         LOG("Quiet Time enabled, ${app.name} will stop updating circulation time", 3, null, 'info')
+        // NOTE: Quiet time will actually pull the circOff reservation and set circulation time to 0
     } else {
     	LOG('Quiet Time already enabled', 3, null, 'info')
     }
@@ -287,6 +303,7 @@ def quietOnHandler(evt) {
 
 def quietOffHandler(evt) {
 	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
+    // NOTE: Quiet time will release its circOff reservation and set circulation time to whatever it was
     if (atomicState.quietNow) {
     	if (!settings.quietSwitches.currentSwitch.contains(settings.qtOn)) {
 	    	// All the switches are "off"
@@ -337,14 +354,31 @@ def deltaHandler(evt=null) {
     String currentProgram = theThermostat.currentValue('currentProgram')
     boolean vacationHold = (currentProgram && (currentProgram == 'Vacation'))
     
+    // Make sure it is OK for us to e changing circulation times
 	def isOK = atomicState.isOK
     if (!isOK) return
-
 	if (vacationHold && !settings.vacationOverride) {
     	LOG("${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
         return
     }
-    
+    if (!vacationHold) {
+        if (anyReservations(theThermostat, 'circOff') && (theThermostat.currentValue('fanMinOnTime').toInteger() == 0)) {
+            // Looks like somebody else has turned off circulation
+            if (!haveReservation(theThermostat, 'circOff')) {		// is it me?
+                // Not me, so we can't be changing circulation
+				return
+            }
+        }
+    } else {
+    	if (anyReservations(theThermostat, 'vacaCircOff') && (theThermostat.currentValue('fanMinOnTime').toInteger() == 0)) {
+            // Looks like somebody else has turned off circulation
+            if (!haveReservation(theThermostat, 'vacaCircOff')) {		// is it me?
+                // Not me, so we can't be changing circulation
+				return
+            }
+        }
+    }
+
 	if (evt) {
     	if (evt.name == 'currentProgram') {
         	LOG("Thermostat Program changed to my Program (${evt.value})",3,null,'info')
@@ -360,9 +394,11 @@ def deltaHandler(evt=null) {
             } else {
                 LOG("Configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
                 if (vacationHold && settings.vacationOverride) {
-        			theThermostat.setVacationFanMinOnTime(0)
+                	cancelReservation( theThermostat, 'vacaCircOff')
+        			theThermostat.setVacationFanMinOnTime(settings.fanMinOnTIme)
         		} else if (!vacationHold) {
-    				theThermostat.setFanMinOnTime(0)
+                	cancelReservation( theThermostat, 'circOff')
+    				theThermostat.setFanMinOnTime(settings.fanMinOnTime)
         		}
                 return
             }
@@ -396,19 +432,19 @@ def calcTemps() {
     
     // parse temps - ecobee sensors can return "unknown", others may return
     def temps = []
-    Double total = 0.0
+    def total = 0.0
     def i=0
     theSensors.each {
     	def temp = it.currentValue("temperature")
     	if (temp && temp.isNumber() && (temp > 0)) {
         	temps += [temp]	// we want to deal with valid inside temperatures only
-            total = total + temp.toDouble()
+            total = total + temp
             i = i + 1
         }
     }
-    Double avg = 0.0
+    def avg = 0.0
     if (i > 1) {
-    	avg = (total / i.toDouble()).round(2)
+    	avg = roundIt((total / i.toBigDecimal()), 2) 
 	    LOG("Current temperature readings: ${temps}, average is ${String.format("%.2f",avg)}°", 4, "", 'trace')
     } else {
     	LOG("Only recieved ${temps.size()} valid temperature readings, skipping...",3,"",'warn')
@@ -425,9 +461,9 @@ def calcTemps() {
         	outTemp = outdoorSensor.currentValue("temperature")
             LOG("Using ${outdoorSensor.displayName}'s temperature (${outTemp}°)",4,null,"info")
         }
-        Double inoutDelta = null
+        def inoutDelta = null
         if (outTemp && outTemp.isNumber()) {
-        	inoutDelta = (outTemp.toDouble() - avg).round(2)
+        	inoutDelta = roundIt((outTemp - avg), 2)
         }
         if (inoutDelta == null) {
         	LOG("Invalid outdoor temperature, skipping...",1,"","warn")
@@ -461,36 +497,38 @@ def calcTemps() {
         }
     }
     
-    Double min = temps.min().toDouble().round(2)
-	Double max = temps.max().toDouble().round(2)
-	Double delta = (max - min).round(2)
+    def min = roundIt(temps.min(), 2)
+	def max = roundIt(temps.max(), 2)
+	def delta = roundIt((max - min), 2)
     
-    atomicState.maxMax = atomicState.maxMax.toDouble() > max ? atomicState.maxMax: max 
-    atomicState.minMin = atomicState.minMin.toDouble() < min ? atomicState.minMin: min
-    atomicState.maxDelta = atomicState.maxDelta.toDouble() > delta ? atomicState.maxDelta: delta 
-    atomicState.minDelta = atomicState.minDelta.toDouble() < delta ? atomicState.minDelta: delta
+    atomicState.maxMax = atomicState.maxMax > max ? roundIt(atomicState.maxMax, 2) : max 
+    atomicState.minMin = atomicState.minMin < min ? roundIt(atomicState.minMin, 2) : min
+    atomicState.maxDelta = atomicState.maxDelta > delta ? roundIt(atomicState.maxDelta, 2) : delta 
+    atomicState.minDelta = atomicState.minDelta < delta ? roundIt(atomicState.minDelta, 2) : delta
     
-    Integer currentOnTime
+    def currentOnTime
     if (atomicState.quietOnTime?.isNumber()) {
     	// pick up where we left off at the start of Quiet Time
-    	currentOnTime = atomicState.quietOnTime.toInteger()
+    	currentOnTime = roundIt(atomicState.quietOnTime, 0)
         atomicState.quietOnTime = null
     } else {
-    	currentOnTime = theThermostat.currentValue('fanMinOnTime') ? theThermostat.currentValue('fanMinOnTime').toInteger() : 0	// Ecobee (Connect) will populate this with Vacation.fanMinOnTime if necessary
+    	currentOnTime = theThermostat.currentValue('fanMinOnTime').toInteger() ?: 0	// EcobeeSuite Manager will populate this with Vacation.fanMinOnTime if necessary
 	}
-    int newOnTime = currentOnTime
+    def newOnTime = roundIt(currentOnTime, 0)
 	
-	if (delta >= deltaTemp.toDouble()) {			// need to increase recirculation (fanMinOnTime)
-		newOnTime = currentOnTime + fanOnTimeDelta
+	if (delta >= deltaTemp.toBigDecimal()) {			// need to increase recirculation (fanMinOnTime)
+		newOnTime = roundIt(currentOnTime + fanOnTimeDelta, 0)
 		if (newOnTime > settings.maxFanOnTime) {
 			newOnTime = settings.maxFanOnTime
 		}
 		if (currentOnTime != newOnTime) {
-			LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",deltaTemp.toDouble())}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
+			LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",deltaTemp.toBigDecimal())}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
 			if (vacationHold) {
+            	cancelReservation( theThermostat, 'vacaCircOff')
             	theThermostat.setVacationFanMinOnTime(newOnTime)
             } else {
             	LOG("deltaHandler: calling setFanMinOnTime(${newOnTime})",3,null,'info')
+                cancelReservation( theThermostat, 'circOff')
             	theThermostat.setFanMinOnTime(newOnTime)
             }
             atomicState.fanSinceLastAdjustment = false
@@ -502,17 +540,19 @@ def calcTemps() {
         //atomicState.target = target
         // if (target > deltaTemp.toDouble()) target = (deltaTemp.toDouble() * 0.66667).round(2)	// arbitrary - we have to be less than deltaTemp
     	// if (delta <= target) {			// start adjusting back downwards once we get within 1F or .5556C
-			newOnTime = currentOnTime - fanOnTimeDelta
+			newOnTime = roundIt(currentOnTime - fanOnTimeDelta, 0)
 			if (newOnTime < settings.minFanOnTime) {
 				newOnTime = settings.minFanOnTime
 			}
             if (currentOnTime != newOnTime) {
-           		LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",deltaTemp.toDouble())}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
+           		LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",deltaTemp.toBigDecimal())}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
 				if (vacationHold) {
                 	LOG("Calling setVacationFanMinOnTime(${newOnTime})",3,null,'info')
+                    cancelReservation( theThermostat, 'vacaCircOff')
                 	theThermostat.setVacationFanMinOnTime(newOnTime)
                 } else {
                 	LOG("Calling setFanMinOnTime(${newOnTime})",3,null,'info')
+                    cancelReservation( theThermostat, 'circOff')
                 	theThermostat.setFanMinOnTime(newOnTime)
                 }
                 atomicState.fanSinceLastAdjustment = false
@@ -524,7 +564,55 @@ def calcTemps() {
 	LOG("No adjustment made",4,"",'info')
 }
 
+// Reservation Management Functions
+// Make a reservation for me
+void makeReservation( stat, String type='modeOff' ) {
+	stat.makeReservation( app.id, type )
+}
+// Cancel my reservation
+void cancelReservation( stat, String type='modeOff') {
+	stat.cancelReservation( app.id, type )
+}
+// Do I have a reservation?
+Boolean haveReservation( stat, String type='modeOff') {
+def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	return (reservations?."${type}"?.contains(app.id))
+}
+// Do any Apps have reservations?
+Boolean anyReservations( stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
+}
+// How many apps have reservations?
+Integer countReservations(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))	
+	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
+}
+// Get the list of app IDs that have reservations
+List getReservations(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+    return (reservations?.containsKey(type)) ? reservations."${type}" : []
+}
+// Get the list of app Names that have reservations
+List getGuestList(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+    if (reservations?.containsKey(type)) {
+    	def guestList = []
+        reservations."${type}".each {
+        	guestList << parent.getChildAppName( it )
+        }
+        return guestList
+    }
+    return []
+}
+
 // Helper Functions
+private roundIt( value, decimals=0 ) {
+	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
+}
+private roundIt( BigDecimal value, decimals=0 ) {
+	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
+}
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
 	if (logType == null) logType = 'debug'
