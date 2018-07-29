@@ -16,11 +16,14 @@
  *	1.5.00 - Release number synchronization
  *	1.5.01 - Allow Ecobee Suite Thermostats only
  *	1.5.02 - Fixed statState error
- *
+ *	1.5.03 - Converted all setpoint math to BigDecimal
+ *	1.5.04 - Add modeOff reservation support
+ *	1.5.05 - Removed Notifications settings - not yet implemented
+ *	1.6.00- Release number synchronization
  */
- 
-def getVersionNum() { return "1.5.02" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
+import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Suite Quiet Time",
@@ -73,9 +76,11 @@ def mainPage() {
             	if (settings.hvacMode) {
             		input(name: 'quietMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, 
                 			options:getThermostatModes())
-                	if (settings.quietMode) paragraph("At the end of Quiet Time, the Thermostat Mode will be reset to its prior value.")
+                	if (settings.quietMode) paragraph("HVAC mode will be set to ${settings.quietMode} Mode.${(settings.quietMode=='off')?' Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.':''}")
                 }
             }
+            if (settings.hvacOff || hvacMode) paragraph("HVAC mode will be returned to its original value when Quiet Time ends")
+
             input(name: 'fanOff', type: "bool", title: "Turn off the Fan?", required: true, defaultValue: false, submitOnChange: true)
             if (settings.fanOff) {
             	paragraph('Turning off the fan will not stop automatic circulation, even if the HVAC is also off.')
@@ -90,6 +95,7 @@ def mainPage() {
             if (settings.hvacOff || settings.hvacMode || settings.fanOff) {
             	input(name: 'modeResume', type: 'bool', title: 'Also resume current program at the end of Quiet Time (recommended)?', defaultValue: true, required: true)
             }
+            
             if (!settings.hvacOff && !settings.hvacMode) {
             	input(name: 'adjustSetpoints', type: 'bool', title: 'Adjust heat/cool setpoints?', required: true, defaultValue: false, submitOnChange: true)
                 if (adjustSetpoints) {
@@ -114,16 +120,22 @@ def mainPage() {
 //            		options: ['Resume Current Program', "${adjustSetpoints?'Set Hold with Prior Setpoints':''}", 
 //        }
         
-        section(title: "Notification Preferences") {
+/* NOTIFICATIONS NOT YET IMPLEMENTED 
+		section(title: "Notification Preferences") {
         	input(name: "whichAction", title: "Select which notification actions to take [Default=Notify Only]", type: "enum", required: true, 
                	metadata: [values: ["Notify Only", "Quiet Time Actions Only", "Notify and Quiet Time Actions"]], defaultValue: "Notify Only", submitOnChange: true)
 			if (settings.whichAction != "Quiet Time Actions Only") {
-				input("recipients", "contact", title: "Send notifications to") {
-					input("phone", "phone", title: "Warn with text message (optional)", description: "Phone Number", required: false)
+				input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true) {
+            				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+            				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false 
                 }
-        	}                
+                if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone) {
+                    input( name: 'sendPush', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false)
+                }
+                if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
+            }               
        }
-
+*/
 		section(title: "Temporarily Disable?") {
 			input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
@@ -138,14 +150,21 @@ def installed() {
 	LOG("installed() entered", 5)
 	initialize()  
 }
-
+def uninstalled () {
+	theThermostats.each {
+    	cancelReservation( it, 'modeOff' )
+        cancelReservation( it, 'fanOff' )
+        cancelReservation( it, 'circOff' )
+        cancelReservation( it, 'humidOff' )
+        cancelReservation( it, 'dehumOff' )
+	}   
+}
 def updated() {
 	LOG("updated() entered", 5)
 	unsubscribe()
 	unschedule()
 	initialize()
 }
-
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 3, null, 'info')
     log.debug "${app.name}, ${app.label}"
@@ -194,31 +213,47 @@ def initialize() {
 }
 
 def quietOnHandler(evt=null) {
+	LOG("Quiet Time On requested",2,null,'info')
 	atomicState.isQuietTime = true
     // Allow time for other Helper apps using the same Quiet Time switches to save their states
     runIn(3, 'turnOnQuietTime', [overwrite: true])
 }
 
 def turnOnQuietTime() {
+	LOG("Turning On Quiet Time",2,null,'info')
 	def statState = atomicState.statState
-	settings.theThermostat.each() { stat ->
+	settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
         if (settings.hvacOff) {
         	statState[tid].thermostatMode = stat.currentValue('thermostatMode')
-            stat.setThermostatMode('off')
-            LOG("${stat.device.displayName} Mode is off",3,null,'info')
+            makeReservation(stat, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
+            if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
+            LOG("${stat.device.displayName} Mode is Off",3,null,'info')
         } else if (settings.hvacMode) {
         	statState[tid].thermostatMode = stat.currentValue('thermostatMode')
-            stat.setThermostatMode(settings.quietMode)
-            LOG("${stat.device.displayName} Mode is ${settings.quietMode}",3,null,'info')
+            if (settings.quietMode == 'off') {
+            	makeReservation(stat, 'modeOff')
+                if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
+                LOG("${stat.device.displayName} Mode is Off",3,null,'info')
+            } else {
+            	if ((statState[tid].thermostatMode != 'off')  || !anyReservations(stat, 'modeOff')) {
+                	cancelReservation(stat,'modeOff')				// just in case
+            		stat.setThermostatMode(settings.quietMode)
+            		LOG("${stat.device.displayName} Mode is ${settings.quietMode}",3,null,'info')
+                } else {
+                	LOG("Cannt change ${stat.device.displayName} to ${settings.quietMode} Mode - ${getGuestList(stat, 'modeOff')} hold 'modeOff' reservations",1,null,'warn')
+                }
+            }
         }
         if (settings.fanOff) { 
         	statState[tid].thermostatFanMode = stat.currentValue('thermostatFanMode')
+            makeReservation(stat, 'fanOff')						// reserve the fanOff also
             stat.setThermostatFanMode('off','indefinite')
             LOG("${stat.device.displayName} Fan Mode is off",3,null,'info')
         }
         if (settings.circOff) { 
         	statState[tid].fanMinOnTime = stat.currentValue('fanMinOnTime')
+            makeReservation(stat, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
             stat.setFanMinOnTime(0)
             LOG("${stat.device.displayName} Circulation time is 0 mins/hour",3,null,'info')
         }
@@ -226,47 +261,101 @@ def turnOnQuietTime() {
         	statState[tid].holdType = stat.currentValue('lastHoldType')
         	statState[tid].heatingSetpoint = stat.currentValue('heatingSetpointDisplay')
             statState[tid].coolingSetpoint = stat.currentValue('coolingSetpointDisplay')
-            Double h = statState[tid].heatingSetpoint.toDouble() + settings.heatAdjust.toDouble()
-            Double c = statState[tid].coolingSetpoint.toDouble() + settings.coolAdjust.toDouble()
+            def h = statState[tid].heatingSetpoint + settings.heatAdjust
+            def c = statState[tid].coolingSetpoint + settings.coolAdjust
             stat.setHeatingSetpoint(h, 'indefinite')
             stat.setCoolingSetpoint(c, 'indefinite')
             LOG("${stat.device.displayName} heatingSetpoint adjusted to ${h}, coolingSetpoint to ${c}",3,null,'info')
         }
         if (settings.humidOff && (stat.currentValue('hasHumidifier') == 'true')) { 
+        	LOG("Turning off the humidifier",3,null,'info')
         	statState[tid].humidifierMode = stat.currentValue('humidifierMode')
+            makeReservation(stat, 'humidOff')
             stat.setHumidifierMode('off')
             LOG("${stat.device.displayName} humidifierMode is off",3,null,'info')
         }
-        if (settings.dehumidOff && (stat.currentValue('hasDehumidifier') == 'true')) { 
-        	statState[tid].dehumidifierMode = stat.currentValue('dehumidifierMode')
-            stat.setDehumidifierMode('off')
-            LOG("${stat.device.displayName} dehumidifierMode is off",3,null,'info')
+        if (settings.dehumOff && (stat.currentValue('hasDehumidifier') == 'true')) {
+        	def dehumNow = stat.currentValue('dehumidifierMode')
+            if (dehumNow == 'on') {
+        		LOG("Turning off the dehumidifier",3,null,'info')
+        		statState[tid].dehumidifierMode = 'on'
+            	makeReservation(stat, 'dehumOff')
+            	stat.setDehumidifierMode('off')
+            	LOG("${stat.device.displayName} dehumidifierMode is off",3,null,'info')
+            } else {
+            	LOG("Dehumidifier is already off",2,null,'warn')
+                cancelReservation(stat, 'dehumOff')
+                log.debug anyReservations(stat, 'dehumOff')
+                if (!anyReservations(stat, 'dehumOff')) {
+                	makeReservation(stat, 'dehumOff')
+                    statState[tid].dehumidifierMode = 'on' // we're going to try to turn it back on
+                    LOG("Will turn it back on when Quiet Time ends",2,null,'warn')
+                } else {
+                	statState[tid].dehumidifierMode = 'off' // leave it alone
+                    LOG("Will NOT turn it back on when Quiet Time ends",2,null,'warn')
+                }
+            }
         }
     }
     atomicState.statState = statState
+    LOG('Quiet Time On is complete',2,null,'info')
 }
 
 def quietOffHandler(evt=null) {
+	LOG("Quiet Time Off requested",2,null,'info')
    	atomicState.isQuietTime = false
    	// No delayed execution - 
    	// runIn(3, 'turnOffQuietTime', [overwrite: true])
    	def statState = atomicState.statState
-   	if (stateState) {
-   		settings.theThermostat.each() { stat ->
+   	if (statState) {
+   		settings.theThermostats.each() { stat ->
+        	cancelReservation(stat, 'circOff')			// ASAP so SmartCirculation can carry on
     		def tid = getDeviceId(stat.deviceNetworkId)
-        	if ((settings.hvacOff || settingsHvacMode) && statState[tid]?.thermostatMode) { 
-        		stat.setThermostatMode(statState[tid].thermostatMode)
-                LOG("${stat.device.displayName} Mode is ${statState[tid].thermostatMode}",3,null,'info')
+        	if ((settings.hvacOff || settings.hvacMode) && statState[tid]?.thermostatMode) { 
+            	if (statState[tid]?.thermostatMode != 'off' && (stat.currentValue('thermostatMode') == 'off')) {
+                	if (settings.hvacOff || (settings.hvacMode && (settings.quietMode == 'off'))) {	
+                    	// we wanted it off
+                    	def i = countReservations(stat, 'modeOff') - (haveReservation(stat, 'modeOff')? 1 : 0)
+                		if (i <- 0) {
+                    		// no other reservations, we can turn it on
+                            cancelReservation(stat, 'modeOff')
+        					stat.setThermostatMode(statState[tid].thermostatMode)
+                			LOG("${stat.device.displayName} Mode is ${statState[tid].thermostatMode}",3,null,'info')
+                		} else {
+                        	cancelReservation(stat, 'modeOff')			// just cancel our reservation for now
+                    		LOG("${stat.device.displayName} has other 'modeOff' reservations",1,null,'info')
+                    	}
+                    } else {
+                    	// We didn't turn it off
+                        def i = countReservations(stat, 'modeOff') - (haveReservation(stat, 'modeOff')? 1 : 0)
+                        if (i <= 0) {
+                        	// seems nobody else has reserved it being off
+                            cancelReservation(stat, 'modeOff')			// just in case, cancel our reservation
+                            stat.setThermostatMode(statState[tid].thermostatMode)
+                			LOG("${stat.device.displayName} Mode is ${statState[tid].thermostatMode}",3,null,'info')
+                        } else {
+                        	// Somebody else wants it off right now
+                            cancelReservation(stat, 'modeOff')			// just cancel our reservation for now
+                    		LOG("${stat.device.displayName} has other 'modeOff' reservations (${getGuestList(stat, 'modeOff')}",1,null,'info')
+                        }
+                    }
+                } else {
+                	//Odd, quiet time ends and NOW we turn off the thermostat???
+                    makeReservation(stat, 'modeOff')
+                    stat.setThermostatMode( 'off' )
+                }
             }
         	if (settings.fanOff && statState[tid]?.thermostatFanMode) { 
+            	cancelReservation(stat, 'fanOff')
             	stat.setThermostatFanMode(statState[tid].thermostatFanMode)
                 LOG("${stat.device.displayName} Fan Mode is ${statState[tid].thermostatFanMode}",3,null,'info')
             }
         	if (settings.circOff && statState[tid]?.fanMinOnTime) { 
+            	// cancelReservation(stat, 'circOff')
             	stat.setFanMinOnTime(statState[tid].fanMinOnTime)
                 LOG("${stat.device.displayName} Circulation time is ${statState[tid].fanMinOnTime} mins/hour",3,null,'info')
             }
-            if (settings.hvacOff || settings.hvacMode || settings.fanOff) {
+            if ((settings.hvacOff || settings.hvacMode || settings.fanOff) && settings.modeResume) {
             	stat.resumeProgram()
                 LOG("${stat.device.displayName} resuming currently scheduled program",3,null,'info')
             } else {
@@ -292,16 +381,24 @@ def quietOffHandler(evt=null) {
                     }
                 }
             }
-        	if (settings.humidOff && (stat.currentValue('hasHumidifier') == 'true') && statState[tid]?.humidifierMode) { 
+        	if (settings.humidOff && (stat.currentValue('hasHumidifier') == 'true') && statState[tid]?.humidifierMode) {
+            	cancelReservation(stat, 'humidOff')
           		stat.setHumidifierMode(statState[tid].humidifierMode)
                 LOG("${stat.device.displayName} humidifierMode is ${statState[tid].humidifierMode}",3,null,'info')
             }
-        	if (settings.dehumidOff && (stat.currentValue('hasDehumidifier') == 'true') && statState[tid]?.dehumidifierMode) { 
-            	stat.setDehumidifierMode(statState[tid].dehumidifierMode)
-                LOG("${stat.device.displayName} dehumidifierMode is ${statState[tid].dehumidifierMode}",3,null,'info')
+        	if (settings.dehumOff && (stat.currentValue('hasDehumidifier') == 'true') && statState[tid]?.dehumidifierMode) {
+            	LOG("Turning ${statState[tid]?.dehumidifierMode} the Dehumidifier",3,null,'info')
+            	cancelReservation(stat, 'dehumOff')
+                if (!anyReservations(stat, 'dehumOff') && (statState[tid].dehumidifierMode == 'on')) {
+            		stat.setDehumidifierMode(statState[tid].dehumidifierMode)
+                	LOG("${stat.device.displayName} dehumidifierMode is ${statState[tid].dehumidifierMode}",3,null,'info')
+                } else {
+                	LOG("Cannot turn on the dehumidifier, ${getGuestList(stat,'dehumOff').toString()[1..-2]} still hold 'dehumOff' reservations.",2,null,'warn')
+                }
             }
         }
     }
+    LOG('Quiet Time Off is complete',2,null,'info')
 }
 
 def hasHumidifier() {
@@ -310,6 +407,48 @@ def hasHumidifier() {
 
 def hasDehumidifier() {
 	return (theThermostats.currentValue('hasDehumidifier').contains('true'))
+}
+
+// Reservation Management Functions
+// Make a reservation for me
+void makeReservation( stat, String type='modeOff' ) {
+	stat.makeReservation( app.id, type )
+}
+// Cancel my reservation
+void cancelReservation( stat, String type='modeOff') {
+	stat.cancelReservation( app.id, type )
+}
+// Do I have a reservation?
+Boolean haveReservation( stat, String type='modeOff') {
+def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	return (reservations?."${type}"?.contains(app.id))
+}
+// Do any Apps have reservations?
+Boolean anyReservations( stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	return (reservations?.containsKey(type)) ? (reservations."${type}"?.size() != 0) : false
+}
+// How many apps have reservations?
+Integer countReservations(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))	
+	return (reservations?.containsKey(type)) ? reservations."${type}"?.size() : 0
+}
+// Get the list of app IDs that have reservations
+List getReservations(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+    return (reservations?.containsKey(type)) ? reservations."${type}" : []
+}
+// Get the list of app Names that have reservations
+List getGuestList(stat, String type='modeOff') {
+	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+    if (reservations?.containsKey(type)) {
+    	def guestList = []
+        reservations."${type}".each {
+        	guestList << parent.getChildAppName( it )
+        }
+        return guestList
+    }
+    return []
 }
 
 // Helper Functions
@@ -335,17 +474,30 @@ log.debug "${app.name}, ${app.label}"
     return theModes.sort(false)
 }
 
-private def sendNotification(message) {	
-    if (location.contactBookEnabled && recipients) {
-        LOG("Contact Book enabled!", 4, null, 'info')
-        sendNotificationToContacts(message, recipients)
-    } else {
-        LOG("Contact Book not enabled", 4, null, 'info')
-        if (phone) {
-            sendSms(phone, message)
+/* NOTIFICATIONS NOT YET IMPLEMENTED
+private def sendNotification(notificationMessage) {
+	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
+
+    String msg = "${app.Label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    if (location.contactBookEnabled && settings.recipients) {
+        sendNotificationToContacts(msg, settings.recipients, [event: true]) 
+    } else if (phone) { // check that the user did select a phone number
+        if ( phone.indexOf(";") > 0){
+            def phones = phone.split(";")
+            for ( def i = 0; i < phones.size(); i++) {
+                LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
+                sendSms(phones[i], msg)
+            }
+        } else {
+            LOG("Sending SMS to ${phone}",2,null,'info')
+            sendSms(phone, msg)
         }
+    } else if (settings.sendPush) {
+        LOG("Sending Push to everyone",2,null,'warn')
+        sendPush(msg)
     }
 }
+*/
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${app.label} ${message}"
