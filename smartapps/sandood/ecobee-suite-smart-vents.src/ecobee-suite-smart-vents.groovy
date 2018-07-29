@@ -27,10 +27,13 @@
  *	1.4.0  - Renamed parent Ecobee Suite Manager
  *	1.4.01 - Select ventState when disabling, better temperature validation
  *	1.4.02 - Added configurable heat & cool offsets when following thermostat setpoints
- *	1.4.03 - Fixed a type converstion typo
+ *	1.4.03 - Fixed a type conversion typo
  *	1.5.00 - Release number synchronization
+ *	1.5.01 - Allow Ecobee Suite Thermostats only
+ *	1.5.02 - Converted all math to BigDecimal
+ *	1.6.00- Release number synchronization
  */
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -85,7 +88,7 @@ def mainPage() {
         
 			section(title: "Smart Vents: Thermostat") {
 				paragraph("Specify which thermostat to monitor for heating/cooling events")
-				input(name: "theThermostat", type: "capability.thermostat", title: "Select thermostat", description: 'Tap to choose...', multiple: false, required: true, submitOnChange: true)
+				input(name: "theThermostat", type: "device.ecobeeSuiteThermostat", title: "Select thermostat", description: 'Tap to choose...', multiple: false, required: true, submitOnChange: true)
 			}
 		
 			section(title: "Smart Vents: Target Temperature") {
@@ -177,27 +180,29 @@ private String checkTemperature() {
     
 	def cOpState = theThermostat.currentValue('thermostatOperatingState')
     LOG("Current Operating State ${cOpState}",3,null,'info')
-	Double cTemp = getCurrentTemperature()
-    Double offset 
+	def cTemp = getCurrentTemperature()
+    def offset 
 	def vents = ''			// if not heating/cooling/fan, then no change to current vents
     if (cTemp != null) {	// only if valid temperature readings (Ecosensors can return "unknown")
     	if (cOpState == 'heating') {
-        	offset = heatOffset ? heatOffset.toDouble() : 0.0
-    		Double heatTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature.toDouble() + offset : theThermostat.currentValue('heatingSetpoint').toDouble() + offset) : settings.heatingSetpoint.toDouble()
-        	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential').toDouble()
+        	offset = settings.heatOffset ? settings.heatOffset : 0.0
+    		def heatTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature + offset 
+            																							: theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
+        	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
 			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
     	} else if (cOpState == 'cooling') {
-        	offset = coolOffset ? coolOffset.toDouble() : 0.0
-    		Double coolTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature.toDouble() + offset : theThermostat.currentValue('coolingSetpoint').toDouble() + offset) : settings.coolingSetpoint.toDouble()
-        	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential').toDouble()
+        	offset = settings.coolOffset ? settings.coolOffset : 0.0
+    		def coolTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature + offset 
+            																								: theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
+        	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
 			vents = (coolTarget >= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
 		} else if (cOpState == 'idle') {
     		LOG("${theThermostat.displayName} is idle, room temperature is ${cTemp}°",3,null,'info')
         	def currentMode = theThermostat.currentValue('thermostatMode')
         	if (currentMode == 'cool') {
-        		def coolTarget = useThermostat ? theThermostat.currentValue('coolingSetpoint').toDouble() : settings.coolingSetpoint.toDouble()
+        		def coolTarget = useThermostat ? theThermostat.currentValue('coolingSetpoint') : settings.coolingSetpoint
             	vents = (coolTarget >= cTemp) ? 'closed' : 'open'
         	} 
     	} else if (vents == '' && (cOpState == 'fan only')) {
@@ -215,18 +220,17 @@ private String checkTemperature() {
 }
 
 def getCurrentTemperature() {
-	Double tTemp = 0.0
+	def tTemp = 0.0
     Integer i = 0
 	settings.theSensors.each {
 		if (it.currentTemperature.isNumber()) {
-        	tTemp += it.currentTemperature.toDouble()
+        	tTemp += it.currentTemperature
             i++
         }
 	}
-	if (i > 1) tTemp = tTemp / i // average all the sensors, if more than 1
+	if (i > 1) tTemp = tTemp / i.toBigDecimal() // average all the sensors, if more than 1
     if (i > 0) {
-		tTemp = tTemp.round(1)
-    	return tTemp
+		return roundIt(tTemp, 1)
     } else {
     	LOG("No valid temperature readings from ${settings.theSensors}",1,null,'warn')
     	return null
@@ -311,6 +315,12 @@ private def generateSensorsEvents( Map dataMap ) {
 }
 
 // Helper Functions
+private roundIt( value, decimals=0 ) {
+	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
+}
+private roundIt( BigDecimal value, decimals=0 ) {
+	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
+}
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	if (logType == null) logType = 'debug'
 	log."${logType}" message
