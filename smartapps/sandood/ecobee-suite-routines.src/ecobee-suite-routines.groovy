@@ -36,8 +36,9 @@
  *	1.5.01- Allow Ecobee Suite Thermostats only
  *	1.5.02- Added support for notifications via SMS or Push
  *	1.6.00- Release number synchronization
+ *	1.6.01- Fixed sendMessage()
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.01" }
 private def getVersionLabel() { return "Ecobee Suite Mode/Routine/Program Helper, version ${getVersionNum()}" }
 
 
@@ -328,14 +329,14 @@ def changeSTHandler(evt) {
 
 def changeMode() {
 //	if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
-		if (state.ecobeeThatChanged) sendNotification("Changing Mode to ${settings.runMode} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}")
+		if (state.ecobeeThatChanged) sendMessage("Changing Mode to ${settings.runMode} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}")
     	location.mode(settings.runMode)
 //    }
     state.ecobeeThatChanged = null
 }
 
 def runRoutine() {
-	if (state.ecobeeThatChanged) sendNotification("Executing Routine ${settings.runAction} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}")
+	if (state.ecobeeThatChanged) sendMessage("Executing Routine ${settings.runAction} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}")
     state.ecobeeThatChanged = null
 	location.helloHome?.execute(settings.runAction)
 }
@@ -359,16 +360,16 @@ def changeProgramHandler(evt) {
         if (vacationHold) {
         	if (state.doCancelVacation) {
             	stat.cancelVacation()
-                sendNotification("As requested, I cancelled the active Vacation Hold on ${stat}.")
+                sendMessage("As requested, I cancelled the active Vacation Hold on ${stat}.")
                 thermostatHold = 'hold'		// Fake it, so that resumeProgram executes below
                 vacationHold = false
                 state.refresh()				// force a poll for changes from the Ecobee cloud
             } else if (state.doResumeProgram) {
             	LOG("Can't Resume Program while in Vacation mode (${stat})",2,null,'warn')
-           		sendNotification("I was asked to Resume Program on ${stat}, but it is currently in 'Vacation' Hold so I ignored the request.")
+           		sendMessage("I was asked to Resume Program on ${stat}, but it is currently in 'Vacation' Hold so I ignored the request.")
             } else {
         		LOG("Can't change Program while in Vacation mode (${stat})",2,null,'warn')
-           		sendNotification("I was asked to change ${stat} to ${state.programParam}, but it is currently in 'Vacation' Hold so I ignored the request.")
+           		sendMessage("I was asked to change ${stat} to ${state.programParam}, but it is currently in 'Vacation' Hold so I ignored the request.")
             }
         }
         
@@ -380,10 +381,10 @@ def changeProgramHandler(evt) {
             		def scheduledProgram = stat.currentValue("scheduledProgram")
         			stat.resumeProgram(true) 												// resumeAll to get back to the scheduled program
                 	if (state.fanMinutes != null) stat.setFanMinOnTime(state.fanMinutes)		// and reset the fanMinOnTime as requested
-					sendNotification("And I resumed the scheduled ${scheduledProgram} program on ${stat}.")
+					sendMessage("And I resumed the scheduled ${scheduledProgram} program on ${stat}.")
             	} else {
             		// Resume Program requested, but no hold is currently active
-                	sendNotification("I was asked to Resume Program on ${stat}, but there is no Hold currently active.")
+                	sendMessage("I was asked to Resume Program on ${stat}, but there is no Hold currently active.")
             	}
         	} else {
             	// set the requested program
@@ -404,10 +405,11 @@ def changeProgramHandler(evt) {
                         	fanSet = true
                     	}
                         if (settings.statOff) {
+                        	// Don't grab a reservation here, since we won't be around later to release it
                         	stat.off()
-                            sendNotification("And I verified that ${stat.displayName} is already in the ${state.programParam} program, so I turned off the HVAC as requested.")
+                            sendMessage("And I verified that ${stat.displayName} is already in the ${state.programParam} program, so I turned off the HVAC as requested.")
                         } else {
-                			sendNotification("And I verified that ${stat.displayName} is already in the ${state.programParam} program${fanSet?' with the requested fan settings.':'.'}")
+                			sendMessage("And I verified that ${stat.displayName} is already in the ${state.programParam} program${fanSet?' with the requested fan settings.':'.'}")
                         }
                 		done = true
                     } else if ((thermostatHold == 'hold') || currentProgramName.startsWith('Hold')) { // (In case the Vacation hasn't cleared yet)
@@ -426,17 +428,18 @@ def changeProgramHandler(evt) {
                     		}
                             if (whatHoldType(stat) == 'nextTransition') {
                             	if (settings.statOff) {
+                                	// Don't make a reservation, since we won't be around later to release it
                             		stat.off()
-                                    sendNotification("And I resumed the scheduled ${state.programParam} on ${stat.displayName}, then I turned off the HVAC as requested.")
+                                    sendMessage("And I resumed the scheduled ${state.programParam} program on ${stat.displayName}, then I turned off the HVAC as requested.")
                                 } else {
-                					sendNotification("And I resumed the scheduled ${state.programParam} on ${stat.displayName}${fanSet?' with the requested fan settings.':'.'}")
+                					sendMessage("And I resumed the scheduled ${state.programParam} program on ${stat.displayName}${fanSet?' with the requested fan settings.':'.'}")
                                 }
                 				done = true
                             }
             			} else if (stat.currentValue('currentProgram') == state.programParam) {
                         	// we are in a hold already, and the program is the one we want...
                         	// Assume (for now) that the fan settings are also what we want (because another instance set them when they set the Hold)
-                            sendNotification("${stat.displayName} is already in the specified Hold: ${state.programParam}.")
+                            sendMessage("${stat.displayName} is already in the specified Hold: ${state.programParam}.")
                             done = true
                         } else { 
                         	// the scheduledProgram is NOT the desiredProgram, so we need to resumeAll, then set the desired program as a Hold: Program
@@ -476,9 +479,9 @@ def changeProgramHandler(evt) {
                         }
                         if (settings.statOff) {
                         	stat.off()
-                            sendNotification("And I set ${stat.displayName} to Hold: ${state.programParam}${timeStr}, then I turned off the HVAC as requested.")
+                            sendMessage("And I set ${stat.displayName} to Hold: ${state.programParam}${timeStr}, then I turned off the HVAC as requested.")
                         } else {
-							sendNotification("And I set ${stat.displayName} to Hold: ${state.programParam}${timeStr}${fanSet?' with the requested fan settings.':'.'}")
+							sendMessage("And I set ${stat.displayName} to Hold: ${state.programParam}${timeStr}${fanSet?' with the requested fan settings.':'.'}")
                         }
                		}
             	} // else { assert state.programParam == null; must have been 'Resume Program' or an old 'Cancel Vacation'  }
@@ -595,9 +598,9 @@ def getThermostatModes() {
     return theModes.sort(false)
 }
 
-private def sendNotification(notificationMessage) {
+private def sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
-    
+
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
         if (location.contactBookEnabled && settings.recipients) {
