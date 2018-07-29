@@ -1,14 +1,44 @@
 Free Ecobee Suite, version: 1.5.* 
 ======================================================
-Latest: Version 1.5.0 Released June 8, 2018
+Latest: Version 1.6.* Released July 29, 2018
+
+***NOTE: You MUST update all of the Suite's components to the latest version***
 
 ## Highlights
-The most significant changes to 1.5.0 include:
-- <b>Ecobee Suite Thermostat</b> Device Handler now implements UI/API control and display of Humidifier and Dehumidifier (if configured/attached), with a newly reorganized section for the 5 adjustable parameters (heating & cooling setpoints, circulation time, desired humidifier and dehumidifier humidity targets).
-- New **Ecobee Suite Quiet Time** Helper will turn off fan, circulation, humidifiers, dehumidifiers, or the entire thermostat based on one (or more) switches (real or virtual). Useful to eliminate noise while watching movies, for example (at the expense of some - or all - climate control).
-- **Ecobee Suite Smart Circulation** Helper now integrates with new Quiet Time Helper so that circulation time isn't adjusted if any of the Quiet Time switches is enabled.
-- **Ecobee Suite Smart Mode** Helper now supports mode changes based on internal temperatures as well
-- **Ecobee Suite Smart Zones** Helper now supports 'sharing' of heating/cooling from the Master Zone (thermostat) to one or more Slave Zones when the Slave Zone's temperature is above/below the appropriate heating/cooling setpoint.
+The most significant changes in the July 29, 2018 update to 1.6.* include the following:
+#### General changes to the Ecobee Suite
+- New **Multiple SMS numbers Notifications** - SmartThings has notified users that the Contact Book will no longer be supported as of Monday, July 30, 2018. The recommended alternative is to send SMS messages to users, or to send Push messages to ALL users. This update enables you to configure multiple phone numbers (separated by ';') as the target for SMS messages (if you want directed notifications).
+- New **Reservations** - Through a new internal reservation system, Helper Apps can coordinate their changes to ensure that another Helper doesn't override an intended function (*e.g.,* changing the Mode to Off, or changing fan circulation time). See below for more information. 
+- Most Helper SmartApps can now select **Ecobee Suite Thermostats Only**, so to ensure proper coordination between the Suite's devices and SmartApps
+#### Ecobee Suite Manager
+- **Asynchronous HTTP** While not user visible, this change significantly improves the performance and reliability of API calls to the Ecobee servers.
+- **Additional Weather Info** Another internal enhancement, now provides more info from the Ecobee weather report to enable the new Dew Point feature of Ecobee Suite Smart Mode.
+##### ecobee Suite Contacts & Switches
+- Now supports **Reservations** for Thermostat Mode changes to/from 'Off'
+- Now supports **Multiple SMS Notifications**
+- Now supports *Ecobee Suite Thermostats Only**
+##### ecobee Suite Quiet Time
+- Now supports **Reservations** for both Mode and Circulation time changes
+- Now supports **Ecobee Suite Thermostats Only**
+- Notification setup has been removed, because Notifications has not been implemented yet
+##### ecobee Suite Mode/Routine/Program
+- Now supports **Multiple SMS Notifications**
+- Now supports **Ecobee Suite Thermostats Only**
+##### ecobee Suite Smart Circulation
+- Now supports **Reservations** for Circulation time changes
+- Now supports **Ecobee Suite Thermostats Only**
+##### ecobee Suite Smart Mode
+- New!! **Dew Point Override** - You can now configure Smart Mode to ***not*** turn off the thermostat if the exterior Dew Point is above a certain temperature (e.g., 64°F), even if the target temperature is observed.
+- New!! **Weather Data Sources** have been expanded to include SmartThings Weather Stations, in addition to the standard Ecobee weather info and the SmartThings/WeatherUnderground data. Users of my [MeteoWeather Weather Station](https://github.com/SANdood/MeteoWeather) can even access their local weather station (if they are using a [Meteobridge](https://www.meteobridge.com/wiki/index.php/Home) device).
+- Now supports **Reservations** for Thermostat Mode changes to/from 'Off'
+- Now supports **Multiple SMS Notifications**
+- Now supports **Ecobee Suite Thermostats Only**
+##### ecobee Suite Smart Room
+- Now supports **Multiple SMS Notifications**
+##### ecobee Suite Smart Switches, Smart Vents, Smart Zones
+- Now support **Ecobee Suite Thermostats Only**
+#### Ecobee Suite Thermostat
+- Implements new **Reservations** system, allowing Helper Apps to coordinate changes to the thermostat
 
 ## <a name="top">Table Of Contents</a>
 - [Introduction](#intro)
