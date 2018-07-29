@@ -37,9 +37,10 @@
  *	1.4.05 - Fixed add/deleteSensorFromProgram
  *	1.4.06 - Removed extra 'inactiveLabel: false', changed main() definition
  *	1.5.00 - Release number synchronization
+ *	1.5.01 - Converted all math to BigDecimal for better precision
+ *	1.6.00 - Release number synchronization
  */
-
-def getVersionNum() { return "1.5.00" }
+def getVersionNum() { return "1.6.00" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -279,10 +280,10 @@ def generateEvent(Map results) {
                     // Generate the display value that will preserve decimal positions ending in 0
                     if (isChange) {
                     	if (precision == 0) {
-                    		tempDisplay = value.toDouble().round(0).toInteger().toString() + '°'
-                            sendValue = value.toDouble().round(0).toInteger()								// Remove decimals in device lists also
+                    		tempDisplay = roundIt(value, 0).toString() + '°'
+                            sendValue = roundIt(value, 0)								// Remove decimals in device lists also
                     	} else {
-							tempDisplay = String.format( "%.${precision.toInteger()}f", value.toDouble().round(precision.toInteger())) + '°'
+							tempDisplay = String.format( "%.${precision.toInteger()}f", roundIt(value, precision.toInteger())) + '°'
                     	}
                         sendEvent( name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 						event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
@@ -393,6 +394,12 @@ private String getSensorId() {
 	def myId = []
     myId = device.deviceNetworkId.split('-') as List
     return (myId[2])
+}
+private roundIt( value, decimals=0 ) {
+	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
+}
+private roundIt( BigDecimal value, decimals=0 ) {
+	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 
 private debugLevel(level=3) {
