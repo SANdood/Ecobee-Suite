@@ -23,10 +23,10 @@
  *	1.6.01 - Fix reservation initialization error
  *	1.6.02 - REALLY fix reservation initialization error
  *	1.6.03 - Really, REALLY fix reservation initialization error
+ *	1.6.10 - Converted to parent-based reservations
  */
-def getVersionNum() { return "1.6.03" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
-import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Suite Quiet Time",
@@ -155,11 +155,11 @@ def installed() {
 }
 def uninstalled () {
 	theThermostats.each {
-    	cancelReservation( it, 'modeOff' )
-        cancelReservation( it, 'fanOff' )
-        cancelReservation( it, 'circOff' )
-        cancelReservation( it, 'humidOff' )
-        cancelReservation( it, 'dehumOff' )
+    	cancelReservation( getDeviceId(it.deviceNetworkId), 'modeOff' )
+        cancelReservation( getDeviceId(it.deviceNetworkId), 'fanOff' )
+        cancelReservation( getDeviceId(it.deviceNetworkId), 'circOff' )
+        cancelReservation( getDeviceId(it.deviceNetworkId), 'humidOff' )
+        cancelReservation( getDeviceId(it.deviceNetworkId), 'dehumOff' )
 	}   
 }
 def updated() {
@@ -229,34 +229,34 @@ def turnOnQuietTime() {
     	def tid = getDeviceId(stat.deviceNetworkId)
         if (settings.hvacOff) {
         	statState[tid].thermostatMode = stat.currentValue('thermostatMode')
-            makeReservation(stat, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
+            makeReservation(tid, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
             if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
             LOG("${stat.device.displayName} Mode is Off",3,null,'info')
         } else if (settings.hvacMode) {
         	statState[tid].thermostatMode = stat.currentValue('thermostatMode')
             if (settings.quietMode == 'off') {
-            	makeReservation(stat, 'modeOff')
+            	makeReservation(tid, 'modeOff')
                 if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
                 LOG("${stat.device.displayName} Mode is Off",3,null,'info')
             } else {
-            	if ((statState[tid].thermostatMode != 'off')  || !anyReservations(stat, 'modeOff')) {
-                	cancelReservation(stat,'modeOff')				// just in case
+            	if ((statState[tid].thermostatMode != 'off')  || !anyReservations(tid, 'modeOff')) {
+                	cancelReservation(tid,'modeOff')				// just in case
             		stat.setThermostatMode(settings.quietMode)
             		LOG("${stat.device.displayName} Mode is ${settings.quietMode}",3,null,'info')
                 } else {
-                	LOG("Cannt change ${stat.device.displayName} to ${settings.quietMode} Mode - ${getGuestList(stat, 'modeOff')} hold 'modeOff' reservations",1,null,'warn')
+                	LOG("Cannt change ${stat.device.displayName} to ${settings.quietMode} Mode - ${getGuestList(tid, 'modeOff')} hold 'modeOff' reservations",1,null,'warn')
                 }
             }
         }
         if (settings.fanOff) { 
         	statState[tid].thermostatFanMode = stat.currentValue('thermostatFanMode')
-            makeReservation(stat, 'fanOff')						// reserve the fanOff also
+            makeReservation(tid, 'fanOff')						// reserve the fanOff also
             stat.setThermostatFanMode('off','indefinite')
             LOG("${stat.device.displayName} Fan Mode is off",3,null,'info')
         }
         if (settings.circOff) { 
         	statState[tid].fanMinOnTime = stat.currentValue('fanMinOnTime')
-            makeReservation(stat, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
+            makeReservation(tid, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
             stat.setFanMinOnTime(0)
             LOG("${stat.device.displayName} Circulation time is 0 mins/hour",3,null,'info')
         }
@@ -273,7 +273,7 @@ def turnOnQuietTime() {
         if (settings.humidOff && (stat.currentValue('hasHumidifier') == 'true')) { 
         	LOG("Turning off the humidifier",3,null,'info')
         	statState[tid].humidifierMode = stat.currentValue('humidifierMode')
-            makeReservation(stat, 'humidOff')
+            makeReservation(tid, 'humidOff')
             stat.setHumidifierMode('off')
             LOG("${stat.device.displayName} humidifierMode is off",3,null,'info')
         }
@@ -282,15 +282,15 @@ def turnOnQuietTime() {
             if (dehumNow == 'on') {
         		LOG("Turning off the dehumidifier",3,null,'info')
         		statState[tid].dehumidifierMode = 'on'
-            	makeReservation(stat, 'dehumOff')
+            	makeReservation(tid, 'dehumOff')
             	stat.setDehumidifierMode('off')
             	LOG("${stat.device.displayName} dehumidifierMode is off",3,null,'info')
             } else {
             	LOG("Dehumidifier is already off",2,null,'warn')
-                cancelReservation(stat, 'dehumOff')
-                log.debug anyReservations(stat, 'dehumOff')
-                if (!anyReservations(stat, 'dehumOff')) {
-                	makeReservation(stat, 'dehumOff')
+                cancelReservation(tid, 'dehumOff')
+                //log.debug anyReservations(tid, 'dehumOff')
+                if (!anyReservations(tid, 'dehumOff')) {
+                	makeReservation(tid, 'dehumOff')
                     statState[tid].dehumidifierMode = 'on' // we're going to try to turn it back on
                     LOG("Will turn it back on when Quiet Time ends",2,null,'warn')
                 } else {
@@ -312,49 +312,49 @@ def quietOffHandler(evt=null) {
    	def statState = atomicState.statState
    	if (statState) {
    		settings.theThermostats.each() { stat ->
-        	cancelReservation(stat, 'circOff')			// ASAP so SmartCirculation can carry on
-    		def tid = getDeviceId(stat.deviceNetworkId)
+        	def tid = getDeviceId(stat.deviceNetworkId)
+        	cancelReservation(tid, 'circOff')			// ASAP so SmartCirculation can carry on
         	if ((settings.hvacOff || settings.hvacMode) && statState[tid]?.thermostatMode) { 
             	if (statState[tid]?.thermostatMode != 'off' && (stat.currentValue('thermostatMode') == 'off')) {
                 	if (settings.hvacOff || (settings.hvacMode && (settings.quietMode == 'off'))) {	
                     	// we wanted it off
-                    	def i = countReservations(stat, 'modeOff') - (haveReservation(stat, 'modeOff')? 1 : 0)
+                    	def i = countReservations(tid, 'modeOff') - (haveReservation(tid, 'modeOff')? 1 : 0)
                 		if (i <- 0) {
                     		// no other reservations, we can turn it on
-                            cancelReservation(stat, 'modeOff')
+                            cancelReservation(tid, 'modeOff')
         					stat.setThermostatMode(statState[tid].thermostatMode)
                 			LOG("${stat.device.displayName} Mode is ${statState[tid].thermostatMode}",3,null,'info')
                 		} else {
-                        	cancelReservation(stat, 'modeOff')			// just cancel our reservation for now
+                        	cancelReservation(tid, 'modeOff')			// just cancel our reservation for now
                     		LOG("${stat.device.displayName} has other 'modeOff' reservations",1,null,'info')
                     	}
                     } else {
                     	// We didn't turn it off
-                        def i = countReservations(stat, 'modeOff') - (haveReservation(stat, 'modeOff')? 1 : 0)
+                        def i = countReservations(tid, 'modeOff') - (haveReservation(tid, 'modeOff')? 1 : 0)
                         if (i <= 0) {
                         	// seems nobody else has reserved it being off
-                            cancelReservation(stat, 'modeOff')			// just in case, cancel our reservation
+                            cancelReservation(tid, 'modeOff')			// just in case, cancel our reservation
                             stat.setThermostatMode(statState[tid].thermostatMode)
                 			LOG("${stat.device.displayName} Mode is ${statState[tid].thermostatMode}",3,null,'info')
                         } else {
                         	// Somebody else wants it off right now
-                            cancelReservation(stat, 'modeOff')			// just cancel our reservation for now
-                    		LOG("${stat.device.displayName} has other 'modeOff' reservations (${getGuestList(stat, 'modeOff')}",1,null,'info')
+                            cancelReservation(tid, 'modeOff')			// just cancel our reservation for now
+                    		LOG("${stat.device.displayName} has other 'modeOff' reservations (${getGuestList(tid, 'modeOff')}",1,null,'info')
                         }
                     }
                 } else {
                 	//Odd, quiet time ends and NOW we turn off the thermostat???
-                    makeReservation(stat, 'modeOff')
+                    makeReservation(tid, 'modeOff')
                     stat.setThermostatMode( 'off' )
                 }
             }
         	if (settings.fanOff && statState[tid]?.thermostatFanMode) { 
-            	cancelReservation(stat, 'fanOff')
+            	cancelReservation(tid, 'fanOff')
             	stat.setThermostatFanMode(statState[tid].thermostatFanMode)
                 LOG("${stat.device.displayName} Fan Mode is ${statState[tid].thermostatFanMode}",3,null,'info')
             }
         	if (settings.circOff && statState[tid]?.fanMinOnTime) { 
-            	// cancelReservation(stat, 'circOff')
+            	// cancelReservation(tid, 'circOff')
             	stat.setFanMinOnTime(statState[tid].fanMinOnTime)
                 LOG("${stat.device.displayName} Circulation time is ${statState[tid].fanMinOnTime} mins/hour",3,null,'info')
             }
@@ -385,18 +385,18 @@ def quietOffHandler(evt=null) {
                 }
             }
         	if (settings.humidOff && (stat.currentValue('hasHumidifier') == 'true') && statState[tid]?.humidifierMode) {
-            	cancelReservation(stat, 'humidOff')
+            	cancelReservation(tid, 'humidOff')
           		stat.setHumidifierMode(statState[tid].humidifierMode)
                 LOG("${stat.device.displayName} humidifierMode is ${statState[tid].humidifierMode}",3,null,'info')
             }
         	if (settings.dehumOff && (stat.currentValue('hasDehumidifier') == 'true') && statState[tid]?.dehumidifierMode) {
             	LOG("Turning ${statState[tid]?.dehumidifierMode} the Dehumidifier",3,null,'info')
-            	cancelReservation(stat, 'dehumOff')
-                if (!anyReservations(stat, 'dehumOff') && (statState[tid].dehumidifierMode == 'on')) {
+            	cancelReservation(tid, 'dehumOff')
+                if (!anyReservations(tid, 'dehumOff') && (statState[tid].dehumidifierMode == 'on')) {
             		stat.setDehumidifierMode(statState[tid].dehumidifierMode)
                 	LOG("${stat.device.displayName} dehumidifierMode is ${statState[tid].dehumidifierMode}",3,null,'info')
                 } else {
-                	LOG("Cannot turn on the dehumidifier, ${getGuestList(stat,'dehumOff').toString()[1..-2]} still hold 'dehumOff' reservations.",2,null,'warn')
+                	LOG("Cannot turn on the dehumidifier, ${getGuestList(tid,'dehumOff').toString()[1..-2]} still hold 'dehumOff' reservations.",2,null,'warn')
                 }
             }
         }
@@ -412,58 +412,42 @@ def hasDehumidifier() {
 	return (theThermostats.currentValue('hasDehumidifier').contains('true'))
 }
 
-// Reservation Management Functions
-// Make a reservation for me
-void makeReservation( stat, String type='modeOff' ) {
-	stat.makeReservation( app.id, type )
+// Reservation Management Functions - Now implemented in Ecobee Suite Manager
+void makeReservation(tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id, type )
 }
 // Cancel my reservation
-void cancelReservation( stat, String type='modeOff') {
-	stat.cancelReservation( app.id, type )
+void cancelReservation(tid, String type='modeOff') {
+	log.debug "cancel ${tid}, ${type}"
+	parent.cancelReservation( tid, app.id, type )
 }
 // Do I have a reservation?
-Boolean haveReservation( stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	return (reservations?."${type}"?.contains(app.id))
+Boolean haveReservation(tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations( stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
+Boolean anyReservations(tid, String type='modeOff') {
+	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
-Integer countReservations(stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]	
-	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
+Integer countReservations(tid, String type='modeOff') {
+	return parent.countReservations( tid, type )
 }
 // Get the list of app IDs that have reservations
-List getReservations(stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-    return (reservations?.containsKey(type)) ? reservations."${type}" : []
+List getReservations(tid, String type='modeOff') {
+	return parent.getReservations( tid, type )
 }
 // Get the list of app Names that have reservations
-List getGuestList(stat, String type='modeOff') {
-	String reserved = stat.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
-    if (reservations?.containsKey(type)) {
-    	def guestList = []
-        reservations."${type}".each {
-        	guestList << parent.getChildAppName( it )
-        }
-        return guestList
-    }
-    return []
+List getGuestList(tid, String type='modeOff') {
+	return parent.getGuestList( tid, type )
 }
 
 // Helper Functions
 private def getDeviceId(networkId) {
-	def deviceId = networkId.split(/\./).last()	
-    LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
-    return deviceId
+	// def deviceId = networkId.split(/\./).last()	
+    // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
+    // return deviceId
+    return networkId.split(/\./).last()
 }
 
 // return all the modes that ALL thermostats support
