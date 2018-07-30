@@ -12,22 +12,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	1.0.0  - Final prep for General Release
- *	1.0.1  - Tweaked LOG and setup for consistency
- *	1.0.2  - Better null variable handling
- *	1.0.3a - Updated settings and Disabled handling (fixed file)
- *	1.0.4a - Enabled min/max to be 0 w/related optimizations
- *	1.0.5  - Fixed currentProgram issues
- *	1.0.6  - Fixed tempDisable loophole
- *	1.0.6a - Minor updates
- *  1.0.7  - More minor updates
- *	1.0.8  - Added execution filter on Thermostat Mode
- *	1.2.0  - Sync version number with new holdHours/holdAction support
- *	1.2.1  - Development Iterations
- *  1.2.2  - Can now set adjustments based on temperature difference between inside (average) and outside
- *	1.2.3  - Protect against LOG type errors
- *	1.2.4  - Allow changes while thermostatMode is 'off' also
- *	1.3.0  - Major release: renamed and moved to "sandood" namespace
+ * <snip>
  *	1.4.0  - Renamed parent Ecobee Suite Manager
  *	1.4.01 - Tweaked supportedThermostatModes handling
  *	1.4.02 - Added install warning to description
@@ -43,8 +28,9 @@
  *	1.6.01 - Fix reservation initialization error
  *	1.6.02 - REALLY fix reservations initialization error
  *	1.6.03 - Really, REALLY fix reservations initialization error
+ *	1.6.10 - Converted to parent-based reservations
  */
-def getVersionNum() { return "1.6.03" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -153,8 +139,8 @@ def installed() {
 }
 
 def uninstalled() {
-	cancelReservation( theThermostat, 'circOff' )
-    cancelReservation( theThermostat, 'vacaCircOff' )
+	cancelReservation( getDeviceId(theThermostat.deviceNetworkId), 'circOff' )
+    cancelReservation( getDeviceId(theThermostat.deviceNetworkId), 'vacaCircOff' )
 }
 
 def updated() {
@@ -243,27 +229,28 @@ def initialize() {
     }
     atomicState.isOK = isOK
     
+    def tid = getDeviceId(theThermostat.deviceNetworkId)
     if (isOK) {	
 		if (currentOnTime < settings.minFanOnTime) {
     		if (vacationHold && settings.vacationOverride) {
-            	cancelReservation( theThermostat, 'vacaCircOff')
+            	cancelReservation( tid, 'vacaCircOff')
         		theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
             	currentOnTime = settings.minFanOnTime
                 atomicState.lastAdjustmentTime = now() 
         	} else if (!vacationHold) {
-            	cancelReservation( theThermostat, 'circOff')
+            	cancelReservation( tid, 'circOff')
     			theThermostat.setFanMinOnTime(settings.minFanOnTime)
             	currentOnTime = settings.minFanOnTime
                 atomicState.lastAdjustmentTime = now() 
         	}
     	} else if (currentOnTime > settings.maxFanOnTime) {
     		if (vacationHold && settings.vacationOverride) {
-            	cancelReservation( theThermostat, 'vacaCircOff')
+            	cancelReservation( tid, 'vacaCircOff')
         		theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime)
         		currentOnTime = settings.maxFanOnTime
                 atomicState.lastAdjustmentTime = now() 
         	} else if (!vacationHold) {
-            	cancelReservation( theThermostat, 'circOff')
+            	cancelReservation( tid, 'circOff')
     			theThermostat.setFanMinOnTime(settings.maxFanOnTime)
         		currentOnTime = settings.maxFanOnTime
                 atomicState.lastAdjustmentTime = now() 
@@ -276,10 +263,10 @@ def initialize() {
     } else if (atomicState.quietNow) {
     	if (currentOnTime != 0) {
     		if (vacationHold && settings.vacationOverride) {
-            	makeReservation(theThermostat, 'vacaCircOff')
+            	makeReservation(tid, 'vacaCircOff')
         		theThermostat.setVacationFanMinOnTime(0)
         	} else if (!vacationHold) {
-                makeReservation(theThermostat, 'circOff')
+                makeReservation(tid, 'circOff')
                 theThermostat.setFanMinOnTime(0)
         	}
         }
@@ -364,18 +351,19 @@ def deltaHandler(evt=null) {
     	LOG("${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
         return
     }
+    def tid = getDeviceId(theThermostat.deviceNetworkId)
     if (!vacationHold) {
-        if (anyReservations(theThermostat, 'circOff') && (theThermostat.currentValue('fanMinOnTime').toInteger() == 0)) {
+        if (anyReservations(tid, 'circOff') && (theThermostat.currentValue('fanMinOnTime').toInteger() == 0)) {
             // Looks like somebody else has turned off circulation
-            if (!haveReservation(theThermostat, 'circOff')) {		// is it me?
+            if (!haveReservation(tid, 'circOff')) {		// is it me?
                 // Not me, so we can't be changing circulation
 				return
             }
         }
     } else {
-    	if (anyReservations(theThermostat, 'vacaCircOff') && (theThermostat.currentValue('fanMinOnTime').toInteger() == 0)) {
+    	if (anyReservations(tid, 'vacaCircOff') && (theThermostat.currentValue('fanMinOnTime').toInteger() == 0)) {
             // Looks like somebody else has turned off circulation
-            if (!haveReservation(theThermostat, 'vacaCircOff')) {		// is it me?
+            if (!haveReservation(tid, 'vacaCircOff')) {		// is it me?
                 // Not me, so we can't be changing circulation
 				return
             }
@@ -397,10 +385,10 @@ def deltaHandler(evt=null) {
             } else {
                 LOG("Configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
                 if (vacationHold && settings.vacationOverride) {
-                	cancelReservation( theThermostat, 'vacaCircOff')
+                	cancelReservation( tid, 'vacaCircOff')
         			theThermostat.setVacationFanMinOnTime(settings.fanMinOnTIme)
         		} else if (!vacationHold) {
-                	cancelReservation( theThermostat, 'circOff')
+                	cancelReservation( tid, 'circOff')
     				theThermostat.setFanMinOnTime(settings.fanMinOnTime)
         		}
                 return
@@ -518,7 +506,7 @@ def calcTemps() {
     	currentOnTime = theThermostat.currentValue('fanMinOnTime').toInteger() ?: 0	// EcobeeSuite Manager will populate this with Vacation.fanMinOnTime if necessary
 	}
     def newOnTime = roundIt(currentOnTime, 0)
-	
+	def tid = getDeviceId(theThermostat.deviceNetworkId)
 	if (delta >= deltaTemp.toBigDecimal()) {			// need to increase recirculation (fanMinOnTime)
 		newOnTime = roundIt(currentOnTime + fanOnTimeDelta, 0)
 		if (newOnTime > settings.maxFanOnTime) {
@@ -527,11 +515,11 @@ def calcTemps() {
 		if (currentOnTime != newOnTime) {
 			LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",deltaTemp.toBigDecimal())}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
 			if (vacationHold) {
-            	cancelReservation( theThermostat, 'vacaCircOff')
+            	cancelReservation( tid, 'vacaCircOff')
             	theThermostat.setVacationFanMinOnTime(newOnTime)
             } else {
             	LOG("deltaHandler: calling setFanMinOnTime(${newOnTime})",3,null,'info')
-                cancelReservation( theThermostat, 'circOff')
+                cancelReservation( tid, 'circOff')
             	theThermostat.setFanMinOnTime(newOnTime)
             }
             atomicState.fanSinceLastAdjustment = false
@@ -551,11 +539,11 @@ def calcTemps() {
            		LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",deltaTemp.toBigDecimal())}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
 				if (vacationHold) {
                 	LOG("Calling setVacationFanMinOnTime(${newOnTime})",3,null,'info')
-                    cancelReservation( theThermostat, 'vacaCircOff')
+                    cancelReservation( tid, 'vacaCircOff')
                 	theThermostat.setVacationFanMinOnTime(newOnTime)
                 } else {
                 	LOG("Calling setFanMinOnTime(${newOnTime})",3,null,'info')
-                    cancelReservation( theThermostat, 'circOff')
+                    cancelReservation( tid, 'circOff')
                 	theThermostat.setFanMinOnTime(newOnTime)
                 }
                 atomicState.fanSinceLastAdjustment = false
@@ -567,54 +555,44 @@ def calcTemps() {
 	LOG("No adjustment made",4,"",'info')
 }
 
-// Reservation Management Functions
-// Make a reservation for me
-void makeReservation( stat, String type='modeOff' ) {
-	stat.makeReservation( app.id, type )
+// Reservation Management Functions - Now implemented in Ecobee Suite Manager
+void makeReservation(tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id, type )
 }
 // Cancel my reservation
-void cancelReservation( stat, String type='modeOff') {
-	stat.cancelReservation( app.id, type )
+void cancelReservation(tid, String type='modeOff') {
+	log.debug "cancel ${tid}, ${type}"
+	parent.cancelReservation( tid, app.id, type )
 }
 // Do I have a reservation?
-Boolean haveReservation( stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	return (reservations?."${type}"?.contains(app.id))
+Boolean haveReservation(tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations( stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
+Boolean anyReservations(tid, String type='modeOff') {
+	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
-Integer countReservations(stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]	
-	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
+Integer countReservations(tid, String type='modeOff') {
+	return parent.countReservations( tid, type )
 }
 // Get the list of app IDs that have reservations
-List getReservations(stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-    return (reservations?.containsKey(type)) ? reservations."${type}" : []
+List getReservations(tid, String type='modeOff') {
+	return parent.getReservations( tid, type )
 }
 // Get the list of app Names that have reservations
-List getGuestList(stat, String type='modeOff') {
-	String reserved = stat.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
-    if (reservations?.containsKey(type)) {
-    	def guestList = []
-        reservations."${type}".each {
-        	guestList << parent.getChildAppName( it )
-        }
-        return guestList
-    }
-    return []
+List getGuestList(tid, String type='modeOff') {
+	return parent.getGuestList( tid, type )
 }
 
 // Helper Functions
+private def getDeviceId(networkId) {
+	// def deviceId = networkId.split(/\./).last()	
+    // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
+    // return deviceId
+    return networkId.split(/\./).last()
+}
+
 private roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
