@@ -12,13 +12,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	1.0.0  - Final prep for General Release
- *	1.0.1  - Edit LOG and setup for consistency
- *	1.0.2  - Fixed initialization
- *	1.0.3  - Updated settings and TempDisable handling
- *	1.2.0  - Sync version number with new holdHours/holdAction support
- *	1.2.1  - Protect against LOG type errors
- *	1.3.0  - Major Release: reanmed and moved to "sandood" namespace
+ * <snip>
  *	1.4.0  - Major release: renamed devices & manager
  *	1.4.01 - Updated description
  *	1.4.02 - Updated for delayed add/delete function
@@ -27,8 +21,9 @@
  *	1.5.01 - Added support for multiple SMS numbers (Contacts being deprecated by ST)
  *	1.6.00 - Release number synchronization
  *	1.6.01 - Fixed sendMessage()
+ *	1.6.10 - Resync for parent-based reservations
  */
-def getVersionNum() { return "1.6.01" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
