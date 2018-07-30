@@ -29,8 +29,9 @@
  *	1.6.02 - REALLY fix reservations initialization error
  *	1.6.03 - Really, REALLY fix reservations initialization error
  *	1.6.10 - Converted to parent-based reservations
+ *	1.6.11 - Clear reservations when disabled
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -139,10 +140,12 @@ def installed() {
 }
 
 def uninstalled() {
-	cancelReservation( getDeviceId(theThermostat.deviceNetworkId), 'circOff' )
-    cancelReservation( getDeviceId(theThermostat.deviceNetworkId), 'vacaCircOff' )
+	clearReservations()
 }
-
+def clearReservations() {
+	cancelReservation( getDeviceId(theThermostat?.deviceNetworkId), 'circOff' )
+    cancelReservation( getDeviceId(theThermostat?.deviceNetworkId), 'vacaCircOff' )
+}
 def updated() {
 	LOG("updated() entered", 4, "", 'trace')
 	unsubscribe()
@@ -176,6 +179,7 @@ def initialize() {
     
 	// Now, just exit if we are disabled...
 	if(tempDisable == true) {
+    	clearReservations()
     	LOG("temporarily disabled as per request.", 2, null, "warn")
     	return true
     }
