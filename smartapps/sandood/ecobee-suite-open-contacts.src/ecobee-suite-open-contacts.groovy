@@ -36,8 +36,9 @@
  *	1.6.02 - Fix reservation initialization error
  *	1.6.03 - REALLY fix reservation initialization error
  *	1.6.04 - Really, REALLY fix reservation initialization error
+ *	1.6.05 - Fixed getDeviceId()
  */
-def getVersionNum() { return "1.6.04" }
+def getVersionNum() { return "1.6.05" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 import groovy.json.JsonSlurper
@@ -594,6 +595,12 @@ private Boolean allClosed() {
     }
     LOG("Returning ${response}",2,null,'info')
     return response
+}
+
+private def getDeviceId(networkId) {
+	def deviceId = networkId.split(/\./).last()	
+    LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
+    return deviceId
 }
 
 // Reservation Management Functions
