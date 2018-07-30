@@ -29,8 +29,9 @@
  *	1.5.05 - Added multiple SMS support (Contacts being deprecated by ST)
  *	1.6.00 - Release number synchronization
  *	1.6.01 - Fixed sendMessage()
+ *	1.6.02 - Fix reservation initialization error
  */
-def getVersionNum() { return "1.6.01" }
+def getVersionNum() { return "1.6.02" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -754,27 +755,32 @@ void cancelReservation( stat, String type='modeOff') {
 }
 // Do I have a reservation?
 Boolean haveReservation( stat, String type='modeOff') {
-def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	String reserved = device.currentValue('reservations')
+    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
 	return (reservations?."${type}"?.contains(app.id))
 }
 // Do any Apps have reservations?
 Boolean anyReservations( stat, String type='modeOff') {
-	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	String reserved = device.currentValue('reservations')
+    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
 	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
 }
 // How many apps have reservations?
 Integer countReservations(stat, String type='modeOff') {
-	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))	
+	String reserved = device.currentValue('reservations')
+    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]	
 	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
 }
 // Get the list of app IDs that have reservations
 List getReservations(stat, String type='modeOff') {
-	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	String reserved = device.currentValue('reservations')
+    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
     return (reservations?.containsKey(type)) ? reservations."${type}" : []
 }
 // Get the list of app Names that have reservations
 List getGuestList(stat, String type='modeOff') {
-	def reservations = new JsonSlurper().parseText(stat.currentValue('reservations'))
+	String reserved = device.currentValue('reservations')
+    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
     if (reservations?.containsKey(type)) {
     	def guestList = []
         reservations."${type}".each {
