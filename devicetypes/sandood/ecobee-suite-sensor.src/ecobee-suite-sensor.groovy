@@ -15,20 +15,7 @@
  * 
  *  See Changelog for change history
  *
- *	1.0.0  - Preparation for General Release
- *	1.0.1  - Added Offline handling (power out, network down, etc.)
- *	1.0.2  - Changed handling of online/offline
- *	1.0.3  - Added Health Check support
- *	1.0.4  - Revised poll/refresh/ping commands
- *	1.0.5  - Improved Health Check reliability
- *  1.0.6  - Restored Fahrenheit 451 ("offline" display)
- *	1.0.7  - Fixed indiscriminate Polling issue
- *  1.0.8  - Setting decimals=0 now also applies to value displayed in device lists
- *	1.0.9  - Uses new Refresh icon
- *	1.2.0  - Sync revision number with new holdHours/holdAction updates
- *	1.2.1  - Reinstated default icon for default Temperature tile
- *	1.2.2  - Added new Program icons, Awake/Wakeup attributes (not currently displayed)
- *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
+ * <snip>
  *	1.4.0  - Major Release: renamed devices also
  *	1.4.01 - Added VersionLabel display
  *	1.4.02 - Fixed getMyId so that add/delete works properly
@@ -39,8 +26,9 @@
  *	1.5.00 - Release number synchronization
  *	1.5.01 - Converted all math to BigDecimal for better precision
  *	1.6.00 - Release number synchronization
+ *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
