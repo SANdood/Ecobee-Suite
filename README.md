@@ -1,16 +1,20 @@
-Free Ecobee Suite, version: 1.6.* 
+Free Ecobee Suite, version: 1.6.1* 
 ======================================================
-Latest: Version 1.6.* Released July 29, 2018
+Latest: Version 1.6.11 Released July 30, 2018 at 3:30pm EDT
 
 ***NOTE: When updating/installing, you MUST include ALL of the Suite's components***
 
 ## Highlights
-The most significant changes in the July 29, 2018 update to 1.6.* include the following:
+The most significant changes in the July 2018 update to 1.6.* include the following:
+
+***The Reservation System have been totally re-implemented as of the 1.6.10 release - now part of Ecobee Suite Manager instead of Thermostats***
+
 #### General changes to the Ecobee Suite
 - New **Multiple SMS numbers Notifications** - SmartThings has notified users that the Contact Book will no longer be supported as of Monday, July 30, 2018. The recommended alternative is to send SMS messages to users, or to send Push messages to ALL users. This update enables you to configure multiple phone numbers (separated by ';') as the target for SMS messages (if you want directed notifications).
 - New **Reservations** - Through a new internal reservation system, Helper Apps can coordinate their changes to ensure that another Helper doesn't override an intended function (*e.g.,* changing the Mode to Off, or changing fan circulation time). See below for more information. 
 - Most Helper SmartApps can now select **Ecobee Suite Thermostats Only**, so to ensure proper coordination between the Suite's devices and SmartApps
 #### Ecobee Suite Manager
+- **Re-implemented Reservations** 1.6.10 moves the entire reservation system into ESM, where it probably should have been since the beginning.
 - **Asynchronous HTTP** While not user visible, this change significantly improves the performance and reliability of API calls to the Ecobee servers.
 - **Additional Weather Info** Another internal enhancement, now provides more info from the Ecobee weather report to enable the new Dew Point feature of Ecobee Suite Smart Mode.
 ##### ecobee Suite Contacts & Switches
@@ -37,8 +41,6 @@ The most significant changes in the July 29, 2018 update to 1.6.* include the fo
 - Now supports **Multiple SMS Notifications**
 ##### ecobee Suite Smart Switches, Smart Vents, Smart Zones
 - Now support **Ecobee Suite Thermostats Only**
-#### Ecobee Suite Thermostat
-- Implements new **Reservations** system, allowing Helper Apps to coordinate changes to the thermostat
 
 ## <a name="top">Table Of Contents</a>
 - [Introduction](#intro)
@@ -91,6 +93,7 @@ The most significant changes in the July 29, 2018 update to 1.6.* include the fo
 	  - [Changing Thermostat Modes](#changingmode)
 	  - [Changing Thermostat Fan Modes](#changingfan)
 	  - [Complex Commands Requiring Arguments](#complex)
+  - [Reservations](#reservations)
 
 ## <a name="intro">Introduction</a>
 This document describes the various features related to the Ecobee Suite of Device Handlers and supporting Helper SmartApps for Ecobee thermostats and sensors. 
@@ -905,3 +908,42 @@ The following command entry points require multiple arguments, and so are most o
 - **scheduleVacation** - define a vacation programmatically 
 - **deleteVacation** - delete a previously defined vacation
 - **cancelVacation** - cancel the currently active vacation (if any)
+
+### <a name="reservations">Reservations</a>
+
+Version 1.6.00 introduced a new ***internal use only*** Reservations System to the Suite. While this *may* one day be opened to external SmartApps or WeBCoRE pistons, for now it is a closed system.
+
+To satisfy your curiousity:
+
+The design intent is to enable certain types of coordination between the various Helper SmartApps. For example, if the Smart Mode helper decides to turn off the HVAC system (setting the thermostatMode to 'off'), then we probably don't want the Switches & Contacts helper turning the HVAC back on. 
+
+To accomplish this, Smart Mode will create a 'modeOff' reservation with each configured thermostat, signifying that it has interest in keeping the HVAC system turned off. Should the Contacts & Switches Helper also decide that the HVAC system should be turned off, it too takes out a' 'modeOff' reservation.
+
+Given multiple such 'modeOff' reservations, neither Helper will turn the HVAC back on until ALL of the reservations are removed.
+
+Operationally, reservations work much like semaphores. A process wishing to turn off the HVAC should (in pseudo-code):
+    1. makeReservation(stat.Id, app.Id, 'modeOff')
+    2. stat.off()
+
+And when it wants to turn the HVAC back on:
+1. if ((reservationCount - myReservation) == 0)		// No reservations except my own
+2. stat.auto()
+3. cancelReservation(stat.id, app.id, 'modeOff')
+
+This order is important, because the entire SmartThings world is asynchronous. You want to be sure to grab the reservation before you turn off the device, and then you want to wait until you have turned the device back on AFTER you turn it on.
+
+  [Note: the revised implementation of Reservations in v1.6.10 and later uses atomicState variables to hold the reservations, explicitly to minimize race conditions. That said, I'm sure that they can still occur.]
+
+The Reservation System implements the following commands/entry points:
+- **void makeReservation(stat.id, child.id, type)** Makes a new reservation of `type` for the calling SmartApp (`childId`). If the caller already has a reservation, a new one is not created, and no error is flagged.
+- **void cancelReservation(stat.id, child.id, type)** Cancels/deletes a reservation for the `client.Id` of the specified `type`. If no reservation exists of this `type`` for `child.id`, it is silently ignored.
+- **Boolean haveReservation(stat.id, child.id, type)** check to see if app.id holds a reservation
+- **Boolean anyReservations(stat.id, type)** check to see if there are ANY reservations for `type`
+- **Integer countReservations((stat.id, type)** Returns the number of current reservations of `type`
+- **List getReservations(stat.id, type)** returns a list of the `child.ids` (aka `app.Ids`)
+- **List getGuestList(stat.id, type)** returns a list of the NAMES for each
+
+Where:
+- `stat.id` is the Ecobee Thermostat ID number (getDeviceId(device.deviceNetworkId))
+- `child.Id` is the SmartThings application ID (app.Id)
+- `type` is any arbitrary identity for the class/type of reservation. Used by the code so far are **`modeOff`**, **`fanOff`**, **`circOff`**, **`vacaCircOff`**.
