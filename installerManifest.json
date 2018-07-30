@@ -33,7 +33,7 @@
 				"name": 	"ecobee Suite Open Contacts",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.6.04",
+				"version": 	"1.6.05",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
 				"optional": 	false
