@@ -13,12 +13,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	1.2.0  - Sync version number with new holdHours/holdAction support
- *	1.2.1  - Changed order of LOGging
- *	1.2.2  - Include device names in notifications
- *	1.2.3  - Protect against LOG type errors
- *	1.2.4  - Fix typo in turnOffHVAC
- *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
+ * <snip>
  *	1.4.00 - Renamed parent Ecobee Suite Manager
  *  1.4.01 - Updated description
  *	1.4.02 - Fixed contact open/closed notification
@@ -37,11 +32,10 @@
  *	1.6.03 - REALLY fix reservation initialization error
  *	1.6.04 - Really, REALLY fix reservation initialization error
  *	1.6.05 - Fixed getDeviceId()
+ *	1.6.10 - Converted to parent-based reservations
  */
-def getVersionNum() { return "1.6.05" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
-
-import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Suite Open Contacts",
@@ -137,7 +131,7 @@ def mainPage() {
                         	input( name: 'sendPush', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
                         }
                         if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.sendPush) paragraph "WARNING: Notifications configured, but nobody to send them to!"
-                        paragraph("(A notification is also sent to the Hello Home log")
+                        paragraph("A notification is also sent to the Hello Home log")
                 	}
             	}
             }          
@@ -158,7 +152,7 @@ def installed() {
 }
 def uninstalled () {
 	myThermostats.each {
-    	cancelReservation(it, 'modeOff') 
+    	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff') 
 	}   
 }
 def updated() {
@@ -170,15 +164,7 @@ def updated() {
 }
 
 def tester() {
-	myThermostats.each {
-    	makeReservation(it, 'fanOff' )
-        log.debug "haveReservation: ${haveReservation(it, 'fanOff')}"
-        log.debug "anyReservations: ${anyReservations(it, 'fanOff')}"
-        log.debug "countReservations: ${countReservations( it, 'fanOff')}"
-        cancelReservation(it, 'fanOff')
-        cancelReservation(it, 'modeOff')
-        log.debug "haveReservation: ${haveReservation(it, 'fanOff')}"
-    }
+
 }
 
 def initialize() {
@@ -207,7 +193,7 @@ def initialize() {
     	if (switchOn) {
         	subscribe(theSwitches, "switch.on", sensorOpened)
             subscribe(theSwitches, "switch.off", sensorClosed)
-            switchOffState = theSwitches.currentSwitch.contains('on')
+            switchOffState = theSwitches.currentValue('switch').contains('on')
         } else {
         	subscribe(theSwitches, "switch.off", sensorOpened)
             subscribe(theSwitches, "switch.on", sensorClosed)
@@ -389,11 +375,11 @@ def turnOffHVAC() {
                 LOG("${therm.displayName} Quiet Time enabled (${qtSwitch.displayName} turned ${settings.qtOn})",2,null,'info')
             } else if ((settings.hvacOff == null) || settings.hvacOff) {
             	// turn off the HVAC
-                makeReservation(therm, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
+                makeReservation(tid, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
     			if (therm.currentValue('thermostatMode') != 'off') {
                 	tmpThermSavedState[tid].mode = therm.currentValue('thermostatMode')
             		therm.setThermostatMode('off')
-                	tstatNames << [therm.device.displayName]		// only report the ones that aren't off already
+                	tstatNames << therm.device.displayName		// only report the ones that aren't off already
                 	LOG("${therm.device.displayName} turned off (was ${tmpThermSavedState[tid].mode})",2,null,'info')    
             	}
             } else if (settings.adjustSetpoints) {
@@ -435,24 +421,24 @@ def turnOffHVAC() {
     		if (contactSensors) {
         		def sensorNames = []
             	contactSensors.each { 
-            		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorNames << [it.device.displayName]
+            		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorNames << it.device.displayName
             	}
         		if (delay != 0) {
-    				sendMessage("${sensorNames} left ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
+    				sendMessage("${sensorNames.toString()[1..-2]} left ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames.toString()[1..-2]}.")
             	} else {
-            		sendMessage("${sensorNames} ${contactOpen?'opened':'closed'}, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames}.")
+            		sendMessage("${sensorNames.toString()[1..-2]} ${contactOpen?'opened':'closed'}, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames.toString()[1..-2]}.")
             	}
             	notified = true		// only send 1 notification
         	}
         	if (!notified && theSwitches) {
         		def switchNames = []
             	theSwitches.each {
-            		if (it.currentSwitch() == (switchOn?'on':'off')) switchNames << [it.device.displayName]
+            		if (it.currentSwitch == (switchOn?'on':'off')) switchNames << it.device.displayName
             	}
         		if (delay != 0) {
-    				sendMessage("${switchNames} left ${switchOn?'on':'off'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
+    				sendMessage("${switchNames.toString()[1..-2]} left ${switchOn?'on':'off'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames.toString()[1..-2]}.")
             	} else {
-            		sendMessage("${switchNames} turned ${switchOn?'on':'off'}, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames}.")
+            		sendMessage("${switchNames.toString()[1..-2]} turned ${switchOn?'on':'off'}, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames.toString()[1..-2]}.")
             	}
           		notified = true
         	}
@@ -481,7 +467,7 @@ def turnOnHVAC() {
         
         settings.myThermostats.each { therm ->
 			// LOG("Working on thermostat: ${therm}", 5)
-            tstatNames << [therm.displayName]
+            tstatNames << therm.displayName
             def tid = getDeviceId(therm.deviceNetworkId)
             String priorMode = settings.defaultMode
             def tmpThermSavedState = atomicState.thermSavedState
@@ -496,15 +482,16 @@ def turnOnHVAC() {
                     def oldMode = therm.currentValue('thermostatMode')
                     def newMode = (tmpThermSavedState[tid].mode == '') ? 'auto' : tmpThermSavedState[tid].mode
                     if (newMode != oldMode) {
-                    	def i = therm.countReservations( 'modeOff' ) - (haveReservation(therm, 'modeOff') ? 1 : 0)
+                    	def i = countReservations( tid, 'modeOff' ) - (haveReservation(tid, 'modeOff') ? 1 : 0)
+                        log.debug "count=${countReservations(tid,'modeOff')}, have=${haveReservation(tid,'modeOff')}, i=${i}"
                     	if ((oldMode == 'off') && (i > 0)) {
                         	// Currently off, and somebody besides me has a reservation - just release my reservation
-                            cancelReservation(therm, 'modeOff')
+                            cancelReservation(tid, 'modeOff')
                             notReserved = false							
-                            LOG("Cannot change ${therm.device.displayName} to ${newMode.capitalize()} - ${getGuestList(therm, 'modeOff').toString()[1..-2]} hold 'modeOff' reservations",1,null,'warn')
+                            LOG("Cannot change ${therm.device.displayName} to ${newMode.capitalize()} - ${getGuestList(tid, 'modeOff').toString()[1..-2]} hold 'modeOff' reservations",1,null,'warn')
                         } else {
                         	// Not off, or nobody else but me has a reservation
-                            cancelReservation(therm, 'modeOff')
+                            cancelReservation(tid, 'modeOff')
                         	therm.setThermostatMode( newMode )                            
                 			tstatNames << [therm.device.displayName]		// only report the ones that aren't off already
                 			LOG("${therm.device.displayName} ${newMode.capitalize()} Mode restored (was ${oldMode.capitalize()})",2,null,'info')
@@ -547,20 +534,21 @@ def turnOnHVAC() {
     	if (contactSensors) {
         	if (delay != 0) {
     			sendMessage("All Doors and Windows ${contactOpen?'closed':'opened'} for ${settings.onDelay} minutes, " +
-                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn on'} ${tstatNames}.")
+                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn on'} ${tstatNames.toString()[1..-2]}.")
             } else {
             	sendMessage("All Doors and Windows are ${contactOpen?'closed':'open'}, " +
-                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
+                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames.toString()[1..-2]}.")
             }
             notified = true		// only send 1 notification
         }
         if (!notified && theSwitches) {
         	if (delay != 0) {
-    			sendMessage("${(theSwitches.size()>1)?'All switches':'Switch'} left ${switchOn?'off':'on'} for ${settings.onDelay} minutes, " +
-                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
+    			sendMessage("${theSwitches.toString()[1..-2]}${(theSwitches.size()>1)?' all':''} left ${switchOn?'off':'on'} for ${settings.onDelay} minutes, " +
+                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames.toString()[1..-2]}.")
             } else {
-            	sendMessage("${(theSwitches.size()>1)?'All switches':'Switch'} turned ${switchOn?'off':'on'}, " +
-                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames}.")
+            log.debug "foo ${tstatNames}"
+            	sendMessage("${theSwitches.toString()[1..-2]}${(theSwitches.size()>1)?' all':''} turned ${switchOn?'off':'on'}, " +
+                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames.toString()[1..-2]}.")
             }
             notified = true
         }
@@ -598,56 +586,40 @@ private Boolean allClosed() {
 }
 
 private def getDeviceId(networkId) {
-	def deviceId = networkId.split(/\./).last()	
-    LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
-    return deviceId
+	// def deviceId = networkId.split(/\./).last()	
+    // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
+    // return deviceId
+    return networkId.split(/\./).last()
 }
 
-// Reservation Management Functions
-// Make a reservation for me
-void makeReservation( stat, String type='modeOff' ) {
-	stat.makeReservation( app.id, type )
+// Reservation Management Functions - Now implemented in Ecobee Suite Manager
+void makeReservation(tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id, type )
 }
 // Cancel my reservation
-void cancelReservation( stat, String type='modeOff') {
-	stat.cancelReservation( app.id, type )
+void cancelReservation(tid, String type='modeOff') {
+	log.debug "cancel ${tid}, ${type}"
+	parent.cancelReservation( tid, app.id, type )
 }
 // Do I have a reservation?
-Boolean haveReservation( stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	return (reservations?."${type}"?.contains(app.id))
+Boolean haveReservation(tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations( stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
+Boolean anyReservations(tid, String type='modeOff') {
+	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
-Integer countReservations(stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]	
-	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
+Integer countReservations(tid, String type='modeOff') {
+	return parent.countReservations( tid, type )
 }
 // Get the list of app IDs that have reservations
-List getReservations(stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-    return (reservations?.containsKey(type)) ? reservations."${type}" : []
+List getReservations(tid, String type='modeOff') {
+	return parent.getReservations( tid, type )
 }
 // Get the list of app Names that have reservations
-List getGuestList(stat, String type='modeOff') {
-	String reserved = stat.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
-    if (reservations?.containsKey(type)) {
-    	def guestList = []
-        reservations."${type}".each {
-        	guestList << parent.getChildAppName( it )
-        }
-        return guestList
-    }
-    return []
+List getGuestList(tid, String type='modeOff') {
+	return parent.getGuestList( tid, type )
 }
 
 private def sendMessage(notificationMessage) {
