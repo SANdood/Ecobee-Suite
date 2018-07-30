@@ -24,9 +24,10 @@
  *	1.5.00 - Release number synchronization
  *	1.5.01 - Allow Ecobee Suite Thermostats only
  *	1.5.02 - Converted all math to BigDecimal
- *	1.6.00- Release number synchronization
+ *	1.6.00 - Release number synchronization
+ *	1.6.10- Resync for parent-based reservations
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()}" }
 
 definition(
