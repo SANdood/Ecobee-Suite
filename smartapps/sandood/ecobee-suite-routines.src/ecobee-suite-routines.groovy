@@ -14,20 +14,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- * 	1.0.0 - Final preparation for General Release
- * 	1.0.1 - Updated LOG and setup for consistency
- * 	1.0.2 - Fixed Ecobee Program changes when using Permanent/Indefinite or Default holdType
- * 	1.0.3 - Updated settings and Disabled handling
- * 	1.0.4 - Added Cancel Vacation option
- * 	1.0.5 - Added optional fanMinOnTime setting when changing Ecobee programs (because we can't change fMOT while in Hold:)
- * 	1.0.5a- Double check fanMinutes settings is valid
- * 	1.0.6 - Minor optimizations and LOGging fixups
- * 	1.0.7 - Allow fanMinutes == 0
- * 	1.0.8 - Allow override/cancellation of Vacation Hold (e.g., came home early)
- * 	1.2.0 - Update to support holdHours and thermostat holdAction
- * 	1.2.1 - Corrected setHold logic 
- * 	1.2.2 - Protect against LOG type errors
- * 	1.3.0 - Major Release: renamed and moved to "sandood" namespace
+ * <snip>
  * 	1.4.0 - Renamed parent to Ecobee Suite Manager
  * 	1.4.01- Updated description
  * 	1.4.02- Fixed fanMode == Circulate handling
@@ -37,10 +24,10 @@
  *	1.5.02- Added support for notifications via SMS or Push
  *	1.6.00- Release number synchronization
  *	1.6.01- Fixed sendMessage()
+ *	1.6.10- Resync for parent-based reservations
  */
-def getVersionNum() { return "1.6.01" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Mode/Routine/Program Helper, version ${getVersionNum()}" }
-
 
 definition(
 	name: "ecobee Suite Routines",
