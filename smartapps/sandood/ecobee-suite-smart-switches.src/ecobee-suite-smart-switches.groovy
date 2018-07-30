@@ -22,9 +22,10 @@
  *	1.4.01 - Updated description
  *	1.5.00 - Release number synchronization
  *	1.5.01 - Allow Ecobee Suite Thermostats only
- *	1.6.00- Release number synchronization
+ *	1.6.00 - Release number synchronization
+ *	1.6.10 - Resync for parent-based reservations
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()}" }
 
 definition(
