@@ -32,8 +32,9 @@
  *	1.6.02 - Fix reservation initialization error
  *	1.6.03 - REALLY fix reservation initialization error
  *	1.6.04 - Really, REALLY fix reservation initialization error
+ *	1.6.10 - Converted to parent-based reservations
  */
-def getVersionNum() { return "1.6.04" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -200,7 +201,7 @@ def installed() {
 
 def uninstalled() {
 	thermostats.each {
-    	cancelReservation(it, 'modeOff' )
+    	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff' )
     }
 }
 
@@ -404,13 +405,14 @@ def insideChangeHandler(evt) {
         if (newMode != null) {
         	def cMode = evt.device.currentValue('thermostatMode')
         	if (cMode != newMode) {
-            	if ((cMode == 'off') && anyReservations( evt.device, 'modeOff' )) {
+            	def tid = getDeviceId(evt.device.deviceNetworkId)
+            	if ((cMode == 'off') && anyReservations( tid, 'modeOff' )) {
                 	// if ANYBODY (including me) has a reservation on this being off, I can't turn it back on)
                     LOG("${evt.device.displayName} temp is ${theTemp}°, but Mode is Off with reservations, can't change to ${newMode}",2,null,'warn')
                     // Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
                 } else {
                 	// not currently off or there are no modeOff reservations, change away!
-                    cancelReservation(evt.device, 'modeOff' )
+                    cancelReservation(tid, 'modeOff' )
             		evt.device.setThermostatMode(newMode)
                 	LOG("${evt.device.displayName} temp is ${theTemp}°, changed thermostat to ${newMode} mode",3,null,'trace')
         			sendMessage("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
@@ -578,34 +580,35 @@ def temperatureUpdate( BigDecimal temp ) {
         String sameNames = ""
 		settings.thermostats.each { 
         	def cMode = it.currentValue('thermostatMode')
+            def tid = getDeviceId(it.deviceNetworkId)
 			if ( cMode != desiredMode) {
             	if (desiredMode == 'off') {
                     it.setThermostatMode( 'off' )
-                    makeReservation(it, 'modeOff')
+                    makeReservation(tid, 'modeOff')
                 } else {
                 	// Desired mode IS NOT 'off'
                 	if (cMode == 'off') {
-                    	def i = countReservations(it, 'modeOff') - (haveReservation(it, 'modeOff')? 1 : 0)
+                    	def i = countReservations(tid, 'modeOff') - (haveReservation(tid, 'modeOff')? 1 : 0)
                     	if (i <= 0) {
                     		// nobody else has a reservation on modeOff
-                            cancelReservation( it, 'modeOff')
+                            cancelReservation( tid, 'modeOff')
 							it.setThermostatMode(desiredMode)
                 			changeNames += changeNames ? ", ${it.displayName}" : it.displayName
 						} else {
                     		// somebody else has a 'modeOff' reservation so we can't turn it on, but we can cancel our reservation
-                        	cancelReservation( it, 'modeOff')
-                            LOG("Temp is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(it,'modeOff').toString()[1..-2]} hold 'modeOff' reservations",2,null,'warn')
-                            sendMessage("The temperature is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(it,'modeOff').toString()[1..-2]} hold 'modeOff' reservations")
+                        	cancelReservation( tid, 'modeOff')
+                            LOG("Temp is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations",2,null,'warn')
+                            sendMessage("The temperature is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations")
                             // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
                     	}
                     } else {
                     	// Not off currently, so we can change freely
-                        cancelReservation(it, 'modeOff')	// just in case
+                        cancelReservation(tid, 'modeOff')	// just in case
                     	it.setThermostatMode(desiredMode)
                     }
                 }
             } else {
-            	cancelReservation(it, 'modeOff')
+            	cancelReservation(tid, 'modeOff')
                 sameNames += sameNames ? ", ${it.displayName}" : it.displayName
             }
 		}
@@ -746,51 +749,41 @@ private String getPWSID() {
 	return PWSID
 }
 
-// Reservation Management Functions
-// Make a reservation for me
-void makeReservation( stat, String type='modeOff' ) {
-	stat.makeReservation( app.id, type )
+private def getDeviceId(networkId) {
+	// def deviceId = networkId.split(/\./).last()	
+    // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
+    // return deviceId
+    return networkId.split(/\./).last()
+}
+
+// Reservation Management Functions - Now implemented in Ecobee Suite Manager
+void makeReservation(tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id, type )
 }
 // Cancel my reservation
-void cancelReservation( stat, String type='modeOff') {
-	stat.cancelReservation( app.id, type )
+void cancelReservation(tid, String type='modeOff') {
+	log.debug "cancel ${tid}, ${type}"
+	parent.cancelReservation( tid, app.id, type )
 }
 // Do I have a reservation?
-Boolean haveReservation( stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	return (reservations?."${type}"?.contains(app.id))
+Boolean haveReservation(tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations( stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
+Boolean anyReservations(tid, String type='modeOff') {
+	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
-Integer countReservations(stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]	
-	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
+Integer countReservations(tid, String type='modeOff') {
+	return parent.countReservations( tid, type )
 }
 // Get the list of app IDs that have reservations
-List getReservations(stat, String type='modeOff') {
-	def reserved = stat.currentValue('reservations')
-    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-    return (reservations?.containsKey(type)) ? reservations."${type}" : []
+List getReservations(tid, String type='modeOff') {
+	return parent.getReservations( tid, type )
 }
 // Get the list of app Names that have reservations
-List getGuestList(stat, String type='modeOff') {
-	String reserved = stat.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
-    if (reservations?.containsKey(type)) {
-    	def guestList = []
-        reservations."${type}".each {
-        	guestList << parent.getChildAppName( it )
-        }
-        return guestList
-    }
-    return []
+List getGuestList(tid, String type='modeOff') {
+	return parent.getGuestList( tid, type )
 }
 
 // Helper Functions
