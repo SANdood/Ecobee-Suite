@@ -33,8 +33,9 @@
  *	1.6.03 - REALLY fix reservation initialization error
  *	1.6.04 - Really, REALLY fix reservation initialization error
  *	1.6.10 - Converted to parent-based reservations
+ *	1.6.11 - Clear reservations when disabled
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -200,11 +201,13 @@ def installed() {
 }
 
 def uninstalled() {
-	thermostats.each {
+	clearReservations()
+}
+def clearReservations() {
+	thermostats?.each {
     	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff' )
     }
 }
-
 def updated() {
 	LOG("updated() with settings: ${settings}", 3, "", 'trace')
 	unsubscribe()
@@ -217,6 +220,7 @@ def updated() {
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	if(settings.tempDisable) {
+    	clearReservations()
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
