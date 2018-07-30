@@ -49,8 +49,9 @@
  *	1.5.04 - Changed humidity/dehumidity setpoint attributes to "number"
  *	1.5.05 - Added reservations manager for better Helper cooperation
  *	1.6.00 - Release number synchronization
+ *	1.6.01 - Fix reservations initialization error
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.01" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -2817,8 +2818,8 @@ void makeReservation(String childId, String type='modeOff') {
 	if (!childName) {
     	LOG("Illegal reservation attempt using childId: ${childId} - caller is not a childApp of my parent",1,null,'warn')
     }
-    String reserved = device.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
+    def reserved = device.currentValue('reservations')
+    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
     if (!reservations?.containsKey(type)) {				// allow for ANY type of reservations
         reservations."${type}" = []
     }
@@ -2832,8 +2833,8 @@ void makeReservation(String childId, String type='modeOff') {
 void cancelReservation( String childId, String type='modeOff') {
 	String childName = parent.getChildAppName( childId )
     if (childName) {									// silently ignore bad childId
-        String reserved = device.currentValue('reservations')
-    	def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
+        def reserved = device.currentValue('reservations')
+    	def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
     	if (reservations?."${type}"?.contains(childId)) {
     		reservations."${type}" = reservations."${type}" - [childId]
         	sendEvent(name: "reservations", value: JsonOutput.toJson(reservations), displayed: false, isStateChange: true)
