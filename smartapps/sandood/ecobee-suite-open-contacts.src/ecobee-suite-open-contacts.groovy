@@ -33,8 +33,9 @@
  *	1.6.04 - Really, REALLY fix reservation initialization error
  *	1.6.05 - Fixed getDeviceId()
  *	1.6.10 - Converted to parent-based reservations
+ *	1.6.11 - Clear reservations when disabled
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -151,9 +152,7 @@ def installed() {
 	initialize()  
 }
 def uninstalled () {
-	myThermostats.each {
-    	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff') 
-	}   
+   clearReservations()
 }
 def updated() {
 	LOG("updated() entered", 5)
@@ -163,13 +162,16 @@ def updated() {
     // tester()
 }
 
-def tester() {
-
+def clearReservations() {
+	myThermostats?.each {
+    	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff') 
+	}
 }
 
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	if(tempDisable == true) {
+    	clearReservations()
 		LOG("Teporarily Disabled as per request.", 2, null, "warn")
 		return true
 	}
