@@ -35,8 +35,9 @@
  *	1.6.01 - Fixed sendMessage()
  *	1.6.02 - Fix reservation initialization error
  *	1.6.03 - REALLY fix reservation initialization error
+ *	1.6.04 - Really, REALLY fix reservation initialization error
  */
-def getVersionNum() { return "1.6.03" }
+def getVersionNum() { return "1.6.04" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 import groovy.json.JsonSlurper
@@ -606,26 +607,26 @@ void cancelReservation( stat, String type='modeOff') {
 }
 // Do I have a reservation?
 Boolean haveReservation( stat, String type='modeOff') {
-	String reserved = stat.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
+	def reserved = stat.currentValue('reservations')
+    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
 	return (reservations?."${type}"?.contains(app.id))
 }
 // Do any Apps have reservations?
 Boolean anyReservations( stat, String type='modeOff') {
-	String reserved = stat.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
+	def reserved = stat.currentValue('reservations')
+    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
 	return (reservations?.containsKey(type)) ? (reservations."${type}".size() != 0) : false
 }
 // How many apps have reservations?
 Integer countReservations(stat, String type='modeOff') {
-	String reserved = stat.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]	
+	def reserved = stat.currentValue('reservations')
+    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]	
 	return (reservations?.containsKey(type)) ? reservations."${type}".size() : 0
 }
 // Get the list of app IDs that have reservations
 List getReservations(stat, String type='modeOff') {
-	String reserved = stat.currentValue('reservations')
-    def reservations = (reserved != '') ? new JsonSlurper().parseText(reserved) : [:]
+	def reserved = stat.currentValue('reservations')
+    def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
     return (reservations?.containsKey(type)) ? reservations."${type}" : []
 }
 // Get the list of app Names that have reservations
@@ -640,13 +641,6 @@ List getGuestList(stat, String type='modeOff') {
         return guestList
     }
     return []
-}
-
-// Helper Functions
-private def getDeviceId(networkId) {
-	def deviceId = networkId.split(/\./).last()	
-    LOG("getDeviceId() returning ${deviceId}", 2)
-    return deviceId
 }
 
 private def sendMessage(notificationMessage) {
