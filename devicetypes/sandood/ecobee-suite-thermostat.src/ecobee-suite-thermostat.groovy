@@ -49,9 +49,12 @@
  *	1.5.04 - Changed humidity/dehumidity setpoint attributes to "number"
  *	1.5.05 - Added reservations manager for better Helper cooperation
  *	1.6.00 - Release number synchronization
- *	1.6.01 - Fix reservations initialization error
+ *	1.6.02 - Fix reservations initialization error
+ *	1.6.03 - Automatically re-run updated() if VersionLabel changes
+ *	1.6.04 - Deprecated make/cancelReservation - moved to parent
+ *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
  */
-def getVersionNum() { return "1.6.01" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -282,7 +285,7 @@ metadata {
 		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			//state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
+			// state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
             state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
 		}     
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
@@ -740,7 +743,8 @@ def updated() {
     sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
     resetUISetpoints()
     // testChildren()
-    //sendEvent(name: 'reservations', value: null, displayed: false, isStateChange: true)
+    if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
+    state.version = getVersionLabel()
     runIn(2, 'forceRefresh', [overwrite: true])
 }
 
@@ -756,6 +760,7 @@ def ping() {
 }
 
 def generateEvent(Map results) {
+	if (!state.version || (state.version != getVersionLabel())) updated()
 	def startMS = now()
 	boolean debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("generateEvent(): parsing data ${results}", 4)
@@ -2803,17 +2808,10 @@ def whatHoldType() {
     }
 }
 
-// Registration handling
-def testChildren() {
-	//log.debug "IsChild: ${parent.isChild('483cb42e-252a-483d-a64c-6dad276d3e34')}"
-    //log.debug "childName: ${parent.getChildName('483cb42e-252a-483d-a64c-6dad276d3e34')}"
-    //makeReservation('483cb42e-252a-483d-a64c-6dad276d3e34', 'modeOff')
-    //cancelReservation('483cb42e-252a-483d-a64c-6dad276d3e34', 'modeOff')
-    //makeReservation('365ebfc0-af9c-45e7-8e56-282865509926', 'modeOff')
-    //cancelReservation('365ebfc0-af9c-45e7-8e56-282865509926', 'modeOff')
-}
-// NEED TO VERIFY SLURPER ON NULL RESPONSE
 void makeReservation(String childId, String type='modeOff') {
+	LOG("The thermostat-based Reservation System has been deprecated - please recode for Ecobee Suite Manager-based implementation.",1,null,'error')
+    if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
+/*
 	String childName = parent.getChildAppName( childId )
 	if (!childName) {
     	LOG("Illegal reservation attempt using childId: ${childId} - caller is not a childApp of my parent",1,null,'warn')
@@ -2828,10 +2826,13 @@ void makeReservation(String childId, String type='modeOff') {
         sendEvent(name: "reservations", value: JsonOutput.toJson(reservations), displayed: false, isStateChange: true)
         LOG("'${type}' reservation created for ${childName}",2,null,'info')
     }
+    */
 }
 
 void cancelReservation( String childId, String type='modeOff') {
-	String childName = parent.getChildAppName( childId )
+	LOG("The thermostat-based Reservation System has been deprecated - please recode for Ecobee Suite Manager-based implementation.",1,null,'error')
+    if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
+/*	String childName = parent.getChildAppName( childId )
     if (childName) {									// silently ignore bad childId
         def reserved = device.currentValue('reservations')
     	def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
@@ -2841,6 +2842,7 @@ void cancelReservation( String childId, String type='modeOff') {
             LOG("'${type}' reservation cancelled for ${childName}",2,null,'info')
     	}
     }
+*/
 }
 
 private Integer howManyHours() {
