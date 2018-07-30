@@ -24,8 +24,9 @@
  *	1.6.02 - REALLY fix reservation initialization error
  *	1.6.03 - Really, REALLY fix reservation initialization error
  *	1.6.10 - Converted to parent-based reservations
+ *	1.6.11 - Clear reservations when disabled
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
 
 definition(
@@ -154,13 +155,16 @@ def installed() {
 	initialize()  
 }
 def uninstalled () {
-	theThermostats.each {
+	clearReservations()
+}
+def clearReservations() {
+	theThermostats?.each {
     	cancelReservation( getDeviceId(it.deviceNetworkId), 'modeOff' )
         cancelReservation( getDeviceId(it.deviceNetworkId), 'fanOff' )
         cancelReservation( getDeviceId(it.deviceNetworkId), 'circOff' )
         cancelReservation( getDeviceId(it.deviceNetworkId), 'humidOff' )
         cancelReservation( getDeviceId(it.deviceNetworkId), 'dehumOff' )
-	}   
+	}
 }
 def updated() {
 	LOG("updated() entered", 5)
@@ -172,6 +176,7 @@ def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 3, null, 'info')
     log.debug "${app.name}, ${app.label}"
 	if(tempDisable == true) {
+    	clearReservations()
 		LOG("Temporarily Disabled as per request.", 2, null, "warn")
 		return true
 	}
