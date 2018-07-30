@@ -50,12 +50,14 @@
  *	1.5.04- Added outdoor Dewpoint, Humidity & Barometric Pressure for Smart Mode's use
  *	1.5.05- Added support for multiple SMS numbers (Contacts being deprecated by ST)
  *	1.6.00- Release number synchronization
+ *	1.6.10- Re-implemented reservations 
  */
-def getVersionNum() { return "1.6.00" }
+def getVersionNum() { return "1.6.10" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 
 private def getHelperSmartApps() {
 	return [ 
@@ -993,6 +995,7 @@ def initialize() {
     atomicState.forcePoll = true				// make sure we get ALL the data after initialization
     atomicState.hourlyForcedUpdate = 0
     atomicState.needExtendedRuntime = true		// we'll stop getting it once we decide we don't need it
+   	if (!atomicState.reservations) atomicState.reservations = [:]
 
     getTimeZone()		// these will set/refresh atomicState.timeZone
     getZipCode()		// and atomicState.zipCode (because atomicState.forcePoll is true)
@@ -4436,4 +4439,76 @@ private String fixDateTimeString( String dateStr, String timeStr, String thermos
     	resultStr = myTime ? "${myDate} at ${myTime}" : "${myDate}"
     }
     return resultStr
+}
+
+private def getDeviceId(networkId) {
+	// def deviceId = networkId.split(/\./).last()	
+    // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
+    // return deviceId
+    return networkId.split(/\./).last()
+}
+
+// Reservation Management Functions
+// Make a reservation for me
+void makeReservation( statId, childId, String type='modeOff' ) {
+    def childName = getChildAppName( childId )
+	if (!childName) {
+    	LOG("Illegal reservation attempt using childId: ${childId} - caller is not my child.",1,null,'warn')
+    }
+    def reservations = atomicState.reservations
+    if (!reservations) reservations = [:]
+    if (!reservations?.containsKey(statId)) {
+    	reservations."${statId}" = [:]
+    }
+    if (!reservations."${statId}"?.containsKey(type)) {				// allow for ANY type of reservations
+        reservations."${statId}"."${type}" = []
+    }
+    if (!reservations."${statId}"."${type}"?.contains(childId)) {
+    	reservations."${statId}"."${type}" << childId
+        atomicState.reservations = reservations
+        LOG("'${type}' reservation created for ${childName}",2,null,'info')
+    }
+}
+// Cancel my reservation
+void cancelReservation( statId, childId, String type='modeOff') {
+    def childName = getChildAppName( childId )
+    if (!childName) childName = childId
+    def reservations = atomicState.reservations
+    if (reservations?."${statId}"?."${type}"?.contains(childId)) {
+    	reservations."${statId}"."${type}" = reservations."${statId}"."${type}" - [childId]
+        atomicState.reservations = reservations
+        LOG("'${type}' reservation cancelled for ${childName}",2,null,'info')
+    }
+}
+// Do I have a reservation?
+Boolean haveReservation( statId, childId, String type='modeOff') {
+    def reservations = atomicState.reservations
+	return (reservations?."${statId}"?."${type}"?.contains(childId))
+}
+// Do any Apps have reservations?
+Boolean anyReservations( statId, String type='modeOff') {
+	def reservations = atomicState.reservations
+	return (reservations?."${statId}"?.containsKey(type)) ? (reservations."${statId}"."${type}".size() != 0) : false
+}
+// How many apps have reservations?
+Integer countReservations(statId, String type='modeOff') {
+	def reservations = atomicState.reservations
+	return (reservations?."${statId}"?.containsKey(type)) ? reservations."${statId}"."${type}".size() : 0
+}
+// Get the list of app IDs that have reservations
+List getReservations(statId, String type='modeOff') {
+	def reservations = atomicState.reservations
+    return (reservations?."${statId}"?.containsKey(type)) ? reservations."${statId}"."${type}" : []
+}
+// Get the list of app Names that have reservations
+List getGuestList(statId, String type='modeOff') {
+	def reservations = atomicState.reservations
+    if (reservations?."${statId}"?.containsKey(type)) {
+    	def guestList = []
+        reservations."${statId}"."${type}".each {
+        	guestList << getChildAppName( it )
+        }
+        return guestList
+    }
+    return []
 }
