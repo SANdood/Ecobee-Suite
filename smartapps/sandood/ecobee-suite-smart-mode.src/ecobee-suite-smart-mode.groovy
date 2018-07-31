@@ -34,8 +34,9 @@
  *	1.6.04 - Really, REALLY fix reservation initialization error
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
+ *	1.6.12 - Logic tuning, clear reservations when externally overridden
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -411,8 +412,8 @@ def insideChangeHandler(evt) {
         	if (cMode != newMode) {
             	def tid = getDeviceId(evt.device.deviceNetworkId)
             	if ((cMode == 'off') && anyReservations( tid, 'modeOff' )) {
-                	// if ANYBODY (including me) has a reservation on this being off, I can't turn it back on)
-                    LOG("${evt.device.displayName} temp is ${theTemp}°, but Mode is Off with reservations, can't change to ${newMode}",2,null,'warn')
+                	// if ANYBODY (including me) has a reservation on this being off, I can't turn it back on
+                    LOG("${evt.device.displayName} inside temp is ${theTemp}°, but can't change to ${newMode} since ${getGuestList(tid,'offMode').toString()[1..-2]} have offMode reservations",2,null,'warn')
                     // Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
                 } else {
                 	// not currently off or there are no modeOff reservations, change away!
@@ -440,6 +441,7 @@ def thermostatModeHandler(evt) {
     	atomicState.aboveChanged = false
         atomicState.belowChanged = false
     }
+    if (evt.value != 'off') cancelReservation( getDeviceId(evt.device.deviceNetworkId), 'modeOff' ) // we're not off anymore, give up the reservation
 }
 
 def tempChangeHandler(evt) {
@@ -587,22 +589,21 @@ def temperatureUpdate( BigDecimal temp ) {
             def tid = getDeviceId(it.deviceNetworkId)
 			if ( cMode != desiredMode) {
             	if (desiredMode == 'off') {
+                	makeReservation(tid, 'modeOff')
                     it.setThermostatMode( 'off' )
-                    makeReservation(tid, 'modeOff')
                 } else {
                 	// Desired mode IS NOT 'off'
                 	if (cMode == 'off') {
-                    	def i = countReservations(tid, 'modeOff') - (haveReservation(tid, 'modeOff')? 1 : 0)
-                    	if (i <= 0) {
+                    	cancelReservation(tid,'modeOff')
+                    	if (countReservations(tid, 'modeOff') == 0) {
                     		// nobody else has a reservation on modeOff
-                            cancelReservation( tid, 'modeOff')
 							it.setThermostatMode(desiredMode)
                 			changeNames += changeNames ? ", ${it.displayName}" : it.displayName
 						} else {
-                    		// somebody else has a 'modeOff' reservation so we can't turn it on, but we can cancel our reservation
-                        	cancelReservation( tid, 'modeOff')
-                            LOG("Temp is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations",2,null,'warn')
-                            sendMessage("The temperature is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode - ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations")
+                    		// somebody else still has a 'modeOff' reservation so we can't turn it on
+                            def msg = "The temperature is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode because ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations"
+                            LOG(msg ,2,null,'warn')
+                            sendMessage(msg)
                             // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
                     	}
                     } else {
@@ -612,8 +613,9 @@ def temperatureUpdate( BigDecimal temp ) {
                     }
                 }
             } else {
-            	cancelReservation(tid, 'modeOff')
-                sameNames += sameNames ? ", ${it.displayName}" : it.displayName
+            	// already running the mode we want
+            	(desireMode == 'off') ? makeReservation(tid, 'modeOff') : cancelReservation(tid, 'modeOff')
+	            sameNames += sameNames ? ", ${it.displayName}" : it.displayName
             }
 		}
         def multi=0
@@ -799,10 +801,10 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 }
 
 private def sendMessage(notificationMessage) {
-	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
+	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 5, null, "trace")
     
     if (settings.notify) {
-        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+        String msg = "${location.name} ${app.label}: " + notificationMessage		// for those that have multiple locations, tell them where we are
         if (location.contactBookEnabled && settings.recipients) {
             sendNotificationToContacts(msg, settings.recipients, [event: false]) 	// only to contacts
         } else if (phone) { // check that the user did select a phone number
@@ -821,5 +823,5 @@ private def sendMessage(notificationMessage) {
             sendPushMessage(msg)													// Push to everyone
         }
     }
-    sendNotificationEvent( notificationMessage )								// Always send to hello home
+    sendNotificationEvent( ${app.label}+ ': ' + notificationMessage )								// Always send to hello home
 }
