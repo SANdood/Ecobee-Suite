@@ -36,7 +36,7 @@
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Logic tuning, clear reservations when externally overridden
  */
-def getVersionNum() { return "1.6.12" }
+def getVersionNum() { return "1.6.12" } 
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
