@@ -34,8 +34,9 @@
  *	1.6.05 - Fixed getDeviceId()
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
+ *	1.6.12 - Cancel modeOff reservation if we get overridden
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -248,13 +249,16 @@ def initialize() {
 
 def statModeChange(evt) {
 	// only gets called if we are turning off the HVAC (not for quietTime or setpointAdjust operations)
+    def tid = getDeviceId(evt.device.deviceNetworkId)
 	if (evt.value == 'off') {
     	if (atomicState.HVACModeState != 'off') atomicState.HVACModeState = 'off'
     } else {
+    	// somebody has overridden us..
+        cancelReservation( tid, 'modeOff' )		// might as well give up our reservation
     	if (atomicState.HVACModeState != 'on') atomicState.HVACModeState = 'on'
     }
     def tmpThermSavedState = atomicState.thermSavedState
-    tmpThermSavedState[evt.device.id].mode = evt.value	// update the saved mode
+    tmpThermSavedState[tid].mode = evt.value	// update the saved mode
     atomicState.thermSavedState = tmpThermSavedState
 }
     
@@ -485,7 +489,7 @@ def turnOnHVAC() {
                     def newMode = (tmpThermSavedState[tid].mode == '') ? 'auto' : tmpThermSavedState[tid].mode
                     if (newMode != oldMode) {
                     	def i = countReservations( tid, 'modeOff' ) - (haveReservation(tid, 'modeOff') ? 1 : 0)
-                        log.debug "count=${countReservations(tid,'modeOff')}, have=${haveReservation(tid,'modeOff')}, i=${i}"
+                        // log.debug "count=${countReservations(tid,'modeOff')}, have=${haveReservation(tid,'modeOff')}, i=${i}"
                     	if ((oldMode == 'off') && (i > 0)) {
                         	// Currently off, and somebody besides me has a reservation - just release my reservation
                             cancelReservation(tid, 'modeOff')
