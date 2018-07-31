@@ -30,8 +30,9 @@
  *	1.6.03 - Really, REALLY fix reservations initialization error
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
+ *	1.6.12 - Minor optimizations
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
