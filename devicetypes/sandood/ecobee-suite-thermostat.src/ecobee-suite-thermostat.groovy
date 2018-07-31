@@ -53,8 +53,10 @@
  *	1.6.03 - Automatically re-run updated() if VersionLabel changes
  *	1.6.04 - Deprecated make/cancelReservation - moved to parent
  *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
+ *	1.6.11 - Deleted 'reservations' attribute - no longer used
+ *	1.6.12 - Fixed type conversion error on Auto mode temp display
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -213,7 +215,6 @@ metadata {
         attribute "thermostatFanModeDisplay", "string"
         attribute "humiditySetpointDisplay", "string"
         
-        attribute "reservations", "string"				// "JSON_OBJECT" // USAGE: List reservations = stat.currentValue('reservations')[1..-2].tokenize(", ")
         attribute "thermostatTime", "string"
         attribute "statHoldAction", "string"
         attribute "setpointDisplay", "string"
@@ -285,8 +286,8 @@ metadata {
 		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			// state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
-            state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
+			state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true)
+            //state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
 		}     
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
         valueTile("heatingSetpointColor", "device.heatingSetpointDisplay", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
@@ -1176,7 +1177,7 @@ def generateEvent(Map results) {
                             break;
                                 
                         case 'auto':
-                            def avg = roundIt(((device.currentValue('heatingSetpointDisplay').toBigDecimal() + device.currentValue('coolingSetpointDisplay').toBigDecimal()) / 2.0), precision.toInteger())
+                            def avg = roundIt(((device.currentValue('heatingSetpointDisplay').toBigDecimal() + device.currentValue('coolingSetpointDisplay').toBigDecimal()) / 2.0), precision.toInteger()).toString()
                             if (isStateChange(device, 'thermostatSetpoint', avg)) sendEvent(name: 'thermostatSetpoint', value: avg, unit: tu, descriptionText: "Thermostat setpoint is ${avg}°", displayed: true, isStateChange: true)
                             disableModeAutoButton()
                             disableFanOffButton()
