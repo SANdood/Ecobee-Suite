@@ -25,8 +25,9 @@
  *	1.6.03 - Really, REALLY fix reservation initialization error
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
+ *	1.6.12 - Clear reservations on manual override
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
 
 definition(
@@ -217,12 +218,95 @@ def initialize() {
     }
     if (atomicState.isQuietTime == null) atomicState.isQuietTime = false
     
+    if (settings.hvacOff || (settings.hvacMode && (settings.quietMode == 'off'))) subscribe(theThermostats, 'thermostatMode', statModeChange)
+    if (settings.fanOff) {
+    	subscribe(theThermostats, 'thermostatFanMode', fanModeChange)
+        if (settings.circOff) subscribe(theThermostats, 'fanMinOnTime', circTimeChange)
+    }
+    if (settings.humidOff) subscribe(theThermostats, 'humidifierMode', humidModeChange)
+    if (settings.dehumOff) subscribe(theThermostats, 'dehumidifierMode', dehumModeChange)
+    
 	LOG("initialize() exiting")
+}
+
+def dehumModeChange(evt) {
+	// only gets called if we are turning off the dehumidifier
+    if (settings.humidOff && atomicState.isQuietTime && (evt.value != 'off')) {
+    	def tid = getDeviceId(evt.device.deviceNetworkId)
+    	if (evt.value != atomicState.statState[tid].dehumidifierMode) {
+    		def statState = atomicState.statState
+    		statState[tid].dehumidifierMode = evt.value	// update the saved time
+    		atomicState.statState = statState
+    	}
+		   // For now, just cancel the reservation - don't take as a Quiet Time override
+        cancelReservation( tid, 'dehumOff' )
+    }
+}
+
+def humidModeChange(evt) {
+	// only gets called if we are turning off the humidifier
+    if (settings.humidOff && atomicState.isQuietTime && (evt.value != 'off')) {
+    	def tid = getDeviceId(evt.device.deviceNetworkId)
+    	if (evt.value != atomicState.statState[tid].humidifierMode) {
+    		def statState = atomicState.statState
+    		statState[tid].humidifierMode = evt.value	// update the saved time
+    		atomicState.statState = statState
+    	}
+        // For now, just cancel the reservation - don't take as a Quiet Time override
+       	cancelReservation( tid, 'humidOff' )
+    }
+}
+
+def circTimeChange(evt) {
+	// only gets called if we are turning off the thermostat's circulation time
+    if (settings.circOff && atomicState.isQuietTime && (evt.value != 0)) {
+    	def tid = getDeviceId(evt.device.deviceNetworkId)
+    	if (evt.value != atomicState.statState[tid].fanMinOnTime) {
+    		def statState = atomicState.statState
+    		statState[tid].fanMinOnTime = evt.value	// update the saved time
+    		atomicState.statState = statState
+    	}
+        // NOTIFY here?
+        LOG("${evt.device.displayName} Fan minimum circulation time changed to ${evt.value}, exiting Quiet Time",2,null,'info')
+        quietOffHandler(null)					// effect the override
+    }
+}
+
+def fanModeChange(evt) {
+	// only gets called if we are turning off the thermostat's fan
+    if (settings.fanOff && atomicState.isQuietTime && (evt.value != 'off')) {
+        // somebody has overridden us...
+        def tid = getDeviceId(evt.device.deviceNetworkId)
+        if (evt.value != atomicState.statState[tid].thermostatFanMode) {
+            def statState = atomicState.statState
+            statState[tid].thermostatFanMode = evt.value	// update the saved mode
+            atomicState.statState = statState
+        }
+        // NOTIFY here?
+        LOG("${evt.device.displayName} Fan Mode changed to ${evt.value}, exiting Quiet Time",2,null,'info')
+        quietOffHandler(null)					// effect the override       
+    }
+}
+
+def statModeChange(evt) {
+	// only gets called if we are turning off the HVAC
+    if ((settings.hvacOff || (settings.hvacMode && (settings.quietMode == 'off'))) && atomicState.isQuietTime && (evt.value != 'off')) {
+        // somebody has overridden us...
+        def tid = getDeviceId(evt.device.deviceNetworkId)
+        if (evt.value != atomicState.statState[tid].thermostatMode) {
+            def statState = atomicState.statState
+            statState[tid].thermostatMode = evt.value	// update the saved mode
+            atomicState.statState = statState
+        }
+        // NOTIFY here?
+        LOG("${evt.device.displayName} Mode changed to ${evt.value}, exiting Quiet Time",2,null,'info')
+        quietOffHandler(null)					// effect the override
+    }
 }
 
 def quietOnHandler(evt=null) {
 	LOG("Quiet Time On requested",2,null,'info')
-	atomicState.isQuietTime = true
+	// atomicState.isQuietTime = true		// don't turn this on until we are all configured
     // Allow time for other Helper apps using the same Quiet Time switches to save their states
     runIn(3, 'turnOnQuietTime', [overwrite: true])
 }
@@ -230,6 +314,7 @@ def quietOnHandler(evt=null) {
 def turnOnQuietTime() {
 	LOG("Turning On Quiet Time",2,null,'info')
 	def statState = atomicState.statState
+    clearReservations()			// clean slate
 	settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
         if (settings.hvacOff) {
@@ -243,14 +328,11 @@ def turnOnQuietTime() {
             	makeReservation(tid, 'modeOff')
                 if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
                 LOG("${stat.device.displayName} Mode is Off",3,null,'info')
+            } else if ((statState[tid].thermostatMode != 'off')  || !anyReservations(tid, 'modeOff')) {
+            	stat.setThermostatMode(settings.quietMode)
+            	LOG("${stat.device.displayName} Mode is ${settings.quietMode}",3,null,'info')
             } else {
-            	if ((statState[tid].thermostatMode != 'off')  || !anyReservations(tid, 'modeOff')) {
-                	cancelReservation(tid,'modeOff')				// just in case
-            		stat.setThermostatMode(settings.quietMode)
-            		LOG("${stat.device.displayName} Mode is ${settings.quietMode}",3,null,'info')
-                } else {
-                	LOG("Cannt change ${stat.device.displayName} to ${settings.quietMode} Mode - ${getGuestList(tid, 'modeOff')} hold 'modeOff' reservations",1,null,'warn')
-                }
+               	LOG("Cannot change ${stat.device.displayName} to ${settings.quietMode} Mode - ${getGuestList(tid, 'modeOff')} hold 'modeOff' reservations",1,null,'warn')
             }
         }
         if (settings.fanOff) { 
@@ -306,11 +388,17 @@ def turnOnQuietTime() {
         }
     }
     atomicState.statState = statState
+    atomicState.isQuietTime = true
     LOG('Quiet Time On is complete',2,null,'info')
 }
 
 def quietOffHandler(evt=null) {
+    if (!atomicState.isQuietTime || (atomicState.quietTime = false)) {
+    	LOG("Quiet Time Off requested, but not in Quiet Time",1,null,'warn')
+        return
+    }
 	LOG("Quiet Time Off requested",2,null,'info')
+    
    	atomicState.isQuietTime = false
    	// No delayed execution - 
    	// runIn(3, 'turnOffQuietTime', [overwrite: true])
