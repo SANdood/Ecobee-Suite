@@ -35,8 +35,9 @@
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Cancel modeOff reservation if we get overridden
+ *	1.6.13- Removed location.contactBook support - deprecated by SmartThings
  */
-def getVersionNum() { return "1.6.12" }
+def getVersionNum() { return "1.6.13" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -124,17 +125,16 @@ def mainPage() {
             	section(title: "Action Preferences") {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
                     	metadata: [values: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"]], defaultValue: "Notify Only", submitOnChange: true)
+                        
 					if (settings.whichAction != "HVAC Actions Only") {
-                    	input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true, submitOnChange: true) {
-            				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-            				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
-                        }
-                        if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone) {
+                    	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+            			input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
+                        if (!settings.phone) {
                         	input( name: 'sendPush', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
                         }
-                        if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.sendPush) paragraph "WARNING: Notifications configured, but nobody to send them to!"
-                        paragraph("A notification is also sent to the Hello Home log")
+                        if (!settings.phone && !settings.sendPush) paragraph "WARNING: Notifications configured, but nobody to send them to!"
                 	}
+                    paragraph("All notifications are always sent to the Hello Home log")
             	}
             }          
 		} // End if (myThermostats?.size() > 0)
@@ -630,11 +630,8 @@ List getGuestList(tid, String type='modeOff') {
 
 private def sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
-
     String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-    if (location.contactBookEnabled && settings.recipients) {
-        sendNotificationToContacts(msg, settings.recipients, [event: false]) 
-    } else if (phone) { // check that the user did select a phone number
+    if (phone) { // check that the user did select a phone number
         if ( phone.indexOf(";") > 0){
             def phones = phone.split(";")
             for ( def i = 0; i < phones.size(); i++) {
