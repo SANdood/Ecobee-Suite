@@ -25,8 +25,9 @@
  *	1.6.00- Release number synchronization
  *	1.6.01- Fixed sendMessage()
  *	1.6.10- Resync for parent-based reservations
+ *	1.6.11- Removed location.contactBook support - deprecated by SmartThings
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Mode/Routine/Program Helper, version ${getVersionNum()}" }
 
 definition(
@@ -152,15 +153,14 @@ def mainPage() {
                 } // End of "Actions" section
                 section("Notifications (optional)") {
                     input(name: "notify", type: "boolean", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
+                    
                     if (settings.notify) {
-                        input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true, submitOnChange: true) {
-                                paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-                                input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
-                        }
-                        if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone) {
+                        paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+                        input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
+                        if (!settings.phone) {
                             input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", /* defaultValue: false, */ required: true, submitOnChange: true)
                         }
-                        if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.pushNotify) paragraph "WARNING: Notifications configured, but nobody to send them to!"
+                        if (!settings.phone && !settings.pushNotify) paragraph "WARNING: Notifications configured, but nobody to send them to!"
                     }
                     paragraph("A notification is always sent to the Hello Home log whenever an action is taken")
         		}// End of Notifications
@@ -590,9 +590,7 @@ private def sendMessage(notificationMessage) {
 
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (location.contactBookEnabled && settings.recipients) {
-            sendNotificationToContacts(msg, settings.recipients, [event: false]) 	// only to contacts
-        } else if (phone) { // check that the user did select a phone number
+        if (phone) { // check that the user did select a phone number
             if ( phone.indexOf(";") > 0){
                 def phones = phone.split(";")
                 for ( def i = 0; i < phones.size(); i++) {
