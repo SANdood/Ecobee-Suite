@@ -35,8 +35,9 @@
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Logic tuning, clear reservations when externally overridden
+ *	1.6.13 - Removed location.contactBook - unexpectedly deprecated by SmartThings
  */
-def getVersionNum() { return "1.6.12" } 
+def getVersionNum() { return "1.6.13" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -171,15 +172,14 @@ def mainPage() {
             
       		section("Notifications (optional)") {
         		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
+                
             	if (settings.notify) {
-                	input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true, submitOnChange: true) {
-            				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-            				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false, submitOnChange: true 
-                    }
-                    if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone) {
+       				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+       				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false, submitOnChange: true 
+                    if (!settings.phone) {
                         input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
                     }
-                    if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
+                    if (!settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
                 }
             	paragraph("A notification is always sent to the Hello Home log whenever Smart Mode changes a thermostat's Mode")
         	}
@@ -805,9 +805,7 @@ private def sendMessage(notificationMessage) {
     
     if (settings.notify) {
         String msg = "${location.name} ${app.label}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (location.contactBookEnabled && settings.recipients) {
-            sendNotificationToContacts(msg, settings.recipients, [event: false]) 	// only to contacts
-        } else if (phone) { // check that the user did select a phone number
+        if (phone) { // check that the user did select a phone number
             if ( phone.indexOf(";") > 0){
                 def phones = phone.split(";")
                 for ( def i = 0; i < phones.size(); i++) {
