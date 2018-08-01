@@ -51,8 +51,9 @@
  *	1.5.05- Added support for multiple SMS numbers (Contacts being deprecated by ST)
  *	1.6.00- Release number synchronization
  *	1.6.10- Re-implemented reservations 
+ *	1.6.11- Removed location.contactBook support - deprecated by SmartThings
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -384,9 +385,8 @@ def preferencesPage() {
     LOG("=====> preferencesPage() entered. settings: ${settings}", 5)
     dynamicPage(name: "preferencesPage", title: "Update Ecobee Suite Manager Preferences", nextPage: "") {
 		section("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour. You can have them sent ${location.contactBookEnabled?'to selected Contacts':'via SMS'} or as a Push notification (default).") {
-            input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true) {
-            	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-            	input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false }
+           	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+            input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false 
         }
       	section("How long do you want Hold events to last?") {
             input(name: "holdType", title:"Select Hold Type", type: "enum", required:false, multiple:false, defaultValue: "Until I Change", submitOnChange: true, description: "Until I Change", 
@@ -4099,9 +4099,7 @@ private def sendPushAndFeeds(notificationMessage) {
     Boolean sendNotification = (atomicState.timeSendPush && ((now() - atomicState.timeSendPush) < 3600000)) ? false : true
     if (sendNotification) {
     	String msg = "Your ${location.name} Ecobee${settings.thermostats.size()>1?'s':''} " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (location.contactBookEnabled && settings.recipients) {
-			sendNotificationToContacts(msg, settings.recipients, [event: true]) 
-    	} else if (phone) { // check that the user did select a phone number
+        if (phone) { // check that the user did select a phone number
             if ( phone.indexOf(";") > 0){
                 def phones = phone.split(";")
                 for ( def i = 0; i < phones.size(); i++) {
