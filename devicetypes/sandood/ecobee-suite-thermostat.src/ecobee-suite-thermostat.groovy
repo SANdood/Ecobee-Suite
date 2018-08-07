@@ -57,8 +57,9 @@
  *	1.6.12 - Fixed type conversion error on Auto mode temp display
  *	1.6.13 - Clean up setpoint/setpointDisplay stuff (new isIOS & isAndroid)\
  *	1.6.14 - Another Android setpoint tweak
+ *	1.6.15 - Missed one
  */
-def getVersionNum() { return "1.6.14" }
+def getVersionNum() { return "1.6.15" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -780,7 +781,7 @@ def generateEvent(Map results) {
     def tu = getTemperatureScale()
     def isMetric = (tu == 'C')
     def forceChange = false
-    def isIOS = (parent.settings.mobile == null) || (parent.settings.mobile == 'iOS')
+    def isIOS = ((parent.settings.mobile == null) || (parent.settings.mobile == 'iOS'))
     def isAndroid = !isIOS
 
 	def updateTempRanges = false
@@ -821,7 +822,7 @@ def generateEvent(Map results) {
                     
 				case 'heatingSetpoint':
                 	if (isChange || forceChange) {
-                    	LOG("heatingSetpoint: ${sendValue}",3,null,'info')
+                    	//LOG("heatingSetpoint: ${sendValue}",3,null,'info')
                         // We have to send for backwards compatibility
                     	sendEvent(name: 'heatingSetpointDisplay', value: sendValue, unit: tu, /* isStateChange: isChange,*/ displayed: false) // for the slider
                         objectsUpdated++        
@@ -839,7 +840,7 @@ def generateEvent(Map results) {
                         String heatAt = roundIt((value.toBigDecimal() - heatDiff.toBigDecimal()), precision.toInteger()).toString()
                         sendEvent(name: 'heatAtSetpoint', value: heatAt, unit: tu, displayed: false)
                         objectsUpdated++
-                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('he'))? (isIOS?heatAt:sendValue) : sendValue
+                        String tileValue = (!device.currentValue('thermostatOperatingState')?.startsWith('he'))? (isIOS?heatAt:sendValue) : sendValue
                         sendEvent(name: 'heatingSetpointTile', value: tileValue, unit: tu, displayed: false)
                         objectsUpdated++
                         //} else {
@@ -857,7 +858,7 @@ def generateEvent(Map results) {
                         
 				case 'coolingSetpoint':
                 	if (isChange || forceChange) {
-                		LOG("coolingSetpoint: ${sendValue}",3,null,'info')                    
+                		//LOG("coolingSetpoint: ${sendValue}",3,null,'info')                    
                 		sendEvent(name: 'coolingSetpointDisplay', value: sendValue, unit: tu,  displayed: false) // for the slider
                         objectsUpdated++                       
                         if (tMode == 'cool') {
@@ -874,12 +875,9 @@ def generateEvent(Map results) {
                         String coolAt = roundIt((value.toBigDecimal() + coolDiff.toBigDecimal()), precision.toInteger()).toString()
                         sendEvent(name: 'coolAtSetpoint', value: coolAt, unit: tu, /* isStateChange: true, */ displayed: false)
                         objectsUpdated++
-                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('cool')) ? (isIOS?coolAt:sendValue) : sendValue
+                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('co')) ? (isIOS?coolAt:sendValue) : sendValue
                         sendEvent(name: 'coolingSetpointTile', value: tileValue, unit: tu, displayed: false)
                         objectsUpdated++
-                        //} else {
-                        //	sendEvent(name: 'coolingSetpointTile', value: null, displayed: false)
-                        //}
                         event = eventFront + [value: sendValue, unit: tu, descriptionText: "Cooling setpoint is ${sendValue}°${tu}", displayed: true]
                     }
                     break;
@@ -987,7 +985,7 @@ def generateEvent(Map results) {
                             sendEvent(name: 'coolingSetpointTile', value: coolSetp, unit: tu, descriptionText: "Cooling at ${coolSetp}°${tu}", displayed: false)
                         } else { // isAndroid
                         	String coolSetp = device.currentValue('coolingSetpoint').toString()
-                        	sendEvent(name: 'coolingSetpointTile', value: null, unit: tu, descriptionText: "Cooling at ${coolSetp}°${tu}", displayed: false)
+                        	sendEvent(name: 'coolingSetpointTile', value: coolSetp, unit: tu, descriptionText: "Cooling at ${coolSetp}°${tu}", displayed: false)
                         }
                     	event = eventFront + [value: realValue, descriptionText: "Thermostat is ${realValue}", isStateChange: true, displayed: false]
                         
