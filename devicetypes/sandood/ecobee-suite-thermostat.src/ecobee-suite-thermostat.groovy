@@ -55,9 +55,10 @@
  *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
  *	1.6.11 - Deleted 'reservations' attribute - no longer used
  *	1.6.12 - Fixed type conversion error on Auto mode temp display
- *	1.6.13 - Clean up setpoint/setpointDisplay stuff (new isIOS & isAndroid)
+ *	1.6.13 - Clean up setpoint/setpointDisplay stuff (new isIOS & isAndroid)\
+ *	1.6.14 - Another Android setpoint tweak
  */
-def getVersionNum() { return "1.6.13" }
+def getVersionNum() { return "1.6.14" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -838,7 +839,7 @@ def generateEvent(Map results) {
                         String heatAt = roundIt((value.toBigDecimal() - heatDiff.toBigDecimal()), precision.toInteger()).toString()
                         sendEvent(name: 'heatAtSetpoint', value: heatAt, unit: tu, displayed: false)
                         objectsUpdated++
-                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('he'))? (isIOS?heatAt:null) : sendValue
+                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('he'))? (isIOS?heatAt:sendValue) : sendValue
                         sendEvent(name: 'heatingSetpointTile', value: tileValue, unit: tu, displayed: false)
                         objectsUpdated++
                         //} else {
@@ -873,7 +874,7 @@ def generateEvent(Map results) {
                         String coolAt = roundIt((value.toBigDecimal() + coolDiff.toBigDecimal()), precision.toInteger()).toString()
                         sendEvent(name: 'coolAtSetpoint', value: coolAt, unit: tu, /* isStateChange: true, */ displayed: false)
                         objectsUpdated++
-                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('cool')) ? (isIOS?coolAt:null) : sendValue
+                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('cool')) ? (isIOS?coolAt:sendValue) : sendValue
                         sendEvent(name: 'coolingSetpointTile', value: tileValue, unit: tu, displayed: false)
                         objectsUpdated++
                         //} else {
@@ -966,16 +967,16 @@ def generateEvent(Map results) {
                     // now update thermostatOperatingState - is limited by API to idle, fan only, heating, cooling, pending heat, pending cool, ventilator only
 					if (isStateChange(device, name, realValue)) {
                     	// First, check if we need to change the Heating at/Heating to temperature values
-                        
                         if (realValue.startsWith('heat')) {
                             // heatingSetpoint should display actual setpoint for "Heating to..."
                             String heatSetp = device.currentValue('heatingSetpoint').toString()
                             sendEvent(name: 'heatingSetpointTile', value: heatSetp, unit: tu, descriptionText: "Heating to ${heatSetp}°${tu}", displayed: false) // let sendEvent figure out if this is a change
                         } else if (isIOS) {
-                            String heatSetp = device.currentValue('heatAtSetpoint').toString()
-                            sendEvent(name: 'heatingSetpointTile', value: heatSetp, unit: tu, descriptionText: "Heating at ${heatSetp}°${tu}", displayed: false)
+                            String heatAtSetp = device.currentValue('heatAtSetpoint').toString()
+                            sendEvent(name: 'heatingSetpointTile', value: heatAtSetp, unit: tu, descriptionText: "Heating at ${heatSetp}°${tu}", displayed: false)
                         } else { // isAndroid
-                        	sendEvent(name: 'heatingSetpointTile', value: null, displayed: false)
+                        	String heatSetp = device.currentValue('heatingSetpoint').toString()
+                        	sendEvent(name: 'heatingSetpointTile', value: heatSetp, unit: tu, descriptionText: "Heating at ${heatSetp}°${tu}", displayed: false)
                         }
                         if (realValue.startsWith('cool')) {
                             // coolingSetpoint should display actual setpoint for "Cooling to..."
@@ -985,7 +986,8 @@ def generateEvent(Map results) {
                             String coolSetp = device.currentValue('coolAtSetpoint').toString()
                             sendEvent(name: 'coolingSetpointTile', value: coolSetp, unit: tu, descriptionText: "Cooling at ${coolSetp}°${tu}", displayed: false)
                         } else { // isAndroid
-                        	sendEvent(name: 'coolingSetpointTile', value: null, displayed: false)
+                        	String coolSetp = device.currentValue('coolingSetpoint').toString()
+                        	sendEvent(name: 'coolingSetpointTile', value: null, unit: tu, descriptionText: "Cooling at ${coolSetp}°${tu}", displayed: false)
                         }
                     	event = eventFront + [value: realValue, descriptionText: "Thermostat is ${realValue}", isStateChange: true, displayed: false]
                         
