@@ -55,8 +55,9 @@
  *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
  *	1.6.11 - Deleted 'reservations' attribute - no longer used
  *	1.6.12 - Fixed type conversion error on Auto mode temp display
+ *	1.6.13 - Clean up setpoint/setpointDisplay stuff (new isIOS & isAndroid)
  */
-def getVersionNum() { return "1.6.12" }
+def getVersionNum() { return "1.6.13" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -198,8 +199,10 @@ metadata {
         attribute "thermostatSetpointMax", "number"
         attribute "heatAtSetpoint", "number"
         attribute "coolAtSetpoint", "number"
-        attribute "heatingSetpointDisplay", "number"	// for the Sliders (they don't math.round for their integer displays
-        attribute "coolingSetpointDisplay", "number"
+        attribute "heatingSetpointDisplay", "number"	// now the same as heatingSetpoint
+        attribute "heatingSetpointTile", "number"		// Used to show heatAt/heatTo for MultiTile
+        attribute "coolingSetpointTile", "number"		// Used to show coolAt/coolTo for MultiTile
+        attribute "coolingSetpointDisplay", "number"	// Now the same as coolingSetpoint
         // attribute "newHeatSetpoint", "number"
         // attribute "newCoolSetpoint", "number"
 		attribute "heatRange", "string"
@@ -260,7 +263,7 @@ metadata {
                 attributeState('cooling (smart recovery)', 	backgroundColor:"#2db9e7")		// ecobee snowflake blue
                 attributeState('cooling (overcool)', 		backgroundColor:"#2db9e7") 
                 attributeState('offline', 					backgroundColor:"#ff4d4d")
-                attributeState('off', 						backGroundColor:"#cccccc")		// grey
+                attributeState('off', 						backGroundColor:"#cccccc")		// grey - iOS only???
                 attributeState('default', 		 			backgroundColor:"#d28de0", defaultState: true) 
 			}
 			tileAttribute("device.thermostatMode", key: "THERMOSTAT_MODE") {
@@ -270,10 +273,10 @@ metadata {
                 attributeState("auto", label:'${name}')
                 attributeState('default', label:'${name}', defaultState: true)
 			}
-            tileAttribute("device.heatingSetpoint", key: "HEATING_SETPOINT") {
+            tileAttribute("device.heatingSetpointTile", key: "HEATING_SETPOINT") {
             	attributeState("default", label:'${currentValue}°', /* unit:"dF", */ defaultState: true)
             }
-			tileAttribute("device.coolingSetpoint", key: "COOLING_SETPOINT") {
+			tileAttribute("device.coolingSetpointTile", key: "COOLING_SETPOINT") {
 				attributeState("default", label:'${currentValue}°', /* unit:"dF", */ defaultState: true)
 			}
 		}
@@ -290,10 +293,16 @@ metadata {
             //state("default", label:'${currentValue}°', unit:"F", backgroundColors: getTempColors(), defaultState: true, icon: 'st.Weather.weather2')
 		}     
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
-        valueTile("heatingSetpointColor", "device.heatingSetpointDisplay", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
+        valueTile("heatingSetpointDisplay", "device.heatingSetpointDisplay", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
 			state("default", label:'${currentValue}°', /* unit:"dF", */ backgroundColor:"#ff9c14", defaultState: true)
 		}
-        valueTile("coolingSetpointColor", "device.coolingSetpointDisplay", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
+        valueTile("coolingSetpointDisplay", "device.coolingSetpointDisplay", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
+			state("default", label:'${currentValue}°', /* unit:"dF", */ backgroundColor:"#2db9e7", defaultState: true)
+		}
+        valueTile("heatingSetpointColor", "device.heatingSetpoint", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
+			state("default", label:'${currentValue}°', /* unit:"dF", */ backgroundColor:"#ff9c14", defaultState: true)
+		}
+        valueTile("coolingSetpointColor", "device.coolingSetpoint", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
 			state("default", label:'${currentValue}°', /* unit:"dF", */ backgroundColor:"#2db9e7", defaultState: true)
 		}
         valueTile("thermostatSetpointColor", "device.thermostatSetpoint", width: 2, height: 2, canChangeIcon: false, decoration: "flat") {
@@ -402,16 +411,16 @@ metadata {
 		controlTile("circSliderControl", "device.fanMinOnTime", "slider", height: 1, width: 1, inactiveLabel: false, range: "(0..55)" ) {
 			state "setCircSetpoint", action:"setFanMinOnTimeDelay",  backgroundColor:"#aaaaaa", unit: '', defaultState: true
 		}
-		controlTile("heatSliderControl", "device.heatingSetpointDisplay", "slider", height: 1, width: 1, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
+		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 1, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setHeatingSetpoint", action:"setHeatingSetpointDelay",  backgroundColor:"#ff9c14", /* unit:"dF", */ defaultState: true
 		}
-		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 1, decoration: "flat") {
+		valueTile("heatingSetpoint", "device.heatAtSetpoint", height: 1, width: 1, decoration: "flat") {
 			state "heat", label:'Heat\nat\n${currentValue}°', defaultState: true//, unit:"F", backgroundColor:"#ff9c14"
 		}
-		controlTile("coolSliderControl", "device.coolingSetpointDisplay", "slider", height: 1, width: 1, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
+		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 1, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setCoolingSetpoint", action:"setCoolingSetpointDelay", backgroundColor:"#2db9e7", /* unit:"dF", */ defaultState: true
 		}
-		valueTile("coolingSetpoint", "device.coolingSetpoint", width: 1, height: 1, decoration: "flat") {
+		valueTile("coolingSetpoint", "device.coolAtSetpoint", width: 1, height: 1, decoration: "flat") {
 			state "cool", label:'Cool\nat\n${currentValue}°', defaultState: true //, unit:"F", backgroundColor:"#2db9e7"
 		}
         controlTile("humiditySlider", "device.humiditySetpoint", "slider", height: 1, width: 1, inactiveLabel: false, range: "(0..100)") {
@@ -427,7 +436,7 @@ metadata {
         	state 'humidity', label: 'Dehum\'fy\nto\n${currentValue}%', defaultState: true
         }
 		standardTile("refresh", "device.doRefresh", width: 2, height: 2, decoration: "flat") {
-            state "refresh", action:"doRefresh", nextState: 'updating', label: "Refresh", defaultState: true, icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/ecobee_refresh_green.png"
+            state "refresh", action:"doRefresh", nextState: 'updating', /*label: "Refresh",*/ defaultState: true, icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/ecobee_refresh_green.png"
             state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}        
         standardTile("resumeProgram", "device.resumeProgram", width: 2, height: 2, decoration: "flat") {
@@ -482,7 +491,7 @@ metadata {
 			state "updating", 													label:"Working", 	icon: "st.motion.motion.inactive"
 		}
         standardTile("operatingState", "device.thermostatOperatingState", width: 2, height: 2, decoration: "flat") {
-            state "idle", 						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_idle_purple.png"
+            state "idle", 						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_idle.png"
             state "fan only", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_fan_on_solid.png"
 			state "heating", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat.png"
 			state "cooling", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool.png"
@@ -490,7 +499,7 @@ metadata {
             state "default", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", label: '${currentValue}', defaultState: true
 		}
        	standardTile("operatingStateDisplay", "device.thermostatOperatingStateDisplay", width: 2, height: 2, decoration: "flat") {
-            state "idle", 						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_idle_purple.png"
+            state "idle", 						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_idle.png"
             state "fan only", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_fan_on_solid.png"
 			state "heating", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat.png"
 			state "cooling", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool.png"
@@ -502,7 +511,7 @@ metadata {
             state "default", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", label: '${currentValue}', defaultState: true
 		}
 		standardTile("equipmentState", "device.equipmentOperatingState", width: 2, height: 2, decoration: "flat") {
-			state "idle", 						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_idle_purple.png"
+			state "idle", 						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_idle.png"
             state "fan only", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_fan_on_solid.png"
 			state "emergency", 					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_emergency.png"
             state "auxHeatOnly", 				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_emergency.png"
@@ -630,7 +639,7 @@ metadata {
 //        	state "default", defaultState: true
 //        }
         valueTile("fanMinOnTime", "device.fanMinOnTime", width: 1, height: 1, decoration: "flat") {
-        	state "fanMinOnTime", 	label: 'Circulate\nfor\n${currentValue}m/hr', defaultState: true
+        	state "fanMinOnTime", 	label: 'Circulate\n${currentValue}\nmin/hr', defaultState: true
         }
         valueTile("tstatDate", "device.tstatDate", width: 1, height: 1, decoration: "flat") {
         	state "default",		label: '${currentValue}', defaultState: true
@@ -767,9 +776,11 @@ def generateEvent(Map results) {
 	if (debugLevelFour) LOG("generateEvent(): parsing data ${results}", 4)
     //LOG("Debug level of parent: ${parent.settings.debugLevel}", 4, null, "debug")
 	def linkText = device.displayName
-    def isMetric = wantMetric()
-    def tu = isMetric ? 'C' : 'F'
+    def tu = getTemperatureScale()
+    def isMetric = (tu == 'C')
     def forceChange = false
+    def isIOS = (parent.settings.mobile == null) || (parent.settings.mobile == 'iOS')
+    def isAndroid = !isIOS
 
 	def updateTempRanges = false
     def precision = device.currentValue('decimalPrecision')
@@ -810,64 +821,77 @@ def generateEvent(Map results) {
 				case 'heatingSetpoint':
                 	if (isChange || forceChange) {
                     	LOG("heatingSetpoint: ${sendValue}",3,null,'info')
-                    	sendEvent(name: 'heatingSetpointDisplay', value: sendValue, unit: tu, descriptionText: "Heating setpoint is ${sendValue}°", /* isStateChange: isChange,*/ displayed: true) // for the slider
+                        // We have to send for backwards compatibility
+                    	sendEvent(name: 'heatingSetpointDisplay', value: sendValue, unit: tu, /* isStateChange: isChange,*/ displayed: false) // for the slider
                         objectsUpdated++        
                         if (tMode == 'heat') {
                             // def displayValue = isMetric ? sendValue : value.toDouble().round(0).toInteger().toString() 	// Truncate the decimal point
-                            sendEvent(name: 'thermostatSetpoint', value: /*displayValue*/ sendValue, unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°", displayed: false /*, isStateChange: isChange */)
+                            sendEvent(name: 'thermostatSetpoint', value: /*displayValue*/ sendValue, unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°${tu}", displayed: false /*, isStateChange: isChange */)
                         	objectsUpdated++
                         } else if (tMode == 'auto') {
-                        	def avg = roundIt(((value.toBigDecimal() + device.currentValue('coolingSetpointDisplay').toBigDecimal()) / 2.0), precision.toInteger())
-                            sendEvent(name: 'thermostatSetpoint', value: avg.toString(), unit: tu, descriptionText: "Thermostat setpoint average is ${avg}°", displayed: true /*, isStateChange: isChange */)
+                        	def avg = roundIt(((value.toBigDecimal() + device.currentValue('coolingSetpoint').toBigDecimal()) / 2.0), precision.toInteger())
+                            sendEvent(name: 'thermostatSetpoint', value: avg.toString(), unit: tu, descriptionText: "Thermostat setpoint average is ${avg}°${tu}", displayed: true /*, isStateChange: isChange */)
 							objectsUpdated++
                         }
                         def heatDiff = device.currentValue('heatDifferential')
                         if (heatDiff == null) heatDiff = 0.0
-                        def heatAt = roundIt((value.toBigDecimal() - heatDiff.toBigDecimal()), precision.toInteger())
-                        sendEvent(name: 'heatAtSetpoint', value: heatAt, unit: tu, /* isStateChange: isChange, */ displayed: false)
+                        String heatAt = roundIt((value.toBigDecimal() - heatDiff.toBigDecimal()), precision.toInteger()).toString()
+                        sendEvent(name: 'heatAtSetpoint', value: heatAt, unit: tu, displayed: false)
                         objectsUpdated++
-                        if (!device.currentValue('thermostatOperatingState').startsWith('heat')) sendValue = heatAt.toString()
-                        event = eventFront + [value: sendValue, unit: tu, /*descriptionText: "Heating setpoint is ${sendValue}°", isStateChange: isChange,*/ displayed: false]
+                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('he'))? (isIOS?heatAt:null) : sendValue
+                        sendEvent(name: 'heatingSetpointTile', value: tileValue, unit: tu, displayed: false)
+                        objectsUpdated++
+                        //} else {
+                        //	// Androids screw up the heatAt/heatTo display, so just send null and it should display "Idle" or "Cooling"
+                        //    String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('he')) ? null : sendValue
+                        //    sendEvent(name: 'heatingsSetpointTile', value: null, displayed: false)
+                        //}
+                        event = eventFront + [value: sendValue, unit: tu, descriptionText: "Heating setpoint is ${sendValue}°${tu}"]
                     }
                     break;
                 
                 case 'heatingSetpointDisplay':
-                	event = eventFront + [value: sendValue, unit: tu, descriptionText: "Heating setpoint is ${sendValue}°", displayed: true]
+                	event = eventFront + [value: sendValue, unit: tu, /* descriptionText: "Heating setpoint is ${sendValue}°" */, displayed: false]
                     break;
                         
 				case 'coolingSetpoint':
                 	if (isChange || forceChange) {
                 		LOG("coolingSetpoint: ${sendValue}",3,null,'info')                    
-                		sendEvent(name: 'coolingSetpointDisplay', value: sendValue, unit: tu, descriptionText: "Cooling setpoint is ${sendValue}°", /* isStateChange: true, */ displayed: true) // for the slider
+                		sendEvent(name: 'coolingSetpointDisplay', value: sendValue, unit: tu,  displayed: false) // for the slider
                         objectsUpdated++                       
                         if (tMode == 'cool') {
                         	//def displayValue = isMetric ? sendValue : ((value.toInteger() == value.toFloat()) ?	value.toInteger().toString() : sendValue)	// Truncate the decimal point
-                    		sendEvent(name: 'thermostatSetpoint', value: /* displayValue */ sendValue, unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°", displayed: false, /* isStateChange: true */)
+                    		sendEvent(name: 'thermostatSetpoint', value: sendValue, unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°${tu}", displayed: false)
                         	objectsUpdated++
                         } else if (tMode == 'auto') {
-                        	def avg = roundIt(((value.toBigDecimal() + device.currentValue('heatingSetpointDisplay').toBigDecimal()).toBigDecimal() / 2.0).toBigDecimal(), precision.toInteger())
-                            sendEvent(name: 'thermostatSetpoint', value: avg.toString(), unit: tu, descriptionText: "Thermostat setpoint average is ${avg}°", displayed: true, /* isStateChange: true */)
+                        	def avg = roundIt(((value.toBigDecimal() + device.currentValue('heatingSetpoint').toBigDecimal()).toBigDecimal() / 2.0).toBigDecimal(), precision.toInteger())
+                            sendEvent(name: 'thermostatSetpoint', value: avg.toString(), unit: tu, descriptionText: "Thermostat setpoint average is ${avg}°${tu}", displayed: true, /* isStateChange: true */)
 							objectsUpdated++
                         }
                         def coolDiff = device.currentValue('coolDifferential').toBigDecimal()
                         if (coolDiff == null) coolDiff = 0.0
-                        def coolAt = roundIt((value.toBigDecimal() + coolDiff.toBigDecimal()), precision.toInteger())
+                        String coolAt = roundIt((value.toBigDecimal() + coolDiff.toBigDecimal()), precision.toInteger()).toString()
                         sendEvent(name: 'coolAtSetpoint', value: coolAt, unit: tu, /* isStateChange: true, */ displayed: false)
                         objectsUpdated++
-                        if (!device.currentValue('thermostatOperatingState').startsWith('cool')) sendValue = coolAt.toString()
-                        event = eventFront + [value: sendValue, unit: tu, /*descriptionText: "Cooling setpoint is ${sendValue}°",  isStateChange: true, */ displayed: false]
+                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('cool')) ? (isIOS?coolAt:null) : sendValue
+                        sendEvent(name: 'coolingSetpointTile', value: tileValue, unit: tu, displayed: false)
+                        objectsUpdated++
+                        //} else {
+                        //	sendEvent(name: 'coolingSetpointTile', value: null, displayed: false)
+                        //}
+                        event = eventFront + [value: sendValue, unit: tu, descriptionText: "Cooling setpoint is ${sendValue}°${tu}", displayed: true]
                     }
                     break;
                     
                 case 'coolingSetpointDisplay': 
-                	event = eventFront + [value: sendValue, unit: tu, descriptionText: "Cooling setpoint is ${sendValue}°", displayed: true]
+                	event = eventFront + [value: sendValue, unit: tu, /* descriptionText: "Cooling setpoint is ${sendValue}°" */, displayed: false]
                     break;
                     
                 case 'thermostatSetpoint':
                 	if (isChange || forceChange) {
                     	LOG("thermostatSetpoint: ${sendValue}",2,null,'info')
                     	def displayValue = isMetric ? sendValue : roundIt(value, 0) //((value.toInteger() == value.toFloat()) ?	value.toInteger().toString() : sendValue)	// Truncate the decimal point
-                    	if (isChange) event = eventFront + [value: displayValue, unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°", isStateChange: true, displayed: true]
+                    	if (isChange) event = eventFront + [value: displayValue, unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°${tu}", isStateChange: true, displayed: true]
                     }
                     break;
                     
@@ -876,7 +900,7 @@ def generateEvent(Map results) {
                     break;
                 
                 case 'weatherHumidity':
-                	if (isChange) event = eventFront + [value: sendValue, unit: '%', descriptionText: "Outdoors humidity is ${sendValue}%", isStateChange: true, displayed: true]
+                	if (isChange) event = eventFront + [value: sendValue, unit: '%', descriptionText: "Outdoor humidity is ${sendValue}%", isStateChange: true, displayed: true]
                     break;
                     
                 case 'weatherDewpoint':
@@ -911,8 +935,6 @@ def generateEvent(Map results) {
                 	// A little tricky, but this is how we display Smart Recovery within the stock Thermostat multiAttributeTile
                     // thermostatOperatingStateDisplay has the same values as thermostatOperatingState, plus "heating (smart recovery)" 
                     // and "cooling (smart recovery)". We separately update the standard thermostatOperatingState attribute.
-                    if ((sendValue == 'idle') && (device.currentValue('thermostatMode') == 'off')) sendValue = 'off'
-                    isChange = isStateChange(device, 'thermostatOperatingStateDisplay', sendValue) 
                     boolean displayDesc
                     String descText
                     String realValue
@@ -925,6 +947,10 @@ def generateEvent(Map results) {
                     	displayDesc = false				// hide this message - is redundant with EquipOpState
                         descText = sendValue.capitalize()
                         realValue = sendValue
+                    }
+                    if (isIOS) {
+                    	if ((sendValue == 'idle') && (device.currentValue('thermostatMode') == 'off')) sendValue = 'off'
+                    	// isChange = isStateChange(device, 'thermostatOperatingStateDisplay', sendValue) 
                     }
                    	if (isStateChange(device, 'thermostatOperatingStateDisplay', sendValue)) {
                     	sendEvent(name: "thermostatOperatingStateDisplay", value: sendValue, descriptionText: "Thermostat is ${descText}", linkText: linkText, 
@@ -940,21 +966,26 @@ def generateEvent(Map results) {
                     // now update thermostatOperatingState - is limited by API to idle, fan only, heating, cooling, pending heat, pending cool, ventilator only
 					if (isStateChange(device, name, realValue)) {
                     	// First, check if we need to change the Heating at/Heating to temperature values
-                    	if (realValue.startsWith('heat')) {
-                        	// heatingSetpoint should display actual setpoint for "Heating to..."
-                            def heatSetp = device.currentValue('heatingSetpointDisplay')
-                        	sendEvent(name: 'heatingSetpoint', value: heatSetp, descriptionText: "Heating to ${heatSetp}°", displayed: false) // let sendEvent figure out if this is a change
-                        } else {
-                        	def heatSetp = device.currentValue('heatAtSetpoint')
-                        	sendEvent(name: 'heatingSetpoint', value: heatSetp, descriptionText: "Heating at ${heatSetp}°", displayed: false)
+                        
+                        if (realValue.startsWith('heat')) {
+                            // heatingSetpoint should display actual setpoint for "Heating to..."
+                            String heatSetp = device.currentValue('heatingSetpoint').toString()
+                            sendEvent(name: 'heatingSetpointTile', value: heatSetp, unit: tu, descriptionText: "Heating to ${heatSetp}°${tu}", displayed: false) // let sendEvent figure out if this is a change
+                        } else if (isIOS) {
+                            String heatSetp = device.currentValue('heatAtSetpoint').toString()
+                            sendEvent(name: 'heatingSetpointTile', value: heatSetp, unit: tu, descriptionText: "Heating at ${heatSetp}°${tu}", displayed: false)
+                        } else { // isAndroid
+                        	sendEvent(name: 'heatingSetpointTile', value: null, displayed: false)
                         }
                         if (realValue.startsWith('cool')) {
-                        	// coolingSetpoint should display actual setpoint for "Cooling to..."
-                            def coolSetp = device.currentValue('coolingSetpointDisplay')
-                        	sendEvent(name: 'coolingSetpoint', value: coolSetp, descriptionText: "Cooling to ${coolSetp}°", displayed: false)
-                        } else {
-                        	def coolSetp = device.currentValue('coolAtSetpoint')
-                        	sendEvent(name: 'coolingSetpoint', value: coolSetp, descriptionText: "Cooling at ${coolSetp}°", displayed: false)
+                            // coolingSetpoint should display actual setpoint for "Cooling to..."
+                            String coolSetp = device.currentValue('coolingSetpoint').toString()
+                            sendEvent(name: 'coolingSetpointTile', value: coolSetp, unit: tu, descriptionText: "Cooling to ${coolSetp}°${tu}", displayed: false)
+                        } else if (isIOS) {
+                            String coolSetp = device.currentValue('coolAtSetpoint').toString()
+                            sendEvent(name: 'coolingSetpointTile', value: coolSetp, unit: tu, descriptionText: "Cooling at ${coolSetp}°${tu}", displayed: false)
+                        } else { // isAndroid
+                        	sendEvent(name: 'coolingSetpointTile', value: null, displayed: false)
                         }
                     	event = eventFront + [value: realValue, descriptionText: "Thermostat is ${realValue}", isStateChange: true, displayed: false]
                         
@@ -975,8 +1006,12 @@ def generateEvent(Map results) {
                             def lastOpState = device.currentValue('thermostatOperatingState')
                             if (lastOpState.contains('ea') || lastOpState.contains('oo')) sendEvent(name: 'lastOpState', value: lastOpState, displayed: false)
                        		sendEvent(name: 'thermostatOperatingState', value: 'idle', descriptionText: 'Thermostat is off', displayed: true /*, isStateChange: true */)
-                        	sendEvent(name: 'thermostatOperatingStateDisplay', value: 'off', descriptionText: 'Thermostat is off', displayed: false, /* isStateChange: true */)
-                        	objectsUpdated += 2
+                            objectsUpdated++
+                            if (isIOS) {
+                            	// Android doesn't handle 'off'
+                        		sendEvent(name: 'thermostatOperatingStateDisplay', value: 'off', descriptionText: 'Thermostat is off', displayed: false, /* isStateChange: true */)
+                                objectsUpdated++
+                            }
                         }
                         String descText = sendValue.endsWith('deh') ? sendValue.replace('deh', '& dehumidifying') : (sendValue.endsWith('hum') ? sendValue.replace('hum', '& humidifying') : sendValue)
                         if (!descText.startsWith('heat pump')) {
@@ -1129,7 +1164,13 @@ def generateEvent(Map results) {
 					break;
                     
               	case 'motion': 
-					if (isChange) event = eventFront + [value: sendValue, descriptionText: "Motion is ${sendValue}", isStateChange: true, displayed: true]
+					if (isChange) {
+                    	def cMotion = device.currentValue('motion')
+                        // Once "in/active", prevent inadvertent "not supported" - 
+                    	if ((cMotion == null) || !sendValue.startsWith('not') || !cMotion.contains('act')) {
+                    		event = eventFront + [value: sendValue, descriptionText: "Motion is ${sendValue}", isStateChange: true, displayed: true]
+                        }
+                    }
 					break;
 				
 				case 'fanMinOnTime':
@@ -1158,7 +1199,10 @@ def generateEvent(Map results) {
                        	case 'off':
                             if (isChange) {
                            		sendEvent(name: 'thermostatOperatingState', value: 'idle', displayed: true, isStateChange: true, descriptionText: 'Thermostat is idle')
-                            	sendEvent(name: 'thermostatOperatingStateDisplay', value: 'off', displayed: false, isStateChange: true)
+                                if (isIOS) {
+                                	// Android doesn't handle 'off' for operatingState
+                            		sendEvent(name: 'thermostatOperatingStateDisplay', value: 'off', displayed: false, isStateChange: true)
+                                }
                             }
                             def currentFanMode = device.currentValue('thermostatFanMode')
                             if ((currentFanMode != 'off') && (currentFanMode != 'on')) { // auto or circulate
@@ -1177,30 +1221,31 @@ def generateEvent(Map results) {
                             break;
                                 
                         case 'auto':
-                            def avg = roundIt(((device.currentValue('heatingSetpointDisplay').toBigDecimal() + device.currentValue('coolingSetpointDisplay').toBigDecimal()) / 2.0), precision.toInteger()).toString()
-                            if (isStateChange(device, 'thermostatSetpoint', avg)) sendEvent(name: 'thermostatSetpoint', value: avg, unit: tu, descriptionText: "Thermostat setpoint is ${avg}°", displayed: true, isStateChange: true)
+                            String avg = roundIt(((device.currentValue('heatingSetpoint')?.toBigDecimal() + device.currentValue('coolingSetpoint')?.toBigDecimal()) / 2.0), precision.toInteger()).toString()
+                            if (isStateChange(device, 'thermostatSetpoint', avg)) sendEvent(name: 'thermostatSetpoint', value: avg, unit: tu, descriptionText: "Thermostat setpoint is ${avg}°${tu}", displayed: true, isStateChange: true)
                             disableModeAutoButton()
                             disableFanOffButton()
                             objectsUpdated++
                             break;
                                 
                         case 'heat':
-                        	def statSetpoint = device.currentValue('heatingSetpointDisplay').toString()
-                            if (isStateChange(device, 'thermostatSetpoint', statSetpoint)) sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°", displayed: true, isStateChange: true)
+                        	def statSetpoint = device.currentValue('heatingSetpoint').toString()
+                            if (isStateChange(device, 'thermostatSetpoint', statSetpoint)) sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true, isStateChange: true)
                             disableModeHeatButton()
                             disableFanOffButton()
                             objectsUpdated++
                             break;
                                 
                         case 'cool':
-							def statSetpoint = device.currentValue('coolingSetpointDisplay').toString()
-                            if (isStateChange(device, 'thermostatSetpoint', statSetpoint)) sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°", displayed: true, isStateChange: true)
+							def statSetpoint = device.currentValue('coolingSetpoint').toString()
+                            if (isStateChange(device, 'thermostatSetpoint', statSetpoint)) sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true, isStateChange: true)
                             disableModeCoolButton()
                             disableFanOffButton()
                             objectsUpdated++
                             break;
                                 
                         case 'auxHeatOnly':
+                        case 'emergencyHeat':
                             enableAllModeButtons()
                             disableFanOffButton()
                             objectsUpdated++
@@ -1599,10 +1644,10 @@ private getTemperatureDescriptionText(name, value, linkText) {
         	return "Thermostat setpoint is ${value}°${getTemperatureScale()}"
             break;
         case 'weatherTemperature':
-        	return "Outdoors temperature is ${value}°${getTemperatureScale()}"
+        	return "Outdoor temperature is ${value}°${getTemperatureScale()}"
             break;
         case 'weatherDewpoint':
-        	return "Outdoors dew point is ${value}°${getTemperatureScale()}"
+        	return "Outdoor dew point is ${value}°${getTemperatureScale()}"
 	}
 }
 
@@ -1707,8 +1752,8 @@ def updateThermostatSetpoints() {
 	def isMetric = wantMetric()
 	def deviceId = getDeviceId()
     
-	def heatingSetpoint = state.newHeatingSetpoint ? state.newHeatingSetpoint : device.currentValue('heatingSetpointDisplay').toBigDecimal()
-	def coolingSetpoint = state.newCoolingSetpoint ? state.newCoolingSetpoint : device.currentValue('coolingSetpointDisplay').toBigDecimal()
+	def heatingSetpoint = state.newHeatingSetpoint ? state.newHeatingSetpoint : device.currentValue('heatingSetpoint').toBigDecimal()
+	def coolingSetpoint = state.newCoolingSetpoint ? state.newCoolingSetpoint : device.currentValue('coolingSetpoint').toBigDecimal()
     LOG("updateThermostatSetpoints(): heatingSetpoint ${heatingSetpoint}°, coolingSetpoint ${coolingSetpoint}°", 2, null, 'info')
     
     def sendHoldType = state.useThisHold
@@ -1768,8 +1813,8 @@ def updateThermostatSetpoints() {
     }
         	
     if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType, sendHoldHours)) {
-    	def updates = [	'coolingSetpointDisplay': roundIt(coolingSetpoint, 1),
-        				'heatingSetpointDisplay': roundIt(heatingSetpoint, 1),
+    	def updates = [	'coolingSetpoint': roundIt(coolingSetpoint, 1),	// was Display
+        				'heatingSetpoint': roundIt(heatingSetpoint, 1),	// was Display
                      	'lastHoldType': sendHoldType ]
     	generateEvent(updates)
 		LOG("Done updateThermostatSetpoints() coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}, thermostatSetpoint: ${device.currentValue('thermostatSetpoint')}",4,null,'trace') 
@@ -1802,12 +1847,12 @@ void raiseSetpoint() {
     def changingCool = true
    	def heatingSetpoint = state.newHeatSetpoint // device.currentValue('newHeatSetpoint')?.toDouble()
     if (!heatingSetpoint || (heatingSetpoint == 0.0)) {
-    	heatingSetpoint = device.currentValue("heatingSetpointDisplay").toBigDecimal()
+    	heatingSetpoint = device.currentValue("heatingSetpoint").toBigDecimal()
         changingHeat = false
     }
 	def coolingSetpoint = state.newCoolSetpoint /// device.currentValue('newCoolSetpoint')?.toDouble()
     if (!coolingSetpoint || (coolingSetpoint == 0.0)) {
-    	coolingSetpoint = device.currentValue("coolingSetpointDisplay")?.toBigDecimal()
+    	coolingSetpoint = device.currentValue("coolingSetpoint")?.toBigDecimal()
         changingCool = false
     }
     def thermostatSetpoint = device.currentValue("thermostatSetpoint")?.toBigDecimal()
@@ -1863,12 +1908,12 @@ void lowerSetpoint() {
     def changingCool = true
    	def heatingSetpoint = state.newHeatSetpoint		// device.currentValue('newHeatSetpoint')?.toDouble()
     if (!heatingSetpoint || (heatingSetpoint == 0.0)) {
-    	heatingSetpoint = device.currentValue("heatingSetpointDisplay").toBigDecimal()
+    	heatingSetpoint = device.currentValue("heatingSetpoint").toBigDecimal()
         changingHeat = false
     }
 	def coolingSetpoint = state.newCoolSetpoint		// device.currentValue('newCoolSetpoint')?.toDouble()
     if (!coolingSetpoint || (coolingSetpoint == 0.0)) {
-    	coolingSetpoint = device.currentValue("coolingSetpointDisplay").toBigDecimal()
+    	coolingSetpoint = device.currentValue("coolingSetpoint").toBigDecimal()
         changingCool = false
     }
 	def thermostatSetpoint = device.currentValue("thermostatSetpoint").toBigDecimal()
