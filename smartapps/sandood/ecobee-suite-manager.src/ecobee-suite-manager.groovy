@@ -52,8 +52,10 @@
  *	1.6.00- Release number synchronization
  *	1.6.10- Re-implemented reservations 
  *	1.6.11- Removed location.contactBook support - deprecated by SmartThings
+ *	1.6.12- Cleaned up null values during climate changes
+ *	1.6.13- Cleaned up setpoint/setpointDisplay stuff (added iOS/Android preference setting)
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.13" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -384,9 +386,13 @@ def askAlexaPage() {
 def preferencesPage() {
     LOG("=====> preferencesPage() entered. settings: ${settings}", 5)
     dynamicPage(name: "preferencesPage", title: "Update Ecobee Suite Manager Preferences", nextPage: "") {
-		section("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour. You can have them sent ${location.contactBookEnabled?'to selected Contacts':'via SMS'} or as a Push notification (default).") {
+		section("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour." +
+					" You can have them sent ${location.contactBookEnabled?'to selected Contacts':'via SMS'} or as a Push notification (default).") {
            	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
             input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false 
+        }
+        section("Select your mobile device type to enable device-specific optimizations") {
+        	input(name: 'mobile', type: 'enum', options: ["Android", "iOS"], title: 'Tap to select your mobile device type', defaultValue: 'iOS', submitOnChange: true, required: true, multiple: false)
         }
       	section("How long do you want Hold events to last?") {
             input(name: "holdType", title:"Select Hold Type", type: "enum", required:false, multiple:false, defaultValue: "Until I Change", submitOnChange: true, description: "Until I Change", 
@@ -406,11 +412,6 @@ def preferencesPage() {
         section("Showing a Thermostat as a separate Sensor is useful if you need to access the actual temperature in the room where the Thermostat is located and not just the (average) temperature displayed on the Thermostat") {
             input(name: "showThermsAsSensor", title:"Include Thermostats as a separate Ecobee Sensor?", type: "bool", required:false, defaultValue: false, description: "")
         }
-//		if (settings.pollingInterval?.toInteger() > 2) {
-//			section("Monitoring external devices can be used to drive polling and the watchdog events. Be warned, however, not to select too many devices or devices that will send too many events as this can cause issues with the connection.\nBe sure NOT to select any Ecobee devices!") {
-//            	input(name: "useWatchdogDevices", title:"Monitor external devices to drive additional polling and watchdog events?", type: "bool", required:false, description: "", defaultValue:false)
-//            }
-//        }
         section("Set the pause between pressing the setpoint arrows and initiating the API calls. The pause needs to be long enough to allow you to click the arrow again for changing by more than one degree.") {
             input(name: "arrowPause", title:"Delay timer value after pressing setpoint arrows", type: "enum", required:false, multiple:false, description: "4", defaultValue:5, options:["1", "2", "3", "4", "5"])
 		}
@@ -423,22 +424,6 @@ def preferencesPage() {
         }
 	}
 }
-
-//def addWatchdogDevicesPage() {
-//	LOG("Displaying the Watchdog Device Selection page next...", 5, null, "trace")
-//    dynamicPage(name: "addWatchdogDevicesPage", title: "Select Watchdog Devices", nextPage: "") {
-//		section("Select device(s) that you wish to subscribe to in order to create additional polling events. " +
-//            	"Do NOT select too many devices or devices that will cause excess polling. " + 
-//                "NOTE: Do NOT select any Ecobee devices managed by this SmartApp, as this can cause excess circular polling.") {
-//     		input(name: "watchdogMotion", type:"capability.motionSensor", title: "Select Motion Sensor(s)", required:false, multiple:true)
-//            input(name: "watchdogTemp", type:"capability.temperatureMeasurement", title: "Select Temperature Measurement Device(s)", required:false, multiple:true)
-//            input(name: "watchdogSwitch", type:"capability.switch", title: "Select Switch(es)", required:false, multiple:true)
-//            input(name: "watchdogBattery", type:"capability.battery", title: "Select Battery(ies)", required:false, multiple:true)
-//            input(name: "watchdogHumidity", type:"capability.relativeHumidityMeasurement", title: "Select Humidity Sensor(s)", required:false, multiple:true)
-//            input(name: "watchdogLuminance", type:"capability.illuminanceMeasurement", title: "Select Illuminance Sensor(s)", required:false, multiple:true)
-//        }
-// 	}
-//}
 
 def debugDashboardPage() {
 	LOG("=====> debugDashboardPage() entered.", 5)    
@@ -3169,13 +3154,13 @@ def updateThermostatData() {
             if (lastOList[10] != humiditySetpointDisplay) data += [humiditySetpointDisplay: humiditySetpointDisplay,]
             // send these next two also when the userPrecision changes
             def needPrograms = false
-            if ((lastOList[3] != tempHeatingSetpoint) || (lastOList[11] != userPrecision)) { needPrograms = true; data += [heatingSetpoint: String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),] }
-            if ((lastOList[4] != tempCoolingSetpoint) || (lastOList[11] != userPrecision)) { needPrograms = true; data += [coolingSetpoint: String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),] }
-            if (lastOList[5] != wSymbol) data += [weatherSymbol: wSymbol]
-            if ((lastOList[6] != tempWeatherTemperature) || (lastOList[11] != userPrecision)) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision)),]
-           	if (lastOList[7] != tempWeatherHumidity) data += [weatherHumidity: tempWeatherHumidity,]
-            if ((lastOList[8] != tempWeatherDewpoint) || (lastOList[11] != userPrecision)) data += [weatherDewpoint: String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision)),]
-            if (lastOList[9] != tempWeatherPressure) data += [weatherPressure: tempWeatherPressure,]
+            if ((tempHeatingSetpoint != 0.0) && ((lastOList[3] != tempHeatingSetpoint) || (lastOList[11] != userPrecision))) { needPrograms = true; data += [heatingSetpoint: String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),] }
+            if ((tempCoolingSetpoint != 999.0) && ((lastOList[4] != tempCoolingSetpoint) || (lastOList[11] != userPrecision))) { needPrograms = true; data += [coolingSetpoint: String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),] }
+            if (wSymbol && (lastOList[5] != wSymbol)) data += [weatherSymbol: wSymbol]
+            if (tempWeatherTemperature && ((lastOList[6] != tempWeatherTemperature) || (lastOList[11] != userPrecision))) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision)),]
+           	if (tempWeatherHumidity && (lastOList[7] != tempWeatherHumidity)) data += [weatherHumidity: tempWeatherHumidity,]
+            if (tempWeatherDewpoint && ((lastOList[8] != tempWeatherDewpoint) || (lastOList[11] != userPrecision))) data += [weatherDewpoint: String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision)),]
+            if (tempWeatherPressure && (lastOList[9] != tempWeatherPressure)) data += [weatherPressure: tempWeatherPressure,]
             changeOften[tid] = oftenList
             atomicState.changeOften = changeOften
             // If the setpoints change, then double-check to see if the currently running Program has changed.
@@ -3624,8 +3609,8 @@ def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHo
 	if (theHoldType == 'nextTransition') {
     	// Check if setpoints are the same as currentClimateRef, if so, don't set a new hold
         // ResumeProgram above already sent the setpoint display values for the currentClimate to the DTH
-        def currHeatAt = child.device.currentValue('heatingSetpointDisplay') //?.toInteger()
-        def currCoolAt = child.device.currentValue('coolingSetpointDisplay') //?.toInteger()
+        def currHeatAt = roundIt((isMetric ? (cToF(child.device.currentValue('heatingSetpoint').toBigDecimal()) * 10.0) : (child.device.currentValue('heatingSetpoint').toBigDecimal() * 10.0)), 0)		// better precision using BigDecimal round-half-up
+		def currCoolAt = roundIt((isMetric ? (cToF(child.device.currentValue('coolingSetpoint').toBigDecimal()) * 10.0) : (child.device.currentValue('coolingSetpoint').toBigDecimal() * 10.0)), 0)
         LOG("setHold() - currHeat: ${currHeatAt}, currCool: ${currCoolAt}",2, child, 'trace')
         // if ((c==currCoolAt) && (h==currHeatAt)) {
         if ((cooling==currCoolAt) && (heating==currHeatAt)) {
@@ -3664,7 +3649,8 @@ def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHo
 // Should only be called by child devices, and they MUST provide sendHoldType and sendHoldHours as of version 1.2.0
 def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite', sendHoldHours=2) {
 	String statName = getThermostatName(deviceId)
-	LOG("setFanMode(${fanMode}) for for thermostat ${statName}", 5, null, 'trace')    
+	LOG("setFanMode(${fanMode}) for for thermostat ${statName}", 5, null, 'trace') 
+    def isMetric = (getTemperatureScale() == "C")
     
     def currentThermostatHold = child.device.currentValue('thermostatHold') 
     if (currentThermostatHold == 'vacation') {
@@ -3678,8 +3664,10 @@ def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite'
     // Per this thread: http://developer.ecobee.com/api/topics/qureies-related-to-setfan
     // def extraParams = [isTemperatureRelative: "false", isTemperatureAbsolute: "false"]
     // And then these values are ignored when setting only the fan
-    def h = child.device.currentValue('heatingSetpointDisplay')			// use the device's values, not the ones from our last API refresh
-    def c = child.device.currentValue('coolingSetpointDisplay')		// BUT- IF changing Fan Mode while in a Hold, maybe we should be overloading the hold instead of cancelling it?
+    // use the device's values, not the ones from our last API refresh
+    // BUT- IF changing Fan Mode while in a Hold, maybe we should be overloading the hold instead of cancelling it?
+   	def h = roundIt((isMetric ? (cToF(child.device.currentValue('heatingSetpoint').toBigDecimal()) * 10.0) : (child.device.currentValue('heatingSetpoint').toBigDecimal() * 10.0)), 0)		// better precision using BigDecimal round-half-up
+	def c = roundIt((isMetric ? (cToF(child.device.currentValue('coolingSetpoint').toBigDecimal()) * 10.0) : (child.device.currentValue('coolingSetpoint').toBigDecimal() * 10.0)), 0)
     
     def theHoldType = sendHoldType // ? sendHoldType : whatHoldType(child)
     if (theHoldType == 'holdHours') {
