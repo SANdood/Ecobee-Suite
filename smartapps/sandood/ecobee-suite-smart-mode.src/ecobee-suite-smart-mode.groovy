@@ -36,8 +36,9 @@
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Logic tuning, clear reservations when externally overridden
  *	1.6.13 - Removed location.contactBook - unexpectedly deprecated by SmartThings
+ *	1.6.14 - Updated to remove use of *SetpointDisplay
  */
-def getVersionNum() { return "1.6.13" }
+def getVersionNum() { return "1.6.14" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -169,7 +170,10 @@ def mainPage() {
                     		submitOnChange: true)
                 }
 			}
-            
+			section(title: "Enable only for specific modes or programs?") {
+        		paragraph("Thermostat Modes will only be changed while ${location.name} is in these SmartThings Modes.")
+            	input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
+        	}            
       		section("Notifications (optional)") {
         		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
                 
@@ -368,6 +372,7 @@ def initialize() {
             if (t.isNumber()) tempNow = t
 			break;
 	}
+    atomicState.locModeEnabled = theModes ? theModes.contains(location.mode) : true
     if (tempNow) {
     	atomicState.temperature = tempNow
     	LOG("Initialization complete...current temperature is ${tempNow}°",2,null,'info')
@@ -383,7 +388,7 @@ def insideChangeHandler(evt) {
     def newMode = null
     if (theTemp.isNumber()) {
     	theTemp = evt.numberValue
-    	def coolSP = evt.device.currentValue('coolingSetpointDisplay')
+    	def coolSP = evt.device.currentValue('coolingSetpoint')
         if (coolSP.isNumber()) {
         	coolSP = coolSP.toBigDecimal()
         	if (theTemp > coolSP) {
@@ -395,7 +400,7 @@ def insideChangeHandler(evt) {
             }
         }
         if (newMode == null) {
-       		def heatSP = evt.device.currentValue('heatingSetpointDisplay')
+       		def heatSP = evt.device.currentValue('heatingSetpoint')
             if (heatSP.isNumber()) {
             	heatSP = heatSP.toBigDecimal()
 				if (theTemp < heatSP) {
@@ -407,21 +412,35 @@ def insideChangeHandler(evt) {
                 }
             }
         }
-        if (newMode != null) {
-        	def cMode = evt.device.currentValue('thermostatMode')
-        	if (cMode != newMode) {
-            	def tid = getDeviceId(evt.device.deviceNetworkId)
-            	if ((cMode == 'off') && anyReservations( tid, 'modeOff' )) {
-                	// if ANYBODY (including me) has a reservation on this being off, I can't turn it back on
-                    LOG("${evt.device.displayName} inside temp is ${theTemp}°, but can't change to ${newMode} since ${getGuestList(tid,'offMode').toString()[1..-2]} have offMode reservations",2,null,'warn')
-                    // Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
-                } else {
-                	// not currently off or there are no modeOff reservations, change away!
-                    cancelReservation(tid, 'modeOff' )
-            		evt.device.setThermostatMode(newMode)
-                	LOG("${evt.device.displayName} temp is ${theTemp}°, changed thermostat to ${newMode} mode",3,null,'trace')
-        			sendMessage("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
+        def okMode = theModes ? theModes.contains(location.mode) : true
+        if (okMode) {
+        	atomicState.locModeEnabled = true
+            if (newMode != null) {
+                def cMode = evt.device.currentValue('thermostatMode')
+                if (cMode != newMode) {
+                    def tid = getDeviceId(evt.device.deviceNetworkId)
+                    if ((cMode == 'off') && anyReservations( tid, 'modeOff' )) {
+                        // if ANYBODY (including me) has a reservation on this being off, I can't turn it back on
+                        LOG("${evt.device.displayName} inside temp is ${theTemp}°, but can't change to ${newMode} since ${getGuestList(tid,'offMode').toString()[1..-2]} have offMode reservations",2,null,'warn')
+                        // Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
+                    } else {
+                        // not currently off or there are no modeOff reservations, change away!
+                        cancelReservation(tid, 'modeOff' )
+                        evt.device.setThermostatMode(newMode)
+                        LOG("${evt.device.displayName} temp is ${theTemp}°, changed thermostat to ${newMode} mode",3,null,'trace')
+                        sendMessage("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
+                    }
                 }
+            }
+        } else {
+        	if (atomicState.locModeEnabled) {
+                // Do we check for/cancel reservations?
+                def tid = getDeviceId(evt.device.deviceNetworkId)
+                cancelReservation(tid, 'modeOff')
+                if (!anyReservations(tid, 'modeOff')) {
+                    evt.device.setThermostatMode('auto')		// allow choice, keep reservation if off
+                }
+                atomicState.locModeEnabled = false
             }
         }
     }
@@ -524,6 +543,26 @@ def temperatureUpdate( BigDecimal temp ) {
     temp = roundIt(temp, (getTemperatureScale()=='C'?2:1))
     atomicState.temperature = temp
     LOG("Temperature is: ${temp}°",3,null,'info')
+    
+    def okMode = theModes ? theModes.contains(location.mode) : true
+    if (okMode) {
+    	atomicState.locModeEnabled = true
+    } else {
+    	if (atomicState.locModeEnabled) {
+        	// release all the reservations and reset the mode
+        	settings.thermostats.each { 
+            	def tid = getDeviceId(it.deviceNetworkId)
+            	// Do we check for/cancel reservations?
+            	cancelReservation(tid, 'modeOff')
+            	if (!anyReservations(tid, 'modeOff')) {
+                	evt.device.setThermostatMode('auto')		// allow choice, keep reservation if off
+            	}
+            }
+            atomicState.locModeEnabled = false
+        }
+        //LOG something
+        return
+    }
     
     def desiredMode = null
 	if ( (settings.aboveTemp && (temp >= settings.aboveTemp)) || (settings.dewAboveTemp && (atomicState.dewpoint >= settings.dewAboveTemp))) {
