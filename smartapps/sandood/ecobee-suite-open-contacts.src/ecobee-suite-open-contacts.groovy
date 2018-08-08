@@ -36,8 +36,9 @@
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Cancel modeOff reservation if we get overridden
  *	1.6.13- Removed location.contactBook support - deprecated by SmartThings
+ *	1.6.14- Removed use of *SetpointDisplay
  */
-def getVersionNum() { return "1.6.13" }
+def getVersionNum() { return "1.6.14" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -215,8 +216,8 @@ def initialize() {
     			tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode'), ]
                 if (settings.adjustSetpoints) {
                 	tmpThermSavedState[tid] += [
-                									heatSP: therm.currentValue('heatingSetpointDisplay'), 
-                                            		coolSP: therm.currentValue('coolingSetpointDisplay'),
+                									heatSP: therm.currentValue('heatingSetpoint'), 
+                                            		coolSP: therm.currentValue('coolingSetpoint'),
                                             		heatAdj: 999.0,
                                             		coolAdj: 999.0,
                                             		holdType: therm.currentValue('lastHoldType'),
@@ -239,8 +240,8 @@ def initialize() {
 	if (!settings.quietTime) {
     	if ((settings.hvacOff == null) || settings.hvacOff) subscribe(theThermostats, 'thermostatMode', statModeChange)
         else if (settings.adjustSetpoints) {
-    		subscribe(theThermostats, 'heatingSetpointDisplay', heatSPHandler)
-            subscribe(theThermostats, 'coolingSetpointDisplay', coolSPHandler)
+    		subscribe(theThermostats, 'heatingSetpoint', heatSPHandler)
+            subscribe(theThermostats, 'coolingSetpoint', coolSPHandler)
         }
     }
     
@@ -263,7 +264,7 @@ def statModeChange(evt) {
 }
     
 def heatSPHandler( evt ) {
-	// called when the heatingSetpointDisplay value changes, but only if we are monitoring/making setpoint changes
+	// called when the heatingSetpoint value changes, but only if we are monitoring/making setpoint changes
 	// (ie., this won't get called if we are using Quiet Time or just HVAC Off)
 	def tid = getDeviceId(evt.device.deviceNetworkId)
     
@@ -390,8 +391,8 @@ def turnOffHVAC() {
             	}
             } else if (settings.adjustSetpoints) {
             	// Adjust the setpoints
-                def h = therm.currentValue('heatingSetpointDisplay') 
-                def c = therm.currentValue('coolingSetpointDisplay')
+                def h = therm.currentValue('heatingSetpoint') 
+                def c = therm.currentValue('coolingSetpoint')
                 // save the current values for when we turn back on
                 tmpThermSavedState[tid].heatSP = h
                 tmpThermSavedState[tid].coolSP = c
