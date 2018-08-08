@@ -25,9 +25,10 @@
  *	1.5.01 - Allow Ecobee Suite Thermostats only
  *	1.5.02 - Converted all math to BigDecimal
  *	1.6.00 - Release number synchronization
- *	1.6.10- Resync for parent-based reservations
+ *	1.6.10 - Resync for parent-based reservations
+ *	1.6.11 - Removed use of *SetpointDisplay
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()}" }
 
 definition(
@@ -130,9 +131,7 @@ def initialize() {
 	subscribe( masterThermostat, 'thermostatOperatingState', masterFanStateHandler )
     subscribe( slaveThermostats, 'thermostatOperatingState', changeHandler )
     subscribe( slaveThermostats, 'temperature', changeHandler )
-    subscribe( slaveThermostats, 'heatingSetpointDisplay', changeHandler )
     subscribe( slaveThermostats, 'heatingSetpoint', changeHandler )
-    subscribe( slaveThermostats, 'coolingSetpointDisplay', changeHandler )
     subscribe( slaveThermostats, 'coolingSetpoint', changeHandler )
     subscribe( slaveThermostats, 'temperature', changeHandler )
     // subscribe( slaveThermostats, 'currentProgram', changeHandler )
@@ -187,11 +186,11 @@ def theAdjuster() {
                     } else if (statOpState == 'fanOnly') {
                     	// See if we are holding the fan but don't need the heat any more
                         if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {
-                      		def heatTo = stat.currentValue('heatingSetpointDisplay')
+                      		def heatTo = stat.currentValue('heatingSetpoint')
                         	if (heatTo.isNumber()) {
                         		def temp = stat.currentValue('temperature')
                             	if (temp.isNumber()) {
-                            		def heatAt = stat.currentValue('heatingSetpoint')
+                            		def heatAt = stat.currentValue('heatAtSetpoint')
                                 	if (heatAt.isNumber()) {
                             			if ((temp >= heatTo) || (temp < heatAt)) { 
                                         	// This Zone has reached its target, stop stealing heat
@@ -202,11 +201,11 @@ def theAdjuster() {
                             }
                         }
                     } else if (statOpState == 'idle') {
-                    	def heatTo = stat.currentValue('heatingSetpointDisplay')
+                    	def heatTo = stat.currentValue('heatingSetpoint')
                         if (heatTo.isNumber()) {
                         	def temp = stat.currentValue('temperature')
                             if (temp.isNumber()) {
-                            	def heatAt = stat.currentValue('heatingSetpoint')
+                            	def heatAt = stat.currentValue('heatAtSetpoint')
                                 if (heatAt.isNumber()) {
                             		if ((temp < heatTo) && (temp > heatAt)) { 
                                 		setFanOn(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat		
@@ -241,11 +240,11 @@ def theAdjuster() {
                     } else if (statOpState == 'fanOnly') {
                     	// Check if we are holding the fan but don't need the cool any more
                         if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {
-                      		def coolTo = stat.currentValue('coolingSetpointDisplay')
+                      		def coolTo = stat.currentValue('coolingSetpoint')
                         	if (coolTo.isNumber()) {
                         		def temp = stat.currentValue('temperature')
                             	if (temp.isNumber()) {
-                            		def coolAt = stat.currentValue('coolingSetpoint')
+                            		def coolAt = stat.currentValue('coolAtSetpoint')
                                 	if (coolAt.isNumber()) {
                             			if ((temp <= coolTo) || (temp > coolAt)) { 
                                         	// This Zone has reached its target, stop stealing cool
@@ -257,11 +256,11 @@ def theAdjuster() {
                         }
                     } else if (statOpState == 'idle') {
                     	// Check if we need the cool
-                    	def coolTo = stat.currentValue('coolingSetpointDisplay')
+                    	def coolTo = stat.currentValue('coolingSetpoint')
                         if (coolTo.isNumber()) {
                         	def temp = stat.currentValue('temperature')
                             if (temp.isNumber()) {
-                            	def coolAt = stat.currentValue('coolingSetpoint')
+                            	def coolAt = stat.currentValue('coolAtSetpoint')
                                 if (coolAt.isNumber()) {
                             		if ((temp > coolSp) && (temp < coolAt)) {
                                 	   	setFanOn(stat)
