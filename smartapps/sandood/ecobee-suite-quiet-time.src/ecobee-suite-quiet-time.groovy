@@ -26,8 +26,9 @@
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Clear reservations on manual override
+ *	1.6.13 - Removed use of *SetpointDisplay
  */
-def getVersionNum() { return "1.6.12" }
+def getVersionNum() { return "1.6.13" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
 
 definition(
@@ -130,14 +131,13 @@ def mainPage() {
         	input(name: "whichAction", title: "Select which notification actions to take [Default=Notify Only]", type: "enum", required: true, 
                	metadata: [values: ["Notify Only", "Quiet Time Actions Only", "Notify and Quiet Time Actions"]], defaultValue: "Notify Only", submitOnChange: true)
 			if (settings.whichAction != "Quiet Time Actions Only") {
-				input(name: 'recipients', title: 'Send notifications to', description: 'Contacts', type: 'contact', required: false, multiple: true) {
-            				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-            				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false 
-                }
-                if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone) {
+            	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
+            	input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false 
+                
+                if (!settings.phone) {
                     input( name: 'sendPush', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false)
                 }
-                if ((!location.contactBookEnabled || !settings.recipients) && !settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
+                if (!settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
             }               
        }
 */
@@ -189,8 +189,8 @@ def initialize() {
         					thermostatMode: 	stat.currentValue('thermostatMode'),
                             thermostatFanMode: 	stat.currentValue('thermostatFanMode'),
                             fanMinOnTime:		stat.currentValue('fanMinOnTime'),
-                            heatingSetpoint:	stat.currentValue('heatingSetpointDisplay'),
-                            coolingSetpoint:	stat.currentValue('coolingSetpointDisplay'),
+                            heatingSetpoint:	stat.currentValue('heatingSetpoint'),
+                            coolingSetpoint:	stat.currentValue('coolingSetpoint'),
                            	holdType:			stat.currentValue('lastHoldType'),
                             hasHumidifier:		stat.currentValue('hasHumidifier'),
                             humidifierMode:		stat.currentValue('humidifierMode'),
@@ -564,9 +564,7 @@ private def sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
 
     String msg = "${app.Label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-    if (location.contactBookEnabled && settings.recipients) {
-        sendNotificationToContacts(msg, settings.recipients, [event: true]) 
-    } else if (phone) { // check that the user did select a phone number
+    if (phone) { // check that the user did select a phone number
         if ( phone.indexOf(";") > 0){
             def phones = phone.split(";")
             for ( def i = 0; i < phones.size(); i++) {
