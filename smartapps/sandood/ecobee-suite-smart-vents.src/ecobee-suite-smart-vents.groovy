@@ -32,9 +32,10 @@
  *	1.5.01 - Allow Ecobee Suite Thermostats only
  *	1.5.02 - Converted all math to BigDecimal
  *	1.6.00 - Release number synchronization
- *	1.6.10- Resync for parent-based reservations
+ *	1.6.10 - Resync for parent-based reservations
+ *	1.6.11 - Fix offline sensor temperature values (null instead of Unknown)
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -187,7 +188,7 @@ private String checkTemperature() {
     if (cTemp != null) {	// only if valid temperature readings (Ecosensors can return "unknown")
     	if (cOpState == 'heating') {
         	offset = settings.heatOffset ? settings.heatOffset : 0.0
-    		def heatTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature + offset 
+    		def heatTarget = useThermostat ? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature + offset 
             																							: theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
         	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
 			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
@@ -224,7 +225,7 @@ def getCurrentTemperature() {
 	def tTemp = 0.0
     Integer i = 0
 	settings.theSensors.each {
-		if (it.currentTemperature.isNumber()) {
+		if (it.currentTemperature?.isNumber()) {
         	tTemp += it.currentTemperature
             i++
         }
