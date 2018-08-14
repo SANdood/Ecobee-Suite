@@ -27,8 +27,9 @@
  *	1.5.01 - Converted all math to BigDecimal for better precision
  *	1.6.00 - Release number synchronization
  *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
+ *	1.6.11 - Fix for off-line sensors
  */
-def getVersionNum() { return "1.6.10" }
+def getVersionNum() { return "1.6.11" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -103,8 +104,8 @@ metadata {
         valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
         	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
             // 		The second version will show icon in device lists
-			state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true)
-            //state("default", label:'${currentValue}°', unit:"dF", backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
+			state("default", label:'${currentValue}°', /*unit:"dF",*/ backgroundColors: getTempColors(), defaultState: true)
+            //state("default", label:'${currentValue}°', /* unit:"dF",*/ backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
 		}
         
         standardTile("motion", "device.motion", width: 2, height: 2, decoration: "flat") {
@@ -240,7 +241,7 @@ void noOp() {}
 
 def generateEvent(Map results) {
 	LOG("generateEvent(): parsing data ${results}",3,null,'trace')
-	def tempScale = getTemperatureScale()
+	String tempScale = getTemperatureScale()
     def precision = device.currentValue('decimalPrecision')
     if (!precision) precision = (tempScale == 'C') ? 1 : 0
     def isConnected = (device.currentValue('currentProgramName') != 'Offline')
@@ -255,11 +256,12 @@ def generateEvent(Map results) {
            
 			String sendValue = value as String
 			if (name=='temperature')  {
-                if ((sendValue == 'unknown') || !isConnected) {
+                if ((sendValue == null /*'unknown'*/) || !isConnected) {
                 	// We are OFFLINE
                     // LOG( "Warning: Remote Sensor (${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
-                    sendEvent( name: 'temperatureDisplay', linkText: linkText, value: '451°', handlerName: "temperatureDisplay", descriptionText: 'Fahrenheit 451', /* isStateChange: true, */ displayed: false)
-					event = [name: name, linkText: linkText, descriptionText: "Sensor is Offline", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+                    sendEvent( name: 'temperatureDisplay', linkText: linkText, value: '451°', handlerName: "temperatureDisplay", descriptionText: 'Sensor ifs offline', /* isStateChange: true, */ displayed: true)
+					// don't actually chhange the temperature - leave the old value
+                    // event = [name: name, linkText: linkText, descriptionText: "Sensor is Offline", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
                 } else {
                 	// must be online  
 					// isChange = isStateChange(device, name, sendValue)
@@ -274,7 +276,7 @@ def generateEvent(Map results) {
 							tempDisplay = String.format( "%.${precision.toInteger()}f", roundIt(value, precision.toInteger())) + '°'
                     	}
                         sendEvent( name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
-						event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+						event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, value: sendValue, isStateChange: true, displayed: true]
                     }
                 }
 			} else if (name=='motion') {        
