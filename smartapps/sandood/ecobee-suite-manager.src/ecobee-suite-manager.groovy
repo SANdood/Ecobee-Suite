@@ -54,8 +54,9 @@
  *	1.6.11- Removed location.contactBook support - deprecated by SmartThings
  *	1.6.12- Cleaned up null values during climate changes
  *	1.6.13- Cleaned up setpoint/setpointDisplay stuff (added iOS/Android preference setting)
+ *	1.6.14- Fixed Sensor temp 'unknown' --> null
  */
-def getVersionNum() { return "1.6.13" }
+def getVersionNum() { return "1.6.14" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -2430,7 +2431,7 @@ def updateSensorData() {
                            		LOG("${preText}Sensor ${it.name} temperature is 'unknown'. Perhaps it is unreachable?", 1, null, 'warn')
                             }
                            	// Need to mark as offline somehow
-                           	temperature = 'unknown'   
+                           	temperature = null // 'unknown'   
                        	} else {
                        		LOG("${preText}Sensor ${it.name} returned ${cap.value}.", 1, null, "error")
                        	}
