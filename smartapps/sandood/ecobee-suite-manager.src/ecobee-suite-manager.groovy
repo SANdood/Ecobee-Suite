@@ -55,8 +55,9 @@
  *	1.6.12- Cleaned up null values during climate changes
  *	1.6.13- Cleaned up setpoint/setpointDisplay stuff (added iOS/Android preference setting)
  *	1.6.14- Fixed Sensor temp 'unknown' --> null
+ *	1.6.15- Cleaned up initialization process
  */
-def getVersionNum() { return "1.6.14" }
+def getVersionNum() { return "1.6.15" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -986,26 +987,38 @@ def initialize() {
     getTimeZone()		// these will set/refresh atomicState.timeZone
     getZipCode()		// and atomicState.zipCode (because atomicState.forcePoll is true)
     
+   
     // get sunrise/sunset for the location of the thermostats (getZipCode() prefers thermostat.location.postalCode)
     // def sunriseAndSunset = (atomicState.zipCode != null) ? getSunriseAndSunset(zipCode: atomicState.zipCode) : getSunRiseAndSunset()
-    def sunriseAndSunset = getSunriseAndSunset(zipCode: atomicState.zipCode)
-    if (!(sunriseAndSunset.sunrise instanceof Date)) {
-    	// the zip code is invalid or didn't return the data as expected
- 		LOG("sunriseAndSunset not set as expected, using default hub location")
- 		sunriseAndSunset = getSunriseAndSunset()
- 	}
-    LOG("sunriseAndSunset == ${sunriseAndSunset}")
-    if(atomicState.timeZone) {
+    def sunriseAndSunset
+    if (atomicState.zipCode) {
+    	LOG("Sunrise/set using postal code '${atomicState.zipCode}'",1,null,'info')
+    	sunriseAndSunset = getSunriseAndSunset(zipCode: atomicState.zipCode)
+    } else if (location.longitude && location.latitude) {
+    	LOG("Sunrise/set using geographic coordinates for '${location.name}'",1,null,'info')
+    	sunriseAndSunset = getSunriseAndSunset()
+    } else {
+    	LOG("*** INITIALIZATION ERROR *** PLEASE SET POSTAL CODE AND/OR LATITUDE/LONGITUDE FOR LOCATION '${location.name}'",1,null,'error')
+    }
+    def isOk = false
+    if (!sunriseAndSunset || (!(sunriseAndSunset.sunrise instanceof Date) || !(sunriseAndSunset.sunset instanceof Date))) {
+		LOG("Can't get sunrise/set times, using defaults",1,null,'warn')
+    } else {
+    	isOk = true
+        LOG("sunriseAndSunset == ${sunriseAndSunset}",1,null,'info')
+    }
+    if(isOk && atomicState.timeZone) {
+    	// using the thermostat's time zone
         atomicState.sunriseTime = sunriseAndSunset.sunrise.format("HHmm", TimeZone.getTimeZone(atomicState.timeZone)).toInteger()
         atomicState.sunsetTime = sunriseAndSunset.sunset.format("HHmm", TimeZone.getTimeZone(atomicState.timeZone)).toInteger()
-    } else if( (sunriseAndSunset !=  [:]) && (location != null) ) {
+    } else if( isOk ) {
         atomicState.sunriseTime = sunriseAndSunset.sunrise.format("HHmm").toInteger()
         atomicState.sunsetTime = sunriseAndSunset.sunset.format("HHmm").toInteger()
     } else {
-    	atomicState.sunriseTime = "0500".toInteger()
+        atomicState.sunriseTime = "0500".toInteger()
         atomicState.sunsetTime = "1800".toInteger()
     }
-	
+
 	// Must do this AFTER setting up sunrise/sunset
 	atomicState.timeOfDay = getTimeOfDay()
 	    
@@ -3055,8 +3068,9 @@ def updateThermostatData() {
         	
             // Thermostat configuration stuff that almost never changes - if any one changes, send them all
         	def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,/*heatHigh,heatLow,coolHigh,coolLow,*/heatRange,coolRange,climatesList,
-        						hasHeatPump,hasForcedAir,hasElectric,hasBoiler,auxHeatMode,hasHumidifier,humidifierMode,humidtySetpoint,hasDehumidifier,dehumidifierMode,dehumidifyOvercoolOffset,
-                                dehumiditySetpoint,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
+        						hasHeatPump,hasForcedAir,hasElectric,hasBoiler,auxHeatMode,hasHumidifier,hasDehumidifier,dehumidifyOvercoolOffset,
+                                /*humidifierMode,humidtySetpoint,*//*dehumidifierMode,dehumiditySetpoint,*/
+                                tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
  			if (forcePoll || (changeNever == [:]) || !changeNever.containsKey(tid) || (changeNever[tid] != neverList)) {  
             	data += [
 					coolMode: (coolStages > 0),
@@ -3076,14 +3090,9 @@ def updateThermostatData() {
                 	hasHeatPump: hasHeatPump,
             		hasForcedAir: hasForcedAir,
             		hasElectric: hasElectric,
-            		hasBoiler: hasBoiler,
-					auxHeatMode: auxHeatMode,
+            		hasBoiler: hasBoiler,                    
             		hasHumidifier: hasHumidifier,
-                    humiditySetpoint: humiditySetpoint,
-                    humidifierMode: humidifierMode,
-					hasDehumidifier: hasDehumidifier,
-                    dehumidifierMode: dehumidifierMode,
-                    dehumiditySetpoint: dehumiditySetpoint,
+					hasDehumidifier: hasDehumidifier,                    
                     dehumidifyOvercoolOffset: dehumidifyOvercoolOffset,
                 	heatDifferential: String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision)),
                 	coolDifferential: String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision)),
@@ -3106,8 +3115,8 @@ def updateThermostatData() {
                     }
                 }
             }
-         	def rarelyList = [fanMinOnTime,isConnected,thermostatHold,holdEndsAt,statusMsg,currentClimate,currentClimateName,currentClimateId,scheduledClimateName,
-            					scheduledClimateId,currentFanMode]
+         	def rarelyList = [fanMinOnTime,isConnected,thermostatHold,holdEndsAt,statusMsg,humiditySetpoint,humidifierMode,dehumidifierSetpoint,dehumiditySetpoint,
+            					currentClimate,currentClimateName,currentClimateId,scheduledClimateName,scheduledClimateId,currentFanMode,auxHeatMode]
 		    if (forcePoll || (changeRarely == [:]) || !changeRarely.containsKey(tid) || (changeRarely[tid] != rarelyList)) { 
             	data += [
           			thermostatHold: thermostatHold,
@@ -3125,7 +3134,12 @@ def updateThermostatData() {
 					scheduledProgramId: scheduledClimateId,
 					scheduledProgram: scheduledClimateName,
                     thermostatFanMode: currentFanMode,
-                	fanMinOnTime: fanMinOnTime,
+                	fanMinOnTime: fanMinOnTime,                                        
+					auxHeatMode: auxHeatMode,				// Moved these down here, since they really didn't belong on the neverList
+                    humiditySetpoint: humiditySetpoint,		// ditto
+                    humidifierMode: humidifierMode,			// ditto
+                    dehumidifierMode: dehumidifierMode,		// ditto
+                    dehumiditySetpoint: dehumiditySetpoint,	// ditto
           		]
             	changeRarely[tid] = rarelyList
             	atomicState.changeRarely = changeRarely
@@ -4265,6 +4279,10 @@ private def getTimeZone() {
 private String getZipCode() {
 	// default to the SmartThings location's timeZone (if there is one)
 	String myZipCode = location?.zipCode
+    if (myZipCode == null) {
+    	LOG("*** INITIALIZATION ERROR *** PLEASE SET POSTAL CODE FOR LOCATION '${location.name}'",1,null,'warn')
+        atomicState.zipCode == null
+    }
 	if ((atomicState.zipCode == null) || atomicState.forcePoll) {
         def zipCodes = []
         settings.thermostats?.each{
