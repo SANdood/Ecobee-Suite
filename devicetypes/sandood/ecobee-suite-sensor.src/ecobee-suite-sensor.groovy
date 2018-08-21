@@ -28,13 +28,15 @@
  *	1.6.00 - Release number synchronization
  *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
  *	1.6.11 - Fix for off-line sensors
+ *	1.6.12 - Added a modicom of compatibility with the (new) Samsung (Connect) app
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
-	definition (name: "Ecobee Suite Sensor", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
+	definition (name: "Ecobee Suite Sensor", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)",
+    				mnmn: "SmartThings", vid: "generic-motion") {				// for the new Samsung (Connect) app
 		capability "Sensor"
 		capability "Temperature Measurement"
 		capability "Motion Sensor"
