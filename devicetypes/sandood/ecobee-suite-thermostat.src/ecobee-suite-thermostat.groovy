@@ -59,14 +59,16 @@
  *	1.6.14 - Another Android setpoint tweak
  *	1.6.15 - Missed one
  *	1.6.16 - Fixed initialization errors & priorities
+ *	1.6.17 - Added a modicom of compatibility with the "new" Samsung (Connect)
  */
-def getVersionNum() { return "1.6.16" }
+def getVersionNum() { return "1.6.17" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
  
 metadata {
-	definition (name: "Ecobee Suite Thermostat", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)") {
+	definition (name: "Ecobee Suite Thermostat", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)", 
+    				mnmn: "SmartThings", vid: "SmartThings-smartthings-Z-Wave_Thermostat") {		// add (rough) approximations for the new Samsung (Connect) app
 		capability "Actuator"
 		capability "Thermostat"
         capability "Sensor"
