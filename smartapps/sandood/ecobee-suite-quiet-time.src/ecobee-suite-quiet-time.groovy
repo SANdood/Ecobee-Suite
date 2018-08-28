@@ -27,8 +27,9 @@
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Clear reservations on manual override
  *	1.6.13 - Removed use of *SetpointDisplay
+ *	1.6.14 - Fixed typo (thanks @jml923)
  */
-def getVersionNum() { return "1.6.13" }
+def getVersionNum() { return "1.6.14" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
 
 definition(
@@ -412,7 +413,7 @@ def quietOffHandler(evt=null) {
                 	if (settings.hvacOff || (settings.hvacMode && (settings.quietMode == 'off'))) {	
                     	// we wanted it off
                     	def i = countReservations(tid, 'modeOff') - (haveReservation(tid, 'modeOff')? 1 : 0)
-                		if (i <- 0) {
+                		if (i <= 0) {
                     		// no other reservations, we can turn it on
                             cancelReservation(tid, 'modeOff')
         					stat.setThermostatMode(statState[tid].thermostatMode)
