@@ -35,10 +35,11 @@
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Cancel modeOff reservation if we get overridden
- *	1.6.13- Removed location.contactBook support - deprecated by SmartThings
- *	1.6.14- Removed use of *SetpointDisplay
+ *	1.6.13 - Removed location.contactBook support - deprecated by SmartThings
+ *	1.6.14 - Removed use of *SetpointDisplay
+ *	1.6.15 - Fixed(?) adjust temperature to adjust only when HVACMode is !Off
  */
-def getVersionNum() { return "1.6.14" }
+def getVersionNum() { return "1.6.15" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -266,42 +267,46 @@ def statModeChange(evt) {
 def heatSPHandler( evt ) {
 	// called when the heatingSetpoint value changes, but only if we are monitoring/making setpoint changes
 	// (ie., this won't get called if we are using Quiet Time or just HVAC Off)
-	def tid = getDeviceId(evt.device.deviceNetworkId)
+    if (evt.value.isNumber()) {
+		def tid = getDeviceId(evt.device.deviceNetworkId)
     
-    // save the new value
-	def tmpThermSavedState = atomicState.thermSavedState
-    if (tmpThermSavedState[tid].heatAdj == evt.value) return 	// we generated this event (below)
-    tmpThermSavedState[tid].heatSP = evt.value
+    	// save the new value
+		def tmpThermSavedState = atomicState.thermSavedState
+    	if (tmpThermSavedState[tid].heatAdj == evt.value) return 	// we generated this event (below)
+    	tmpThermSavedState[tid].heatSP = evt.value
     
-    if (atomicState.HVACModeState == 'off') {
-        def h = (evt.value.isNumber()) evt.numberValue + settings.heatAdjust
-        tmpThermSavedState[tid].heatAdj = h
-        evt.device.setHeatingSetpoint( h, 'nextTransition')
-        // Notify???
-    } else {
-    	tmpThermSavedState[tid].heatAdj = 999.0
+    	if (!atomicState.HVACModeState.contains('off')) {			// Only adjust setpoints when the HVAC is not off
+        	def h = evt.numberValue + settings.heatAdjust
+        	tmpThermSavedState[tid].heatAdj = h
+        	evt.device.setHeatingSetpoint( h, 'nextTransition')
+        	// Notify???
+    	} else {
+    		tmpThermSavedState[tid].heatAdj = 999.0
+    	}
+    	atomicState.thermSavedState = tmpThermSavedState
     }
-    atomicState.thermSavedState = tmpThermSavedState
 }
 
 def coolSPHandler( evt ) {
-	def tid = getDeviceId(evt.device.deviceNetworkId)
-    
-    // save the new value
-	def tmpThermSavedState = atomicState.thermSavedState
-    if (tmpThermSavedState[tid].coolAdj == evt.value) return
-    tmpThermSavedState[tid].coolSP = evt.value
-    
-    if (atomicState.HVACModeState == 'off') {
-    	// adjust and change the actual heating setpoints
-        def c = (evt.value.isNumber()) evt.numberValue + settings.coolAdjust
-        tmpThermSaveState[tid].coolAdj = c
-        evt.device.setCoolingSetpoint( c, 'nextTransition')
-        // Notify?
-    } else {
-    	tmpThermSavedState = 999.0
+	if (evt.value.isNumber()) {
+        def tid = getDeviceId(evt.device.deviceNetworkId)
+
+        // save the new value
+        def tmpThermSavedState = atomicState.thermSavedState
+        if (tmpThermSavedState[tid].coolAdj == evt.value) return
+        tmpThermSavedState[tid].coolSP = evt.value
+
+        if (!atomicState.HVACModeState.contains('off')) {
+            // adjust and change the actual heating setpoints
+            def c = evt.numberValue + settings.coolAdjust
+            tmpThermSaveState[tid].coolAdj = c
+            evt.device.setCoolingSetpoint( c, 'nextTransition')
+            // Notify?
+        } else {
+            tmpThermSavedState = 999.0
+        }
+        atomicState.thermSavedState = tmpThermSavedState
     }
-    atomicState.thermSavedState = tmpThermSavedState
 }
 
 // "sensorOpened" called when state change should turn HVAC off - routine name preserved for backwards compatibility with prior implementations
@@ -414,7 +419,7 @@ def turnOffHVAC() {
             }
         } else {
         	if (tmpThermSavedState[tid].mode != 'off') {
-                tstatNames << [therm.device.displayName]		// only report the ones that aren't off
+                tstatNames << therm.device.displayName		// only report the ones that aren't off
         		LOG("Saved ${therm.device.displayName}'s current mode (${tmpThermSavedState[tid].mode})",2,null,'info')
             }
         }
@@ -431,7 +436,7 @@ def turnOffHVAC() {
             		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorNames << it.device.displayName
             	}
         		if (delay != 0) {
-    				sendMessage("${sensorNames.toString()[1..-2]} left ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames.toString()[1..-2]}.")
+    				sendMessage("${sensorNames.toString()[1..-2]} ${(sensorNames.size()>1)?'has':'have'} been ${contactOpen?'open':'closed'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames.toString()[1..-2]}.")
             	} else {
             		sendMessage("${sensorNames.toString()[1..-2]} ${contactOpen?'opened':'closed'}, ${doHVAC?'running HVAC Off actions for':'you should turn off'} ${tstatNames.toString()[1..-2]}.")
             	}
@@ -443,7 +448,7 @@ def turnOffHVAC() {
             		if (it.currentSwitch == (switchOn?'on':'off')) switchNames << it.device.displayName
             	}
         		if (delay != 0) {
-    				sendMessage("${switchNames.toString()[1..-2]} left ${switchOn?'on':'off'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames.toString()[1..-2]}.")
+    				sendMessage("${switchNames.toString()[1..-2]} ${(sensorNames.size()>1)?'has':'have'} been ${switchOn?'on':'off'} for ${settings.offDelay} minutes, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames.toString()[1..-2]}.")
             	} else {
             		sendMessage("${switchNames.toString()[1..-2]} turned ${switchOn?'on':'off'}, ${doHVAC?'running HVAC Off actions for':'you should turn on'} ${tstatNames.toString()[1..-2]}.")
             	}
@@ -500,7 +505,7 @@ def turnOnHVAC() {
                         	// Not off, or nobody else but me has a reservation
                             cancelReservation(tid, 'modeOff')
                         	therm.setThermostatMode( newMode )                            
-                			tstatNames << [therm.device.displayName]		// only report the ones that aren't off already
+                			tstatNames << therm.device.displayName		// only report the ones that aren't off already
                 			LOG("${therm.device.displayName} ${newMode.capitalize()} Mode restored (was ${oldMode.capitalize()})",2,null,'info')
                         } 
                     } else {
@@ -540,10 +545,10 @@ def turnOnHVAC() {
         def delay = (settings.onDelay?:5).toInteger()
     	if (contactSensors) {
         	if (delay != 0) {
-    			sendMessage("All Doors and Windows ${contactOpen?'closed':'opened'} for ${settings.onDelay} minutes, " +
+    			sendMessage("All contact sensors have been ${contactOpen?'closed':'opened'} for ${settings.onDelay} minutes, " +
                 					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn on'} ${tstatNames.toString()[1..-2]}.")
             } else {
-            	sendMessage("All Doors and Windows are ${contactOpen?'closed':'open'}, " +
+            	sendMessage("All contact sensors are ${contactOpen?'closed':'open'}, " +
                 					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):'you could turn On'} ${tstatNames.toString()[1..-2]}.")
             }
             notified = true		// only send 1 notification
