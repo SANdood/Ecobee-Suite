@@ -26,8 +26,9 @@
  *	1.6.01- Fixed sendMessage()
  *	1.6.10- Resync for parent-based reservations
  *	1.6.11- Removed location.contactBook support - deprecated by SmartThings
+ *	1.6.12- Fixed location Mode changing action
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Mode/Routine/Program Helper, version ${getVersionNum()}" }
 
 definition(
@@ -95,7 +96,7 @@ def mainPage() {
                     section(title: "Programs") {
                     	def n = myThermostats?.size()
                     	if (n > 1) paragraph("NOTE: It is recommended (but not required) to select only one thermostat when using Ecobee Programs to control SmartThings Modes or Routines")
-                    	input(name: "ctrlProgram", title: "When Ecobee${n>1?'s':''} switch to Program: ", type: "enum", description: "Tap to choose Programs...", options: programs, required: true, multiple: true)
+                    	input(name: "ctrlProgram", title: "When Ecobee${n>1?'s':''} change${n>1?'':'s'} to Program: ", type: "enum", description: "Tap to choose Programs...", options: programs, required: true, multiple: true)
                     }
                 }
 
@@ -193,7 +194,7 @@ def initialize() {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
-	
+
 	if (settings.modeOrRoutine == "Routine") {
     	subscribe(location, "routineExecuted", changeProgramHandler)
     } else if (settings.modeOrRoutine == "Mode") {
@@ -201,7 +202,7 @@ def initialize() {
     } else { // has to be "Ecobee Program"
     	subscribe(myThermostats, "currentProgram", changeSTHandler)
     }
-   
+    
 //    if(useSunriseSunset?.size() > 0) {
 //		// Setup subscriptions for sunrise and/or sunset as well
 //        if( useSunriseSunset.contains("Sunrise") ) subscribe(location, "sunrise", changeProgramHandler)
@@ -315,10 +316,18 @@ def changeSTHandler(evt) {
 }
 
 def changeMode() {
-//	if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
-		if (state.ecobeeThatChanged) sendMessage("Changing Mode to ${settings.runMode} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}")
-    	location.mode(settings.runMode)
-//    }
+	if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
+        if (state.ecobeeThatChanged) {
+        	if (location.modes?.find {it.name == settings.runMode}) {
+                sendMessage("Changing Mode to ${settings.runMode} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}")
+    			location.setMode(settings.runMode)
+            } else {
+            	sendMessage("${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}, but requested Mode change (${settings.runMode}) is no longer supported by this location")
+            }
+        }
+    } else {
+    	sendMessage("${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}, and your location is already in the requested ${settings.runMode} mode")
+    }
     state.ecobeeThatChanged = null
 }
 
