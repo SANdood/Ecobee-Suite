@@ -16,7 +16,7 @@
 		"thermostat", 
 		"hvac"
 	],
-	"notes": 	"NOTE: This release can be installed directly on top of an existing 1.4.* release",
+	"notes": 	"NOTE: This release can be installed directly on top of an existing 1.4.* or later release",
 	"smartApps": {
 		"parent": {
 			"name": 	"Ecobee Suite Manager",
