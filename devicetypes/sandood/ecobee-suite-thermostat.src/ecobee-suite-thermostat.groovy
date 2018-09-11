@@ -60,8 +60,9 @@
  *	1.6.15 - Missed one
  *	1.6.16 - Fixed initialization errors & priorities
  *	1.6.17 - Added a modicom of compatibility with the "new" Samsung (Connect)
+ *	1.6.18 - Fixed coolingSetpoint error
  */
-def getVersionNum() { return "1.6.17" }
+def getVersionNum() { return "1.6.18" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -878,7 +879,7 @@ def generateEvent(Map results) {
                         String coolAt = roundIt((value.toBigDecimal() + coolDiff.toBigDecimal()), precision.toInteger()).toString()
                         sendEvent(name: 'coolAtSetpoint', value: coolAt, unit: tu, /* isStateChange: true, */ displayed: false)
                         objectsUpdated++
-                        String tileValue = (!device.currentValue('thermostatOperatingState').startsWith('co')) ? (isIOS?coolAt:sendValue) : sendValue
+                        String tileValue = (!device.currentValue('thermostatOperatingState')?.startsWith('co')) ? (isIOS?coolAt:sendValue) : sendValue
                         sendEvent(name: 'coolingSetpointTile', value: tileValue, unit: tu, displayed: false)
                         objectsUpdated++
                         event = eventFront + [value: sendValue, unit: tu, descriptionText: "Cooling setpoint is ${sendValue}°${tu}", displayed: true]
