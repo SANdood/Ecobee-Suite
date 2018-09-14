@@ -56,8 +56,9 @@
  *	1.6.13- Cleaned up setpoint/setpointDisplay stuff (added iOS/Android preference setting)
  *	1.6.14- Fixed Sensor temp 'unknown' --> null
  *	1.6.15- Cleaned up initialization process
+ *	1.6.16- Fixed case of Home/Away when Auto Home/Away
  */
-def getVersionNum() { return "1.6.15" }
+def getVersionNum() { return "1.6.16" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -2840,11 +2841,11 @@ def updateThermostatData() {
                     break;
                 case 'autoAway':
              		currentClimateName = 'Auto Away'
-                    currentClimate = 'away'
+                    currentClimate = 'Away'
                 	break;
                 case 'autoHome':
                		currentClimateName = 'Auto Home'
-                    currentClimate = 'home'
+                    currentClimate = 'Home'
                     break;
             	default:                
                		currentClimateName = runningEvent.type
