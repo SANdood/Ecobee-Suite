@@ -38,8 +38,9 @@
  *	1.6.13 - Removed location.contactBook support - deprecated by SmartThings
  *	1.6.14 - Removed use of *SetpointDisplay
  *	1.6.15 - Fixed(?) adjust temperature to adjust only when HVACMode is !Off
+ *	1.6.16 - Fixed initialization logic WRT HVAC on/off state
  */
-def getVersionNum() { return "1.6.15" }
+def getVersionNum() { return "1.6.16" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -192,6 +193,7 @@ def initialize() {
             contactOffState = contactSensors.currentContact.contains('closed')
         }
     }
+    LOG("contactOffState = ${contactOffState}",2,null,'trace')
     
     boolean switchOffState = false
     if (theSwitches) {
@@ -205,9 +207,11 @@ def initialize() {
             switchOffState = theSwitches.currentSwitch.contains('off')
         }
     }
-       
-    def tempState = atomicState.HVACModeState
-    if (tempState == null) tempState = (contactOffState || switchOffState)?'off':'on'		// recalculate if we should be off or on
+    LOG("switchOffState = ${switchOffState}",2,null,'trace')
+    
+    //def tempState = atomicState.HVACModeState
+    //if (tempState == null) tempState = (contactOffState || switchOffState)?'off':'on'		// recalculate if we should be off or on
+    def tempState = (contactOffState || switchOffState)?'off':'on'		// recalculate if we should be off or on
     if (tempState == 'on') {
     	// Initialize the saved state values
     	if (!settings.quietTime) {
@@ -234,7 +238,7 @@ def initialize() {
         if (atomicState.HVACModeState != 'on') turnOnHVAC()
     } else {
     	LOG("Initialized while should be 'Off' - can't update states",2,null,'warn')
-        turnOffHVAC()
+        if (atomicState.HVACModeState != 'off') turnOffHVAC()
     }
     
     // TODO: Subscribe to the thermostat states to be notified when the HVAC is turned on or off outside of the SmartApp?
