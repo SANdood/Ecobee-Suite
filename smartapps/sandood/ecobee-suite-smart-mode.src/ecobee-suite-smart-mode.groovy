@@ -37,8 +37,9 @@
  *	1.6.12 - Logic tuning, clear reservations when externally overridden
  *	1.6.13 - Removed location.contactBook - unexpectedly deprecated by SmartThings
  *	1.6.14 - Updated to remove use of *SetpointDisplay
+ *  1.6.15 - Fixed external temp range limiter; should now work with either F/C temperature scales
  */
-def getVersionNum() { return "1.6.14" }
+def getVersionNum() { return "1.6.15" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -750,18 +751,25 @@ def getThermostatModes() {
     return theModes.sort(false)
 }
 
-// return the largest range that ALL thermostats will allow
+// return the external temperature range
 def getThermostatRange() {
-	def low = 0.0
-	def high = 99.0
-	settings.thermostats.each {
-		def latest = it.currentState('heatingSetpointMin')
-        def l = (latest.value.isNumber()) ? latest.numberValue : low
-        latest = it.currentState('coolingSetpointMax')
-		def h = (latest.value.isNumber()) ? latest.numberValue : high
-		if (l > low) low = l
-		if (h < high) high = h
-	}
+	def low
+    def high
+	if (getTemperatureScale() == "C") {
+    	low = -20.0
+        high = 40.0
+    } else {
+    	low = -5.0
+		high = 105.0
+    }
+//	settings.thermostats.each {
+//		def latest = it.currentState('heatingSetpointMin')
+//      def l = (latest.value.isNumber()) ? latest.numberValue : low
+//      latest = it.currentState('coolingSetpointMax')
+//		def h = (latest.value.isNumber()) ? latest.numberValue : high
+//		if (l > low) low = l
+//		if (h < high) high = h
+//	}
 	return "${low}..${high}"
 }
 
