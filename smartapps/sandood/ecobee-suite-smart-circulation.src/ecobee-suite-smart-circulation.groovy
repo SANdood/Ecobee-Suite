@@ -31,8 +31,9 @@
  *	1.6.10 - Converted to parent-based reservations
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Minor optimizations
+ *	1.6.13 - Added humidity restrictor
  */
-def getVersionNum() { return "1.6.12" }
+def getVersionNum() { return "1.6.13" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -105,10 +106,18 @@ def mainPage() {
        
 			section(title: "Enable only for specific modes or programs?") {
         		paragraph("Circulation time (min/hr) is only adjusted while in these modes *OR* programs. The time will remain at the last setting while in other modes. If you want different circulation times for other modes or programs, create multiple Smart Circulation handlers.")
-            	input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
-                input(name:"statModes",type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, options: getThermostatModesList())
+            	input(name: "theModes", type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
+                input(name: "statModes", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, options: getThermostatModesList())
             	input(name: "thePrograms", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Program is", multiple: true, required: false, options: getProgramsList())
         	}
+            
+            section(title: "Enable only when relative humidity is high?") {
+            	paragraph("Circulation time (min/hr) is adjusted only when the relative humidity is higher than a specified value")
+                input(name: "theHumidistat", type: "capability.relativeHumidityMeasurement", title: "Use this humidity sensor (blank to disable)", multiple: false, required: false, submitOnChange: true)
+                if (settings.theHumidistat) {
+                	input( name: "highHumidity", type: "number", title: "Adjust circulation only when ${settings.theHumidistat.displayName}'s Relative Humidity is higher than:", range: "0..100", required: true)
+                }
+            }
             
             section(title: "'Quiet Time' Integration") {
             	paragraph("You can configure this Helper to integrate with one or more instances of the Ecobee Suite Quiet Time Helper: This helper will stop updating circulation when one or more Quiet Time switch(es) are enabled.")
@@ -227,10 +236,21 @@ def initialize() {
     	isOK = (theModes && theModes.contains(location.mode)) ? true : 
         			((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : 
                     	((statModes && statModes.contains(theThermostat.currentValue('thermostatMode'))) ? true : false))
+        if (!isOK) LOG("Not in specified Mode or Program, not adjusting", 3, null, "info")
     }
     
-    if (isOK) {
-    	isOK = settings.quietSwitches ? (atomicState.quietNow == false) : true
+    // Check the humidity?
+    if (isOK && settings.theHumidistat) {
+    	if (settings.theHumidistat.currentHumidity.toInteger() <= settings.highHumidity) {
+        	isOK == false
+            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
+        }
+    }
+    
+    // Quiet Time?
+    if (isOK ){
+    	isOK = settings.quietSwitches ? (atomicState.quietNow != true) : true
+        if (!isOK) LOG("Quiet time active, not adjusting", 3, null, "info")
     }
     atomicState.isOK = isOK
     
@@ -327,9 +347,21 @@ def modeOrProgramHandler(evt=null) {
     	isOK = (theModes && theModes.contains(location.mode)) ? true : 
         			((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : 
                     	((statModes && statModes.contains(theThermostat.currentValue('thermostatMode'))) ? true : false))
+        if (!isOK) LOG("Not in specified Mode or Program, not adjusting", 3, null, "info")
     }
+    
+    // Check the humidity?
+    if (isOK && settings.theHumidistat) {
+    	if (settings.theHumidistat.currentHumidity.toInteger() <= settings.highHumidity) {
+        	isOK == false
+            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
+        }
+    }
+    
+    // Quiet Time?
     if (isOK ){
     	isOK = settings.quietSwitches ? (atomicState.quietNow != true) : true
+        if (!isOK) LOG("Quiet time active, not adjusting", 3, null, "info")
     }
     atomicState.isOK = isOK
     
@@ -345,13 +377,12 @@ def deltaHandler(evt=null) {
     	LOG("temporarily disabled as per request.", 2, null, "warn")
     	return true
     }
+
+    // Make sure it is OK for us to e changing circulation times
+	if (!atomicState.isOK) return
     
     String currentProgram = theThermostat.currentValue('currentProgram')
     boolean vacationHold = (currentProgram && (currentProgram == 'Vacation'))
-    
-    // Make sure it is OK for us to e changing circulation times
-	def isOK = atomicState.isOK
-    if (!isOK) return
 	if (vacationHold && !settings.vacationOverride) {
     	LOG("${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
         return
