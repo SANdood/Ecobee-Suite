@@ -38,8 +38,9 @@
  *	1.6.13 - Removed location.contactBook - unexpectedly deprecated by SmartThings
  *	1.6.14 - Updated to remove use of *SetpointDisplay
  *  1.6.15 - Fixed external temp range limiter; should now work with either F/C temperature scales
+ *	1.6.16 - Fixed initialization error when using SmartThings Sensors
  */
-def getVersionNum() { return "1.6.15" }
+def getVersionNum() { return "1.6.16" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -254,11 +255,13 @@ def initialize() {
 			break;
 		
 		case 'sensors':
-            if (settings.dewBelowOverride) {
-            	if (settings.humidistat) subscribe( settings.humidistat, 'relativeHumidity', humidityChangeHandler)
-            } else {
-            	log.error "Dewpoint override enabled, but no humidistat selected - initialization FAILED."
-                return false
+            if (settings.dewBelowOverride || settings.dewAboveTemp?.isNumber()) {
+            	if (settings.humidistat) { 
+                	subscribe( settings.humidistat, 'relativeHumidity', humidityChangeHandler)
+            	} else {
+            		log.error "Dewpoint override(s) enabled, but no humidistat selected - initialization FAILED."
+                	return false
+                }
             }
             subscribe( settings.thermometer, 'temperature', tempChangeHandler)
             def latest = settings.thermometer.currentState("temperature")
