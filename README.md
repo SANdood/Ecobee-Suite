@@ -225,7 +225,7 @@ If this is your first time installing this new Ecobee Suite (versions 1.3.* and 
 Once the Ecobee Suite repository is connected to your IDE, use the GitHub integration to install the current version into your workspace. In the IDE:
 
 8. Click **`Update from Repo`** and select the **`Ecobee-Suite`** repository we just added
-9. Find and Select **`ecobee-sensor.groovy`** and **`ecobee-thermostat.groovy`**
+9. Find and Select **`ecobee-suite-sensor.groovy`** and **`ecobee-suite-thermostat.groovy`**
 10. Select **`Publish`**(bottom right of screen near the **`Cancel`** button)
 11. Click **`Execute Update`**
 	- Note the response at the top of the **`My Devices Handlers`** page. It should be something like "**`Updated 0 devices and created 2 new devices, 2 published`**"
@@ -238,7 +238,7 @@ Once you have both of the Ecobee Suite Device Handlers added and published in yo
 
 12. Click on the **`My SmartApps`** tab
 13. Click **`Update from Repo`** and select the **`**Ecobee-Suite**`** repository we added earlier
-14. Select the checkboxes next to **`ecobee-suite-manager.groovy`**, **`ecobee-suite-routines.groovy`**, **`ecobee-suite-open-contacts.groovy`**, **`ecobee-suite-smart-circulation.groovy`**, **`ecobee-suite-quiet-time.groovy`**, **`ecobee-suite-smart-mode.groovy`**, **`ecobee-suite-smart-room.groovy`**, **`ecobee-suite-smart-switches.groovy`**, **`ecobee-suite-smart-vents.groovy`**, and **`ecobee-suite-smart-zones.groovy`** (all 9 SmartApps listed)
+14. Select the checkboxes next to **`ecobee-suite-manager.groovy`**, **`ecobee-suite-routines.groovy`**, **`ecobee-suite-open-contacts.groovy`**, **`ecobee-suite-smart-circulation.groovy`**, **`ecobee-suite-quiet-time.groovy`**, **`ecobee-suite-smart-mode.groovy`**, **`ecobee-suite-smart-room.groovy`**, **`ecobee-suite-smart-switches.groovy`**, **`ecobee-suite-smart-vents.groovy`**, and **`ecobee-suite-smart-zones.groovy`** (all 10 SmartApps listed)
 15. Select **`Publish`**(bottom right of screen near the `Cancel` button)
 16. Click **`Execute Update`**
 	- Again, note the response at the top of the My SmartApps page. It should be something like "**`Updated 0 and created 10 SmartApps, 10 published`**"
@@ -255,14 +255,14 @@ Finally, we must enable oAuth for the connector SmartApp as follows:
 20. Click **`Update`** (bottom left of screen)
 21. Verify that **`Updated SmartApp`** appears at the top of the screen
 
-That's it - you are now all set to skip down to [install the Ecobee Suite from your mobile device](#mobile).
+That's it - you are now all set to skip down to [install the Ecobee Suite from your mobile device](#install-mobile).
 
 **REMINDER:** The entire Ecobee Suite is installed using the Ecobee Suite Manager SmartApp. You should not attempt to install the individual devices or SmartApps directly - this will undoubtedly result in a failed installation, and you may require assistance from SmartThings support to recover if you don't follow these instructions.
 
 Once completed, you can delete the OLD SmartApps if you prefer. To do so, you can select the Edit Properties icon next to each of the old SmartApps (the ones NOT in the "sandood" namespace) and select Delete.
 
 ## <a name="manual-install">Installing Manually from Code</a>
-For this method it is recommended that you have one browser window open on GitHub and another on the IDE. If you have used the GitHub installation method above, you can skip this section and [proceed to completing the installation on your mobile device](#install-smartapp-phone).
+For this method it is recommended that you have one browser window open on GitHub and another on the IDE. If you have used the GitHub installation method above, you can skip this section and [proceed to completing the installation on your mobile device](#install-mobile).
 
 ### <a name="manual-devices">Installing Ecobee Suite Device Handlers Manually</a>
 Follow these steps to install the **`Ecobee Sensor`** Device Handler:
@@ -379,7 +379,7 @@ Follow these steps for the SmartApp on your mobile device:
 10. Click **`Done`** (or **`Next`** depending on your device OS)
 11. Click **`Done`** (or **`Next`** depending on your device OS) again to save the credentials and exit out of Ecobee Suite Manager 
 You should receive a small green popup at the top stating "**`Ecobee Suite Manager is now installed and automating`**"
-12. In the SmartThings mobile app, go to the **`My Home`** screen and select the **`SmartApps`** tab
+12. In the SmartThings mobile app, go to the **`Automation`** screen and select the **`SmartApps`** tab
 13. Select the the **`Ecobee Suite Manager`** SmartApp that you just installed
 14. Select the Ecobee Thermostat devices you want to connect from your account
 15. Select the Ecobee Sensors you want to connect (if any)
@@ -393,7 +393,7 @@ Using the default settings is fine, but some of the more advanced features will 
 - **Hold Type:** If not specified, this will default to the setting on the thermostat itself. Some of the helper SmartApps allow you to customize this for specific operations.
 - **Polling Interval:** 1 minute if you are using Helper SmartApps to react to thermostat conditions (like changing to heating/cooling, or running a specific Program/Climate); otherwise 2-5 minutes might be sufficient.
 - **Decimal Precision:** One of the reasons I created this in the first place is to get more precision out of the thermostat. If you set this to 1 decimal position, you'll understand better how the thermostat is reacting to your environment, and when "72°" is really "72.4°".
-- **Debug Level:** Although the default is 3, I tend to run with this set to 2 because I've optimized this level to provide the most basic of operational status in the Live Logging monitor.
+- **Debug Level:** I tend to run with this set to 2 because I've optimized this level to provide the most basic of operational status in the Live Logging monitor.
 - 
 
 > **NOTE 1**: It may take a few minutes for the new devices to show up in the list and for them to populate their displays. You should try refreshing the list if they are not there (pull down on the list). In extreme cases, you may have to restart the SmartThings app on your mobile device to update the list. You should only have to do this once.<br/>
