@@ -39,8 +39,9 @@
  *	1.6.14 - Updated to remove use of *SetpointDisplay
  *  1.6.15 - Fixed external temp range limiter; should now work with either F/C temperature scales
  *	1.6.16 - Fixed initialization error when using SmartThings Sensors
+ *	1.6.17 - Added more logging for PWS, calculate dewpoint if not provided by WU
  */
-def getVersionNum() { return "1.6.16" }
+def getVersionNum() { return "1.6.17" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -688,6 +689,7 @@ private def getWUTemp(type) {
     def dewpointNow
     def source = (type == 'zip') ? settings.zipCode : ((type == 'gps')?"${location.latitude},${location.longitude}":settings.stationID)
 	Map wdata = getWeatherFeature('conditions', source)
+    LOG("Requesting WU data for source: ${source}",3,null,'info')
     if (wdata && wdata.response) {
     	//LOG("conditions: ${wdata.response}",4,null,'trace')
 		if (wdata.response.containsKey('error')) {
@@ -706,6 +708,7 @@ private def getWUTemp(type) {
     	return null
     }
     if (wdata.current_observation) { 
+    	LOG("Parsing WU data for station: ${wdata.current_observation.station_id}",3,null,'info')
     	if (!isMetric) {
 			if (wdata.current_observation.temp_f?.isNumber()) tempNow = wdata.current_observation.temp_f.toBigDecimal()
             if (wdata.current_observation.dewpoint_f?.isNumber()) dewpointNow = wdata.current_observation.dewpoint_f.toBigDecimal()
@@ -714,8 +717,17 @@ private def getWUTemp(type) {
             if (wdata.current_observation.dewpoint_c?.isNumber()) dewpointNow = wdata.current_observation.dewpoint_c.toBigDecimal()
         }
         if (tempNow?.isNumber()) {
-        	LOG("Dewpoint is: ${dewpointNow}°",2,null,'info')
-        	atomicState.dewpoint = dewpointNow
+        	if (dewpointNow != -999.0) {
+        		atomicState.dewpoint = dewpointNow
+            } else {
+            	def hum = wdata.current_observation.relative_humidity
+                if (hum && hum.contains('%')) hum = (hum-'%').toInteger()		// strip off the trailing '%' sign
+                if (hum.isNumber()) {
+                	dewpointNow = calculateDewpoint( tempNow, hum, (isMetric?'C':'F'))
+                }
+                atomicState.dewpoint = dewpointNow
+            }
+            LOG("Dewpoint is: ${dewpointNow}°",2,null,'info')
         	temperatureUpdate(tempNow)
             return tempNow
         } else {
