@@ -29,8 +29,9 @@
  *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
  *	1.6.11 - Fix for off-line sensors
  *	1.6.12 - Added a modicom of compatibility with the (new) Samsung (Connect) app
+ *	1.6.13 - Fixed sensor off-line reporting
  */
-def getVersionNum() { return "1.6.12" }
+def getVersionNum() { return "1.6.13" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -258,9 +259,9 @@ def generateEvent(Map results) {
            
 			String sendValue = value as String
 			if (name=='temperature')  {
-                if ((sendValue == null /*'unknown'*/) || !isConnected) {
+                if ((sendValue == null) || (sendValue == 'unknown') || !isConnected) {
                 	// We are OFFLINE
-                    // LOG( "Warning: Remote Sensor (${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
+                    LOG( "Warning: Remote Sensor (${device.displayName}:${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
                     sendEvent( name: 'temperatureDisplay', linkText: linkText, value: '451°', handlerName: "temperatureDisplay", descriptionText: 'Sensor ifs offline', /* isStateChange: true, */ displayed: true)
 					// don't actually chhange the temperature - leave the old value
                     // event = [name: name, linkText: linkText, descriptionText: "Sensor is Offline", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
@@ -284,7 +285,7 @@ def generateEvent(Map results) {
 			} else if (name=='motion') {        
             	if ( (sendValue == 'unknown') || !isConnected) {
                 	// We are OFFLINE
-                    LOG( "Warning: This Sensor is OFFLINE.", 2, null, 'warn')
+                    LOG( "Warning: Remote Sensor (${device.displayName}:${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
                     sendValue = 'unknown'
                 }
                 
