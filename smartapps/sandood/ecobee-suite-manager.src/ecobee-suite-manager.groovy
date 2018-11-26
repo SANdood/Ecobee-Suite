@@ -57,8 +57,9 @@
  *	1.6.14- Fixed Sensor temp 'unknown' --> null
  *	1.6.15- Cleaned up initialization process
  *	1.6.16- Fixed case of Home/Away when Auto Home/Away
+ *	1.6.17- Fixed sensor off-line error handling
  */
-def getVersionNum() { return "1.6.16" }
+def getVersionNum() { return "1.6.17" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -1071,16 +1072,7 @@ def initialize() {
     subscribe(location, "sunset", sunsetEvent)
     subscribe(location, "sunrise", sunriseEvent)
     subscribe(location, "position", scheduleWatchdog)
-    
-//    if ( settings.useWatchdogDevices == true ) {
-//    	if ( settings.watchdogBattery?.size() > 0) { subscribe(settings.watchdogBattery, "battery", userDefinedEvent) }
-//        if ( settings.watchdogHumidity?.size() > 0) { subscribe(settings.watchdogHumidity, "humidity", userDefinedEvent) }
-//        if ( settings.watchdogLuminance?.size() > 0) { subscribe(settings.watchdogLuminance, "illuminance", userDefinedEvent) }
-//        if ( settings.watchdogMotion?.size() > 0) { subscribe(settings.watchdogMotion, "motion", userDefinedEvent) }
-//        if ( settings.watchdogSwitch?.size() > 0) { subscribe(settings.watchdogSwitch, "switch", userDefinedEvent) }
-//        if ( settings.watchdogTemp?.size() > 0) { subscribe(settings.watchdogTemp, "temperature", userDefinedEvent) }    
-//    }    
-    
+       
     // Schedule the various handlers
     LOG("Spawning scheduled events from initialize()", 5, null, "trace")
     if (settings.thermostats?.size() > 0) { 
@@ -2445,7 +2437,7 @@ def updateSensorData() {
                            		LOG("${preText}Sensor ${it.name} temperature is 'unknown'. Perhaps it is unreachable?", 1, null, 'warn')
                             }
                            	// Need to mark as offline somehow
-                           	temperature = null // 'unknown'   
+                           	temperature = 'unknown'   
                        	} else {
                        		LOG("${preText}Sensor ${it.name} returned ${cap.value}.", 1, null, "error")
                        	}
@@ -4134,6 +4126,11 @@ private def sendActivityFeeds(notificationMessage) {
 // Helper Functions
 // Creating my own as it seems that the built-in version only works for a device, NOT a SmartApp
 def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
+
+	if (scaledSensorValue == null) {
+    	LOG("Illegal sensorValue (null)", 2, null, "error")
+        return null
+    }
 	if ( (cmdScale != "C") && (cmdScale != "F") && (cmdScale != "dC") && (cmdScale != "dF") ) {
     	// We do not have a valid Scale input, throw a debug error into the logs and just return the passed in value
         LOG("Invalid temp scale used: ${cmdScale}", 2, null, "error")
@@ -4173,12 +4170,12 @@ def wantMetric() {
 
 private cToF(temp) {
 	if (debugLevel(5)) LOG("cToF entered with ${temp}", 5, null, "info")
-	return (temp * 1.8 + 32) // as Double
+	if (temp) { return (temp * 1.8 + 32) } else { return null } 
     // return celsiusToFahrenheit(temp)
 }
 private fToC(temp) {	
 	if (debugLevel(5)) LOG("fToC entered with ${temp}", 5, null, "info")
-	return (temp - 32) / 1.8 // as Double
+	if (temp) { return (temp - 32) / 1.8 } else { return null } 
     // return fahrenheitToCelsius(temp)
 }
 
