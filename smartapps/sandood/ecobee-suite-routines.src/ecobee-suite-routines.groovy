@@ -27,8 +27,9 @@
  *	1.6.10- Resync for parent-based reservations
  *	1.6.11- Removed location.contactBook support - deprecated by SmartThings
  *	1.6.12- Fixed location Mode changing action
+ *	1.6.13- Use 'fanAuto' if fanMinutes is explicitly set to 0
  */
-def getVersionNum() { return "1.6.12" }
+def getVersionNum() { return "1.6.13" }
 private def getVersionLabel() { return "Ecobee Suite Mode/Routine/Program Helper, version ${getVersionNum()}" }
 
 definition(
@@ -101,18 +102,24 @@ def mainPage() {
                 }
 
 				section(title: "Actions") {
-                	if (settings.modeOrRoutine != "Ecobee Program") {
+                	if (settings?.modeOrRoutine != "Ecobee Program") {
                 		def programs = getEcobeePrograms()
                    		programs += ["Resume Program"]
                 		LOG("Found the following programs: ${programs}", 4)
                     
                     	input(name: "cancelVacation", title: "Cancel Vacation hold if active?", type: "bool", required: true, defaultValue: false)
-	               		input(name: "whichProgram", title: "Switch to this Ecobee Program:", type: "enum", required: true, multiple:false, description: "Tap to choose...", options: programs, 
-                        		submitOnChange: true)
-    	       	    	if (settings.whichProgram != 'Resume Program') input(name: "fanMode", title: "Select a Fan Mode (optional)", type: "enum", required: false, multiple: false, 
-                        														description: "Tap to choose...", options: getThermostatFanModes(), submitOnChange: true)
+	               		input(name: "whichProgram", title: "Switch to this Ecobee Program:", type: "enum", required: true, multiple:false, description: "Tap to choose...", 
+                        		options: programs, submitOnChange: true)
+    	       	    	if (settings?.whichProgram != 'Resume Program') {
+                        	if ((settings?.fanMinutes == null) || (settings.fanMinutes.isNumber() && (settings.fanMinutes != 0))) {
+                        		input(name: "fanMode", title: "Select a Fan Mode (optional)", type: "enum", required: false, multiple: false, description: "Tap to choose...", 
+                            			options: getThermostatFanModes(), submitOnChange: true, /* defaultValue: (settings?.fanMinutes == null)?:((settings?.fanMinutes == 0)?'Auto':'Circulate') */)
+                        	} else if (settings?.fanMinutes?.isNumber() && (settings.fanMinutes == 0)) {
+                            	paragraph("Note than the Fan Mode will be set to 'Auto' because you specified 0 Fan Minimum Minutes")
+                            }
+                        }
                         if (settings.fanMode == 'Auto') {
-                        	paragraph('Note that the fan circulation time will also be set to 0')
+                        	paragraph("Note that the fan circulation time will also be set to 0 because you selected Fan Mode 'Auto'")
                         } else if (settings.fanMode == 'Off') {
                         	// this can never happen, because 'off' is not a value fanMod
                         	input(name: 'statOff', title: 'Do you want to turn off the HVAC entirely?', type: 'bool', defaultValue: false)
@@ -120,6 +127,8 @@ def mainPage() {
                         	input(name: "fanMinutes", title: "Specify Fan Minimum Minutes per Hour (optional)", type: "number", 
                             		required: false, multiple: false, description: "Tap to choose...", range:"0..55", submitOnChange: true, 
                                     defaultValue: (settings.fanMode==null?settings.fanMinutes:20))
+                                    // defaultValue: (settings.fanMode==null?(settings.fanMinutes!=null?settings.fanMinutes:0):20))
+                            
                         }
         	       		if (settings.whichProgram != "Resume Program") {
                         	input(name: "holdType", title: "Select the Hold Type (optional)", type: "enum", required: false, 
@@ -256,13 +265,14 @@ private def normalizeSettings() {
                 state.fanMinutes = 20
             } else if (settings.fanMinutes.isNumber()) {
                 state.fanMinutes = settings.fanMinutes.toInteger()
-            }
+            } 
+            if (state.fanMinutes == 0) state.fanCommand = 'fanAuto'	// override Circulate with 0 minutes of minFanOnTime
             break;
         default : 
         	state.fanCommand = null		// default
             if ((settings.fanMinutes != null) && settings.fanMinutes.isNumber()) {
     			state.fanMinutes = settings.fanMinutes.toInteger()
-                if (settings.fanMode == null) state.fanCommand = 'fanCirculate'	// for backwards compatibility
+                if (settings.fanMode == null) state.fanCommand = (state.fanMinutes == 0) ? 'fanAuto' : 'fanCirculate'	// for backwards compatibility
    			}
    }
     
