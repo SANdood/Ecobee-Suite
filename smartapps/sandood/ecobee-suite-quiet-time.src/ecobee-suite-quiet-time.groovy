@@ -28,8 +28,9 @@
  *	1.6.12 - Clear reservations on manual override
  *	1.6.13 - Removed use of *SetpointDisplay
  *	1.6.14 - Fixed typo (thanks @jml923)
+ *	1.6.15 - Added scheduled Auto Off for Quiet Time
  */
-def getVersionNum() { return "1.6.14" }
+def getVersionNum() { return "1.6.15" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
 
 definition(
@@ -69,7 +70,10 @@ def mainPage() {
         	paragraph("Quiet Time is enabled by turning on (or off) a physical or virtual switch.")
             input(name: 'qtSwitch', type: 'capability.switch', required: true, title: 'Which switch controls Quiet Time?', multiple: false, submitOnChange: true)
             if (settings.qtSwitch) {
-                input(name: "qtOn", type: "enum", title: "Effect Quiet Time Actions when ${settings.qtSwitch.displayName} is turned:", defaultValue: 'on', required: true, multiple: false, options: ["on","off"])
+                input(name: "qtOn", type: "enum", title: "Effect Quiet Time Actions when switch '${settings.qtSwitch.displayName}' is turned", defaultValue: 'on', required: true, multiple: false, submitOnChange: true,
+                		options: ["on","off"])
+                input(name: "qtAutoOff", type: "enum", title: "Auto-disable Quiet Time after ", descriptionText: (settings?.qtAutoOff != null)?:'(Disabled)', defaultValue: '(Disabled)', required: true, multiple: false, submitOnChange: true,
+                		options: ["(Disabled)", "10 Minutes", "15 Minutes", "30 Minutes", "45 Minutes", "1 Hour", "2 Hours", "3 Hours", "4 Hours", "6 Hours"])
             }
         }
 	
@@ -205,8 +209,8 @@ def initialize() {
         				 ]         
         atomicState.statState = statState
     }
-	subscribe(qtSwitch, "switch.${qtOn}", quietOnHandler)
-    def qtOff = qtOn=='on'?'off':'on'
+	subscribe(qtSwitch, "switch.${settings.qtOn}", quietOnHandler)
+    def qtOff = settings.qtOn=='on'?'off':'on'
     subscribe(qtSwitch, "switch.${qtOff}", quietOffHandler)
    	if (!atomicState.isQuietTime) {
     	if (qtSwitch.currentSwitch == qtOn) {
@@ -390,7 +394,20 @@ def turnOnQuietTime() {
     }
     atomicState.statState = statState
     atomicState.isQuietTime = true
+    
+    if ((settings.qtAutoOff == null) || (settings.qtAutoOff != '(Disabled)')) {
+    	def seconds = settings.qtAutoOff.contains('Minute')? (settings.qtAutoOff.tokenize()[0].toInteger() * 60) : (settings.quAutoOff.tokenize()[0].toInteger() * 3600)
+        LOG("Quiet Time Auto Off scheduled in ${seconds} seconds.",2,null,'info')
+       	runIn( seconds, turnQuietOff, [overwrite: true])
+  	}        
+    
     LOG('Quiet Time On is complete',2,null,'info')
+}
+
+def turnQuietOff() {
+	LOG("Executing scheduled Auto Off for ${settings.qtSwitch.displayName}",2,null,'info')
+    def qtOff = settings.qtOn=='on'?'off':'on'
+    settings.qtSwitch."${qtOff}"
 }
 
 def quietOffHandler(evt=null) {
