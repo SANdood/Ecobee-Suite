@@ -58,8 +58,9 @@
  *	1.6.15- Cleaned up initialization process
  *	1.6.16- Fixed case of Home/Away when Auto Home/Away
  *	1.6.17- Fixed sensor off-line error handling
+ *	1.6.18- Ensure test/dummy children are always deleted
  */
-def getVersionNum() { return "1.6.17" }
+def getVersionNum() { return "1.6.18" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -147,7 +148,9 @@ def mainPage() {
     if (!atomicState.initialized) {
     	deviceHandlersInstalled = testForDeviceHandlers()
     	readyToInstall = deviceHandlersInstalled
-	}
+	} else {
+    	removeChildDevices( getAllChildDevices(), true )	// remove any lingering temp devices
+    }
     if (atomicState.initialized) { readyToInstall = true }
     
 	dynamicPage(name: "mainPage", title: "Welcome to ${getVersionLabel()}", install: readyToInstall, uninstall: false, submitOnChange: true) {
@@ -525,28 +528,43 @@ def helperSmartAppsPage() {
 
 // Preference Pages Helpers
 private def Boolean testForDeviceHandlers() {
-	if (atomicState.runTestOnce != null) { return atomicState.runTestOnce }
+	if (atomicState.runTestOnce != null) { 
+    	List myChildren = getAllChildDevices()
+        if (atomicState.runTestOnce == false) {
+    		removeChildDevices( myChildren, true )	// Delete any leftover dummy (test) children
+            atomicState.runTestOnce = null
+            return false
+    	} 
+    }
     
     def DNIAdder = now().toString()
     def d1
     def d2
-    def success = true
+    def success 
     
 	try {    	
 		d1 = addChildDevice(app.namespace, getChildThermostatName(), "dummyThermDNI-${DNIAdder}", null, ["label":"Ecobee Suite Thermostat:TestingForInstall", completedSetup:true])
 		d2 = addChildDevice(app.namespace, getChildSensorName(), "dummySensorDNI-${DNIAdder}", null, ["label":"Ecobee Suite Sensor:TestingForInstall", completedSetup:true])
+        if ((d1 != null) && (d2 != null)) success = true
 	} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
+    	// if (d1) deleteChildDevice("dummyThermDNI-${DNIAdder}") 
+    	// if (d2) deleteChildDevice("dummySensorDNI-${DNIAdder}")
 		LOG("You MUST add the ${getChildThermostatName()} and ${getChildSensorName()} Device Handlers to the IDE BEFORE running the setup.", 1, null, "error")
 		success = false
 	}
-    
     atomicState.runTestOnce = success
-    
-    if (d1) deleteChildDevice("dummyThermDNI-${DNIAdder}") 
-    if (d2) deleteChildDevice("dummySensorDNI-${DNIAdder}") 
+    removeChildDevices( getAllChildDevices(), true )	// Delete my test children
     
     return success
 }
+
+private removeChildDevices(devices, dummyOnly = false) {
+	if (devices != []) LOG("Removing ${dummy?'test':''} child devices",2,null,'trace')
+    devices?.each {
+    	if (!dummyOnly || it?.deviceNetworkId.startsWith('dummy')) deleteChildDevice(it.deviceNetworkId)
+    }
+}
+
 // End Preference Pages Helpers
 
 // Ask Alexa Helpers
@@ -911,12 +929,20 @@ def getThermostatTypeName(stat) {
 }
 
 def installed() {
-	LOG("Installed with settings: ${settings}", 4)	
+	LOG("Installed with settings: ${settings}",2,null,'warn')	
 	initialize()
 }
 
+def uninstalled() {
+	LOG("Uninstalling...",2,null,'warn')
+    unschedule()
+    unsubscribe()
+	removeChildDevices( getAllChildDevices(), false )	// delete all my children!
+    // Child apps are supposedly automatically deleted.
+}
+
 def updated() {	
-    LOG("Updated with settings: ${settings}", 4)	
+    LOG("Updated with settings: ${settings}",2,null,'warn')	
     
     if (!atomicState.atomicMigrate) {
     	LOG("updated() - Migrating state to atomicState...", 2, null, "warn")        
@@ -1029,7 +1055,7 @@ def initialize() {
     atomicState.watchdogInterval = 10	// In minutes
     atomicState.reAttemptInterval = 15 	// In seconds
 	
-    if (state.initialized) {		
+    if (atomicState.initialized) {		
     	// refresh Thermostats and Sensor full lists
     	getEcobeeThermostats()
     	getEcobeeSensors()
@@ -1174,12 +1200,15 @@ String getChildAppName(String childId) {
 
 // NOTE: For this to work correctly getEcobeeThermostats() and getEcobeeSensors() should be called prior
 private def deleteUnusedChildren() {
-	LOG("deleteUnusedChildren() entered", 5, null, 'trace')    
+	LOG("deleteUnusedChildren() entered", 5, null, 'trace')
+    
+    // Always make sure that the dummy devices were deleted
+    removeChildDevices(getAllChildDevices(), true)		// Delete dummy devices
     
     if (settings.thermostats?.size() == 0) {
     	// No thermostats, need to delete all children
         LOG("Deleting All My Children!", 2, null, "warn")
-    	getAllChildDevices().each { deleteChildDevice(it.deviceNetworkId) }        
+    	removeChildDevices(getAllChildDevices(), false)         
     } else {
     	// Only delete those that are no longer in the list
         // This should be a combination of any removed thermostats and any removed sensors
