@@ -61,8 +61,9 @@
  *	1.6.16 - Fixed initialization errors & priorities
  *	1.6.17 - Added a modicom of compatibility with the "new" Samsung (Connect)
  *	1.6.18 - Fixed coolingSetpoint error
+ *	1.6.19 - Shortcut 'TestingForInstall' in installed()
  */
-def getVersionNum() { return "1.6.18" }
+def getVersionNum() { return "1.6.19" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -143,6 +144,8 @@ metadata {
         // Reservation Handling
         command "makeReservation"
         command "cancelReservation"
+        
+        command "getManufacturerName"
 
 		// Capability "Thermostat"
         attribute "temperatureScale", "string"
@@ -751,6 +754,8 @@ def forceRefresh() {
 }
 
 def installed() {
+	log.debug "${this.label} being installed"
+    if (this.label?.contains('TestingForInstall')) return	// we're just going to be deleted in a second...
 	updated()
 }
 
@@ -774,6 +779,8 @@ def ping() {
 	LOG("Health Check ping - apiConnected: ${device.currentValue('apiConnected')}, ecobeeConnected: ${device.currentValue('ecobeeConnected')}, checkInterval: ${device.currentValue('checkInterval')} seconds",1,null,'warn')
    	parent.pollChildren(getDeviceId(),true) 	// forcePoll just me
 }
+
+def getManufacturerName() { log.warn "Ecobee"; return "Ecobee" }
 
 def generateEvent(Map results) {
 	if (!state.version || (state.version != getVersionLabel())) updated()
