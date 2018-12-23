@@ -60,8 +60,9 @@
  *	1.6.17- Fixed sensor off-line error handling
  *	1.6.18- Ensure test/dummy children are always deleted
  *	1.6.19-	Add hubId to device creation; cleanup removeChildDevice 
+ *	1.6.20- Fixed unintended recursion
  */
-def getVersionNum() { return "1.6.19" }
+def getVersionNum() { return "1.6.20" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -535,14 +536,17 @@ private def Boolean testForDeviceHandlers() {
     		removeChildDevices( myChildren, true )	// Delete any leftover dummy (test) children
             atomicState.runTestOnce = null
             return false
-    	} 
+    	} else {
+        	return true
+        }
     }
     
     def DNIAdder = now().toString()
     def d1
     def d2
     def success
-    removeChildDevices( getAllChildDevices(), true )	// Delete my test children
+    List myChildren = getAllChildDevices()
+    if (myChildren.size() > 0) removeChildDevices( myChildren, true )	// Delete my test children
     
 	try {    	
 		d1 = addChildDevice(app.namespace, getChildThermostatName(), "dummyThermDNI-${DNIAdder}", location.hubs[0]?.id, ["label":"Ecobee Suite Thermostat:TestingForInstall", completedSetup:true])
@@ -555,18 +559,24 @@ private def Boolean testForDeviceHandlers() {
     try {
         if (d1) deleteChildDevice("dummyThermDNI-${DNIAdder}") 
     	if (d2) deleteChildDevice("dummySensorDNI-${DNIAdder}")
-    } catch (e) {
-    	LOG("Error deleting test devices (${d1}, ${d2})",1,null,'error')
+    } catch (Exception e) {
+    	LOG("Error ${e} deleting test devices (${d1}, ${d2})",1,null,'warn')
     }
-    removeChildDevices( getAllChildDevices(), true )	// Delete my test children (again)
+    
+    runIn(5, delayedRemoveChildren, [overwrite: true])
     atomicState.runTestOnce = success
     
     return success
 }
 
+def delayedRemoveChildren() {
+	def myChildren = getAllChildDevices()
+	if (myChildren.size() > 0) removeChildDevices( myChildren, true )
+}
+
 private removeChildDevices(devices, dummyOnly = false) {
 	if (devices != []) {
-    	LOG("Removing ${dummy?'test':''} child devices",3,null,'trace')
+    	LOG("Removing ${dummyOnly?'test':''} child devices",3,null,'trace')
 	} else {
     	return		// nothing to remove
     }
@@ -574,10 +584,11 @@ private removeChildDevices(devices, dummyOnly = false) {
     try {
     	devices?.each {
         	devName = it.displayName
+            LOG("Child: ${it.deviceNetworkId} - ${devName}",2,null,'trace')
     		if (!dummyOnly || it?.deviceNetworkId?.startsWith('dummy')) deleteChildDevice(it.deviceNetworkId)
     	}
-    } catch (e) {
-    	LOG("Error removing device ${devName}",1,null,'error')
+    } catch (Exception e) {
+    	LOG("Error ${e} removing device ${devName}",1,null,'warn')
     }
 }
 
@@ -952,7 +963,7 @@ def installed() {
 def uninstalled() {
 	LOG("Uninstalling...",2,null,'warn')
     unschedule()
-    unsubscribe()
+    // unsubscribe()
 	removeChildDevices( getAllChildDevices(), false )	// delete all my children!
     // Child apps are supposedly automatically deleted.
 }
