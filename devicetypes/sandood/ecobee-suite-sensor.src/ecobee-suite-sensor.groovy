@@ -32,8 +32,9 @@
  *	1.6.13 - Fixed sensor off-line reporting
  *	1.6.14 - Clean up digits display
  *  1.6.15 - Shortcut the 'TestingForInstall' installed()
+ *	1.6.16 - Log uninstalls also
  */
-def getVersionNum() { return "1.6.15" }
+def getVersionNum() { return "1.6.16" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -230,14 +231,18 @@ void poll() {
 // Health Check will ping us based on the frequency we configure in Ecobee (Connect) (derived from poll & watchdog frequency)
 void ping() {
 	def tstatId = device.currentValue('thermostatId')
-	LOG( "Pinged - executing parent.pollChildren(${tstatId})", 2, this, 'info')
+	LOG( "Pinged - executing parent.pollChildren(${tstatId})", 2, null, 'info')
 	parent.pollChildren(tstatId,true)		// we have to poll our Thermostat to get updated
 }
 
 void installed() {
-	log.debug "${this.label} being installed"
-    if (this.label?.contains('TestingForInstall')) return	// we're just going to be deleted in a second...
+	LOG("${device.label} being installed",2,null,'info')
+    if (device.label?.contains('TestingForInstall')) return	// we're just going to be deleted in a second...
 	updated()
+}
+
+void uninstalled() {
+	LOG("${device.label} being uninstalled",2,null,'info')
 }
 
 void updated() {
