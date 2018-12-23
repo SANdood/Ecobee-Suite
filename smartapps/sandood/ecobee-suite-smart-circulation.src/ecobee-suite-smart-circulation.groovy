@@ -32,8 +32,9 @@
  *	1.6.11 - Clear reservations when disabled
  *	1.6.12 - Minor optimizations
  *	1.6.13 - Added humidity restrictor
+ *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
  */
-def getVersionNum() { return "1.6.13" }
+def getVersionNum() { return "1.6.14" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -422,10 +423,10 @@ def deltaHandler(evt=null) {
                 LOG("Configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
                 if (vacationHold && settings.vacationOverride) {
                 	cancelReservation( tid, 'vacaCircOff')
-        			theThermostat.setVacationFanMinOnTime(settings.fanMinOnTIme)
+        			theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
         		} else if (!vacationHold) {
                 	cancelReservation( tid, 'circOff')
-    				theThermostat.setFanMinOnTime(settings.fanMinOnTime)
+    				theThermostat.setFanMinOnTime(settings.minFanOnTime)
         		}
                 return
             }
