@@ -30,8 +30,9 @@
  *	1.6.11 - Fix for off-line sensors
  *	1.6.12 - Added a modicom of compatibility with the (new) Samsung (Connect) app
  *	1.6.13 - Fixed sensor off-line reporting
+ *	1.6.14 - Clean up digits display
  */
-def getVersionNum() { return "1.6.13" }
+def getVersionNum() { return "1.6.14" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -272,11 +273,12 @@ def generateEvent(Map results) {
                     
                     // Generate the display value that will preserve decimal positions ending in 0
                     if (isChange) {
+                    	def dValue = value.toBigDecimal()
                     	if (precision == 0) {
-                    		tempDisplay = roundIt(value, 0).toString() + '°'
-                            sendValue = roundIt(value, 0)								// Remove decimals in device lists also
+                    		tempDisplay = roundIt(dValue, 0).toString() + '°'
+                            sendValue = roundIt(dValue, 0).toInteger()								// Remove decimals in device lists also
                     	} else {
-							tempDisplay = String.format( "%.${precision.toInteger()}f", roundIt(value, precision.toInteger())) + '°'
+							tempDisplay = String.format( "%.${precision.toInteger()}f", roundIt(dValue, precision.toInteger())) + '°'
                     	}
                         sendEvent( name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 						event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, value: sendValue, isStateChange: true, displayed: true]
