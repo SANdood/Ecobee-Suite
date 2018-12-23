@@ -31,8 +31,9 @@
  *	1.6.12 - Added a modicom of compatibility with the (new) Samsung (Connect) app
  *	1.6.13 - Fixed sensor off-line reporting
  *	1.6.14 - Clean up digits display
+ *  1.6.15 - Shortcut the 'TestingForInstall' installed()
  */
-def getVersionNum() { return "1.6.14" }
+def getVersionNum() { return "1.6.15" }
 private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -234,6 +235,8 @@ void ping() {
 }
 
 void installed() {
+	log.debug "${this.label} being installed"
+    if (this.label?.contains('TestingForInstall')) return	// we're just going to be deleted in a second...
 	updated()
 }
 
