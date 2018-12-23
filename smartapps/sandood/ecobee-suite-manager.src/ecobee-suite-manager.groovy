@@ -59,8 +59,9 @@
  *	1.6.16- Fixed case of Home/Away when Auto Home/Away
  *	1.6.17- Fixed sensor off-line error handling
  *	1.6.18- Ensure test/dummy children are always deleted
+ *	1.6.19-	Add hubId to device creation; cleanup removeChildDevice 
  */
-def getVersionNum() { return "1.6.18" }
+def getVersionNum() { return "1.6.19" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -540,28 +541,43 @@ private def Boolean testForDeviceHandlers() {
     def DNIAdder = now().toString()
     def d1
     def d2
-    def success 
+    def success
+    removeChildDevices( getAllChildDevices(), true )	// Delete my test children
     
 	try {    	
-		d1 = addChildDevice(app.namespace, getChildThermostatName(), "dummyThermDNI-${DNIAdder}", null, ["label":"Ecobee Suite Thermostat:TestingForInstall", completedSetup:true])
-		d2 = addChildDevice(app.namespace, getChildSensorName(), "dummySensorDNI-${DNIAdder}", null, ["label":"Ecobee Suite Sensor:TestingForInstall", completedSetup:true])
+		d1 = addChildDevice(app.namespace, getChildThermostatName(), "dummyThermDNI-${DNIAdder}", location.hubs[0]?.id, ["label":"Ecobee Suite Thermostat:TestingForInstall", completedSetup:true])
+		d2 = addChildDevice(app.namespace, getChildSensorName(), "dummySensorDNI-${DNIAdder}", location.hubs[0]?.id, ["label":"Ecobee Suite Sensor:TestingForInstall", completedSetup:true])
         if ((d1 != null) && (d2 != null)) success = true
 	} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
-    	// if (d1) deleteChildDevice("dummyThermDNI-${DNIAdder}") 
-    	// if (d2) deleteChildDevice("dummySensorDNI-${DNIAdder}")
 		LOG("You MUST add the ${getChildThermostatName()} and ${getChildSensorName()} Device Handlers to the IDE BEFORE running the setup.", 1, null, "error")
 		success = false
 	}
+    try {
+        if (d1) deleteChildDevice("dummyThermDNI-${DNIAdder}") 
+    	if (d2) deleteChildDevice("dummySensorDNI-${DNIAdder}")
+    } catch (e) {
+    	LOG("Error deleting test devices (${d1}, ${d2})",1,null,'error')
+    }
+    removeChildDevices( getAllChildDevices(), true )	// Delete my test children (again)
     atomicState.runTestOnce = success
-    removeChildDevices( getAllChildDevices(), true )	// Delete my test children
     
     return success
 }
 
 private removeChildDevices(devices, dummyOnly = false) {
-	if (devices != []) LOG("Removing ${dummy?'test':''} child devices",2,null,'trace')
-    devices?.each {
-    	if (!dummyOnly || it?.deviceNetworkId.startsWith('dummy')) deleteChildDevice(it.deviceNetworkId)
+	if (devices != []) {
+    	LOG("Removing ${dummy?'test':''} child devices",3,null,'trace')
+	} else {
+    	return		// nothing to remove
+    }
+    def devName
+    try {
+    	devices?.each {
+        	devName = it.displayName
+    		if (!dummyOnly || it?.deviceNetworkId?.startsWith('dummy')) deleteChildDevice(it.deviceNetworkId)
+    	}
+    } catch (e) {
+    	LOG("Error removing device ${devName}",1,null,'error')
     }
 }
 
@@ -1129,7 +1145,7 @@ private def createChildrenThermostats() {
 		def d = getChildDevice(dni)
 		if(!d) {        	
             try {
-				d = addChildDevice(app.namespace, getChildThermostatName(), dni, null, ["label":"EcobeeTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
+				d = addChildDevice(app.namespace, getChildThermostatName(), dni, location.hubs[0]?.id, ["label":"EcobeeTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
 			} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
             	LOG("You MUST add the ${getChildThermostatName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
                 return false
@@ -1151,7 +1167,7 @@ private def createChildrenSensors() {
 		def d = getChildDevice(dni)
 		if(!d) {        	
             try {
-				d = addChildDevice(app.namespace, getChildSensorName(), dni, null, ["label":"EcobeeSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
+				d = addChildDevice(app.namespace, getChildSensorName(), dni, location.hubs[0]?.id, ["label":"EcobeeSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
 			} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
             	LOG("You MUST add the ${getChildSensorName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
                 return false
@@ -1334,7 +1350,7 @@ def scheduleWatchdog(evt=null, local=false) {
 	}
     
     // Check to see if we have called too soon
-    def timeSinceLastWatchdog = (now() - atomicState.lastWatchdog) / 60000
+    def timeSinceLastWatchdog = (atomicState.lastWatchdog == null) ? 0 :(now() - atomicState.lastWatchdog) / 60000
     if ( timeSinceLastWatchdog < 1 ) {
     	if (debugLevel(4)) LOG("It has only been ${timeSinceLastWatchdog} since last scheduleWatchdog was called. Please come back later.", 4, null, "trace")
         return true
