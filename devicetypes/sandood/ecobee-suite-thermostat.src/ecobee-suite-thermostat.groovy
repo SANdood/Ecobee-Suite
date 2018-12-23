@@ -62,8 +62,9 @@
  *	1.6.17 - Added a modicom of compatibility with the "new" Samsung (Connect)
  *	1.6.18 - Fixed coolingSetpoint error
  *	1.6.19 - Shortcut 'TestingForInstall' in installed()
+ *	1.6.20 - Log uninstall also
  */
-def getVersionNum() { return "1.6.19" }
+def getVersionNum() { return "1.6.20" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -754,9 +755,13 @@ def forceRefresh() {
 }
 
 def installed() {
-	log.debug "${this.label} being installed"
-    if (this.label?.contains('TestingForInstall')) return	// we're just going to be deleted in a second...
+	LOG("${device.label} being installed",2,null,'info')
+    if (device.label?.contains('TestingForInstall')) return	// we're just going to be deleted in a second...
 	updated()
+}
+
+def uninstalled() {
+	LOG("${device.label} being uninstalled",2,null,'info')
 }
 
 def updated() {
