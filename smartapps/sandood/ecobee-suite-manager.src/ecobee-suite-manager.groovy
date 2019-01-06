@@ -61,8 +61,10 @@
  *	1.6.18- Ensure test/dummy children are always deleted
  *	1.6.19-	Add hubId to device creation; cleanup removeChildDevice 
  *	1.6.20- Fixed unintended recursion
+ *  1.6.21- Improve error logging
+ *	1.6.22- SmartThings started throwing errors on some Canadian zipcodes - we now catch these and use geographic coordinates instead...
  */
-def getVersionNum() { return "1.6.20" }
+def getVersionNum() { return "1.6.22" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -1045,22 +1047,28 @@ def initialize() {
    
     // get sunrise/sunset for the location of the thermostats (getZipCode() prefers thermostat.location.postalCode)
     // def sunriseAndSunset = (atomicState.zipCode != null) ? getSunriseAndSunset(zipCode: atomicState.zipCode) : getSunRiseAndSunset()
-    def sunriseAndSunset
+    def sunriseAndSunset = null
     if (atomicState.zipCode) {
-    	LOG("Sunrise/set using postal code '${atomicState.zipCode}'",1,null,'info')
-    	sunriseAndSunset = getSunriseAndSunset(zipCode: atomicState.zipCode)
-    } else if (location.longitude && location.latitude) {
-    	LOG("Sunrise/set using geographic coordinates for '${location.name}'",1,null,'info')
+    	LOG("Trying to get sunrise/set using postal code '${atomicState.zipCode}'",1,null,'info')
+        try {
+    		sunriseAndSunset = getSunriseAndSunset(zipCode: atomicState.zipCode)
+        } catch (Exception e) {
+        	LOG("Failed to get sunrise/set using postal code: Exception: ${e}",1,null,'error')
+            sunriseAndSunset = null
+        }
+    } 
+    if (!sunriseAndSunset && location.longitude && location.latitude) {
+    	LOG("Trying to get sunrise/set using geographic coordinates for '${location.name}'",1,null,'info')
     	sunriseAndSunset = getSunriseAndSunset()
     } else {
-    	LOG("*** INITIALIZATION ERROR *** PLEASE SET POSTAL CODE AND/OR LATITUDE/LONGITUDE FOR LOCATION '${location.name}'",1,null,'error')
+    	if (!sunriseAndSunset) LOG("*** INITIALIZATION ERROR *** PLEASE SET LATITUDE/LONGITUDE FOR LOCATION '${location.name}' IN YOUR MOBILE APP",1,null,'error')
     }
     def isOk = false
     if (!sunriseAndSunset || (!(sunriseAndSunset.sunrise instanceof Date) || !(sunriseAndSunset.sunset instanceof Date))) {
-		LOG("Can't get sunrise/set times, using defaults",1,null,'warn')
+		LOG("Can't get valid sunrise/set times, using generic defaults (05:00-->18:00)",1,null,'warn')
     } else {
     	isOk = true
-        LOG("sunriseAndSunset == ${sunriseAndSunset}",1,null,'info')
+        LOG("Got valid sunrise/set data: ${sunriseAndSunset}",1,null,'info')
     }
     if(isOk && atomicState.timeZone) {
     	// using the thermostat's time zone
@@ -1758,7 +1766,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
         atomicState.inTimeoutRetry = 0
 	} catch (groovyx.net.http.HttpResponseException e) {   
         result = false // this thread failed to get the summary
-        if ((e.statusCode == 500) && (e.response.data.status.code == 14) /*&& ((atomicState.authTokenExpires - now()) <= 0) */){
+        if ((e.statusCode == 500) && (e?.response?.data?.status?.code == 14) /*&& ((atomicState.authTokenExpires - now()) <= 0) */){
             LOG('checkThermostatSummary() - HttpResponseException occurred: Auth_token has expired', 3, null, "info")
             atomicState.action = "pollChildren"
             if (debugLevelFour) LOG( "Refreshing your auth_token!", 4, null, 'trace')
@@ -1770,7 +1778,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                 LOG('Checking: Auth_token refresh failed', 1, null, 'error')
             }
         } else {
-        	LOG("checkThermostatSummary() - HttpResponseException: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
+        	LOG("checkThermostatSummary() - HttpResponseException: ${e} StatusCode: ${e?.statusCode} response.data.status.code: ${e?.response?.data?.status?.code}", 1, null, "error")
         }
     } catch (java.util.concurrent.TimeoutException e) {
     	LOG("checkThermostatSummary() - Concurrent Execution Timeout: ${e}.", 1, null, "warn")
