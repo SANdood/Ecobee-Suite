@@ -1,6 +1,6 @@
-Free Ecobee Suite, version: 1.6.1* 
+Free Ecobee Suite, version: 1.6.** 
 ======================================================
-Latest: Version 1.6.1* Released August 7, 2018 at 4:00pm EDT
+Latest Updates Released 10 January, 2019 at 12:015pm EST
 
 ***NOTE: When updating/installing, you MUST include ALL of the Suite's components***
 
