@@ -40,8 +40,9 @@
  *  1.6.15 - Fixed external temp range limiter; should now work with either F/C temperature scales
  *	1.6.16 - Fixed initialization error when using SmartThings Sensors
  *	1.6.17 - Added more logging for PWS, calculate dewpoint if not provided by WU
+ *	1.6.18 - Switched Zip/GPS external temp source to new getTwcConditions
  */
-def getVersionNum() { return "1.6.17" }
+def getVersionNum() { return "1.6.18" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
@@ -77,15 +78,15 @@ def mainPage() {
 				input(name: 'tempSource', title: 'Monitor this weather source', type: 'enum', required: true, multiple: false, description: 'Tap to choose...', 
                 	options:[
                     	'ecobee':"Ecobee Thermostat's Weather", 
-                    	'location':'SmartThings Weather for Location', 
+                    	'location':"SmartThings/TWC Weather for ${location.name}", 
                         'sensors':'SmartThings Sensors',
-                        'station':'SmartThings Weather Station',
-                        'wunder':'Weather Underground Station'
+                        'station':'SmartThings-based Weather Station DTH',
+                        'wunder':'Weather Underground Station (obsolete)'
                     ], submitOnChange: true
                 )
 				if (tempSource) {
 					if (tempSource == 'location') {
-                    	paragraph "Using SmartThings weather for the current location (${location.name})."
+                    	paragraph "Using The Weather Company weather for the current location (${location.name})."
                         if (!settings.latLon) input(name: "zipCode", type: 'text', title: 'Zipcode (Default is location Zip code)', defaultValue: getZIPcode(), required: true, submitOnChange: true )
                         if (location.latitude && location.longitude) input(name: "latLon", type: 'bool', title: 'Use SmartThings hub\'s GPS coordinates instead (better precision)?', submitOnChange: true)
 						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', 
@@ -672,15 +673,56 @@ def temperatureUpdate( BigDecimal temp ) {
 }
 
 private def getZipTemp() {
-	return getWUTemp('zip')
+	return getTwcTemp('zip')
 }
 
 private def getGPSTemp() {
-	return getWUTemp('gps')
+	return getTwcTemp('gps')
 }
 
 private def getPwsTemp() {
 	return getWUTemp('pws')
+}
+
+private def getTwcTemp(type) {
+	def isMetric = (getTemperatureScale() == "C")
+	def source = (type == 'zip') ? settings.zipCode : ((type == 'gps')?"${location.latitude},${location.longitude}":null)
+    
+    def twcConditions = [:]
+    try {
+    	twcConditions = getTwcConditions(source)
+    } catch (e) {
+    	LOG("Error getting TWC Conditions: ${e}",1,null,'error')
+        return null
+    }
+    if (twcConditions) {
+    	LOG("Parsing TWC data",3,null,'info')
+        def tempNow
+    	def dewpointNow = -999.0
+    	tempNow = twcConditions.temperature
+        dewpointNow = twcConditions.temperatureDewPoint
+
+        if (tempNow?.isNumber()) {
+        	if (dewpointNow != -999.0) {
+        		atomicState.dewpoint = dewpointNow
+            } else {
+            	def hum = twcConditions.relativeHumidity
+                if (hum && hum.contains('%')) hum = (hum-'%').toInteger()		// strip off the trailing '%' sign
+                if (hum.isNumber()) {
+                	dewpointNow = calculateDewpoint( tempNow, hum, (isMetric?'C':'F'))
+                }
+                atomicState.dewpoint = dewpointNow
+            }
+            LOG("Dewpoint is: ${dewpointNow}°",2,null,'info')
+        	temperatureUpdate(tempNow)
+            return tempNow
+        } else {
+        	LOG("Invalid temp returned ${newTemp}, ignoring...",2,null,'warn')
+            return null
+        }
+    }
+    LOG("Current conditions unavailable",1,null,'error')
+    return null
 }
 
 private def getWUTemp(type) {
