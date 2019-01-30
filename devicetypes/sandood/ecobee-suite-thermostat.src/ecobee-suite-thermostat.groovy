@@ -25,23 +25,7 @@
  *
  *  See Github Changelog for complete change history 
  *
- *	1.3.0  - Major release: rename and move to "sandood" namespace
- *	1.4.0  - Major release: Renamed device files
- *	1.4.01 - Don't display apiConnected status changes in device log unless in Debug Level 4 or 5
- *	1.4.02 - Fixed display of fanMinOnTime in device log
- *	1.4.03 - Fixed race condition when ST Routine sets both heatingSetpoint() and coolingSetpoint() in rapid succession
- *	1.4.04 - Optimized setProgram to avoid "Hold: Away", resumeProgram, "Hold: Away" redundancies
- *	1.4.05 - Revision number correction
- *	1.4.07 - Remove erroneous "Hold: program" 
- *	1.4.08 - Cleanup around currentProgram & lastOpState
- *	1.4.09 - Fixed replaceAll calls ("", not '')
- *	1.4.10 - Fixed setpoint up/down arrows
- *	1.4.11 - Fixed "Fan Only" green
- *	1.4.12 - Better error messages around missing programsList
- *	1.4.13 - Initial support for setting humidifier/dehumidifier mode
- *	1.4.14 - Add setHumidity/DehumiditySetpoint support (API & sliders)
- *	1.4.15 - Removed extra "inactiveLabel" and changed main() to main([])
- *	1.4.16 - Rearranged & condensed setpoint sliders section
+ * <snip>
  *	1.5.00 - Release number synchronization
  *	1.5.01 - Removed deprecated getLinkText()
  *	1.5.02 - Added more Weather data for Smart Mode
@@ -63,8 +47,9 @@
  *	1.6.18 - Fixed coolingSetpoint error
  *	1.6.19 - Shortcut 'TestingForInstall' in installed()
  *	1.6.20 - Log uninstall also
+ *	1.6.21 - Added setProgramSetpoints()
  */
-def getVersionNum() { return "1.6.20" }
+def getVersionNum() { return "1.6.21" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -102,6 +87,7 @@ metadata {
 
 		command "switchMode"
         command "setThermostatProgram"
+        command "setProgramSetpoints"
         command "setThermostatMode"
         command "setThermostatFanMode"
         command "setFanMinOnTime"
@@ -115,6 +101,14 @@ metadata {
         command "cancelVacation"
         command "home"
         command "present"
+
+//		command "setStage1CoolDifferentialTemp" 
+//		command "setStage1HeatDifferentialTemp" 
+//		command "setCoolDissipationTime"
+//      command "setHeatDissipationTime"
+//		command "setCompressorProtectionMinTemp" 
+//		command "setCompressorProtectionMinTime"
+//		command	"setAuxMaxOutdoorTemp"
 
 // Unfortunately we cannot overload the internal Java/Groovy definition of 'sleep()', and calling this will silently fail (actually, it does a
 // "sleep(0)")
@@ -171,6 +165,7 @@ metadata {
 		attribute "equipmentStatus", "string"
         attribute "humiditySetpoint", "number"
         attribute "dehumiditySetpoint", "number"
+//		attribute "dehumidifierLevel", "number"		// should be same as dehumiditySetpoint
         attribute "weatherTemperature", "number"
         attribute "weatherHumidity", "number"
         attribute "weatherDewpoint", "number"
@@ -181,6 +176,7 @@ metadata {
         attribute "coolMode", "string"
 		attribute "heatMode", "string"
         attribute "autoMode", "string"
+//		attribute "autoHeatCoolFeatureEnabled", "string"
 		attribute "heatStages", "number"
 		attribute "coolStages", "number"
 		attribute "hasHeatPump", "string"
@@ -189,7 +185,6 @@ metadata {
         attribute "hasBoiler", "string"
         attribute "hasHumidifier", "string"
         attribute "hasDehumidifier", "string"
-        // attribute "dehumidifyOvercoolOffset", "number"
         attribute "humidifierMode", "string"
         attribute "dehumidifierMode", "string"
 		attribute "auxHeatMode", "string"
@@ -227,6 +222,73 @@ metadata {
         attribute "thermostatOperatingStateDisplay", "string"
         attribute "thermostatFanModeDisplay", "string"
         attribute "humiditySetpointDisplay", "string"
+
+//		attribute "ventMode", "string"
+//		attribute "supportedVentModes", "JSON_OBJECT" // USAGE: List theModes = stat.currentValue('supportedVentModes')[1..-2].tokenize(", ")
+//		attribute "ventilatorMinOnTime
+//      attribute "stage1CoolingDifferentialTemp", "number"
+//		attribute "stage1HeatingDifferentialTemp", "number" /
+//		attribute "stage1CoolingDissipationTime", "number"
+//      attribute "stage1HeatingDissipationTime", "number"
+//		attribute "compressorProtectionMinTemp", "number" 
+//		attribute "compressorProtectionMinTime", "number"
+//		attribute "heatPumpReversalOnCool", "string"
+//		attribute "auxMaxOutdoorTemp", "number"
+//		attribute "maxSetBack", "number"
+//		attribute "maxSetForward", "number"
+//		attribute "quickSaveSetBack", "number"
+//		attribute "quickSaveSetForward", "number"
+//		attribute "condensationAvoid", "string"			// boolean
+//		attribute "backlightOnIntensity", "number"
+//		attribute "backlightSleepIntensity", "number"
+//		attribute "backlightOffTime", "number"
+//		attribute "compressorProtectionMinTime", "number"
+//		attribute "compressorProtectionMinTemp", "number"
+//		attribute "fanControlRequired", "string"
+//		attribute "tempCorrection", "number"
+// 		attribute "dehumidifyOvercoolOffset", "number"
+//		attribute "dehumidifyWithAC", "string"
+//		attribute "disablePreHeating", "string"
+//		attribute "disablePreCooling", "string"
+//		attribute "ventilatorMinOnTimeHome", "number"
+//		attribute "ventilatorMinOnTimeAway", "number"
+//		attribute "backlightOffDuringSleep", "string"
+//		attribute "autoAway", "string"
+//		attribute "followMeComfort", "string"
+//		attribute "smartCirculation", "string"			// not implemented by E3, but by this code it is
+//		attribute "isVentilatorTimerOn", "string"
+//		attribute "hasUVFilter", "string"
+//		attribute "coolingLockout", "string"
+//		attribute "ventilatorFreeCooling", "string"
+//		attribute "dehumidifyWhenHeating", "string"
+//		attribute "ventilatorDuhumidify", "string"
+//
+// Alerts
+//		attribute "coldTempAlert", "number"
+//		attribute "coldTempAlertEnabled", "string"		// or boolean?
+//		attribute "hotTempAlert", "number"
+//		attribute "hotTempAlertEnabled", "string"
+//		attribute "wifiOfflineAlert", "string"			// is it enabled?
+//		attribute "auxRuntimeAlert", "number"			// time
+//		attribute "auxOutdoorTempAlert", "number"		// temp
+//		attribute "auxMaxOutdoorTemp", "number"
+//		attribute "auxRuntimeAlertNotify", "string"
+//		attribute "auxOutdoorTempAlertNotify", "string"
+//		attribute "humidityHighAlert", "number"			// %
+//		attribute "humidityLowAlert", "number"
+//		attribute "disableHeatPumpAlerts", "string"
+//		attribute "disableAlertsOnIdt", "string"
+//		attribute "humidityAlertNotify", "string"
+//		attribute "tempAlertNotify", "string"
+//
+// Read only
+//		attribute "hasErv", "string"
+//		attribute "hasHrv", "string"
+//		attribute "heatPumpGroundWater", "string"
+//		attribute "randomStartDelayCool", "string"
+//		attribute "randomStartDelayHeat", "string"
+//		attribute "ventilatorType", "string"		// 'none', 'ventilator', 'hrv', 'erv'
+//		attribute "ventilatorOffDateTime", "string"
         
         attribute "thermostatTime", "string"
         attribute "statHoldAction", "string"
@@ -1311,6 +1373,7 @@ def generateEvent(Map results) {
 				
 				case 'debugEventFromParent':
 					event = eventFront + [value: sendValue, descriptionText: "-> ${sendValue}", isStateChange: true, displayed: true]
+                    if (sendValue.contains('rror')) {log.error "${parent.name}: " + sendValue} else {log.debug "${parent.name}: " + sendValue}
 					break;
                     
                 case 'thermostatTime':
@@ -2182,7 +2245,6 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
     }
     refresh()		// need to know if scheduled program changed recently
     
-    
     def currentProgram = device.currentValue('currentProgram')
     def currentProgramName = device.currentValue('currentProgramName')
     def scheduledProgram = device.currentValue('scheduledProgram')
@@ -2711,6 +2773,22 @@ void cancelVacation() {
     	generateQuickEvent('currentProgramName', device.currentValue('scheduledProgramName'))
         updateModeButtons()
     }
+}
+
+// Climate change commands
+def setProgramSetpoints(programName, heatingSetpoint, coolingSetpoint) {
+   	def scale = getTemperatureScale()
+    LOG("setProgramSetpoints( ${programName}, heatSP: ${heatingSetpoint}°${scale}, coolSP: ${coolingSetpoint}°${scale} )",2,null,'info')
+    def deviceId = getDeviceId()
+    if (parent.setProgramSetpoints( this, deviceId, programName, heatingSetpoint, coolingSetpoint )) {
+    	if (device.currentValue('currentProgram') == programName) {
+            def updates = []
+            if (coolingSetpoint) updates << ['coolingSetpoint': coolingSetpoint]
+        	if (heatinfSetpoint) updates << ['heatingSetpoint': heatingSetpoint]
+            if (updates != []) generateEvent(updates)
+        }
+		LOG("setProgramSetpoints() - completed",3,null,'trace')
+    } else LOG("setProgramSetpoints() - failed",1,null,'warn')
 }
 
 // No longer used as of v1.2.21
