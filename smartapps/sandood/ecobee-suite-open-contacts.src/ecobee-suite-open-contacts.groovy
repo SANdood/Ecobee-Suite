@@ -39,8 +39,9 @@
  *	1.6.14 - Removed use of *SetpointDisplay
  *	1.6.15 - Fixed(?) adjust temperature to adjust only when HVACMode is !Off
  *	1.6.16 - Fixed initialization logic WRT HVAC on/off state
+ *	1.6.17 - Minor text edits
  */
-def getVersionNum() { return "1.6.16" }
+def getVersionNum() { return "1.6.17" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
 
 definition(
@@ -68,7 +69,7 @@ def mainPage() {
         }
         
         section(title: "Select Thermostats") {
-        	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn back on below to activate handler." }
+        	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn on below to activate handler." }
         	else { 
             	input(name: "myThermostats", type: "device.ecobeeSuiteThermostat", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
                 input(name: 'defaultMode', type: 'enum',  title: "Default Mode for thermostat${((settings.myThermostats==null)||(settings.myThermostats.size()>1))?'s':''}", 
