@@ -21,28 +21,6 @@
  *
  *  See Github Changelog for complete change history
  * 	<snip>
- *	1.4.00- Renamed devices and manager, removed watchdogDevices
- *	1.4.01- Fix sensor device naming bug
- *	1.4.02- Handle javax.net.ssl.SSLPeerUnverifiedException; fixed poll daemon recovery
- *  1.4.03- Fixed internal mentions of "Ecobee (Connect)"
- *	1.4.04- Handle javax.net.ssl.SSLHandshakeException & java.net.SocketTimeoutException
- *  1.4.05- Improved timeout handling
- *	1.4.06- Added new Smart Mode helper SmartApp
- *	1.4.07- Trap & avoid errors where no resp.data is returned; fix null+null in SmartRecovery calculations
- *	1.4.08-	Fix the inevitable typo that prevented clean initial install
- *	1.4.09- Trapped another exception (org.apache.http.conn.HttpHostConnectException)
- *	1.4.10- Fixed sendJson LOG error
- *	1.4.11-	Added monitor_sensor support, now handles duplicate sensor names
- *	1.4.12- fixed sendJson calls;
- *	1.4.13- Optimized updates for setpoint changes
- *	1.4.14- First pass at fixing currentProgram problems
- *	1.4.15- Moved recent debug LOGs to debugLevel 3
- *	1.4.16- 2nd pass at fixing currentProgram problems
- *	1.4.17- Round 3 currentProgram fixes plus resumeProgram optimization
- *	1.4.18-	Display thermostat & sensor names in the log wherever possible
- *	1.4.19- setHold/nextTransition to currentClimate setpoints is same as resumeProgram
- *	1.4.20- Added setHumidifierMode() & setDehumidifierMode()
- *	1.4.21- Queue add/delete program updates to effect only a single API call
  *	1.5.00- Release number synchronization
  *	1.5.01- pollEcobeeAPI() now uses asynchttp
  *	1.5.02-	Cleanup of obsolete code
@@ -63,8 +41,9 @@
  *	1.6.20- Fixed unintended recursion
  *  1.6.21- Improve error logging
  *	1.6.22- SmartThings started throwing errors on some Canadian zipcodes - we now catch these and use geographic coordinates instead...
+ *	1.6.23-	Added setProgramSetpoint, fixed typo & null-checking that was breaking some error handling
  */
-def getVersionNum() { return "1.6.22" }
+def getVersionNum() { return "1.6.23" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
 include 'asynchttp_v1'
@@ -87,7 +66,7 @@ private def getHelperSmartApps() {
 			 title: "New Smart Circulation Helper..."],
 		[name: "ecobeeModeChild", appName: "ecobee Suite Smart Mode",
         	namespace: "sandood", multiple: true,
-            title: "New Smart Mode Helper..."],
+            title: "New Smart Mode & Setpoints Helper..."],
         [name: "ecobeeRoomChild", appName: "ecobee Suite Smart Room",
         	namespace: "sandood", multiple: true,
             title: "New Smart Room Helper..."],
@@ -1207,6 +1186,7 @@ def appHandler(evt) {
     	LOG('appHandler(touch) event, forced poll',2,null,'info')
 		atomicState.forcePoll = true
         atomicState.getWeather = true	// update the weather also
+        pollEcobeeAPI('')
     	pollChildren(null, true)		// double force-poll
     }
 }
@@ -1828,7 +1808,8 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
     String checkTherms = allMyChildren
 
 	// forcePoll = true
-	
+	somethingChanged = checkThermostatSummary(thermostatIdsString)
+    
 	if (forcePoll) {
     	// if it's a forcePoll, and thermostatIdString specified, we check only the specified thermostat, else we check them all
         if (thermostatIdsString) {
@@ -2175,9 +2156,9 @@ def pollEcobeeAPICallback( resp, pollState ) {
 		if (debugLevelFour) LOG("${preText}Poll returned http status ${resp.status}, ${resp.errorMessage}", 4, null, "error")
         
 		// Handle recoverable / retryable errors
-		if (resp.status == 500) {
+		if (resp.status && (resp.status == 500)) {
   			// Ecobee server error
-        	if (resp.errorJson?.status.code == 14) {
+        	if (resp.errorJson?.status && resp.errorJson.status?.code && (resp.errorJson?.status.code == 14)) {
             	// Auth_token expired
             	if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "warn")
                 atomicState.action = "pollChildren"
@@ -2191,7 +2172,7 @@ def pollEcobeeAPICallback( resp, pollState ) {
             	return result
             } else { 
             	// All other Ecobee Server (500) errors here
-            	LOG("Ecobee Server error ${rest.errorJson?.status.code}: ${resp.errorJson?.status.message}", 1, null, 'error')
+            	LOG("Ecobee Server error ${resp.errorJson?.status?.code}: ${resp.errorJson?.status?.message}", 1, null, 'error')
                 // Don't retry for now...may change in the future
                 return result
             }
@@ -2210,7 +2191,7 @@ def pollEcobeeAPICallback( resp, pollState ) {
         	atomicState.inTimeoutRetry = inTimeoutRetry + 1
         	return result
         } else /* can we handle any other errors??? */ {
-			LOG("Polling Error ${resp.status}: ${resp.errorMessage}, ${resp.errorJson?.status.message}, ${resp.errorJson?.status.code}", 1, null, "error")
+			LOG("Polling Error ${resp.status}: ${resp.errorMessage}, ${resp.errorJson?.status?.message}, ${resp.errorJson?.status?.code}", 1, null, "error")
 		}
         // For now, the code here just logs the error and assumes that checkThermostatSummary() will recover from the unhandled errors on the next call.
         return result
@@ -3594,18 +3575,18 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
     
     if (deleteVacation(child, deviceId, evt.name)) { // apparently on order to change something in a vacation, we have to delete it and then re-create it..
   
-    def thermostatSettings = ''
-    def thermostatFunctions = '{"type":"createVacation","params":{"name":"' + evt.name + '","coolHoldTemp":"' + evt.coolHoldTemp + '","heatHoldTemp":"' + evt.heatHoldTemp + 
-    							'","startDate":"' + evt.startDate + '","startTime":"' + evt.startTime + '","endDate":"' + evt.endDate + '","endTime":"' + evt.endTime + 
-                                '","fan":"' + evt.fan + '","fanMinOnTime":"' + "${howLong}" + '"}}'
-    def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
-	
-    LOG("setVacationFanMinOnTime() for thermostat ${statName} - before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, "info")
-    
-    def result = sendJson(child, jsonRequestBody)
-    LOG("setVacationFanMinOnTime(${howLong}) for thermostat ${statName} returned ${result}", 4, child, 'info') 
-	// if (result) atomicState.forcePoll = true 		// force next poll to get updated data
-    return result
+        def thermostatSettings = ''
+        def thermostatFunctions = '{"type":"createVacation","params":{"name":"' + evt.name + '","coolHoldTemp":"' + evt.coolHoldTemp + '","heatHoldTemp":"' + evt.heatHoldTemp + 
+                                    '","startDate":"' + evt.startDate + '","startTime":"' + evt.startTime + '","endDate":"' + evt.endDate + '","endTime":"' + evt.endTime + 
+                                    '","fan":"' + evt.fan + '","fanMinOnTime":"' + "${howLong}" + '"}}'
+        def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
+
+        LOG("setVacationFanMinOnTime() for thermostat ${statName} - before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, "info")
+
+        def result = sendJson(child, jsonRequestBody)
+        LOG("setVacationFanMinOnTime(${howLong}) for thermostat ${statName} returned ${result}", 4, child, 'info') 
+        // if (result) atomicState.forcePoll = true 		// force next poll to get updated data
+        return result
     }
 }
 
@@ -3915,7 +3896,7 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
                     program.climates[c].sensors = program.climates[c].sensors - program.climates[c].sensors[s]   
 					climateChange[deviceId] = program
 					atomicState.climateChange = climateChange		// save for later 
-                    runIn(2, 'updateClimates', [data: [deviceId: deviceId]])
+                    runIn(2, 'updateClimates', [data: [deviceId: deviceId, child: child]])
                     LOG("deleteSensorFromProgram() - ${sensName} deletion from ${programId.capitalize()} program on thermostat ${statName} queued successfully", 4, child, 'info')
            			return true
             	}
@@ -3929,25 +3910,93 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
     return true
 }
 
+def setProgramSetpoints(child, deviceId, programName, heatingSetpoint = null, coolingSetpoint = null) {
+	String statName = getThermostatName( deviceId )
+	LOG("setProgramSetpoints(${deviceId} (${statName}): ${programName} heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})",3,child,'trace')
+    
+	def program
+    def climateChange = atomicState.climateChange
+    if (climateChange && climateChange[deviceId]) {
+    	program = climateChange[deviceId]			// already have some edits underway
+    } else {
+    	if (!climateChange) climateChange = [:]
+		program = atomicState.program[deviceId]		// starting new edits
+    }
+    if (!program) {
+    	return false
+    }
+    
+    // convert C temps to F
+    def isMetric = (getTemperatureScale() == "C")
+	def ht = (heatingSetpoint && heatingSetpoint.isNumber()) ? (roundIt((isMetric ? (cToF(heatingSetpoint) * 10.0) : (heatingSetpoint * 10.0)), 0)) : null		// better precision using BigDecimal round-half-up
+	def ct = (coolingSetpoint && coolingSetpoint.isNumber()) ? (roundIt((isMetric ? (cToF(coolingSetpoint) * 10.0) : (coolingSetpoint * 10.0)), 0)) : null
+    
+    // enforce the minimum delta
+    def delta = atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null
+    if ((delta != null) && (ht != null) && (ct != null) && ((ct - ht) < delta)) {
+    	LOG("setProgramSetpoints() - Error: heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
+        return false
+    }
+    
+        
+    int c = 0
+    while ( program.climates[c] ) {	
+    	if (program.climates[c].name == programName) { // found the program we want to change
+            def heatTemp = program.climates[c]?.heatTemp
+            def coolTemp = program.climates[c]?.coolTemp
+            def adjusted = ''
+            // If we have both ht & ct, we already know the delta is good
+            // but if we only have 1, we need to determine the valid value for the other
+			if (!ct) {
+            	ct = (!coolTemp || ((coolTemp - ht) < delta)) ? (ht + delta) : coolTemp
+                if(!coolingSetpoint || (ct != cooltemp)) adjusted = 'cool'
+            } else if (!ht) {
+            	ht = (!heatTemp || ((ct - heatTemp) < delta)) ? (ct - delta) : heatTemp
+                if (!heatingSetpoint || (ht != heatTemp)) adjusted = 'heat'
+            }
+            LOG("setProgramSetpoints() - heatingSetpoint: ${ht/10}°F ${adjusted=='heat'?'(adjusted)':''}, coolingSetpoint: ${ct/10}°F ${adjusted=='cool'?'(adjusted)':''}${adjusted?', minDelta: '+(delta/10).toString()+'°F':''}",2,child,'info')
+            program.climates[c].heatTemp = ht
+            program.climates[c].coolTemp = ct
+            climateChange[deviceId] = program
+            atomicState.climateChange = climateChange		// save for later 
+            if (updateClimatesDirect( deviceId, child )) {
+            	LOG("setProgramSetpoints(): ${programName} setpoints changed successfully", 2, child, 'info')
+            	return true
+            } else {
+            	LOG("setProgramSetpoints(): ${programName} setpoints change failed", 1, child, 'warn')
+                return false
+            }
+        }
+        c++
+    }
+    // didn't find the specified climate
+    LOG("setProgramSetpoints(): ${programName} not found on thermostat ${statName}", 1, child, 'warn')
+    return false
+}
+
 def updateClimates(data) {
-	def deviceId = data.deviceId
+	updateClimatesDirec(data.deviceId, data.child)
+}
+
+def updateClimatesDirect(deviceId, child) {
     def statName = getThermostatName( deviceId )
-	LOG("Updating Program Sensors for ${statName}", 4, null, 'info')
+	LOG("Updating Program settings for ${statName}", 4, child, 'info')
     def climateChange = atomicState.climateChange
     def program
 	if (climateChange && climateChange[deviceId]) program = climateChange[deviceId]
-
+	def result
     if (program) {
     	def programJson = JsonOutput.toJson(program)
         def thermostatSettings = ',"thermostat":{"program":' + programJson +'}'
     	def thermostatFunctions = ''
     	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
-        def result = sendJson(null, jsonRequestBody)
-    	LOG("Updating Program Sensors for ${statName}) returned ${result}", 2, null, result?'info':'warn')
+        result = sendJson(child, jsonRequestBody)
+    	LOG("Updating Program settings for ${statName} returned ${result}", 4, child, result?'info':'warn')
         climateChange[deviceId] = null
         atomicState.climateChange = climateChange
     }
-    atomicState.forcePoll = true
+    // atomicState.forcePoll = true
+    return result    
 }
 
 // API Helper Functions
@@ -4049,7 +4098,6 @@ private def sendJson(child=null, String jsonBody) {
         result = false
         throw e
 	}
-    
 	return result
 }
 
@@ -4125,11 +4173,11 @@ private def LOG(message, level=3, child=null, String logType='debug', event=fals
 	}
     // if ( debugLevel(0) ) { return }
 	if ( debugLevel(5) ) { prefix = 'LOG: ' }
-	if ( dbgLevel ) { 
+	//if ( dbgLevel ) { 
     	log."${logType}" "${prefix}${message}"        
-        if (event) { debugEvent("${message}", displayEvent) }
+        if (event) { debugEvent(message, displayEvent) }
         if (child) { debugEventFromParent(child, message) }
-	}    
+	//}    
 }
 
 private def debugEvent(message, displayEvent = false) {
@@ -4466,7 +4514,7 @@ def getAvailablePrograms(thermostat) {
     String devId = getChildThermostatDeviceIdsString(thermostat)
     // LOG("getAvailablePrograms() Looking for ecobee thermostat ${devId}", 5, thermostat, "trace")
 
-    def climates = atomicState.program[devId].climates
+    def climates = atomicState.program[devId]?.climates
     
     return climates?.collect { it.name }
 }
