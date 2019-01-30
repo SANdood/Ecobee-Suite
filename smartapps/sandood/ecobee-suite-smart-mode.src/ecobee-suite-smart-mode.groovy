@@ -41,9 +41,12 @@
  *	1.6.16 - Fixed initialization error when using SmartThings Sensors
  *	1.6.17 - Added more logging for PWS, calculate dewpoint if not provided by WU
  *	1.6.18 - Switched Zip/GPS external temp source to new getTwcConditions
+ *	1.6.19 - Changes Reverted
+ *	1.6.20 - Handle null list of Climates
+ *	1.6.21 - Added option to change heat/cool setpoints instead of/in addition to changing the mode
  */
-def getVersionNum() { return "1.6.18" }
-private def getVersionLabel() { return "Ecobee Suite Smart Mode Helper, version ${getVersionNum()}" }
+def getVersionNum() { return "1.6.21" }
+private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()}" }
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 
@@ -51,7 +54,7 @@ definition(
 	name: "ecobee Suite Smart Mode",
 	namespace: "sandood",
 	author: "Justin J. Leonard & Barry A. Burke",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets Ecobee Heat/Cool/Auto mode based on (outside) temperature.",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets Ecobee Heat/Cool/Auto mode and/or Program Setpoints based on (outside) temperature & dewpoint.",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -66,8 +69,8 @@ preferences {
 
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Mode Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Mode"
+    	section(title: "Name for Smart Mode & Setpoints Helper") {
+        	label title: "Name this Helper", required: true, defaultValue: "Smart Mode & Setpoints"
         }
         section(title: "${settings.tempDisable?'':'Select Thermostat(s)'}") {
         	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."}
@@ -109,7 +112,7 @@ def mainPage() {
                         input(name: "smartWeather2", type: "device.smartWeatherStationTile2.0", title: 'Which SmartWeather Station Tile 2.0?', description: "Tap to choose...", required: false, 
                         		multiple: false, hideWhenEmpty: true)
                         input(name: "meteoWeather", type: "device.meteobridgeWeatherStation", title: 'Which Meteobridge Weather Station?', description: "Tap to choose...", required: false, 
-                        		multiple: false, hideWhenEmpty: true)
+                        		multiple: false, hideWhenEmpty: true)      
                     } else if (tempSource == "wunder") {
                     	paragraph "Using a specific Weather Underground Weather Station"
 						input(name: 'stationID', type: 'string', title: 'Enter WeatherUnderground Station identifier', description: "Tap to choose...", 
@@ -126,26 +129,48 @@ def mainPage() {
 					}
 				}
 			}
-			section(title: "Outdoor Temperature Thresholds\n(Required, range: ${getThermostatRange()})") {
+			section(title: "Outdoor Temperature 'Above' Settings") {
 				// need to set min & max - get from thermostat range
        			input(name: "aboveTemp", title: "When the outdoor temperature is at or above...", type: 'decimal', description: "Enter decimal temperature (${settings.belowTemp?'optional':'required'})", 
                 		range: getThermostatRange(), required: !settings.belowTemp, submitOnChange: true)
                 input(name: "dewAboveTemp", title: "Or, (optionally) when the outdoor dewpoint is at or above...", type: 'decimal', description: "Enter decimal dewpoint", 
                 		required: false, submitOnChange: true)
 				if (settings.aboveTemp || settings.dewAboveTemp) {
-					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes(), 
+					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: (!settings.aboveSetpoints), multiple: false, options:getThermostatModes(), 
                     		submitOnChange: true)
                     if (settings.aboveMode == 'off') {
                     	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
                     }
+                    input(name: 'aboveSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.aboveMode), defaultValue: false, submitOnChange: true) 
+                    if (settings.aboveSetpoints) {
+                    	if (!settings.aboveProgram && (!settings.aboveHeatTemp || !settings.aboveCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
+                    	input(name: 'aboveProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                        		options:getEcobeePrograms())
+                    	input(name: 'aboveHeatTemp', title: "Desired heating setpoint (${getHeatRange()})", type: 'decimal', description: 'Default = no change...', required: (!settings.aboveCoolTemp), 
+                        		range: getHeatRange(), submitOnChange: true)
+                        input(name: 'aboveCoolTemp', title: "Desired cooling setpoint (${getCoolRange()})", type: 'decimal', description: 'Default = no change...', required: (!settings.aboveHeatTemp), 
+                        		range: getCoolRange(), submitOnChange: true)
+                    }
 				}
+			}
+            section(title: "Outdoor Temperature 'Below' Settings") {
             	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'decimal', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", 
                 		range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
 				if (settings.belowTemp) {
-					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, options:getThermostatModes(), 
-                    		submitOnChange: true)
+					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: (!settings.belowSetpoints), multiple: false, 
+                    		options:getThermostatModes(), submitOnChange: true)
                     if (!(settings.aboveMode == 'off') && (settings.belowMode == 'off')) {
                     	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
+                    }
+                    input(name: 'belowSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.belowMode), defaultValue: false, submitOnChange: true) 
+                    if (settings.belowSetpoints) {
+                    	if (!settings.belowProgram && (!settings.belowHeatTemp || !settings.belowCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
+                    	input(name: 'belowProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                        		options:getEcobeePrograms())
+                    	input(name: 'belowHeatTemp', title: "Desired heating setpoint (${getHeatRange()})", type: 'decimal', description: 'Default = no change...', required: (!settings.belowCoolTemp), 
+                        		range: getHeatRange(), submitOnChange: true)
+                        input(name: 'belowCoolTemp', title: "Desired cooling setpoint (${getCoolRange()})", type: 'decimal', description: 'Default = no change...', required: (!settings.belowHeatTemp), 
+                        		range: getCoolRange(), submitOnChange: true)
                     }
 				}
                 if (settings.belowTemp && (settings.belowMode == 'off')) {
@@ -155,12 +180,24 @@ def mainPage() {
                         		submitOnChange: true)       
                 	}
             	}
-				if ((settings.belowTemp && settings.aboveTemp) && (settings.belowTemp != settings.aboveTemp)) {
+            }
+			if ((settings.belowTemp && settings.aboveTemp) && (settings.belowTemp != settings.aboveTemp)) {
+            	section(title: "Outdoor Temperature 'Between' Settings") {
 					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', 
                     		description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
+            		input(name: 'betweenSetpoints', title: 'Change Program Setpoints', type: 'bool', required: false, defaultValue: false, submitOnChange: true) 
+                    if (settings.betweenSetpoints) {
+                    	if (!settings.betweenProgram && (!settings.betweenHeatTemp || !settings.betweenCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
+                    	input(name: 'betweenProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                        		options:getEcobeePrograms())
+                    	input(name: 'betweenHeatTemp', title: 'Desired heating setpoint', type: 'decimal', description: 'Default = no change...', required: (!settings.betweenCoolTemp), 
+                        		range: getHeatRange(), submitOnChange: true)
+                        input(name: 'betweenCoolTemp', title: 'Desired cooling setpoint', type: 'decimal', description: 'Default = no change...', required: (!settings.betweenHeatTemp), 
+                        		range: getCoolRange(), submitOnChange: true)
+                    }
 				}
             }
-            section(title: "Indoor Temperature Controls (Optional)") {
+            section(title: "Indoor Temperature Settings (Optional)") {
             	if (getThermostatModes().contains('cool') && !settings.insideAuto) {
             		input(name: 'aboveCool', title: 'Set thermostat Mode to Cool if its indoor temperature is above its Cooling Setpoint (optional)?', type: 'bool', defaultValue: false, 
                     		submitOnChange: true)
@@ -174,7 +211,7 @@ def mainPage() {
                     		submitOnChange: true)
                 }
 			}
-			section(title: "Enable only for specific modes or programs?") {
+			section(title: "Enable only for specific modes or programs? (optional)") {
         		paragraph("Thermostat Modes will only be changed while ${location.name} is in these SmartThings Modes.")
             	input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
         	}            
@@ -221,6 +258,9 @@ def updated() {
 	LOG("updated() with settings: ${settings}", 3, "", 'trace')
 	unsubscribe()
     unschedule()
+    atomicState.aboveChanged = false
+    atomicState.betweenChanged = false
+    atomicState.belowChanged = false
     atomicState.dewpoint = null
     atomicState.humidity = null
     initialize()
@@ -279,7 +319,7 @@ def initialize() {
                         LOG("Humidity is: ${h}%",3,null,'info')
                 		def d = calculateDewpoint( t, h, unit )
             			atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                        LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
                    	}
                 }
             	tempNow = t 
@@ -303,7 +343,7 @@ def initialize() {
                         	LOG("Humidity is: ${h}%",3,null,'info')
                 			def d = calculateDewpoint( t, h, unit )
                             atomicState.dewpoint = d
-                            LOG("Dewpoint is: ${d}°",3,null,'info')
+                            LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
                         }
                     }
                 	tempNow = t 
@@ -317,7 +357,7 @@ def initialize() {
                     if (latest.value.isNumber()) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                        LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
                     }
                 }
             	subscribe(settings.smartWeather2, 'temperature', tempChangeHandler)
@@ -334,7 +374,24 @@ def initialize() {
                     if (latest.value.isNumber()) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                        LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
+                    }
+                }
+            	subscribe(settings.meteoWeather, 'temperature', tempChangeHandler)
+                latest = settings.meteoWeather.currentState('temperature')
+            	if (latest.value.isNumber()) { 
+                	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+                    temperatureUpdate(tempNow) 
+                }
+            } else if (settings.ambientWeather) {
+            	def latest
+                if (settings.dewBelowOverride) {
+                	subscribe(settings.meteoWeather, 'dewPoint', dewpointChangeHandler)
+                	latest = settings.meteoWeather.currentState('dewPoint')
+                    if (latest.value.isNumber()) {
+                    	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+                        atomicState.dewpoint = d
+                        LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
                     }
                 }
             	subscribe(settings.meteoWeather, 'temperature', tempChangeHandler)
@@ -356,7 +413,7 @@ def initialize() {
             	if (latest.value.isNumber()) {
                 	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                 	atomicState.dewpoint = d
-                    LOG("Dewpoint is: ${d}°",3,null,'info')
+                    LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
                 }
             }
             subscribe(theStat, 'weatherTemperature', tempChangeHandler)
@@ -381,10 +438,10 @@ def initialize() {
     atomicState.locModeEnabled = theModes ? theModes.contains(location.mode) : true
     if (tempNow) {
     	atomicState.temperature = tempNow
-    	LOG("Initialization complete...current temperature is ${tempNow}°",2,null,'info')
+    	LOG("Initialization complete...current temperature is ${tempNow}°${gu}",2,null,'info')
         return true
     } else {
-    	LOG("Initialization error...invalid temperature: ${tempNow}° - please check settings and retry", 2, null, 'error')
+    	LOG("Initialization error...invalid temperature: ${tempNow}°${gu} - please check settings and retry", 2, null, 'error')
         return false
     }
 }
@@ -427,13 +484,13 @@ def insideChangeHandler(evt) {
                     def tid = getDeviceId(evt.device.deviceNetworkId)
                     if ((cMode == 'off') && anyReservations( tid, 'modeOff' )) {
                         // if ANYBODY (including me) has a reservation on this being off, I can't turn it back on
-                        LOG("${evt.device.displayName} inside temp is ${theTemp}°, but can't change to ${newMode} since ${getGuestList(tid,'offMode').toString()[1..-2]} have offMode reservations",2,null,'warn')
+                        LOG("${evt.device.displayName} inside temp is ${theTemp}°${evt.unit}, but can't change to ${newMode} since ${getGuestList(tid,'offMode').toString()[1..-2]} have offMode reservations",2,null,'warn')
                         // Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
                     } else {
                         // not currently off or there are no modeOff reservations, change away!
                         cancelReservation(tid, 'modeOff' )
                         evt.device.setThermostatMode(newMode)
-                        LOG("${evt.device.displayName} temp is ${theTemp}°, changed thermostat to ${newMode} mode",3,null,'trace')
+                        LOG("${evt.device.displayName} temp is ${theTemp}°${evt.unit}, changed thermostat to ${newMode} mode",3,null,'trace')
                         sendMessage("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
                     }
                 }
@@ -486,7 +543,7 @@ def tempChangeHandler(evt) {
                         LOG("Humidity is: ${h}%",3,null,'info')
                 		def d = calculateDewpoint( t, h, evt.unit )
             			atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                        LOG("Dewpoint is: ${d}°${evt.unit}",3,null,'info')
                         runIn(2, atomicTempUpdater, [overwrite: true] )		// humidity might be updated also
                         return
                    	}
@@ -497,7 +554,7 @@ def tempChangeHandler(evt) {
                         LOG("Humidity is: ${h}%",3,null,'info')
                 		def d = calculateDewpoint( t, h, unit )
                         atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°",3,null,'info')
+                        LOG("Dewpoint is: ${d}°${evt.unit}",3,null,'info')
                         runIn(2, atomicTempUpdater, [overwrite: true] )		// humidity might be updated also
                         return
                     }
@@ -516,7 +573,7 @@ def dewpointChangeHandler(evt) {
 	if (evt.value.isNumber()) {
     	def d = roundIt(evt.numberValue, (evt.unit=='C'?2:1))
     	atomicState.dewpoint = d
-        LOG("Dewpoint is: ${d}°",3,null,'info')
+        LOG("Dewpoint is: ${d}°${evt.unit}",3,null,'info')
         runIn(2, atomicTempUpdater, [overwrite: true]) 		// wait for temp to be updated also
     }
 }
@@ -529,7 +586,7 @@ def humidityChangeHandler(evt) {
         LOG("Humidity is: ${evt.numberValue}%",3,null,'info')
     	def d = calculateDewpoint(t, evt.numberValue, u)
         atomicState.dewpoint = d
-        LOG("Dewpoint is: ${d}°",3,null,'info')
+        LOG("Dewpoint is: ${d}°${getTemperatureScale()}",3,null,'info')
         runIn(2, atomicTempUpdater, [overwrite: true])
     }
 }
@@ -542,13 +599,15 @@ def temperatureUpdate( temp ) {
 	if (temp?.isNumber()) temperatureUpdate(temp as BigDecimal)
 }
 def temperatureUpdate( BigDecimal temp ) {
+	def unit = getTemperatureScale()
     if (!temp) {
-    	LOG("Ignoring invalid temperature: ${temp}°", 2, null, 'warn')
+    	LOG("Ignoring invalid temperature: ${temp}°${unit}", 2, null, 'warn')
         return false
     }
-    temp = roundIt(temp, (getTemperatureScale()=='C'?2:1))
+    
+    temp = roundIt(temp, (unit=='C'?2:1))
     atomicState.temperature = temp
-    LOG("Temperature is: ${temp}°",3,null,'info')
+    LOG("Temperature is: ${temp}°${unit}",3,null,'info')
     
     def okMode = theModes ? theModes.contains(location.mode) : true
     if (okMode) {
@@ -574,6 +633,9 @@ def temperatureUpdate( BigDecimal temp ) {
 	if ( (settings.aboveTemp && (temp >= settings.aboveTemp)) || (settings.dewAboveTemp && (atomicState.dewpoint >= settings.dewAboveTemp))) {
     	if (!atomicState.aboveChanged) {
 			desiredMode = settings.aboveMode
+            if (settings.aboveSetpoints) {
+            	changeSetpoints(settings.aboveProgram, settings.aboveHeatTemp, settings.aboveCoolTemp)
+            }
             atomicState.aboveChanged = true
             atomicState.betweenChanged = false
             atomicState.belowChanged = false
@@ -581,10 +643,13 @@ def temperatureUpdate( BigDecimal temp ) {
 	} else if (settings.belowTemp && (temp <= settings.belowTemp)) {
     	if (!atomicState.belowChanged) {
         	// We haven't already changed to belowMode
-        	if ((settings.belowMode != 'off') || !settings.dewBelowOverride || (settings.dewBelowTemp > atomicState.dewpoint)) {
+        	if ( settings.belowSetpoints || (settings.belowMode && (settings.belowMode != 'off')) || !settings.dewBelowOverride || (settings.dewBelowTemp > atomicState.dewpoint)) {
             	// not turning HVAC off or aren't overriding off at this time
                 desiredMode = settings.belowMode
                 // TBD: Should we save the prior mode so we have something to return to???
+                if (settings.belowSetpoints) {
+            		changeSetpoints(settings.belowProgram, settings.belowHeatTemp, settings.belowCoolTemp)
+            	}
                 atomicState.aboveChanged = false
                 atomicState.betweenChanged = false
                 atomicState.belowChanged = true
@@ -601,15 +666,21 @@ def temperatureUpdate( BigDecimal temp ) {
         	// We have prior changed to the belowMode - now we have to check if dewpoint is still below the limit
             if ((settings.belowMode == 'off') && settings.dewBelowOverride && (settings.dewBelowTemp <= atomicState.dewpoint)) {
             	// Uh-oh, the dewpoint has risen into the bad land
-            	if (settings.betweenMode) {
+            	if (settings.betweenMode || settings.betweenSetpoints) {
                 	// We have a between mode - let's change back to that
                 	desiredMode = settings.betweenMode
+                    if (settings.betweenSetpoints) {
+            			changeSetpoints(settings.betweenProgram, settings.betweenHeatTemp, setting.betweenCoolTemp)
+            		}
             		atomicState.aboveChanged = false
             		atomicState.betweenChanged = true
             		atomicState.belowChanged = false
-                } else if (settings.aboveMode) {
-                	// OK, now between mode. But we have an above mode - switch to that
+                } else if (settings.aboveMode || settings.aboveSetpoints) {
+                	// OK, no between mode. But we have an above mode - switch to that
                 	desiredMode = settings.aboveMode
+                    if (settings.aboveSetpoints) {
+            			changeSetpoints(settings.aboveProgram, settings.aboveHeatTemp, setting.aboveCoolTemp)
+            		}
                     atomicState.aboveChanged = true
                     atomicState.betweeChanged = false
                     atomicState.belowChanged = false
@@ -621,6 +692,9 @@ def temperatureUpdate( BigDecimal temp ) {
 	} else if ((settings.aboveTemp || (settings.dewAboveTemp && (atomicState.dewpoint < settings.dewAboveTemp))) && settings.belowTemp && settings.betweenMode) {
     	if (!atomicState.betweenChanged) {
 			desiredMode = settings.betweenMode
+            if (settings.betweenSetpoints) {
+            	changeSetpoints(settings.betweenProgram, settings.betweenHeatTemp, setting.betweenCoolTemp)
+            }
             atomicState.aboveChanged = false
             atomicState.betweenChanged = true
             atomicState.belowChanged = false
@@ -646,7 +720,7 @@ def temperatureUpdate( BigDecimal temp ) {
                 			changeNames += changeNames ? ", ${it.displayName}" : it.displayName
 						} else {
                     		// somebody else still has a 'modeOff' reservation so we can't turn it on
-                            def msg = "The temperature is ${temp}°, but I can't change ${it.displayName} to ${desiredMode} Mode because ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations"
+                            def msg = "The temperature is ${temp}°${unit}, but I can't change ${it.displayName} to ${desiredMode} Mode because ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations"
                             LOG(msg ,2,null,'warn')
                             sendMessage(msg)
                             // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
@@ -665,11 +739,19 @@ def temperatureUpdate( BigDecimal temp ) {
 		}
         def multi=0
         if (changeNames) {
-        	LOG("Temp is ${temp}°, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
-        	sendMessage("The temperature is ${temp}°, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
+        	LOG("Temp is ${temp}°${unit}, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
+        	sendMessage("The temperature is ${temp}°${unit}, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
         }
-        if (sameNames) LOG("Temp is ${temp}°, ${sameNames} already in ${desiredMode} mode",3,null,'info')
+        if (sameNames) LOG("Temp is ${temp}°${unit}, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
+}
+
+private def changeSetpoints( program, heatTemp, coolTemp ) {
+	def unit = getTemperatureScale()
+	settings.thermostats.each { stat ->
+    	LOG("Setting ${stat.displayName} '${program}' heatingSetpoint to ${heatTemp}°${unit}, coolingSetpoint to ${coolTemp}°${unit}",2,null,'info')
+    	stat.setProgramSetpoints( program, heatTemp, coolTemp )
+    }
 }
 
 private def getZipTemp() {
@@ -713,7 +795,7 @@ private def getTwcTemp(type) {
                 }
                 atomicState.dewpoint = dewpointNow
             }
-            LOG("Dewpoint is: ${dewpointNow}°",2,null,'info')
+            LOG("Dewpoint is: ${dewpointNow}°${isMetric?'C':'F'}",2,null,'info')
         	temperatureUpdate(tempNow)
             return tempNow
         } else {
@@ -769,7 +851,7 @@ private def getWUTemp(type) {
                 }
                 atomicState.dewpoint = dewpointNow
             }
-            LOG("Dewpoint is: ${dewpointNow}°",2,null,'info')
+            LOG("Dewpoint is: ${dewpointNow}°${isMetric?'C':'F'}",2,null,'info')
         	temperatureUpdate(tempNow)
             return tempNow
         } else {
@@ -798,7 +880,7 @@ private roundIt( BigDecimal value, decimals=0) {
 def getThermostatModes() {
 	def theModes = []
     
-    settings.thermostats.each { stat ->
+    settings.thermostats?.each { stat ->
     	if (theModes == []) {
         	theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", ")
         } else {
@@ -806,6 +888,26 @@ def getThermostatModes() {
         }   
     }
     return theModes.sort(false)
+}
+
+// get the combined set of Ecobee Programs applicable for these thermostats
+private def getEcobeePrograms() {
+	def programs
+
+    settings.thermostats?.each { stat ->
+        def DNI = stat.device.deviceNetworkId
+        //LOG("Getting list of programs for stat (${stat}) with DNI (${DNI})", 4)
+        if (!programs) {
+            //LOG("No programs yet, adding to the list", 4)
+            programs = parent.getAvailablePrograms(stat)
+        } else {
+            //LOG("Already have some programs, need to create the set of overlapping", 4)
+            programs = programs.intersect(parent.getAvailablePrograms(stat))
+        }
+    }
+
+    LOG("getEcobeePrograms: returning ${programs}", 4, null, 'info')
+    if (programs) { return programs.sort(false) } else { return ['Away', 'Home', 'Sleep'] }
 }
 
 // return the external temperature range
@@ -819,15 +921,41 @@ def getThermostatRange() {
     	low = -5.0
 		high = 105.0
     }
-//	settings.thermostats.each {
-//		def latest = it.currentState('heatingSetpointMin')
-//      def l = (latest.value.isNumber()) ? latest.numberValue : low
-//      latest = it.currentState('coolingSetpointMax')
-//		def h = (latest.value.isNumber()) ? latest.numberValue : high
-//		if (l > low) low = l
-//		if (h < high) high = h
-//	}
 	return "${low}..${high}"
+}
+
+def getHeatRange() {
+	def low
+    def high
+    settings.thermostats.each { stat ->
+    	def lo
+        def hi
+        def setp = stat.currentValue('heatRangeLow')
+        lo = lo ? ((setp < lo) ? setp : lo) : setp
+        setp = stat.currentValue('heatRangeHigh')
+        hi = hi ? ((setp > hi) ? setp : hi) : setp
+        // if there are multiple stats, we need to find the range that ALL stats can support
+        low = low ? ((lo > low) ? lo : low) : lo
+        high = high ? ((hi < high) ? hi : high) : hi
+    }
+    return "${roundIt(low-0.5,0)}..${roundIt(high-0.5,0)}"
+}
+
+def getCoolRange() {
+	def low
+    def high
+    settings.thermostats.each { stat ->
+    	def lo
+        def hi
+        def setp = stat.currentValue('coolRangeLow')
+        lo = lo ? ((setp < lo) ? setp : lo) : setp
+        setp = stat.currentValue('coolRangeHigh')
+        hi = hi ? ((setp > hi) ? setp : hi) : setp
+        // if there are multiple stats, we need to find the range that ALL stats can support
+        low = low ? ((lo > low) ? lo : low) : lo
+        high = high ? ((hi < high) ? hi : high) : hi
+    }
+    return "${roundIt(low-0.5,0)}..${roundIt(high-0.5,0)}"
 }
 
 private String getZIPcode() {
@@ -898,9 +1026,9 @@ List getGuestList(tid, String type='modeOff') {
 
 // Helper Functions
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	message = "${app.label} ${message}"
+	def msg = app.label + ': ' + message
 	if (logType == null) logType = 'debug'
-	parent.LOG(message, level, null, logType, event, displayEvent)
+	parent.LOG(msg, level, null, logType, event, displayEvent)
     log."${logType}" message
 }
 
