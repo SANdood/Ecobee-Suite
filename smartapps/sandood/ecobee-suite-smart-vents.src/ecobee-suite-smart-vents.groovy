@@ -34,22 +34,23 @@
  *	1.6.00 - Release number synchronization
  *	1.6.10 - Resync for parent-based reservations
  *	1.6.11 - Fix offline sensor temperature values (null instead of Unknown)
+ *	1.6.12 - Added "Generic" (dimmer/switchLevel) Vents
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
 definition(
-	name: "ecobee Suite Smart Vents",
-	namespace: "sandood",
-	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates SmartThings-controlled vents to meet a target temperature in a room.",
-	category: "Convenience",
-	parent: "sandood:Ecobee Suite Manager",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	name: 			"ecobee Suite Smart Vents",
+	namespace: 		"sandood",
+	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
+	description:	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates SmartThings-controlled vents to meet a target temperature in a room.",
+	category: 		"Convenience",
+	parent: 		"sandood:Ecobee Suite Manager",
+	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false,
-    pausable: true
+    pausable: 		true
 )
 
 preferences {
@@ -79,10 +80,11 @@ def mainPage() {
         	}
        
         	section(title: "Smart Vents: Automated Vents") {
-        		paragraph("Specified Econet or Keen vents will be opened until target temperature is achieved, and then closed")
+        		paragraph("Specified Econet, Keen and/or 'generic' vents will be opened until target temperature is achieved, and then closed")
             	input(name: "theEconetVents", type: "device.econetVent", title: "Control which EcoNet Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
             	input(name: "theKeenVents", type: "device.keenHomeSmartVent", title: "Control which Keen Home Smart Vent(s)?", description: 'Tap to choose...', required: false, multiple:true, submitOnChange: true)
-            	if (settings.theEconetVents || settings.theKeenVents) {
+                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
+            	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage.")
             		input(name: "minimumVentLevel", type: "number", title: "Minimum vent level when closed?", required: true, defaultValue:10, description: '10', range: "0..100")
             	}
@@ -108,7 +110,7 @@ def mainPage() {
 				}
 			}
         } else { 
-        	if (settings.theEconetVents || settings.theKeenVents) {
+        	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
             	section( title: "Disabled Vent State") {
             		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:['open','closed','unchanged'], required: true, multiple: false, defaultValue: 'closed')
                 }
@@ -248,7 +250,7 @@ private def setTheVents(ventState) {
 }
 
 private def updateTheVents() {
-	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : [])
+	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
     theVents.each {
 		if (it.hasCapability('Refresh')) {
     		it.refresh()
@@ -261,13 +263,13 @@ private def updateTheVents() {
 }
 
 def allVentsOpen() {
-	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : [])
+	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
     //LOG("Opening the vent${theVents.size()>1?'s':''}",3,null,'info')
 	theVents?.each { ventOn(it) }
 }
 
 def allVentsClosed() {
-	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : [])
+	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
     //LOG("Closing the vent${theVents.size()>1?'s':''}",3,null,'info')
 	theVents?.each { ventOff(it) } 
 }
