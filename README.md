@@ -1,6 +1,6 @@
 Free Ecobee Suite, version: 1.6.** 
 ======================================================
-Latest Updates Released 10 January, 2019 at 12:015pm EST
+Latest Updates Released 7 April, 2019 at 7:15am EDT
 
 ***NOTE: When updating/installing, you MUST include ALL of the Suite's components***
 
@@ -10,6 +10,7 @@ The most significant changes in the August 2018 update to 1.6.1* include the fol
 ***The Reservation System have been totally re-implemented as of the 1.6.10 release - now part of Ecobee Suite Manager instead of Thermostats***
 
 #### General changes to the Ecobee Suite
+- New **schedule/setSchedule support** - Documentation coming soon!
 - New **Android Optimizations** - Via a new preference setting in Ecobee Suite Manager (under Preferences), users can now specify the type of mobile device they are using (iOS or Android). Where SmartThings operates differently on these devices, the code now tries to optimize for the platform. Primary differences are Heat/Cool **At** and Heat/Cool **To** on iOS (but not Android), and OperatingState 'Off' on iOS (but not Android). Default is 'iOS', so if you have an Android, please go change the preference setting. *Added to Ecobee Suite Manager v1.6.13 and Ecobee Thermostat v1.6.15*
 - New **Multiple SMS numbers Notifications** - SmartThings has notified users that the Contact Book will no longer be supported as of Monday, July 30, 2018. The recommended alternative is to send SMS messages to users, or to send Push messages to ALL users. This update enables you to configure multiple phone numbers (separated by ';') as the target for SMS messages (if you want directed notifications).
 - New **Reservations** - Through a new internal reservation system, Helper Apps can coordinate their changes to ensure that another Helper doesn't override an intended function (*e.g.,* changing the Mode to Off, or changing fan circulation time). See below for more information. 
@@ -91,6 +92,7 @@ The most significant changes in the August 2018 update to 1.6.1* include the fol
   - [Supported Device Attributes](#attributes)
   - [Supported Commands](#commands)
 	  - [Changing Programs](#changeprogram)
+  	  - [Changing Schedules](#changeschedule)
 	  - [Changing Thermostat Modes](#changingmode)
 	  - [Changing Thermostat Fan Modes](#changingfan)
 	  - [Complex Commands Requiring Arguments](#complex)
@@ -878,6 +880,38 @@ The complete set of thermostat DTH commands that can be called programmatically 
 - **resumeProgram** - return to the regularly scheduled program
 
 Calling any of the above will initiate a Hold for the requested program for the currently specified duration (Permanent, Until I Change, 2 Hours, 4 Hours, etc.). If the duration is Until I Change (temporary) and the requested program is the same as the current program, resumeProgram is effected instead to return to the scheduled program.
+
+#### <a name="changeschedule">Changing Schedules</a>
+**N.B.** "`schedule`" is a synonymn for "`programs`". SmartThings has defined `schedule/setSchedule` is the API mechanism to change programs on a thermostst. Note `that setSchedule()` is a front-end for the existing setThermostatProgram() and `resumeProgram()` command entry points, as documented above.
+
+Follows is documentation on the implementation within Ecobee Suite:
+
+##### Using the new `setSchedule(JSON_OBJECT)` 
+The choice by SmartThings to define the argument to `setSchedule()` has allowed me to implement an incredibly flexible way to utilize this command to change the current program. The single argument passed can be a String (*e.g.,* "Home"), or a List (*e.g.,* ["Away", "nextTransition']) or a Map (*e.g.,* [name: "Sleep", holdType: "holdHours", holdHours: 6]). 
+
+* Only the first argument (`name`) is required, and it must be one of the supported Program/Climate names for the target thermostat **- or -** the word "Resume". By default, the supported names are (Home, Away, Sleep, Resume), but will include any other Programs/Schedules/Climates that you have defined on the thermostat(s)
+* The second argument (`holdType`) is optional, and must be one of "nextTransition" (temporary hold), "indefinite" (a permanent hold), or "holdHours" (hold for a specified number of hours, obviously). 
+* With "holdHours" the third argument (`holdHours`) is the number of hours you want the hold to last.
+
+These arguments can be passed programmatically as their respective data types (String, List, or Map). But to make this implementation even ***more powerful***, it allows you to pass a String that *looks like* JSON, but isn't necessarily pure JSON. In this manner, virtually ANY programming interface/language can be used to change the currently running program/schedule. For example:
+
+<div align="center">
+	
+| String Argument| Translates to |
+|---|---|
+|"Home"|[name: "Home"]|
+|"[Home]"|[name: "Home"]|
+|"Home,nextTransition"|[name: "Home", holdType: "nextTransition"]|
+|"name:Home,holdType:holdHours,holdHours:6"|[name: "Home", holdType: "holdHours", holdHours: 6]|
+|"name,Home,holdType,holdHours,holdHours,6"|[name: "Home", holdType: "holdHours", holdHours: 6]|
+</div>
+
+As the second example implies, the argument String can be wrapped in one or more pairs of brackets ("[...]") or even braces ("{...}"). 
+
+This design provides ultimate flexibility for programmers and end users alike, and allows [Hubitat+HubConnect](https://community.hubitat.com/t/release-hubconnect-share-devices-across-multiple-hubs-even-smartthings/12028) users of the reflected Ecobee Suite Thermostat device to pass simple strings without sacrificing functionality.
+
+##### About the new `schedule` Attribute
+Since HubConnect doesn't reflect ALL of the attributes provided by the Ecobee Suite Thermostat device, I have chosen to somewhat *overload* the meaning of the `schedule` attribute. Under normal operation, it will merely report the current Program Name (Home, Away, Sleep...). But during a Hold event (or an Auto Home/Away event), the content will expand to be more descriptive, as in **Hold Home until 6:30pm** or **Hold Away forever.** SmartThings users get this additional information from the `currentProgramName` and `statusMsg` attributes which are displayed in the SmartThings Classic UI.
 
 #### <a name="changemode">Changing Thermostat Modes</a>
 - **off** - turns off the thermostat/HVAC. Note, however, if the Fan Minimum On Time is not zero when this is called, the HVAC will turn off, but the fan will remain in circulate mode. Thus, to turn the HVAC *completely* off, you should first call **fanOff**, then **off**
