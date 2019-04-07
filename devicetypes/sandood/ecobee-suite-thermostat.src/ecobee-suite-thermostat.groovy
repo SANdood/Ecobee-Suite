@@ -48,11 +48,13 @@
  *	1.6.19 - Shortcut 'TestingForInstall' in installed()
  *	1.6.20 - Log uninstall also
  *	1.6.21 - Added setProgramSetpoints()
+ *	1.6.22 - Expanded to include ALL settings as attributes
+ *	1.6.23 - Changed equipment operating state to 'de/humidifying'
+ *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  */
-def getVersionNum() { return "1.6.21" }
+def getVersionNum() { return "1.6.24" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
-import groovy.json.JsonSlurper
-import groovy.json.JsonOutput
+import groovy.json.*
  
 metadata {
 	definition (name: "Ecobee Suite Thermostat", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)", 
@@ -87,6 +89,7 @@ metadata {
 
 		command "switchMode"
         command "setThermostatProgram"
+        command "setSchedule"
         command "setProgramSetpoints"
         command "setThermostatMode"
         command "setThermostatFanMode"
@@ -140,7 +143,8 @@ metadata {
         command "makeReservation"
         command "cancelReservation"
         
-        command "getManufacturerName"
+        // command "getManufacturerName"
+        // command "getModelName"
 
 		// Capability "Thermostat"
         attribute "temperatureScale", "string"
@@ -152,6 +156,7 @@ metadata {
 		attribute "currentProgramName", "string"
         attribute "currentProgramId","string"
 		attribute "currentProgram","string"
+        attribute "schedule", "string"				// new attribute: same as 'currentProgram'
 		attribute "scheduledProgramName", "string"
         attribute "scheduledProgramId","string"
 		attribute "scheduledProgram","string"
@@ -165,7 +170,7 @@ metadata {
 		attribute "equipmentStatus", "string"
         attribute "humiditySetpoint", "number"
         attribute "dehumiditySetpoint", "number"
-//		attribute "dehumidifierLevel", "number"		// should be same as dehumiditySetpoint
+		attribute "dehumidifierLevel", "number"		// should be same as dehumiditySetpoint
         attribute "weatherTemperature", "number"
         attribute "weatherHumidity", "number"
         attribute "weatherDewpoint", "number"
@@ -176,7 +181,7 @@ metadata {
         attribute "coolMode", "string"
 		attribute "heatMode", "string"
         attribute "autoMode", "string"
-//		attribute "autoHeatCoolFeatureEnabled", "string"
+		attribute "autoHeatCoolFeatureEnabled", "string"
 		attribute "heatStages", "number"
 		attribute "coolStages", "number"
 		attribute "hasHeatPump", "string"
@@ -222,73 +227,74 @@ metadata {
         attribute "thermostatOperatingStateDisplay", "string"
         attribute "thermostatFanModeDisplay", "string"
         attribute "humiditySetpointDisplay", "string"
+        attribute "holdEndsAt", "string"
+        attribute "schedText", "string"
 
-//		attribute "ventMode", "string"
-//		attribute "supportedVentModes", "JSON_OBJECT" // USAGE: List theModes = stat.currentValue('supportedVentModes')[1..-2].tokenize(", ")
-//		attribute "ventilatorMinOnTime
-//      attribute "stage1CoolingDifferentialTemp", "number"
-//		attribute "stage1HeatingDifferentialTemp", "number" /
-//		attribute "stage1CoolingDissipationTime", "number"
-//      attribute "stage1HeatingDissipationTime", "number"
-//		attribute "compressorProtectionMinTemp", "number" 
-//		attribute "compressorProtectionMinTime", "number"
-//		attribute "heatPumpReversalOnCool", "string"
-//		attribute "auxMaxOutdoorTemp", "number"
-//		attribute "maxSetBack", "number"
-//		attribute "maxSetForward", "number"
-//		attribute "quickSaveSetBack", "number"
-//		attribute "quickSaveSetForward", "number"
-//		attribute "condensationAvoid", "string"			// boolean
-//		attribute "backlightOnIntensity", "number"
-//		attribute "backlightSleepIntensity", "number"
-//		attribute "backlightOffTime", "number"
-//		attribute "compressorProtectionMinTime", "number"
-//		attribute "compressorProtectionMinTemp", "number"
-//		attribute "fanControlRequired", "string"
-//		attribute "tempCorrection", "number"
-// 		attribute "dehumidifyOvercoolOffset", "number"
-//		attribute "dehumidifyWithAC", "string"
-//		attribute "disablePreHeating", "string"
-//		attribute "disablePreCooling", "string"
-//		attribute "ventilatorMinOnTimeHome", "number"
-//		attribute "ventilatorMinOnTimeAway", "number"
-//		attribute "backlightOffDuringSleep", "string"
-//		attribute "autoAway", "string"
-//		attribute "followMeComfort", "string"
-//		attribute "smartCirculation", "string"			// not implemented by E3, but by this code it is
-//		attribute "isVentilatorTimerOn", "string"
-//		attribute "hasUVFilter", "string"
-//		attribute "coolingLockout", "string"
-//		attribute "ventilatorFreeCooling", "string"
-//		attribute "dehumidifyWhenHeating", "string"
-//		attribute "ventilatorDuhumidify", "string"
-//
+		attribute "supportedVentModes", "JSON_OBJECT" // USAGE: List theModes = stat.currentValue('supportedVentModes')[1..-2].tokenize(", ")
+		attribute "ventMode", "string"					// Ecobee actually calls it only "vent"
+		attribute "vent", "string"						// same as "ventMode"
+		attribute "ventilatorMinOnTime", "number"
+        attribute "stage1CoolingDifferentialTemp", "number"
+		attribute "stage1HeatingDifferentialTemp", "number" 
+		attribute "stage1CoolingDissipationTime", "number"
+		attribute "stage1HeatingDissipationTime", "number"
+		attribute "compressorProtectionMinTemp", "number" 
+		attribute "compressorProtectionMinTime", "number"
+		attribute "heatPumpReversalOnCool", "string"
+		attribute "auxMaxOutdoorTemp", "number"
+		attribute "maxSetBack", "number"
+		attribute "maxSetForward", "number"
+		attribute "quickSaveSetBack", "number"
+		attribute "quickSaveSetForward", "number"
+		attribute "condensationAvoid", "string"			// boolean
+		attribute "backlightOnIntensity", "number"
+		attribute "backlightSleepIntensity", "number"
+		attribute "backlightOffTime", "number"
+		attribute "fanControlRequired", "string"
+		attribute "tempCorrection", "number"
+ 		attribute "dehumidifyOvercoolOffset", "number"
+		attribute "dehumidifyWithAC", "string"
+		attribute "disablePreHeating", "string"
+		attribute "disablePreCooling", "string"
+		attribute "ventilatorMinOnTimeHome", "number"
+		attribute "ventilatorMinOnTimeAway", "number"
+		attribute "backlightOffDuringSleep", "string"
+		attribute "autoAway", "string"
+		attribute "followMeComfort", "string"
+		attribute "smartCirculation", "string"			// not implemented by E3, but by this code it is
+		attribute "isVentilatorTimerOn", "string"
+		attribute "hasUVFilter", "string"
+		attribute "coolingLockout", "string"
+		attribute "ventilatorFreeCooling", "string"
+		attribute "dehumidifyWhenHeating", "string"
+		attribute "ventilatorDuhumidify", "string"
+
 // Alerts
-//		attribute "coldTempAlert", "number"
-//		attribute "coldTempAlertEnabled", "string"		// or boolean?
-//		attribute "hotTempAlert", "number"
-//		attribute "hotTempAlertEnabled", "string"
-//		attribute "wifiOfflineAlert", "string"			// is it enabled?
-//		attribute "auxRuntimeAlert", "number"			// time
-//		attribute "auxOutdoorTempAlert", "number"		// temp
-//		attribute "auxMaxOutdoorTemp", "number"
-//		attribute "auxRuntimeAlertNotify", "string"
-//		attribute "auxOutdoorTempAlertNotify", "string"
-//		attribute "humidityHighAlert", "number"			// %
-//		attribute "humidityLowAlert", "number"
-//		attribute "disableHeatPumpAlerts", "string"
-//		attribute "disableAlertsOnIdt", "string"
-//		attribute "humidityAlertNotify", "string"
-//		attribute "tempAlertNotify", "string"
+		attribute "coldTempAlert", "number"
+		attribute "coldTempAlertEnabled", "string"		// or boolean?
+		attribute "hotTempAlert", "number"
+		attribute "hotTempAlertEnabled", "string"
+		attribute "wifiOfflineAlert", "string"			// is it enabled?
+		attribute "auxRuntimeAlert", "number"			// time
+		attribute "auxOutdoorTempAlert", "number"		// temp
+		attribute "auxMaxOutdoorTemp", "number"
+		attribute "auxRuntimeAlertNotify", "string"
+		attribute "auxOutdoorTempAlertNotify", "string"
+		attribute "humidityHighAlert", "number"			// %
+		attribute "humidityLowAlert", "number"
+		attribute "disableHeatPumpAlerts", "string"
+		attribute "disableAlertsOnIdt", "string"
+		attribute "humidityAlertNotify", "string"
+		attribute "tempAlertNotify", "string"
 //
 // Read only
-//		attribute "hasErv", "string"
-//		attribute "hasHrv", "string"
-//		attribute "heatPumpGroundWater", "string"
-//		attribute "randomStartDelayCool", "string"
-//		attribute "randomStartDelayHeat", "string"
-//		attribute "ventilatorType", "string"		// 'none', 'ventilator', 'hrv', 'erv'
-//		attribute "ventilatorOffDateTime", "string"
+		attribute "hasErv", "string"
+		attribute "hasHrv", "string"
+		attribute "heatPumpGroundWater", "string"
+		attribute "randomStartDelayCool", "string"
+		attribute "randomStartDelayHeat", "string"
+		attribute "ventilatorType", "string"		// 'none', 'ventilator', 'hrv', 'erv'
+		attribute "ventilatorOffDateTime", "string"
         
         attribute "thermostatTime", "string"
         attribute "statHoldAction", "string"
@@ -847,7 +853,8 @@ def ping() {
    	parent.pollChildren(getDeviceId(),true) 	// forcePoll just me
 }
 
-def getManufacturerName() { log.warn "Ecobee"; return "Ecobee" }
+// def getManufacturerName() { log.trace "getManufactururerName()"; return null /*"Ecobee"*/ }
+// def getModelName() { log.trace "getModelName()"; return null }
 
 def generateEvent(Map results) {
 	if (!state.version || (state.version != getVersionLabel())) updated()
@@ -874,11 +881,24 @@ def generateEvent(Map results) {
         if (device.currentValue('coolMode') == 'true') supportedThermostatModes << 'cool'
         if (device.currentValue('autoMode') == 'true') supportedThermostatModes << 'auto'
         if (device.currentValue('auxHeatMode') == 'true') supportedThermostatModes += ['auxHeatOnly', 'emergency heat']
-       	sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false)
-       	sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false)
+       	sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
+       	sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
         state.supportedThermostatModes = supportedThermostatModes
     } else {
     	supportedThermostatModes = state.supportedThermostatModes
+    }
+    if (device.currentValue('autoHeatCoolFeatureEnabled') == null) sendEvent(name: 'autoHeatCoolFeatureEnabled', value: device.currentValue('autoMode'), isStateChange: true, displayed: false)
+    def vType = device.currentValue('ventilatorType')
+    if ((vType != null) && (vType != 'none')) {
+    	if ((state.supportedVentModes == null) || (state.supportedVentModes.size() == 1)){
+    		state.supportedVentModes = ventModes()
+        	sendEvent(name: 'supportedVentModes', value: ventModes(), displayed: false, isStateChange: true)
+    	} 
+    } else {
+        if (state.supportedVentModes == null) {
+        	state.supportedVentModes = ['off']
+            sendEvent(name: 'supportedVentModes', value: ['off'], displayed: false, isStateChange: true)
+		}
     }
 	
 	if(results) {
@@ -1096,7 +1116,7 @@ def generateEvent(Map results) {
                         	descText = descText.replace('heat ','heating ')
                         	descText = descText.replace('cool ','cooling ')
                         }
-                        descText = descText.replace('1', 'stage 1').replace('2', 'stage 2').replace('3', 'stage 3')
+                        descText = descText.replace('1', '(stage 1)').replace('2', '(stage 2)').replace('3', '(stage 3)').replace('fier', 'fying')
                      	event = eventFront + [value: sendValue, descriptionText: "Equipment is ${descText}", isStateChange: isChange, displayed: true]
                     }
 					break;
@@ -1130,6 +1150,7 @@ def generateEvent(Map results) {
                     
                 case 'dehumiditySetpoint':
                 	if (isChange || forceChange) {
+                    	sendEvent(name: 'dehumidifierLevel', value: sendValue, unit: '%', descriptionText: "Dehumidifier level is ${sendValue}%", isStateChange: true, displayed: false)
                     	event = eventFront + [value: sendValue, unit: '%', descriptionText: "Dehumidifier setpoint is ${sendValue}%", isStateChange: true, displayed: true]
                     }
                     break;
@@ -1172,6 +1193,7 @@ def generateEvent(Map results) {
                     	event = eventFront + [value: sendValue, descriptionText: progText, isStateChange: true, displayed: true]
                         if (sendValue.endsWith('Temp')) enableAllProgramButtons()
                     }
+                    sendEvent(name: 'schedule', value: sendValue + device.currentValue('schedText'), displayed: false)			// For Hubitat, we show  schedule: "Hold: Home until today at 6:30pm"
 					break;
                     
                 case 'currentProgram':
@@ -1195,7 +1217,10 @@ def generateEvent(Map results) {
                             }
                             break;
                     }
-                    if (isChange) event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
+                    if (isChange) {
+                    	event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
+                        // sendEvent(name: 'schedule', value: sendValue, isStateChange: true, displayed: false, descriptionText: "Current Schedule is ${sendValue}") // compatibility with new Capability definition
+                    }
                 	break;
 				
 				case 'apiConnected':
@@ -1396,11 +1421,11 @@ def generateEvent(Map results) {
                     	sendEvent(name: 'heatingSetpointMin', value: value, unit: tu, isStateChange: true, displayed: false)
                         objectsUpdated++
                         if ((tMode == 'heat') || (tMode == 'auto')) {
-                        	sendEvent(name: 'thermostatSetpointMin', value: value, isStateChange: true, displayed: false)
+                        	sendEvent(name: 'thermostatSetpointMin', value: value, unit: tu, isStateChange: true, displayed: false)
                            	def range = [value, device.currentValue('thermostatSetpointMax')]
-                            sendEvent(name: 'thermostatSetpointRange', value: range, isStateChange: true, displayed: false)
+                            sendEvent(name: 'thermostatSetpointRange', value: range, unit: tu, isStateChange: true, displayed: false)
                             range = [value, device.currentValue('heatingSetpointMax')]
-                            sendEvent(name: 'heatingSetpointRange', value: range, isStateChange: true, displayed: false)
+                            sendEvent(name: 'heatingSetpointRange', value: range, unit: tu, isStateChange: true, displayed: false)
                             objectsUpdated += 3
                         }
                         event = eventFront + [value: value, unit: tu, isStateChange: true, displayed: false]
@@ -1412,11 +1437,11 @@ def generateEvent(Map results) {
                     	sendEvent(name: 'heatingSetpointMax', value: value, unit: tu, isStateChange: true, displayed: false)
                         objectsUpdated++
                         if (tMode == 'heat') {
-                        	sendEvent(name: 'thermostatSetpointMax', value: value, isStateChange: true, displayed: false)
+                        	sendEvent(name: 'thermostatSetpointMax', value: value, unit: tu, isStateChange: true, displayed: false)
                             def range = [device.currentValue('thermostatSetpointMin'), value]
-                            sendEvent(name: 'thermostatSetpointRange', value: range, isStateChange: true, displayed: false)
+                            sendEvent(name: 'thermostatSetpointRange', value: range, unit: tu, isStateChange: true, displayed: false)
                             range = [device.currentValue('heatingSetpointMin'), value]
-                            sendEvent(name: 'heatingSetpointRange', value: range, isStateChange: true, displayed: false)
+                            sendEvent(name: 'heatingSetpointRange', value: range, unit: tu, isStateChange: true, displayed: false)
                             objectsUpdated += 3
                         }
                         event = eventFront + [value: value, unit: tu, isStateChange: true,  displayed: false]
@@ -1489,12 +1514,29 @@ def generateEvent(Map results) {
                     break;
                     
 				case 'holdEndsAt':
-                	if (isChange) {
-                    	if (sendValue.startsWith('Hold ends a l' /*ong time from now*/)){
-                        	// Record the lastHoldType for permanent holds effected through the Thermostat itself, the WebApp, or the Ecobee Mobile app
-                        	sendEvent(name: 'lastHoldType', value: 'indefinite', isStateChange: true, displayed: false)
-                            objectsUpdated++
+                    def schedText = ''
+                    def cpn = ''
+                    log.debug "holdEndsAt: ${sendValue}"
+                    if (sendValue.startsWith('a l' /*ong time from now*/)) {
+                        // Record the lastHoldType for permanent holds effected through the Thermostat itself, the WebApp, or the Ecobee Mobile app
+                        sendEvent(name: 'lastHoldType', value: 'indefinite', displayed: false)
+                        schedText = ' forever'
+                        objectsUpdated++
+                    }
+                    cpn = device.currentValue('currentProgramName')
+                    if (cpn != 'Offline') {
+                        if ((schedText == '') && (sendValue != '')) {
+                            def when = sendValue - 'today at '
+                            schedText = ' until ' + when
                         }
+                    }
+                    sendEvent(name: 'schedText', value: schedText, displayed: false)
+                    if (cpn != '') {
+                    	sendEvent(name: 'schedule', value: cpn + schedText, displayed: false)
+                    	objectsUpdated++
+                    }
+                    
+                    if (isChange) {
                         event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
                     }
                     break;
@@ -1516,13 +1558,35 @@ def generateEvent(Map results) {
                 case 'heatDifferential':
 				case 'coolDifferential':
                 case 'heatCoolMinDelta':
-                	if (isChange) event = eventFront +  [value: sendValue, unit: tu, isStateChange: true, displyed: false]
+                case 'stage1CoolingDifferentialTemp':
+                case 'stage1HeatingDifferentialTemp':                
+                case 'dehumidifyOvercoolOffset':
+                case 'compressorProtectionMinTemp':
+                case 'auxMaxOutdoorTemp':
+                case 'maxSetBack':
+                case 'maxSetForward':
+                case 'quickSaveSetBack':
+                case 'quickSaveSetForward':
+                case 'tempCorrection':
+                	if (isChange) event = eventFront +  [value: sendValue, unit: tu, isStateChange: true, displayed: false]
                     break;
-                    
+
+	           	case 'vent':
+                	if (isChange) {
+                    	sendEvent(name: 'ventMode', value: sendValue, isStateChange: true, displayed: false)
+                        event = eventFront +  [value: sendValue, descriptionText: "Vent is ${sendValue}", isStateChange: true, displayed: true]
+                        log.debug "vent: ${sendValue}"
+                    }
+                    break;
+	
+                // These are ones we don't need to display or provide descriptionText for (mostly internal or debug use)
+                //
                 // New attribute: supportedThermostatModes
+                case 'autoMode':
+                	// we piggyback the long name on the short name 'autoMode'
+                	if (isChange) sendEvent(name: 'autoHeatCoolFeatureEnabled', value: sendValue, isStateChange: true, displayed: false)
                	case 'heatMode':
 				case 'coolMode':
-				case 'autoMode':
 				case 'auxHeatMode':
                 	def modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
                 	if (sendValue == 'true') {
@@ -1535,12 +1599,57 @@ def generateEvent(Map results) {
 				case 'hasElectric':
 				case 'hasBoiler':
                 case 'hasHumidifier':
-                //case 'humidifierMode':
-                //case 'dehumidifierMode':
-                //case 'dehumiditySetpoint':
-                                  
-				// These are ones we don't need to display or provide descriptionText for (mostly internal or debug use)
-				case 'debugLevel':
+                case 'dehumidifierLevel':             
+                case "coldTempAlert":
+                case "coldTempAlertEnabled":
+                case "hotTempAlert":
+                case "hotTempAlertEnabled":
+                case "wifiOfflineAlert":
+                case "auxRuntimeAlert":
+                case "auxOutdoorTempAlert":
+                case "auxMaxOutdoorTemp":
+                case "auxRuntimeAlertNotify":
+                case "auxOutdoorTempAlertNotify":
+                case "humidityHighAlert":
+                case "humidityLowAlert":
+                case "disableHeatPumpAlerts":
+                case "disableAlertsOnIdt":
+                case "humidityAlertNotify":
+				case "tempAlertNotify":
+                case "hasErv":
+                case "hasHrv":
+                case "heatPumpGroundWater":
+                case "randomStartDelayCool":
+                case "randomStartDelayHeat":
+                case "ventilatorType":
+                case "ventilatorOffDateTime":
+                case 'ventilatorMinOnTime':
+                case 'stage1CoolingDissipationTime':
+                case 'stage1HeatingDissipationTime':
+                case 'compressorProtectionMinTime':
+                case 'heatPumpReversalOnCool':
+                case 'condensationAvoid':
+                case 'backlightOnIntensity':
+                case 'backlightSleepIntensity':
+                case 'backlightOffTime':
+                case 'compressorProtectionMinTime':
+                case 'fanControlRequired':
+                case 'dehumidifyWithAC':
+                case 'disablePreHeating':
+                case 'disablePreCooling':
+                case 'ventilatorMinOnTimeHome':
+                case 'ventilatorMinOnTimeAway':
+                case 'backlightOffDuringSleep':
+                case 'autoAway':
+                case 'followMeComfort':
+                case 'smartCirculation':
+                case 'isVentilatorTimerOn':
+                case 'hasUVFilter':
+                case 'coolingLockout':
+                case 'ventilatorFreeCooling':
+                case 'dehumidifyWhenHeating':
+                case 'ventilatorDuhumidify':
+                case 'debugLevel':
 				case 'decimalPrecision':
 				case 'currentProgramId':
 				case 'scheduledProgramName':
@@ -2173,32 +2282,32 @@ def modes() {
 	return state.supportedThermostatModes
 }
 void off() {
-	LOG('off()', 5, null, 'trace')
+	LOG('off()', 4, null, 'trace')
 	setThermostatMode('off')
 }
 void heat() {
-	LOG('heat()', 5, null, 'trace')
+	LOG('heat()', 4, null, 'trace')
     setThermostatMode('heat')
 }
 void auxHeatOnly() {
-	LOG("auxHeatOnly()", 5)
+	LOG("auxHeatOnly()", 4, null, 'trace')
     setThermostatMode("auxHeatOnly")
 }
 void emergency() {
-	LOG("emergency()", 5)
+	LOG("emergency()", 4, null, 'trace')
     setThermostatMode("auxHeatOnly")
 }
 // This is the proper definition for the capability
 void emergencyHeat() {
-	LOG("emergencyHeat()", 5)
+	LOG("emergencyHeat()", 4, null, 'trace')
     setThermostatMode("auxHeatOnly")
 }
 void cool() {
-	LOG('cool()', 5, null, 'trace')
+	LOG('cool()', 4, null, 'trace')
     setThermostatMode('cool')
 }
 void auto() {
-	LOG('auto()', 5, null, 'trace')
+	LOG('auto()', 4, null, 'trace')
     setThermostatMode('auto')
 }
 
@@ -2218,18 +2327,24 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
     def programs = device.currentValue('programsList')
     if (!programs) {
     	LOG("Supported programs list not initialized, possible installation error", 1, this, 'warn')
-        programsList = ["Away","Home","Sleep"]		// Just use the default list
+        programsList = ["Away","Home","Sleep","Resume"]		// Just use the default list
     } else {    
-    	programsList = new JsonSlurper().parseText(programs)
+        programsList = new JsonSlurper().parseText(programs) + ['Resume']
     }
     
-    if (!programsList.contains(program)) {
-    	LOG("setThermostatProgram(${program}) not found in (${programsList})", 2, this, 'warn')
+    if ((program == null) || (!programsList.contains(program))) {
+    	LOG("setThermostatProgram( ${program} ): Missing or Invalid argument - must be one of (${programsList.toString()[1..-2]})", 2, this, 'warn')
        	return
     }
    	
 	def deviceId = getDeviceId()    
-	LOG("setThermostatProgram(${program}, ${holdType}, ${holdHours})", 4,null,'trace')
+	LOG("setThermostatProgram(${program}, ${holdType}, ${holdHours})", 4, this,'trace')
+    
+    if (program == 'Resume') {
+    	LOG("setThermostatProgram() Resuming scheduled program", 2, this, 'info')
+    	resumeProgram( true )
+        return
+    }
     
     def sendHoldType = null
     def sendHoldHours = null
@@ -2304,6 +2419,69 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
 		// generateProgramEvent(priorProgram, program) // reset the tile back
 	}
 }
+void setSchedule(scheduleJson) {
+	LOG("setSchedule( ${scheduleJson} )", 4, this, 'trace')
+    if ((scheduleJson != null) && (scheduleJson != '[null]') && (scheduleJson != 'null')) {
+    	if (scheduleJson instanceof CharSequence) {
+			// Handle Strings made to look like JSON (e.g. commands from Hubitat Hubconnect device driver)
+            while (scheduleJson.startsWith('[') || scheduleJson.startsWith('{')) { scheduleJson = scheduleJson[1..-2] }	// Recursively trim brackets/braces
+        	if (scheduleJson.contains(':')) {
+            	// Looks like a Map masquerading as a String
+            	def scheduleList = scheduleJson.contains(',') ? scheduleJson.split(',') : [scheduleJson]
+                scheduleJson = [:]
+                scheduleList.each { 
+                	def m = it.split(':')
+                    scheduleJson += [ (m[0].trim()) : m[1].trim() ]
+                }
+            } else if (scheduleJson.contains(',')) {
+            	// Looks like a List masquerading as a String
+                if (scheduleJson.contains('name')) {
+                	// It's actually a lazy Map (name, Home, holdType, nextTransition) masquerading as a String
+                	def scheduleList = scheduleJson.split(',')
+                    def s = scheduleList.size()
+                    int i
+                    scheduleJson = [:]
+                	for (i=0; i+1 <= s; i=i+2) { 
+                    	scheduleJson += [ (scheduleList[i].trim()) : scheduleList[i+1].trim() ]
+                	}
+                } else {
+                	// OK, it's really just a List (Home, nextTransition) masquerading as a String
+        			scheduleJson = (scheduleJson.split(',') + [null, null]) as List			// Pad with extra arguments
+                }
+            } // else it's a one-argument String - leave it alone if not a Map or a List 
+        }
+        LOG("scheduleJson  -  isMap: ${scheduleJson instanceof Map}, isList: ${scheduleJson instanceof List}, isCharSequence: ${scheduleJson instanceof CharSequence}", 4, this, 'debug')
+        LOG("setSchedule( ${scheduleJson} )", 2, this, 'info')
+    	if (scheduleJson instanceof Map) {
+            // [name: "scheduleName", holdType: ["nextTransition", "indefinite", "holdHours"], holdHours: number]
+			if (scheduleJson.holdHours && scheduleJson.holdType && scheduleJson.name) {
+                setThermostatProgram( scheduleJson.name?.trim().capitalize(), scheduleJson.holdType?.trim(), scheduleJson.holdHours?.trim())
+            } else if (scheduleJson.holdType && scheduleJson.name) {
+                setThermostatProgram( scheduleJson.name?.trim().capitalize(), scheduleJson.holdType?.trim())
+            } else if (scheduleJson.name) {
+                setThermostatProgram( scheduleJson.name?.trim().capitalize())
+            }
+        } else if (scheduleJson instanceof List) {
+            // [scheduleName, holdType, holdHours]
+            setThermostatProgram( scheduleJson[0].trim().capitalize(), scheduleJson[1]?.trim(), scheduleJson[2]?.trim() )
+        } else if (scheduleJson instanceof CharSequence) {
+            // Simple scheduleName
+            setThermostatProgram( scheduleJson.trim().capitalize() )
+        } else {
+        	LOG("setSchedule( ${scheduleJson} ): Invalid argument Class - must be String, Map or List", 2, this, 'warn')
+        }
+    } else {
+    	def programsList = []
+    	def programs = device.currentValue('programsList')
+    	if (!programs) {
+    		LOG("Supported programs list not initialized, possible installation error", 1, this, 'warn')
+        	programsList = ['Away','Home','Sleep','Resume']		// Just use the default list
+    	} else {    
+    		programsList = new JsonSlurper().parseText(programs) + ['Resume']
+    	}
+    	LOG("setSchedule( null ): Missing or Invalid argument - must be one of (${programsList.toString()[1..-2]})", 1, this, 'warn')
+    }
+}
 void present(){
 	// Change the Comfort Setting to Home (Nest compatibility)
     LOG('present()', 5, null, 'trace')
@@ -2346,7 +2524,7 @@ void resumeProgram(resumeAll=true) {
 	String currentProgramName = device.currentValue('currentProgramName')
 	resumeProgramInternal(resumeAll)
     if (currentProgramName.startsWith('Hold') || currentProgramName.startsWith('Auto ')) {
-    	//def updates = ['thermostatOperatingState':'idle','equipmentOperatingState':'idle']
+    	//def updates = ['holdEndsAt' : '']
         //log.debug updates
         //generateEvent(updates)
         runIn(5, refresh, [overwrite:false])
@@ -2526,6 +2704,10 @@ def setThermostatFanMode(String value, holdType=null, holdHours=2) {
             }
             break;
     }    
+}
+
+def ventModes() {
+	return ["auto", "minontime", "on", "off"]
 }
 def fanModes() {
 	["on", "auto", "circulate", "off"]
