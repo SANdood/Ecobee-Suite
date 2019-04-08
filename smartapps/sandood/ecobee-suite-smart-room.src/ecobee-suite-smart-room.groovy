@@ -23,8 +23,9 @@
  *	1.6.01 - Fixed sendMessage()
  *	1.6.10 - Resync for parent-based reservations
  *	1.6.11 - Removed location.contactBook support - deprecated by SmartThings
+ *	1.6.12 - Added support for "generic" vents (dimmers), as with Smart Vents
  */
-def getVersionNum() { return "1.6.11" }
+def getVersionNum() { return "1.6.12" }
 private def getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -91,7 +92,8 @@ def mainPage() {
         		paragraph("You can have specified Econet or Keen vents opened while a Smart Room is Active, and closed when Inactive")
             	input(name: "theEconetVents", type: "device.econetVent", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, submitOnChange: true)
             	input(name: "theKeenVents", type: "device.keenHomeSmartVent", title: "Control which Keen Home Smart Vent(s)?", required: false, multiple:true, submitOnChange: true)
-            	if (settings.theEconetVents || settings.theKeenVents) {
+                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
+            	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage")
             		input(name: "minimumVentLevel", type: "number", title: "Minimum vent level when closed?", required: true, defaultValue:0, description: '0', range: "0..100")
             	}
@@ -187,8 +189,7 @@ def initialize() {
 	}
 	sensorData << [windows:windowStatus]
 	
-    def theVents = (theEconetVents ? theEconetVents : []) 
-    theVents += (theKeenVents ? theKeenVents : [])
+    def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents : [])    
     def ventStatus = 'notused'
 	if (theVents != []) {
     	// if any vent is on and open == 100, then open
@@ -367,8 +368,7 @@ def activateRoom() {
     
     // turn on vents
     String status = 'notused'
-    def theVents = (theEconetVents ? theEconetVents : []) 
-    theVents += (theKeenVents ? theKeenVents : [])
+    def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents : [])
     if (theVents != []) {
     	theVents.each {
         	if (it.currentSwitch != 'on') it.on()
@@ -416,8 +416,7 @@ def deactivateRoom() {
     
     //turn off the vents
     String status = 'notused'
-    def theVents = (theEconetVents ? theEconetVents : [])
-    theVents += (theKeenVents ? theKeenVents : [])
+    def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents : [])
     if (theVents != []) {
     	theVents.each {
         	ventOff(it)
