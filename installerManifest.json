@@ -109,6 +109,15 @@
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
 				"optional": 	false
+			},
+			{
+				"name": 	"ecobee Suite Thermal Comfort",
+				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+				"published": 	true,
+				"version": 	"1.6.23",
+				"appSettings": 	{ },
+				"appUrl": 	"smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
+				"optional": 	false
 			}
 		]
 	},

@@ -51,8 +51,8 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 
 private def getHelperSmartApps() {
-	return [ 
-		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",  
+	return [
+		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",
             namespace: "sandood", multiple: true, 
             title: "New Contacts & Switches Helper..."],
     	[name: "ecobeeRoutinesChild", appName: "ecobee Suite Routines",  
@@ -78,7 +78,10 @@ private def getHelperSmartApps() {
             title: "New Smart Vents Helper..."],
 		[name: "ecobeeZonesChild", appName: "ecobee Suite Smart Zones",
 			 namespace: "sandood", multiple: true,
-			 title: "New Smart Zones Helper..."]
+			 title: "New Smart Zones Helper..."],
+		[name: "ecobeeThermalComfortChild", appName: "ecobee Suite Thermal Comfort",
+		 	 namespace: "sandood", multiple: true,
+		 	 title: "New Thermal Comfort Helper..."],
 	]
 }
  
