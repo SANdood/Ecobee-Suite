@@ -95,19 +95,17 @@ def mainPage() {
                     input(name: "coolPmvCustom", title: "PMV (custom)", type: 'decimal', description: "Enter decimal (required)",
                             range: "0..*", required: settings.coolPmv=='custom', submitOnChange: true )
                 }
-                if (settings.coolPmv) {
-                    input(name: "coolMet", title: "Metabolic rate", type: 'enum', description: "Tap to choose...",
-                            options: metOptions, required: true, submitOnChange: true, defaultValue: 1.1 )
-                    if (settings.coolMet=='custom') {
-                        input(name: "coolMetCustom", title: "Metabolic rate (custom)", type: 'decimal', description: "Enter decimal (required)",
-                                range: "0..*", required: settings.coolMet=='custom', submitOnChange: true )
-                    }
-                    input(name: "coolClo", title: "Clothing level", type: 'enum', description: "Tap to choose...",
-                            options: cloOptions, required: true, submitOnChange: true, defaultValue: 0.6 )
-                    if (settings.coolClo=='custom') {
-                        input(name: "coolCloCustom", title: "Clothing level (custom)", type: 'decimal', description: "Enter decimal (required)",
-                                range: "0..*", required: settings.coolClo=='custom', submitOnChange: true )
-                    }
+                input(name: "coolMet", title: "Metabolic rate", type: 'enum', description: "Tap to choose...",
+                        options: metOptions, required: true, submitOnChange: true, defaultValue: 1.1 )
+                if (settings.coolMet=='custom') {
+                    input(name: "coolMetCustom", title: "Metabolic rate (custom)", type: 'decimal', description: "Enter decimal (required)",
+                            range: "0..*", required: settings.coolMet=='custom', submitOnChange: true )
+                }
+                input(name: "coolClo", title: "Clothing level", type: 'enum', description: "Tap to choose...",
+                        options: cloOptions, required: true, submitOnChange: true, defaultValue: 0.6 )
+                if (settings.coolClo=='custom') {
+                    input(name: "coolCloCustom", title: "Clothing level (custom)", type: 'decimal', description: "Enter decimal (required)",
+                            range: "0..*", required: settings.coolClo=='custom', submitOnChange: true )
                 }
 			}
             section(title: "Heat Comfort Settings") {
@@ -117,19 +115,17 @@ def mainPage() {
                     input(name: "heatPmvCustom", title: "PMV (custom)", type: 'decimal', description: "Enter decimal (required)",
                             range: "*..0", required: settings.heatPmv=='custom', submitOnChange: true )
                 }
-                if (settings.heatPmv) {
-                    input(name: "heatMet", title: "Metabolic rate", type: 'enum', description: "Tap to choose...",
-                            options: metOptions, required: true, submitOnChange: true, defaultValue: 1.1 )
-                    if (settings.heatMet=='custom') {
-                        input(name: "heatMetCustom", title: "Metabolic rate (custom)", type: 'decimal', description: "Enter decimal (required)",
-                                range: "0..*", required: settings.heatMet=='custom', submitOnChange: true )
-                    }
-                    input(name: "heatClo", title: "Clothing level", type: 'enum', description: "Tap to choose...",
-                            options: cloOptions, required: true, submitOnChange: true, defaultValue: 1.0 )
-                    if (settings.heatClo=='custom') {
-                        input(name: "heatCloCustom", title: "Clothing level (custom)", type: 'decimal', description: "Enter decimal (required)",
-                                range: "0..*", required: settings.heatClo=='custom', submitOnChange: true )
-                    }
+                input(name: "heatMet", title: "Metabolic rate", type: 'enum', description: "Tap to choose...",
+                        options: metOptions, required: true, submitOnChange: true, defaultValue: 1.1 )
+                if (settings.heatMet=='custom') {
+                    input(name: "heatMetCustom", title: "Metabolic rate (custom)", type: 'decimal', description: "Enter decimal (required)",
+                            range: "0..*", required: settings.heatMet=='custom', submitOnChange: true )
+                }
+                input(name: "heatClo", title: "Clothing level", type: 'enum', description: "Tap to choose...",
+                        options: cloOptions, required: true, submitOnChange: true, defaultValue: 1.0 )
+                if (settings.heatClo=='custom') {
+                    input(name: "heatCloCustom", title: "Clothing level (custom)", type: 'decimal', description: "Enter decimal (required)",
+                            range: "0..*", required: settings.heatClo=='custom', submitOnChange: true )
                 }
             }
 			section(title: "Enable only for specific programs? (optional)") {
@@ -246,7 +242,7 @@ def humidityUpdate( humidity ) {
 }
 def humidityUpdate( Integer humidity ) {
     if (!humidity) {
-    	LOG("Ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
+    	log("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
         return false
     }
 
