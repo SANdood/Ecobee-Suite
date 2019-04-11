@@ -249,9 +249,10 @@ def humidityUpdate( Integer humidity ) {
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
 
-    def okProgram = thePrograms ? thePrograms.contains(theThermostat.currentValue('currentProgram')) : true
+    def currentProgram = theThermostat.currentValue('currentProgram')
+    def okProgram = thePrograms ? thePrograms.contains(currentProgram) : true
     if (!okProgram) {
-        LOG("Program is ignored: ${theThermostat.currentValue('currentProgram')}",3,null,'info')
+        LOG("Program is ignored: ${currentProgram}",3,null,'info')
         return
     }
 
@@ -262,12 +263,11 @@ def humidityUpdate( Integer humidity ) {
     if (settings.coolPmv) {
         coolSetpoint = calculateCoolSetpoint()
     }
-    changeSetpoints(heatSetpoint, coolSetpoint)
+    changeSetpoints(currentProgram, heatSetpoint, coolSetpoint)
 }
 
-private def changeSetpoints( heatTemp, coolTemp ) {
+private def changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
-    def program = theThermostat.currentCurrentProgram
     LOG("Setting ${theThermostat.displayName} '${program}' heatingSetpoint to ${heatTemp}°${unit}, coolingSetpoint to ${coolTemp}°${unit}",2,null,'info')
     theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
 }
