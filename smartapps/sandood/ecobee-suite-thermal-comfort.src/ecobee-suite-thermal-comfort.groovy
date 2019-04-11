@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 /**
  *  Ecobee Suite Thermal Comfort
  *
@@ -36,6 +38,20 @@ preferences {
 
 def mainPage() {
     def unit = getTemperatureScale()
+    def coolPmvOptions = [
+            0.5: 'Comfortable (0.5)',
+            0.64: 'Eco (0.64)',
+            0.8: 'Slightly warm (0.8)',
+            1.9: 'Warm (1.9)',
+            'custom': 'Custom'
+    ]
+    def heatPmvOptions = [
+            (-0.5): 'Comfortable (-0.5)',
+            (-0.64): 'Eco (-0.64)',
+            (-1.0): 'Slightly cool (-1.0)',
+            (-2.3): 'Cool (-2.3)',
+            'custom': 'Custom'
+    ]
     def metOptions = [
             0.7: 'Sleeping (0.7)',
             0.8: 'Reclining (0.8)',
@@ -61,44 +77,68 @@ def mainPage() {
             8.7: 'Winter weight duvet [7.7-8.7] (8.7)',
             'custom': 'Custom'
     ]
-    def pmvRange = '-5..5'
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "Name for Thermal Comfort Helper") {
         	label title: "Name this Helper", required: true, defaultValue: "Thermal Comfort"
         }
-        section(title: "${settings.tempDisable?'':'Select Thermostat(s)'}") {
+        section(title: "${settings.tempDisable?'':'Select Thermostat'}") {
         	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."}
-        	else {input ("thermostats", "device.ecobeeSuiteThermostat", title: "Pick Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)}
+        	else {input ("theThermostat", "device.ecobeeSuiteThermostat", title: "Use which Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)}
 		}
         if (!settings.tempDisable) {
             section(title: "Sensors") {
-                input(name: 'thermometer', type: 'capability.temperatureMeasurement', title: "Which Temperature Sensor?", description: 'Tap to choose...', required: true, multiple: false)
                 input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", description: 'Tap to choose...', required: true, multiple: false, submitOnChange: true)
                 if (settings.humidistat) {
                     atomicState.humidity = settings.humidistat.currentHumidity
                 }
             }
-			section(title: "Comfort Settings") {
-       			input(name: "coolPmv", title: "PMV in cool mode${settings.coolPmv!=null&&configured()?' ('+calculateCoolSetpoint()+'°'+unit+')':''}", type: 'decimal', description: "Enter decimal PMV (${settings.heatPmv?'optional':'required'})",
-                		range: pmvRange, required: !settings.heatPmv, submitOnChange: true)
-                input(name: "heatPmv", title: "PMV in heat mode${settings.heatPmv!=null&&configured()?' ('+calculateHeatSetpoint()+'°'+unit+')':''}", type: 'decimal', description: "Enter decimal PMV (${settings.coolPmv?'optional':'required'})",
-                        range: pmvRange, required: !settings.coolPmv, submitOnChange: true)
-                input(name: "met", title: "Metabolic rate", type: 'enum', description: "Tap to choose...",
-                        options: metOptions, required: true, submitOnChange: true )
-                if (settings.met=='custom') {
-                    input(name: "metCustom", title: "Metabolic rate (custom)", type: 'decimal', description: "Enter decimal (required)",
-                            range: "0..*", required: settings.met=='custom', submitOnChange: true )
+			section(title: "Cool Comfort Settings") {
+       			input(name: "coolPmv", title: "PMV in cool mode${settings.coolPmv!=null&&coolConfigured()?' ('+calculateCoolSetpoint()+'°'+unit+')':''}", type: 'enum', description: "Tap to choose... (${settings.heatPmv?'optional':'required'})",
+                		options: coolPmvOptions, required: !settings.heatPmv, submitOnChange: true)
+                if (settings.coolPmv=='custom') {
+                    input(name: "coolPmvCustom", title: "PMV (custom)", type: 'decimal', description: "Enter decimal (required)",
+                            range: "0..*", required: settings.coolPmv=='custom', submitOnChange: true )
                 }
-                input(name: "clo", title: "Clothing level", type: 'enum', description: "Tap to choose...",
-                        options: cloOptions, required: true, submitOnChange: true )
-                if (settings.clo=='custom') {
-                    input(name: "cloCustom", title: "Clothing level (custom)", type: 'decimal', description: "Enter decimal (required)",
-                            range: "0..*", required: settings.clo=='custom', submitOnChange: true )
+                if (settings.coolPmv) {
+                    input(name: "coolMet", title: "Metabolic rate", type: 'enum', description: "Tap to choose...",
+                            options: metOptions, required: true, submitOnChange: true, defaultValue: 1.1 )
+                    if (settings.coolMet=='custom') {
+                        input(name: "coolMetCustom", title: "Metabolic rate (custom)", type: 'decimal', description: "Enter decimal (required)",
+                                range: "0..*", required: settings.coolMet=='custom', submitOnChange: true )
+                    }
+                    input(name: "coolClo", title: "Clothing level", type: 'enum', description: "Tap to choose...",
+                            options: cloOptions, required: true, submitOnChange: true, defaultValue: 0.6 )
+                    if (settings.coolClo=='custom') {
+                        input(name: "coolCloCustom", title: "Clothing level (custom)", type: 'decimal', description: "Enter decimal (required)",
+                                range: "0..*", required: settings.coolClo=='custom', submitOnChange: true )
+                    }
                 }
 			}
-			section(title: "Enable only for specific modes or programs? (optional)") {
+            section(title: "Heat Comfort Settings") {
+                input(name: "heatPmv", title: "PMV in heat mode${settings.heatPmv!=null&&heatConfigured()?' ('+calculateHeatSetpoint()+'°'+unit+')':''}", type: 'enum', description: "Tap to choose... (${settings.coolPmv?'optional':'required'})",
+                        options: heatPmvOptions, required: !settings.coolPmv, submitOnChange: true)
+                if (settings.heatPmv=='custom') {
+                    input(name: "heatPmvCustom", title: "PMV (custom)", type: 'decimal', description: "Enter decimal (required)",
+                            range: "*..0", required: settings.heatPmv=='custom', submitOnChange: true )
+                }
+                if (settings.heatPmv) {
+                    input(name: "heatMet", title: "Metabolic rate", type: 'enum', description: "Tap to choose...",
+                            options: metOptions, required: true, submitOnChange: true, defaultValue: 1.1 )
+                    if (settings.heatMet=='custom') {
+                        input(name: "heatMetCustom", title: "Metabolic rate (custom)", type: 'decimal', description: "Enter decimal (required)",
+                                range: "0..*", required: settings.heatMet=='custom', submitOnChange: true )
+                    }
+                    input(name: "heatClo", title: "Clothing level", type: 'enum', description: "Tap to choose...",
+                            options: cloOptions, required: true, submitOnChange: true, defaultValue: 1.0 )
+                    if (settings.heatClo=='custom') {
+                        input(name: "heatCloCustom", title: "Clothing level (custom)", type: 'decimal', description: "Enter decimal (required)",
+                                range: "0..*", required: settings.heatClo=='custom', submitOnChange: true )
+                    }
+                }
+            }
+			section(title: "Enable only for specific programs? (optional)") {
         		paragraph("Thermostat Modes will only be changed while ${location.name} is in these SmartThings Modes.")
-            	input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
+                input(name: "thePrograms", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Program is", multiple: true, required: false, options: getProgramsList())
         	}
       		section("Notifications (optional)") {
         		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
@@ -128,12 +168,6 @@ def installed() {
 }
 
 def uninstalled() {
-	clearReservations()
-}
-def clearReservations() {
-	thermostats?.each {
-    	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff' )
-    }
 }
 def updated() {
 	LOG("updated() with settings: ${settings}", 3, "", 'trace')
@@ -143,46 +177,56 @@ def updated() {
     initialize()
 }
 
+def getProgramsList() {
+    if (theThermostat) {
+        def programs = theThermostat.currentValue('programsList')
+        if (programs) {
+            return new JsonSlurper().parseText(programs)
+        }
+    }
+    return ["Away","Home","Sleep"]
+}
+
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	if(settings.tempDisable) {
-    	clearReservations()
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
 
-    subscribe( settings.humidistat, 'humidity', humidityChangeHandler)
-    subscribe(thermostats, 'currentProgram', programHandler)
+    subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
+    subscribe(settings.theThermostat, 'currentProgram', programHandler)
 
-    def gu = getTemperatureScale()
-    def latest = settings.thermometer.currentState("temperature")
-    def unit = latest.unit
-    def t, pmv
-    if (latest.value.isNumber()) {
-        t = roundIt(latest.numberValue, (unit=='C'?2:1))
-        latest = settings.humidistat.currentState('humidity')
-        if (latest.value.isNumber()) {
-            def h = latest.numberValue
-            atomicState.humidity = h
-            pmv = calculatePmv(t, gu, h)
-        }
+    def h = settings.humidistat.currentHumidity
+    atomicState.humidity = h
 
-        runIn(2, atomicHumidityUpdater, [overwrite: true])
-    }
-    if (pmv) {
-    	LOG("Initialization complete...current temperature is ${t}°${gu} (PMV: ${pmv})",2,null,'info')
+    runIn(2, atomicHumidityUpdater, [overwrite: true])
+    if (h) {
+    	LOG("Initialization complete...current humidity is ${h}%",2,null,'info')
         return true
     } else {
-    	LOG("Initialization error...invalid temperature: ${t}°${gu} (PMV: ${pmv}) - please check settings and retry", 2, null, 'error')
+    	LOG("Initialization error...invalid humidity: ${h}% - please check settings and retry", 2, null, 'error')
         return false
     }
 }
 
 def configured() {
     return atomicState.humidity != null &&
-            (settings.met != null && ( settings.met == 'custom' ? settings.metCustom != null : true)) &&
-            (settings.clo != null && ( settings.clo == 'custom' ? settings.cloCustom != null : true)) &&
-            settings.thermostats != null
+            settings.theThermostat != null
+}
+
+def coolConfigured() {
+    return configured() &&
+            (settings.coolPmv != null && ( settings.coolPmv == 'custom' ? settings.coolPmvCustom != null : true)) &&
+            (settings.coolMet != null && ( settings.coolMet == 'custom' ? settings.coolMetCustom != null : true)) &&
+            (settings.coolClo != null && ( settings.coolClo == 'custom' ? settings.coolCloCustom != null : true))
+}
+
+def heatConfigured() {
+    return configured() &&
+            (settings.heatPmv != null && ( settings.heatPmv == 'custom' ? settings.heatPmvCustom != null : true)) &&
+            (settings.heatMet != null && ( settings.heatMet == 'custom' ? settings.heatMetCustom != null : true)) &&
+            (settings.heatClo != null && ( settings.heatClo == 'custom' ? settings.heatCloCustom != null : true))
 }
 
 def programHandler(evt) {
@@ -213,9 +257,9 @@ def humidityUpdate( Integer humidity ) {
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
 
-    def okMode = theModes ? theModes.contains(location.mode) : true
-    if (!okMode) {
-        LOG("Mode is ignored: ${location.mode}",3,null,'info')
+    def okProgram = thePrograms ? thePrograms.contains(theThermostat.currentValue('currentProgram')) : true
+    if (!okProgram) {
+        LOG("Program is ignored: ${theThermostat.currentValue('currentProgram')}",3,null,'info')
         return
     }
 
@@ -231,11 +275,9 @@ def humidityUpdate( Integer humidity ) {
 
 private def changeSetpoints( heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
-	settings.thermostats.each { stat ->
-        def program = stat.currentCurrentProgram
-    	LOG("Setting ${stat.displayName} '${program}' heatingSetpoint to ${heatTemp}°${unit}, coolingSetpoint to ${coolTemp}°${unit}",2,null,'info')
-    	stat.setProgramSetpoints( program, heatTemp, coolTemp )
-    }
+    def program = theThermostat.currentCurrentProgram
+    LOG("Setting ${theThermostat.displayName} '${program}' heatingSetpoint to ${heatTemp}°${unit}, coolingSetpoint to ${coolTemp}°${unit}",2,null,'info')
+    theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
 }
 
 private roundIt( value, decimals=0 ) {
@@ -245,7 +287,7 @@ private roundIt( BigDecimal value, decimals=0) {
     return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP)
 }
 
-private def calculatePmv(temp, units, rh) {
+private def calculatePmv(temp, units, rh, met, clo) {
     // returns pmv
     // temp, air temperature
     // units, air temperature unit
@@ -254,8 +296,6 @@ private def calculatePmv(temp, units, rh) {
     // clo, clothing (clo)
 
     def vel = 0.0
-    def met = settings.met=='custom' ? settings.metCustom : settings.met as BigDecimal
-    def clo = settings.clo=='custom' ? settings.cloCustom : settings.clo as BigDecimal
 
     def ta = ((units == 'C') ? temp : (temp-32)/1.8) as BigDecimal
 
@@ -320,70 +360,56 @@ private def calculatePmv(temp, units, rh) {
 }
 
 private def calculateHeatSetpoint() {
+    def targetPmv = settings.heatPmv=='custom' ? settings.heatPmvCustom : settings.heatPmv as BigDecimal
+    def met = settings.heatMet=='custom' ? settings.heatMetCustom : settings.heatMet as BigDecimal
+    def clo = settings.heatClo=='custom' ? settings.heatCloCustom : settings.heatClo as BigDecimal
+
     def units = getTemperatureScale()
     def range = getHeatRange()
     def min = range[0]
     def max = range[1]
     def preferred = max
-    def pmv = calculatePmv(preferred, units, atomicState.humidity)
-    while (preferred >= min && pmv >= settings.heatPmv) {
+    def pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
+    while (preferred >= min && pmv >= targetPmv) {
         preferred = preferred - 1
-        pmv = calculatePmv(preferred, units, atomicState.humidity)
+        pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     }
     preferred = preferred + 1
-    pmv = calculatePmv(preferred, units, atomicState.humidity)
+    pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     LOG("Heating preferred set point: ${preferred}°${units} (PMV: ${pmv})",3,null,'info')
     return preferred
 }
 
 private def calculateCoolSetpoint() {
+    def targetPmv = settings.coolPmv=='custom' ? settings.coolPmvCustom : settings.coolPmv as BigDecimal
+    def met = settings.coolMet=='custom' ? settings.coolMetCustom : settings.coolMet as BigDecimal
+    def clo = settings.coolClo=='custom' ? settings.coolCloCustom : settings.coolClo as BigDecimal
+
     def units = getTemperatureScale()
     def range = getCoolRange()
     def min = range[0]
     def max = range[1]
     def preferred = min
-    def pmv = calculatePmv(preferred, units, atomicState.humidity)
-    while (preferred <= max && pmv <= settings.coolPmv) {
+    def pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
+    while (preferred <= max && pmv <= targetPmv) {
         preferred = preferred + 1
-        pmv = calculatePmv(preferred, units, atomicState.humidity)
+        pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     }
     preferred = preferred - 1
-    pmv = calculatePmv(preferred, units, atomicState.humidity)
+    pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     LOG("Cooling preferred set point: ${preferred}°${units} (PMV: ${pmv})",3,null,'info')
     return preferred
 }
 
 def getHeatRange() {
-	def low
-    def high
-    settings.thermostats.each { stat ->
-    	def lo
-        def hi
-        def setp = stat.currentValue('heatRangeLow')
-        lo = lo ? ((setp < lo) ? setp : lo) : setp
-        setp = stat.currentValue('heatRangeHigh')
-        hi = hi ? ((setp > hi) ? setp : hi) : setp
-        // if there are multiple stats, we need to find the range that ALL stats can support
-        low = low ? ((lo > low) ? lo : low) : lo
-        high = high ? ((hi < high) ? hi : high) : hi
-    }
+    def low = theThermostat.currentValue('heatRangeLow')
+    def high = theThermostat.currentValue('heatRangeHigh')
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
 def getCoolRange() {
-	def low
-    def high
-    settings.thermostats.each { stat ->
-    	def lo
-        def hi
-        def setp = stat.currentValue('coolRangeLow')
-        lo = lo ? ((setp < lo) ? setp : lo) : setp
-        setp = stat.currentValue('coolRangeHigh')
-        hi = hi ? ((setp > hi) ? setp : hi) : setp
-        // if there are multiple stats, we need to find the range that ALL stats can support
-        low = low ? ((lo > low) ? lo : low) : lo
-        high = high ? ((hi < high) ? hi : high) : hi
-    }
+    def low = theThermostat.currentValue('coolRangeLow')
+    def high = theThermostat.currentValue('coolRangeHigh')
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
@@ -392,36 +418,6 @@ private def getDeviceId(networkId) {
     // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
     // return deviceId
     return networkId.split(/\./).last()
-}
-
-// Reservation Management Functions - Now implemented in Ecobee Suite Manager
-void makeReservation(tid, String type='modeOff' ) {
-	parent.makeReservation( tid, app.id, type )
-}
-// Cancel my reservation
-void cancelReservation(tid, String type='modeOff') {
-	log.debug "cancel ${tid}, ${type}"
-	parent.cancelReservation( tid, app.id, type )
-}
-// Do I have a reservation?
-Boolean haveReservation(tid, String type='modeOff') {
-	return parent.haveReservation( tid, app.id, type )
-}
-// Do any Apps have reservations?
-Boolean anyReservations(tid, String type='modeOff') {
-	return parent.anyReservations( tid, type )
-}
-// How many apps have reservations?
-Integer countReservations(tid, String type='modeOff') {
-	return parent.countReservations( tid, type )
-}
-// Get the list of app IDs that have reservations
-List getReservations(tid, String type='modeOff') {
-	return parent.getReservations( tid, type )
-}
-// Get the list of app Names that have reservations
-List getGuestList(tid, String type='modeOff') {
-	return parent.getGuestList( tid, type )
 }
 
 // Helper Functions
