@@ -62,10 +62,6 @@ def mainPage() {
             1.8: 'Cooking (1.8)',
             2.1: 'Lifting/packing (2.1)',
             2.7: 'House cleaning (2.7)',
-            3.4: 'Dancing (3.4)',
-            3.8: 'Tennis (3.8)',
-            6.3: 'Basketball (6.3)',
-            7.8: 'Wrestling (7.8)',
             'custom': 'Custom'
     ]
     def cloOptions = [
