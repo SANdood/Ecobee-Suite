@@ -73,7 +73,10 @@ def mainPage() {
         if (!settings.tempDisable) {
             section(title: "Sensors") {
                 input(name: 'thermometer', type: 'capability.temperatureMeasurement', title: "Which Temperature Sensor?", description: 'Tap to choose...', required: true, multiple: false)
-                input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", description: 'Tap to choose...', required: true, multiple: false)
+                input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", description: 'Tap to choose...', required: true, multiple: false, submitOnChange: true)
+                if (settings.humidistat) {
+                    atomicState.humidity = settings.humidistat.currentHumidity
+                }
             }
 			section(title: "Comfort Settings") {
        			input(name: "coolPmv", title: "PMV in cool mode${settings.coolPmv!=null&&configured()?' ('+calculateCoolSetpoint()+'°'+unit+')':''}", type: 'decimal', description: "Enter decimal PMV (${settings.heatPmv?'optional':'required'})",
