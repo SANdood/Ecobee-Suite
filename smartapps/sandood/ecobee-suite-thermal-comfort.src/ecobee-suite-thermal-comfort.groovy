@@ -128,9 +128,10 @@ def mainPage() {
                             range: "0..*", required: settings.heatClo=='custom', submitOnChange: true )
                 }
             }
-			section(title: "Enable only for specific programs? (optional)") {
+			section(title: "Enable only for specific modes and programs? (optional)") {
         		paragraph("Thermostat Modes will only be changed while ${location.name} is in these SmartThings Modes.")
                 input(name: "thePrograms", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Program is", multiple: true, required: false, options: getProgramsList())
+                input(name: "statModes", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, options: getThermostatModesList())
         	}
       		section("Notifications (optional)") {
         		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
@@ -179,6 +180,15 @@ def getProgramsList() {
     return ["Away","Home","Sleep"]
 }
 
+def getThermostatModesList() {
+    def statModes = ["heat","cool","auto","auxHeatOnly"]
+    if (settings.theThermostat) {
+        def tempModes = theThermostat.currentValue('supportedThermostatModes')
+        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
+    }
+    return statModes
+}
+
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	if(settings.tempDisable) {
@@ -187,7 +197,9 @@ def initialize() {
     }
 
     subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
-    subscribe(settings.theThermostat, 'currentProgram', programHandler)
+    subscribe(settings.theThermostat, 'currentProgram', modeOrProgramHandler)
+    if (thePrograms) subscribe(theThermostat, "currentProgram", modeOrProgramHandler)
+    if (statModes) subscribe(theThermostat, "thermostatMode", modeOrProgramHandler)
 
     def h = settings.humidistat.currentHumidity
     atomicState.humidity = h
@@ -221,7 +233,7 @@ def heatConfigured() {
             (settings.heatClo != null && ( settings.heatClo == 'custom' ? settings.heatCloCustom != null : true))
 }
 
-def programHandler(evt) {
+def modeOrProgramHandler(evt) {
     LOG("Program is: ${evt.value}",3,null,'info')
     runIn(2, atomicHumidityUpdater, [overwrite: true])
 }
@@ -250,10 +262,16 @@ def humidityUpdate( Integer humidity ) {
     LOG("Humidity is: ${humidity}%",3,null,'info')
 
     def currentProgram = theThermostat.currentValue('currentProgram')
-    def okProgram = thePrograms ? thePrograms.contains(currentProgram) : true
-    if (!okProgram) {
-        LOG("Program is ignored: ${currentProgram}",3,null,'info')
-        return
+    def currentMode = theThermostat.currentValue('thermostatMode')
+    boolean isOK = true
+    if (thePrograms || statModes) {
+        isOK = ((thePrograms && thePrograms.contains(currentProgram)) ?
+                ((statModes && statModes.contains(currentMode)) ? true : false) :
+                false)
+        if (!isOK) {
+            LOG("Mode \"${currentMode}\" or program \"${currentProgram}\" is ignored, not adjusting", 3, null, "info")
+            return
+        }
     }
 
     def heatSetpoint, coolSetpoint
