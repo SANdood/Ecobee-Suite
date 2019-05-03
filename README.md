@@ -1,6 +1,9 @@
-Free Ecobee Suite, version: 1.6.** 
+Free Ecobee Suite, version: 1.7.** 
 ======================================================
-Latest Updates Released 7 April, 2019 at 7:15am EDT
+Latest Updates Released 3 May 2019 at 12:50am EDT
+
+# WARNING: Work in progress - Universal Ecobee Suite
+## Single code base supporting both SmartThings and Hubitat
 
 ***NOTE: When updating/installing, you MUST include ALL of the Suite's components***
 
