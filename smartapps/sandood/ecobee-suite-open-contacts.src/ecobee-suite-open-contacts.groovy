@@ -40,9 +40,10 @@
  *	1.6.15 - Fixed(?) adjust temperature to adjust only when HVACMode is !Off
  *	1.6.16 - Fixed initialization logic WRT HVAC on/off state
  *	1.6.17 - Minor text edits
+ *	1.7.00 - Universal release supporting both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.6.17" }
-private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00a" }
+private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Open Contacts",
@@ -71,9 +72,9 @@ def mainPage() {
         section(title: "Select Thermostats") {
         	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn on below to activate handler." }
         	else { 
-            	input(name: "myThermostats", type: "device.ecobeeSuiteThermostat", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+				input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, /*options: parent.getEcobeeThermostats(),*/ submitOnChange: true)
                 input(name: 'defaultMode', type: 'enum',  title: "Default Mode for thermostat${((settings.myThermostats==null)||(settings.myThermostats.size()>1))?'s':''}", 
-                		multiple: false, required: true, metadata: [values: ['auto', 'cool', 'heat', 'off']], defaultValue: 'auto', submitOnChange: true)
+                		multiple: false, required: true, options: ['auto', 'cool', 'heat', 'off'], defaultValue: 'auto', submitOnChange: true)
             }          
 		}
     
@@ -121,14 +122,14 @@ def mainPage() {
             if ((settings.contactSensors != null) || (settings.theSwitches != null)) {
 				section(title: "Timers") {
 					input(name: "offDelay", title: "Delay time (in minutes) before turning off HVAC or Sending Notification [Default=5]", type: "enum", required: true, 
-                    	metadata: [values: [0, 1, 2, 3, 4, 5, 10, 15, 30]], defaultValue: 5)
+                    	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: 5)
 					input(name: "onDelay", title: "Delay time (in minutes) before turning HVAC back on  or Sending Notification [Default=0]", type: "enum", required: true, 
-                    	metadata: [values: [0, 1, 2, 3, 4, 5, 10, 15, 30]], defaultValue: "0")
+                    	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: "0")
 	        	}
             
             	section(title: "Action Preferences") {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
-                    	metadata: [values: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"]], defaultValue: "Notify Only", submitOnChange: true)
+                    	options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
                         
 					if (settings.whichAction != "HVAC Actions Only") {
                     	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
@@ -174,7 +175,7 @@ def clearReservations() {
 }
 
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
 	if(tempDisable == true) {
     	clearReservations()
 		LOG("Teporarily Disabled as per request.", 2, null, "warn")
@@ -272,13 +273,13 @@ def statModeChange(evt) {
 def heatSPHandler( evt ) {
 	// called when the heatingSetpoint value changes, but only if we are monitoring/making setpoint changes
 	// (ie., this won't get called if we are using Quiet Time or just HVAC Off)
-    if (evt.value.isNumber()) {
+    if (evt.numberValue != null) {
 		def tid = getDeviceId(evt.device.deviceNetworkId)
     
     	// save the new value
 		def tmpThermSavedState = atomicState.thermSavedState
-    	if (tmpThermSavedState[tid].heatAdj == evt.value) return 	// we generated this event (below)
-    	tmpThermSavedState[tid].heatSP = evt.value
+    	if (tmpThermSavedState[tid].heatAdj == evt.numberValue) return 	// we generated this event (below)
+    	tmpThermSavedState[tid].heatSP = evt.numberValue
     
     	if (!atomicState.HVACModeState.contains('off')) {			// Only adjust setpoints when the HVAC is not off
         	def h = evt.numberValue + settings.heatAdjust
@@ -293,13 +294,13 @@ def heatSPHandler( evt ) {
 }
 
 def coolSPHandler( evt ) {
-	if (evt.value.isNumber()) {
+	if (evt.numberValue != null) {
         def tid = getDeviceId(evt.device.deviceNetworkId)
 
         // save the new value
         def tmpThermSavedState = atomicState.thermSavedState
-        if (tmpThermSavedState[tid].coolAdj == evt.value) return
-        tmpThermSavedState[tid].coolSP = evt.value
+        if (tmpThermSavedState[tid].coolAdj == evt.numberValue) return
+        tmpThermSavedState[tid].coolSP = evt.numberValue
 
         if (!atomicState.HVACModeState.contains('off')) {
             // adjust and change the actual heating setpoints
@@ -323,7 +324,7 @@ def sensorOpened(evt=null) {
     	// HVAC is already off
         return
     }
-    int delay = (settings.onDelay?:0).toInteger()
+    int delay = (settings.onDelay?:0) as Integer
     if (HVACModeState == 'resume_pending') {
         atomicState.openedState = 'off'
         if (delay > 0) unschedule('turnOnHVAC')
@@ -610,32 +611,32 @@ private def getDeviceId(networkId) {
 }
 
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
-void makeReservation(tid, String type='modeOff' ) {
-	parent.makeReservation( tid, app.id, type )
+void makeReservation(String tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id as String, type )
 }
 // Cancel my reservation
-void cancelReservation(tid, String type='modeOff') {
+void cancelReservation(String tid, String type='modeOff') {
 	log.debug "cancel ${tid}, ${type}"
-	parent.cancelReservation( tid, app.id, type )
+	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
-Boolean haveReservation(tid, String type='modeOff') {
-	return parent.haveReservation( tid, app.id, type )
+Boolean haveReservation(String tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id as String, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations(tid, String type='modeOff') {
+Boolean anyReservations(String tid, String type='modeOff') {
 	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
-Integer countReservations(tid, String type='modeOff') {
+Integer countReservations(String tid, String type='modeOff') {
 	return parent.countReservations( tid, type )
 }
 // Get the list of app IDs that have reservations
-List getReservations(tid, String type='modeOff') {
+List getReservations(String tid, String type='modeOff') {
 	return parent.getReservations( tid, type )
 }
 // Get the list of app Names that have reservations
-List getGuestList(tid, String type='modeOff') {
+List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
 
@@ -657,7 +658,7 @@ private def sendMessage(notificationMessage) {
         LOG("Sending Push to everyone",2,null,'warn')
         sendPushMessage(msg)
     }
-    sendNotificationEvent( notificationMessage )								// Always send to hello home
+    if (isST) sendNotificationEvent( notificationMessage )	// Always send to hello home (no notifications on HE yet)
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
@@ -666,3 +667,43 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
     log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
