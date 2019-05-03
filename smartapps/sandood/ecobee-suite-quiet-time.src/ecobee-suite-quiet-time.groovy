@@ -29,9 +29,10 @@
  *	1.6.13 - Removed use of *SetpointDisplay
  *	1.6.14 - Fixed typo (thanks @jml923)
  *	1.6.15 - Added scheduled Auto Off for Quiet Time
+ *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.6.15" }
-private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00a" }
+private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Quiet Time",
@@ -60,12 +61,14 @@ def mainPage() {
         section(title: "Select Thermostats") {
         	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn back on below to activate handler." }
         	else { 
-            	input(name: "theThermostats", type: "device.ecobeeSuiteThermostat", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+            	input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
             }          
 		}
     
 		if (!settings.tempDisable && (settings.theThermostats?.size() > 0)) {
-
+			def hasH = hasHumidifier()
+			def hasD = hasDehumidifier()
+			
 		section(title: 'Quiet Time Control Switch') {
         	paragraph("Quiet Time is enabled by turning on (or off) a physical or virtual switch.")
             input(name: 'qtSwitch', type: 'capability.switch', required: true, title: 'Which switch controls Quiet Time?', multiple: false, submitOnChange: true)
@@ -90,7 +93,7 @@ def mainPage() {
                 	if (settings.quietMode) paragraph("HVAC mode will be set to ${settings.quietMode} Mode.${(settings.quietMode=='off')?' Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.':''}")
                 }
             }
-            if (settings.hvacOff || hvacMode) paragraph("HVAC mode will be returned to its original value when Quiet Time ends")
+            if (settings.hvacOff || settings.hvacMode) paragraph("HVAC mode will be returned to its original value when Quiet Time ends")
 
             input(name: 'fanOff', type: "bool", title: "Turn off the Fan?", required: true, defaultValue: false, submitOnChange: true)
             if (settings.fanOff) {
@@ -109,19 +112,19 @@ def mainPage() {
             
             if (!settings.hvacOff && !settings.hvacMode) {
             	input(name: 'adjustSetpoints', type: 'bool', title: 'Adjust heat/cool setpoints?', required: true, defaultValue: false, submitOnChange: true)
-                if (adjustSetpoints) {
+                if (settings.adjustSetpoints) {
                    	input(name: 'heatAdjust', type: 'decimal', title: 'Heating setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
                     input(name: 'coolAdjust', type: 'decimal', title: 'Cooling setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
                 	input(name: 'setpointResume', type: 'enum', title: 'At the end of Quiet Time', description: 'Tap to choose...', multiple: false, required: true,
                 			options: ['Restore prior Setpoints','Resume Current Program', 'Resume Scheduled Program'], submitOnChange: true)
-                    if (setpointResume) paragraph("At the end of Quiet Time, ${settings.setpointResume.startsWith('Resu')?'the currently scheduled program will be resumed.':'the prior setpoints will be restored.'}")
+                    if (settings.setpointResume) paragraph("At the end of Quiet Time, ${settings.setpointResume.startsWith('Resu')?'the currently scheduled program will be resumed.':'the prior setpoints will be restored.'}")
                 }
             }
-            if (hasHumidifier()) {
+			if ((settings.theThermostats?.size() != 0) && atomicState.hasHumidifier) {
 				input(name: 'humidOff', type: 'bool', title: 'Turn off the Humidifier?', required: true, defaultValue: false, submitOnChange: true)
                 if (settings.humidOff) paragraph("At the end of Quiet Time, the humidifier(s) will be turned back on.")
             }
-            if (hasDehumidifier()) {
+            if ((settings.theThermostats?.size() != 0) && atomicState.hasDehumidifier) {
 				input(name: 'dehumOff', type: 'bool', title: 'Turn off the Dehumidifier?', required: true, defaultValue: false, submitOnChange: true)
                 if (settings.dehumOff) paragraph("At the end of Quiet Time, the dehumidifier(s) will be turned back on.")
             }
@@ -515,41 +518,49 @@ def quietOffHandler(evt=null) {
     LOG('Quiet Time Off is complete',2,null,'info')
 }
 
-def hasHumidifier() {
-	return (theThermostats.currentValue('hasHumidifier').contains('true'))
+Boolean hasHumidifier() {
+	settings.theThermostats.each {
+		def hh = it.currentValue('hasHumidifier')
+		if ((hh != null) && ((hh == true) || (hh == 'true'))) {	atomicState.hasHumidifier = true; log.debug "yup"; return true }
+	}
+	atomicState.hasDehumidifier = false; return false
 }	
 
-def hasDehumidifier() {
-	return (theThermostats.currentValue('hasDehumidifier').contains('true'))
+Boolean hasDehumidifier() {
+	settings.theThermostats.each {
+		def hd = it.currentValue('hasDehumidifier')
+		if ((hd != null) && ((hd == true) || (hd == 'true'))) { atomicState.hasDehumidifier = true; return true }
+	}
+	atomicState.hasDehumidifier = false; return false
 }
 
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
-void makeReservation(tid, String type='modeOff' ) {
-	parent.makeReservation( tid, app.id, type )
+void makeReservation(String tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id as String, type )
 }
 // Cancel my reservation
-void cancelReservation(tid, String type='modeOff') {
+void cancelReservation(String tid, String type='modeOff') {
 	log.debug "cancel ${tid}, ${type}"
-	parent.cancelReservation( tid, app.id, type )
+	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
-Boolean haveReservation(tid, String type='modeOff') {
-	return parent.haveReservation( tid, app.id, type )
+Boolean haveReservation(String tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id as String, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations(tid, String type='modeOff') {
+Boolean anyReservations(String tid, String type='modeOff') {
 	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
-Integer countReservations(tid, String type='modeOff') {
+Integer countReservations(String tid, String type='modeOff') {
 	return parent.countReservations( tid, type )
 }
 // Get the list of app IDs that have reservations
-List getReservations(tid, String type='modeOff') {
+List getReservations(String tid, String type='modeOff') {
 	return parent.getReservations( tid, type )
 }
 // Get the list of app Names that have reservations
-List getGuestList(tid, String type='modeOff') {
+List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
 
@@ -606,3 +617,43 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
     log."${logType}" message
 	//parent.LOG(msg, level, null, logType, event, displayEvent)
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
