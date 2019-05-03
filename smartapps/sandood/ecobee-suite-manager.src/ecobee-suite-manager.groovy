@@ -290,7 +290,7 @@ def authPage() {
 				href url:redirectUrl, style: "embedded", state: "complete", title: "ecobee Account Authorization", description: description
 			}
 		}           
-	} 
+	}
 }
 
 // Select which Thermostats are to be used
