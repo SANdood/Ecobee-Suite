@@ -24,9 +24,10 @@
  *	1.6.10 - Resync for parent-based reservations
  *	1.6.11 - Removed location.contactBook support - deprecated by SmartThings
  *	1.6.12 - Added support for "generic" vents (dimmers), as with Smart Vents
+ *	1.7.00 - Universal code now supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.6.12" }
-private def getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00a" }
+private def getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
 definition(
@@ -89,9 +90,9 @@ def mainPage() {
         	}
        
         	section(title: "Smart Room Vents (optional)") {
-        		paragraph("You can have specified Econet or Keen vents opened while a Smart Room is Active, and closed when Inactive")
-            	input(name: "theEconetVents", type: "device.econetVent", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, submitOnChange: true)
-            	input(name: "theKeenVents", type: "device.keenHomeSmartVent", title: "Control which Keen Home Smart Vent(s)?", required: false, multiple:true, submitOnChange: true)
+        		paragraph("You can have specified Econet, Keen or Generic(dimmer) vents opened while a Smart Room is Active, and closed when Inactive")
+				input(name: "theEconetVents", type: "${isST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, submitOnChange: true)
+				input(name: "theKeenVents", type: "${isST?'device.keenHomeSmartVent':'deviceKeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", required: false, multiple:true, submitOnChange: true)
                 input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
             	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage")
@@ -109,7 +110,7 @@ def mainPage() {
                     }
                     if (!settings.phone && !settings.pushNotify) paragraph "WARNING: Notifications configured, but nobody to send them to!"
                 }
-                paragraph("A notification is always sent to the Hello Home log whenever a Smart Room is activated or de-activated")
+                if (isST) paragraph("A notification is always sent to the Hello Home log whenever a Smart Room is activated or de-activated")
         	}
         }
         	
@@ -143,7 +144,7 @@ def getProgramsList() { return theThermostat ? new JsonSlurper().parseText(theTh
 def getEcobeeSensorsList() { return parent.getEcobeeSensors().sort { it.value } }    
 
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 3, "", 'info')
+	LOG("${getVersionLabel()}\nInitializing...", 3, "", 'info')
     
     atomicState.isSmartRoomActive = false
     atomicState.isWaitingForWindows = false
@@ -530,7 +531,7 @@ private def sendMessage(notificationMessage) {
             sendPushMessage(msg)													// Push to everyone
         }
     }
-    sendNotificationEvent( notificationMessage )								// Always send to hello home
+    if (isST) sendNotificationEvent( notificationMessage )								// Always send to hello home
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
@@ -539,3 +540,43 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 	parent?.LOG(message, level, null, logType, event, displayEvent)
     log."${logType}" message
 }
+			
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
