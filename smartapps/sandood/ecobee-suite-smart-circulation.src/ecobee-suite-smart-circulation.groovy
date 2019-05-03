@@ -71,7 +71,7 @@ def mainPage() {
                 submitOnChange: true)
             }
 		}
-        
+ 
         if (!settings.tempDisable) {
         	section(title: "Select Indoor Temperature Sensors") {
             	input(name: "theSensors", title: "Use which indoor temperature sensor(s)", type: "capability.temperatureMeasurement", required: true, multiple: true, submitOnChange: true)
