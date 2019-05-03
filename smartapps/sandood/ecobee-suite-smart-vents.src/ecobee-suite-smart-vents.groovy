@@ -35,16 +35,17 @@
  *	1.6.10 - Resync for parent-based reservations
  *	1.6.11 - Fix offline sensor temperature values (null instead of Unknown)
  *	1.6.12 - Added "Generic" (dimmer/switchLevel) Vents
+ *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.6.12" }
-private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00a" }
+private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
 definition(
 	name: 			"ecobee Suite Smart Vents",
 	namespace: 		"sandood",
 	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description:	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates SmartThings-controlled vents to meet a target temperature in a room.",
+	description:	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled vents to meet a target temperature in a room.",
 	category: 		"Convenience",
 	parent: 		"sandood:Ecobee Suite Manager",
 	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -81,8 +82,8 @@ def mainPage() {
        
         	section(title: "Smart Vents: Automated Vents") {
         		paragraph("Specified Econet, Keen and/or 'generic' vents will be opened until target temperature is achieved, and then closed")
-            	input(name: "theEconetVents", type: "device.econetVent", title: "Control which EcoNet Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
-            	input(name: "theKeenVents", type: "device.keenHomeSmartVent", title: "Control which Keen Home Smart Vent(s)?", description: 'Tap to choose...', required: false, multiple:true, submitOnChange: true)
+				input(name: "theEconetVents", type: "${isST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
+					  input(name: "theKeenVents", type: "${isST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", description: 'Tap to choose...', required: false, multiple:true, submitOnChange: true)
                 input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
             	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage.")
@@ -92,7 +93,7 @@ def mainPage() {
         
 			section(title: "Smart Vents: Thermostat") {
 				paragraph("Specify which thermostat to monitor for heating/cooling events")
-				input(name: "theThermostat", type: "device.ecobeeSuiteThermostat", title: "Select thermostat", description: 'Tap to choose...', multiple: false, required: true, submitOnChange: true)
+				input(name: "theThermostat", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select thermostat", description: 'Tap to choose...', multiple: false, required: true, submitOnChange: true)
 			}
 		
 			section(title: "Smart Vents: Target Temperature") {
@@ -142,7 +143,7 @@ void uninstalled() {
 }
 
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
     atomicState.scheduled = false
     // Now, just exit if we are disabled...
 	if (tempDisable) {
@@ -190,15 +191,14 @@ private String checkTemperature() {
     if (cTemp != null) {	// only if valid temperature readings (Ecosensors can return "unknown")
     	if (cOpState == 'heating') {
         	offset = settings.heatOffset ? settings.heatOffset : 0.0
-    		def heatTarget = useThermostat ? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature + offset 
+    		def heatTarget = useThermostat ? ((smarter && (theThermostat.currentTemperature != null))? theThermostat.currentTemperature + offset 
             																							: theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
         	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
 			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
     	} else if (cOpState == 'cooling') {
         	offset = settings.coolOffset ? settings.coolOffset : 0.0
-    		def coolTarget = useThermostat? ((smarter && theThermostat.currentTemperature.isNumber())? theThermostat.currentTemperature + offset 
-            																								: theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
+    		def coolTarget = useThermostat? ((smarter && (theThermostat.currentTemperature != null))? theThermostat.currentTemperature + offset : theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
         	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
 			vents = (coolTarget >= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
@@ -227,7 +227,7 @@ def getCurrentTemperature() {
 	def tTemp = 0.0
     Integer i = 0
 	settings.theSensors.each {
-		if (it.currentTemperature?.isNumber()) {
+		if (it.currentTemperature != null) {
         	tTemp += it.currentTemperature
             i++
         }
@@ -331,3 +331,43 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 	message = "${app.label} ${message}"
 	parent?.LOG(message, level, null, logType, event, displayEvent)
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
