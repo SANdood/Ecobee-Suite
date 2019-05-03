@@ -42,13 +42,13 @@
  *  1.6.21- Improve error logging
  *	1.6.22- SmartThings started throwing errors on some Canadian zipcodes - we now catch these and use geographic coordinates instead...
  *	1.6.23-	Added setProgramSetpoint, fixed typo & null-checking that was breaking some error handling
+ *	1.6.24- Added more null-handling in http error handlers
+ *	1.7.00- Porting to Hubitat begins
  */
-def getVersionNum() { return "1.6.23" }
+def getVersionNum() { return "1.7.00a" }
 private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()}" }
 
-include 'asynchttp_v1'
-import groovy.json.JsonOutput
-import groovy.json.JsonSlurper
+import groovy.json.*
 
 private def getHelperSmartApps() {
 	return [ 
@@ -533,10 +533,13 @@ private def Boolean testForDeviceHandlers() {
 		d1 = addChildDevice(app.namespace, getChildThermostatName(), "dummyThermDNI-${DNIAdder}", location.hubs[0]?.id, ["label":"Ecobee Suite Thermostat:TestingForInstall", completedSetup:true])
 		d2 = addChildDevice(app.namespace, getChildSensorName(), "dummySensorDNI-${DNIAdder}", location.hubs[0]?.id, ["label":"Ecobee Suite Sensor:TestingForInstall", completedSetup:true])
         if ((d1 != null) && (d2 != null)) success = true
-	} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
-		LOG("You MUST add the ${getChildThermostatName()} and ${getChildSensorName()} Device Handlers to the IDE BEFORE running the setup.", 1, null, "error")
-		success = false
+	} catch (Exception e) {
+		if ("${e}".startsWith("${state.isST?'physicalgraph':'hubitat'}.app.exception.UnknownDeviceTypeException")) { 
+			LOG("You MUST add the ${getChildThermostatName()} and ${getChildSensorName()} Device Handlers to the IDE BEFORE running the setup.", 1, null, "error")
+			success = false
+		}
 	}
+		
     try {
         if (d1) deleteChildDevice("dummyThermDNI-${DNIAdder}") 
     	if (d2) deleteChildDevice("dummySensorDNI-${DNIAdder}")
@@ -589,7 +592,7 @@ def askAlexaMQHandler(evt) {
 	LOG("askAlexaMQHandler ${evt?.name} ${evt?.value}",4,null,'trace')
     
     // Ignore null events
-    if (!evt) return
+    if (!evt || !settings.askAlexa) return
     
     // Always collect the List of Message Queues when refreshed, even if not currently integrating with Ask Alexa
     if (evt.value == 'refresh') {
@@ -815,7 +818,7 @@ def getEcobeeThermostats() {
         httpGet(deviceListParams) { resp ->
 		LOG("getEcobeeThermostats() - httpGet() response: ${resp.data}", 4)
         
-        // Initialize the Thermostat Data. Will reuse for the Sensor List intialization
+        //  the Thermostat Data. Will reuse for the Sensor List intialization
         atomicState.thermostatData = resp.data        	
         
             if (resp.status == 200) {
@@ -830,7 +833,7 @@ def getEcobeeThermostats() {
             } else {                
                 LOG("getEcobeeThermostats() - httpGet() in else: http status: ${resp.status}", 1)
                 //refresh the auth token
-                if (resp.status == 500 && resp.data.status.code == 14) {
+                if (resp.status == 500 && resp.data?.status?.code == 14) {
                 	LOG("getEcobeeThermostats() - Storing the failed action to try later", 1)
                     atomicState.action = "getEcobeeThermostats"
                     LOG("getEcobeeThermostats() - Refreshing your auth_token!", 1)
@@ -979,6 +982,8 @@ def updated() {
 def initialize() {	
     LOG("=====> initialize()", 4)    
     
+	LOG("Running on ${getHubPlatform()}.", 1, null, 'info')
+	
     atomicState.connected = "full"        
     atomicState.reAttempt = 0
     atomicState.reAttemptPoll = 0
@@ -1144,9 +1149,11 @@ private def createChildrenThermostats() {
 		if(!d) {        	
             try {
 				d = addChildDevice(app.namespace, getChildThermostatName(), dni, location.hubs[0]?.id, ["label":"EcobeeTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
-			} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
-            	LOG("You MUST add the ${getChildThermostatName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
-                return false
+			} catch (Exception e) {
+				if ("${e}".startsWith("${state.isST?'physicalgraph':'hubitat'}.app.exception.UnknownDeviceTypeException")) {
+            		LOG("You MUST add the ${getChildThermostatName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
+                	return false
+				}
             }
             LOG("created ${d.displayName} with id ${dni}", 4, null, 'trace')
 		} else {
@@ -1166,9 +1173,11 @@ private def createChildrenSensors() {
 		if(!d) {        	
             try {
 				d = addChildDevice(app.namespace, getChildSensorName(), dni, location.hubs[0]?.id, ["label":"EcobeeSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
-			} catch (physicalgraph.app.exception.UnknownDeviceTypeException e) {
-            	LOG("You MUST add the ${getChildSensorName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
-                return false
+			} catch (Exception e) { //(physicalgraph.app.exception.UnknownDeviceTypeException e) {
+				if ("${e}".startsWith("${state.isST?'physicalgraph':'hubitat'}.app.exception.UnknownDeviceTypeException")) {
+					LOG("You MUST add the ${getChildSensorName()} Device ${state.isST?'Handler':'Driver'} to the ${getHubPlatform} IDE BEFORE running the setup.", 1, null, "error")
+                	return false
+				}
             }
             LOG("created ${d.displayName} with id $dni", 4, null, 'trace')
 		} else {
@@ -1536,6 +1545,8 @@ def pollChildren(deviceId=null,force=false) {
     if (atomicState.versionLabel != version) {
     	LOG("Code updated: ${version}",1,null,'debug')
         atomicState.versionLabel = version
+        runIn(2, updated, [overwrite: true])
+        return
     }
     
 	boolean debugLevelFour = debugLevel(4)
@@ -1662,7 +1673,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
     def debugLevelFour = debugLevel(4)
     if (debugLevelFour) LOG("checkThermostatSummary() - ${thermostatIdsString}",4,null,'trace')
     
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeEquipmentStatus":"false"}}'
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeEquipmentStatus":"true"}}'
 	def pollParams = [
 			uri: apiEndpoint,
 			path: "/1/thermostatSummary",
@@ -1676,11 +1687,22 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 	
 	try {
 		httpGet(pollParams) { resp ->
-			if(resp.status == 200) {
+			if(resp?.status == 200) {
 				if (debugLevelFour) LOG("checkThermostatSummary() - poll results returned resp.data ${resp.data}", 4, null, 'trace')
-				statusCode = resp.data.status.code
+                if (resp.data == null) {
+                	LOG("checkThermostatSummary() - resp.data is null", 2, null, 'warn')
+                } else if (resp.data instanceof CharSequence) {
+                	LOG("checkThermostatSummary() - poll results returned resp.data as a String: (${resp.data})", 2, null, 'warn')
+                } else if (resp?.data?.containsKey("status")) {
+                	if ((resp.data.status == null) || (resp.data.status instanceof CharSequence)) {
+                    	// Ooops - status is a string!
+                        LOG("checkThermostatSummary() - poll results returned resp.data.status as a String (${resp.data.status})", 2, null, 'warn')
+                    } else {
+                    	if (resp.data?.status?.containsKey("code")) statusCode = resp.data.status.code
+                    }
+                }
 				if (statusCode == 0) { 
-                    def revisions = resp.data.revisionList
+                    def revisions = resp.data?.revisionList
                     // log.debug "${atomicState.thermostatUpdated}, ${atomicState.runtimeUpdated}, ${atomicState.alertsUpdated}"
 					def thermostatUpdated = atomicState.thermostatUpdated	// false
                     def alertsUpdated = atomicState.alertsUpdated			// false
@@ -1705,13 +1727,33 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                         def ttu = false
 						if (lastDetails) {			// if we have prior revision details
 							if (lastDetails[2] != latestDetails[2]) tru = true 	// runtime
-                            if (lastDetails[1] != latestDetails[1]) tau = true	// alerts
+                            if (settings.askAlexa && (lastDetails[1] != latestDetails[1])) tau = true	// alerts
 							if (lastDetails[0] != latestDetails[0]) ttu = true	// thermostat 
                         } else {					// no priors, assume all have been updated
                             tru = true 
-                            tau = true
+                            if (settings.askAlexa) tau = true
                             ttu = true
                         }
+
+	                    // Check if the equipmentStatus changed but runtimeUpdated didn't
+                    	if (!tru) {
+                    		def equipStatus = (resp.data?.containsKey('statusList')) ? resp.data.statusList : null
+                        	if (equipStatus != null) {
+                        		def lastEquipStatus = atomicState.equipmentStatus
+                                if (debugLevelFour) LOG("equipStatus: ${equipStatus}, lastEquipStatus: ${lastEquipStatus}, tid: ${tstat}", 4, null, 'trace')
+                                equipStatus.each { status ->
+                                	if (!tru) {
+                                    	def tList = status.split(':') as List
+                                    	if (tList[0] == tstat) {
+                                        	if (tList[1] == null) tList[1] = ''
+                                        	if (debugLevelFour) LOG("${tstat}: New: '${tList[1]}', Old: '${lastEquipStatus[tstat]}'", 4, null, 'trace')
+                                    		if (tList[1] != lastEquipStatus[tstat]) tru = true
+                                    	}
+                                    }
+                            	}
+                        	}
+                        	if (tru) LOG("Equipment Status changed, runtime did not", 2, null, 'info')
+                    	}
 
                         // update global flags (we update the superset of changes for all requested tstats)
                         if (tru || tau || ttu) {
@@ -1727,7 +1769,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                     
 					atomicState.latestRevisions = latestRevisions		// let pollEcobeeAPI update last with latest after it finishes the poll
                     atomicState.thermostatUpdated = thermostatUpdated	// Revised: settings, program, event, device
-                    atomicState.alertsUpdated = alertsUpdated			// Revised: alerts
+                    atomicState.alertsUpdated = settings.askAlexa ? alertsUpdated : false		// Revised: alerts
 					atomicState.runtimeUpdated = runtimeUpdated			// Revised: runtime, equip status, remote sensors, weather?
                     atomicState.changedThermostatIds = tstatsStr    	// only these thermostats need to be requested in pollEcobeeAPI
                 	// Tell the children that we are once again connected to the Ecobee API Cloud
@@ -1737,7 +1779,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
     				}
 				} else {
                 	// if we get here, we had http status== 200, but API status != 0
-					LOG("${preText}ThermnostatSummary poll got API status ${statusCode}", 1, null, 'warn')
+					LOG("${preText}ThermostatSummary poll got API status ${statusCode}", 1, null, 'warn')
                 }
 			} else {
 				LOG("${preText}ThermostatSummary poll got http status ${resp.status}", 1, null, "error")
@@ -1766,8 +1808,10 @@ private boolean checkThermostatSummary(thermostatIdsString) {
         runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true])
        	result = false
     //
-    // These appear to be transient errors, treat them all as if a Timeout...
-    } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+    // These appear to be transient errors, treat them all as if a Timeout... 
+    } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | 
+    			javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | 
+    			java.net.SocketTimeoutException | java.net.NoRouteToHostException e) {
     	LOG("checkThermostatSummary() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
         if (apiConnected != 'warn') {
         	atomicState.connected = 'warn'
@@ -1782,12 +1826,12 @@ private boolean checkThermostatSummary(thermostatIdsString) {
         result = false
         // throw e
     } catch (Exception e) {
-		LOG("checkThermostatSummary() - General Exception: ${e}.", 1, null, "error")
+		LOG("checkThermostatSummary() - General Exception: ${e}, data: ${resp?.data}", 1, null, "error")
         result = false
         throw e
     }
 
-    if (debugLevel(4)) LOG("<===== Leaving checkThermostatSummary() result: ${result}, tstats: ${tstatsStr}", 4, null, "info")
+    if (debugLevel4) LOG("<===== Leaving checkThermostatSummary() result: ${result}, tstats: ${tstatsStr}", 4, null, "info")
 	return result
 }
 
@@ -1916,7 +1960,12 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
 	]
     
     atomicState.asyncPollStart = now()
-    asynchttp_v1.get( pollEcobeeAPICallback, pollParams, pollState ); 
+	if (state.isST) {
+		include 'asynchttp_v1'
+    	asynchttp_v1.get( pollEcobeeAPICallback, pollParams, pollState )
+	} else {
+		asynchttpGet( pollEcobeeAPICallback, pollParams, pollState )
+	}
     atomicState.waitingForCallback = true
     return true
 }
@@ -1943,7 +1992,7 @@ def pollEcobeeAPICallback( resp, pollState ) {
 	def tidList = []
     LOG("pollEcobeeAPICallback() status code ${resp?.status}",4,null,'trace')
     
-	if (resp && /* !resp.hasError() && */ (resp.status == 200)) {
+	if (resp && /* !resp.hasError() && */ (resp.status?.toInteger() == 200)) {
 		try {
 			if (resp.json) {
 				atomicState.thermostatData = resp.json		// this only stores the most recent collection of changed data
@@ -2154,11 +2203,11 @@ def pollEcobeeAPICallback( resp, pollState ) {
 	} else if (resp && resp.hasError()) {
     	result = false
 		if (debugLevelFour) LOG("${preText}Poll returned http status ${resp.status}, ${resp.errorMessage}", 4, null, "error")
-        
+        def iStatus = resp.status ? resp.status?.toInteger() : null
 		// Handle recoverable / retryable errors
-		if (resp.status && (resp.status == 500)) {
+		if (iStatus && (iStatus == 500)) {
   			// Ecobee server error
-        	if (resp.errorJson?.status && resp.errorJson.status?.code && (resp.errorJson?.status.code == 14)) {
+        	if (resp.errorJson?.status && resp.errorJson.status?.code && (resp.errorJson?.status.code?.toInteger() == 14)) {
             	// Auth_token expired
             	if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "warn")
                 atomicState.action = "pollChildren"
@@ -2176,9 +2225,10 @@ def pollEcobeeAPICallback( resp, pollState ) {
                 // Don't retry for now...may change in the future
                 return result
             }
-		} else if (((resp.status > 400) && (resp.status < 405)) || (resp.status == 408) || ((resp.status > 500) && (resp.status < 505))) {
+		} else if (((iStatus == null) && (resp.errorMessage?.contains('connection timed out'))) || 
+        			((iStatus > 400) && (iStatus < 405)) || (iStatus == 408) || ((iStatus > 500) && (iStatus < 505))) {
         	// Retry on transient, recoverable error codes (timeouts, server temporarily unavailable, etc.) see https://en.wikipedia.org/wiki/List_of_HTTP_status_codes 
-            LOG("Polling error: ${resp.status}, ${resp.errorMessage} - Will Retry",1,null,'warn') 	// Just log it, and hope for better next time...
+            LOG("pollEcobeeAPICallback() Polling error: ${iStatus}, ${resp.errorMessage} - Will Retry", 1, null, 'warn') 	// Just log it, and hope for better next time...
         	if (apiConnected != 'warn') {
         		atomicState.connected = 'warn'
         		atomicState.lastPoll = now()
@@ -2191,7 +2241,7 @@ def pollEcobeeAPICallback( resp, pollState ) {
         	atomicState.inTimeoutRetry = inTimeoutRetry + 1
         	return result
         } else /* can we handle any other errors??? */ {
-			LOG("Polling Error ${resp.status}: ${resp.errorMessage}, ${resp.errorJson?.status?.message}, ${resp.errorJson?.status?.code}", 1, null, "error")
+			LOG("Polling Error ${iStatus}: ${resp.errorMessage}, ${resp.errorJson?.status?.message}, ${resp.errorJson?.status?.code}", 1, null, "error")
 		}
         // For now, the code here just logs the error and assumes that checkThermostatSummary() will recover from the unhandled errors on the next call.
         return result
@@ -2625,6 +2675,7 @@ def updateThermostatData() {
         if (equipStatus == '') equipStatus = 'idle'
         def changeEquip = atomicState.changeEquip ? atomicState.changeEquip : [:]
         def lastEquipStatus = (changeEquip && changeEquip[tid]) ? changeEquip[tid] : 'unknown'
+        
         def statSettings = atomicState.settings ? atomicState.settings[tid] : [:]
         def program = atomicState.program ? atomicState.program[tid] : [:]
         def events = atomicState.events ? atomicState.events[tid] : [:]
@@ -2690,11 +2741,11 @@ def updateThermostatData() {
         }
      
      // EQUIPMENT SPECIFICS
-		def hasHeatPump =  statSettings?.hasHeatPump
-		def hasForcedAir = statSettings?.hasForcedAir
-		def hasElectric =  statSettings?.hasElectric
-		def hasBoiler =    statSettings?.hasBoiler
-		def auxHeatMode =  (hasHeatPump) && (hasForcedAir || hasElectric || hasBoiler) // 'auxHeat1' == 'emergency' if using a heatPump
+		//def hasHeatPump =  statSettings?.hasHeatPump
+		//def hasForcedAir = statSettings?.hasForcedAir
+		//def hasElectric =  statSettings?.hasElectric
+		//def hasBoiler =    statSettings?.hasBoiler
+		def auxHeatMode =  (statSettings?.hasHeatPump) && (statSettings?.hasForcedAir || statSettings?.hasElectric || statSettings?.hasBoiler) // 'auxHeat1' == 'emergency' if using a heatPump
         
 	// handle[tid] things that only change when the thermostat object is updated
 		def heatHigh
@@ -2733,6 +2784,8 @@ def updateThermostatData() {
 		String currentClimateId = ''
         String currentClimate = ''
         def currentFanMode = ''
+        def currentVentMode = statSettings.vent
+        def ventMinOnTime = statSettings.ventilatorMinOnTime
         def climatesList = []
         def statMode = statSettings.hvacMode
         def fanMinOnTime = statSettings.fanMinOnTime
@@ -2853,6 +2906,7 @@ def updateThermostatData() {
         if (runningEvent && isConnected) {
         	if (debugLevelFour) LOG("Found a running Event: ${runningEvent}", 4, null, 'trace') 
             holdEndsAt = fixDateTimeString( runningEvent.endDate, runningEvent.endTime, stat.thermostatTime)
+            // log.debug "holdEndsAt: ${holdEndsAt}"
 			thermostatHold = runningEvent.type
             String tempClimateRef = runningEvent.holdClimateRef ? runningEvent.holdClimateRef : ''
             switch (runningEvent.type) {
@@ -2906,6 +2960,8 @@ def updateThermostatData() {
         // Note that fanMode == 'auto' might be changedby the Thermostat DTH to 'off' or 'circulate' dependent on  HVACmode and fanMinRunTime
         if (runningEvent) {
         	currentFanMode = runningEvent.fan
+            currentVentMode = runningEvent.vent
+            ventMinOnTime = runningEvent.ventilatorMinOnTime
         } else {
         	currentFanMode = runtime.desiredFanMode
 		}
@@ -3049,6 +3105,10 @@ def updateThermostatData() {
         def changeNever =  atomicState.changeNever  ? atomicState.changeNever  : [:]
         def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
         def changeOften =  atomicState.changeOften  ? atomicState.changeOften  : [:]
+        def changeAlerts = atomicState.changeAlerts ? atomicState.changeAlerts : [:]
+        def changeAttrs =  atomicState.changeAttrs  ? atomicState.changeAttrs  : [:]
+        def changeTemps =  atomicState.changeTemps  ? atomicState.changeTemps  : [:]
+        
         //changeEquip was initialized earlier
          
         def data = [forced: forcePoll,]				// Tell the DTH to force-update all attributes, states and tiles
@@ -3081,6 +3141,69 @@ def updateThermostatData() {
             atomicState.changeCloud = changeCloud
         }
         
+        // Alerts & Read Only
+        if (alertsUpdated || forcePoll) {
+            def alertNamesList = ["coldTempAlertEnabled", "hotTempAlertEnabled", "wifiOfflineAlert", "auxRuntimeAlert", "auxRuntimeAlertNotify", "auxOutdoorTempAlertNotify", "humidityHighAlert", 
+            					  "humidityLowAlert", "disableHeatPumpAlerts", "disableAlertsOnIdt", "humidityAlertNotify", "tempAlertNotify", "randomStartDelayCool", "randomStartDelayHeat", 
+                                  "ventilatorOffDateTime"]
+            if (!changeAlerts?.containsKey(tid)) changeAlerts[tid] = [:]
+            def alertValues = []
+            int i = 0
+            alertNamesList.each { alert ->
+            	def alertVal = statSettings."${alert}"
+                alertValues <<  alertVal 
+                if (forcePoll || (changeAlerts[tid]?.getAt(i) != alertVal)) {
+                    data += [ "${alert}": alertVal, ]
+                }
+                i++
+            }
+            changeAlerts[tid] = alertValues
+            atomicState.changeAlerts = changeAlerts
+        }
+        
+        // Configuration Attributes
+        if (thermostatUpdated || forcePoll) {
+            def attrNamesList = ['hasHeatPump', 'hasForcedAir', 'hasElectric', 'hasBoiler', "hasErv", "hasHrv", "heatPumpGroundWater", "ventilatorType",
+								 'stage1CoolingDissipationTime', 'stage1HeatingDissipationTime', 'compressorProtectionMinTime', 'heatPumpReversalOnCool', 
+								 'condensationAvoid', 'backlightOnIntensity', 'backlightSleepIntensity', 'backlightOffTime', 'compressorProtectionMinTime', 'fanControlRequired', 
+                                 'dehumidifyWithAC', 'disablePreHeating', 'disablePreCooling', 'ventilatorMinOnTimeHome', 'ventilatorMinOnTimeAway', 'backlightOffDuringSleep', 'autoAway', 
+                                 'followMeComfort', 'smartCirculation', 'isVentilatorTimerOn', 'hasUVFilter', 'coolingLockout', 'ventilatorFreeCooling', 'dehumidifyWhenHeating', 
+                                 'ventilatorDehumidify']
+            if (!changeAttrs?.containsKey(tid)) changeAttrs[tid] = [:]
+            def attrValues = []
+            int i = 0
+            attrNamesList.each { attr ->
+            	def attrVal = statSettings."${attr}"
+                attrValues <<  attrVal 
+                if (forcePoll || (changeAttrs[tid]?.getAt(i) != attrVal)) {
+                    data += [ "${attr}": attrVal, ]
+                }
+                i++
+            }
+            changeAttrs[tid] = attrValues
+            atomicState.changeAttrs = changeAttrs
+        }
+        
+        // Temperatures - need to convert from internal F*10 to standard Thermostat units
+        if (thermostatUpdated || forcePoll) {
+        	def tempNamesList = ['stage1CoolingDifferentialTemp', 'stage1HeatingDifferentialTemp', 'compressorProtectionMinTemp', 'auxMaxOutdoorTemp', 'maxSetBack', 'maxSetForward', 
+            					 'quickSaveSetBack', 'quickSaveSetForward', 'compressorProtectionMinTemp',  'tempCorrection', 'dehumidifyOvercoolOffset', "coldTempAlert", 
+                                 "hotTempAlert", "auxOutdoorTempAlert", "auxMaxOutdoorTemp"]
+    		if (!changeTemps?.containsKey(tid)) changeTemps[tid] = [:]
+            def tempValues = []
+            int i = 0
+            tempNamesList.each { temp ->
+            	def tempVal = String.format("%.${apiPrecision}f", roundIt((usingMetric ? roundIt((statSettings."${temp}" / 1.8), 0) / 10.0 : statSettings."${temp}" / 10.0),apiPrecision))
+                tempValues <<  tempVal 
+                if (forcePoll || (changeTemps[tid]?.getAt(i) != tempVal)) {
+                    data += [ "${temp}": tempVal, ]
+                }
+                i++
+            }
+            changeTemps[tid] = tempValues
+            atomicState.changeTemps = changeTemps
+    	}
+        
         // SmartApp configuration settings that almost never change (Listed in order of frequency that they should change normally)
         Integer dbgLevel = getDebugLevel()
         String tmpScale = getTemperatureScale()
@@ -3105,10 +3228,8 @@ def updateThermostatData() {
             														// useEndTime4hour, useEndTime2hour, nextPeriod, indefinite, askMe
         	
             // Thermostat configuration stuff that almost never changes - if any one changes, send them all
-        	def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,/*heatHigh,heatLow,coolHigh,coolLow,*/heatRange,coolRange,climatesList,
-        						hasHeatPump,hasForcedAir,hasElectric,hasBoiler,auxHeatMode,hasHumidifier,hasDehumidifier,dehumidifyOvercoolOffset,
-                                /*humidifierMode,humidtySetpoint,*//*dehumidifierMode,dehumiditySetpoint,*/
-                                tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
+        	def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,heatRange,coolRange,climatesList,
+        						auxHeatMode,hasHumidifier,hasDehumidifier,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
  			if (forcePoll || (changeNever == [:]) || !changeNever.containsKey(tid) || (changeNever[tid] != neverList)) {  
             	data += [
 					coolMode: (coolStages > 0),
@@ -3124,14 +3245,9 @@ def updateThermostatData() {
             		coolRangeLow: coolLow,
 					heatRange: heatRange,
 					coolRange: coolRange,
-                	programsList: climatesList,
-                	hasHeatPump: hasHeatPump,
-            		hasForcedAir: hasForcedAir,
-            		hasElectric: hasElectric,
-            		hasBoiler: hasBoiler,                    
-            		hasHumidifier: hasHumidifier,
-					hasDehumidifier: hasDehumidifier,                    
-                    dehumidifyOvercoolOffset: dehumidifyOvercoolOffset,
+                    hasHumidifier: hasHumidifier, 
+                    hasDehumidifier: hasDehumidifier,
+                	programsList: climatesList,                
                 	heatDifferential: String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision)),
                 	coolDifferential: String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision)),
                     heatCoolMinDelta: String.format("%.${apiPrecision}f", roundIt(tempHeatCoolMinDelta, apiPrecision)),
@@ -3153,8 +3269,8 @@ def updateThermostatData() {
                     }
                 }
             }
-         	def rarelyList = [fanMinOnTime,isConnected,thermostatHold,holdEndsAt,statusMsg,humiditySetpoint,humidifierMode,dehumidifierSetpoint,dehumiditySetpoint,
-            					currentClimate,currentClimateName,currentClimateId,scheduledClimateName,scheduledClimateId,currentFanMode,auxHeatMode]
+         	def rarelyList = [fanMinOnTime,thermostatHold,holdEndsAt,statusMsg,humiditySetpoint,humidifierMode,dehumiditySetpoint,
+            					currentClimate,currentClimateName,currentClimateId,scheduledClimateName,scheduledClimateId,currentFanMode,currentVentMode,auxHeatMode]
 		    if (forcePoll || (changeRarely == [:]) || !changeRarely.containsKey(tid) || (changeRarely[tid] != rarelyList)) { 
             	data += [
           			thermostatHold: thermostatHold,
@@ -3172,12 +3288,15 @@ def updateThermostatData() {
 					scheduledProgramId: scheduledClimateId,
 					scheduledProgram: scheduledClimateName,
                     thermostatFanMode: currentFanMode,
+                    vent: currentVentMode,
+                    ventilatorMinOnTime: ventMinOnTime,
                 	fanMinOnTime: fanMinOnTime,                                        
 					auxHeatMode: auxHeatMode,				// Moved these down here, since they really didn't belong on the neverList
                     humiditySetpoint: humiditySetpoint,		// ditto
                     humidifierMode: humidifierMode,			// ditto
                     dehumidifierMode: dehumidifierMode,		// ditto
                     dehumiditySetpoint: dehumiditySetpoint,	// ditto
+                    dehumidifierLevel: dehumiditySetpoint,	// department of redundancy dept.
           		]
             	changeRarely[tid] = rarelyList
             	atomicState.changeRarely = changeRarely
@@ -3405,8 +3524,124 @@ private refreshAuthToken(child=null) {
     }
 }
 
+def queueFailedCall(String routine, String DNI, numArgs, arg1=null, arg2=null, arg3=null, arg4=null, arg5=null, arg6=null, arg7=null) {
+	//log.debug "queueCall routine: ${routine}, DNI: ${DNI}, ${arg1}, ${arg2}, ${arg3}, ${arg4}, ${arg5}, ${arg6}, ${arg7}"  // ${routine}" // , args: ${theArgs}"
+	if ((atomicState.connected == 'full') && atomicState.runningCallQueue) return // don't queue when we are clearing the queue
+    runIn(2, 'queueCall', [overwrite: false, data: [routine: routine, DNI: DNI, args: [arg1, arg2, arg3, arg4, arg5], done: false, numArgs: numArgs]])
+    if (atomicState.callsQueued == null) { atomicState.callsQueued = 0; atomicState.callsRun = 0; }
+    atomicState.callsQueued = atomicState.callsQueued + 1
+}
+
+def queueCall(data) {
+	def dbgLvl = 1
+	LOG("queueCall() data: ${data}", dbgLvl, null, 'trace')
+    
+    def failedCallQueue = null
+    def queueSize = 0
+    if (!atomicState.queueingFailedCalls) {
+    	atomicState.queueingFailedCalls = true
+	} else {
+    	failedCallQueue = atomicState.callQueue
+        queueSize = failedCallQueue ? failedCallQueue.size() : 0
+    }
+    LOG("queueSize: ${queueSize}, failedCallQueue: ${failedCallQueue}", dbgfLvl, null, 'trace')
+    if (queueSize == 0) {
+    	failedCallQueue = ["${queueSize}": data]
+    } else {
+    	failedCallQueue = failedCallQueue + ["${queueSize}": data]
+    }
+    
+    log.debug "failedCallQueue: ${failedCallQueue}"
+    //atomicState.callQueue = toJson(failedCallQueue)
+    atomicState.callQueue = failedCallQueue
+    
+	// runIn( 5, runCallQueue )
+}
+
+def runCallQueue() {
+	def dbgLvl = 1
+	LOG("runCallQueue() connected: ${atomicState.connected}, callQueue: ${atomicState.callQueue}, runningCallQueue: ${atomicState.runningCallQueue}", dbgLvl, null, 'trace')
+	if (atomicState.connected?.toString() != 'full') return
+    if (atomicState.callQueue?.size() == 0) {atomicState.runningCallQueue = false; return;}
+    if (atomicState.runningCallQueue) return
+    atomicState.runningCallQueue = true
+    
+    //while (atomicState.connected == 'full') {
+    def failed = false
+    def result = true
+    def queue = atomicState.callQueue
+    int i
+    for (i=0; i<queue.size(); i++) {
+    	//log.debug queue."${i}"
+        def cmd = queue."${i}"
+        log.debug "${i}: ${cmd}"
+      	if (cmd?.done?.toString() == 'false') {    	
+            if (atomicState.connected == 'full') {
+            	// execute the command
+                //def command = "${cmd.routine}(getChildDevice(${cmd.DNI})"
+                cmd.args?.each {
+                	if (it == [:]) it = null
+                }
+                //command += ')'
+                //log.debug "${i}: ${command}"
+                if (true) { // (cmd.routine == 'resumeProgram') {
+                    switch(cmd.numArgs) {
+                    	case 0:
+                        	result = this."${cmd.routine}"(getChildDevice(cmd.DNI))
+                        	break;
+                        case 1:
+                        	result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0])
+                        	break;
+                        case 2:
+							result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1] )
+							break;
+                        case 3:
+                        	result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2])
+                        	break;
+                        case 4:
+                        	result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3])
+                        	break;
+                        case 5:
+                        	result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4])
+                        	break;
+                        //case 6:
+                        //	result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4], cmd.args[5])
+                        //	break;
+                        //case 7:
+                        //	result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4], cmd.args[5], cmd.args[6])
+                        //	break;
+                    }
+                    LOG("RESULT: ${result}", dbgLvl, null, 'trace')
+                }
+                if (result) {
+                    queue = atomicState.callQueue
+                    cmd = queue."${i}"
+                    cmd.done = true
+                    queue."${i}" = cmd
+                    atomicState.callQueue = queue
+                    atomicState.callsRun = atomicState.callsRun + 1
+                } else {
+                	i = queue.size()
+                    failed = true
+                }
+            }
+        }
+    }
+    if (!failed) { atomicState.callQueue = [:]; LOG("callQueue completed and cleared", 2, null, 'info'); }
+    atomicState.runningCallQueue = false
+    atomicState.queueingFailedCalls = false
+}
+
 def resumeProgram(child, String deviceId, resumeAll=true) {
-	
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to resumeProgram(${child}, ${deviceId}, ${resumeAll})", 2, child, 'warn')
+        queueFailedCall('resumeProgram', child.device.deviceNetworkId, 2, deviceId, resumeAll)
+        return false
+    }
+
 	def result = true
     boolean debugLevelFour = debugLevel(4)
     boolean debugLevelThree = debugLevel(3)
@@ -3417,7 +3652,7 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
 	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 4, child)
     
 	result = sendJson(child, jsonRequestBody)
-    if (debugLevelThree) LOG("resumeProgram(${resumeAll}) returned ${result}", 3, child,'info')
+    if (debugLevelThree) LOG("resumeProgram(${resumeAll}) returned ${result}", 3, child,result?'info':'warn')
 	if (result) {
     	def program = atomicState.program[deviceId]
         if ( program ) {
@@ -3437,10 +3672,15 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
                             'currentProgramName': climateName,
                             'currentProgram': climateName,
                        		'currentProgramId':climateId ]
-        	LOG("setProgram() ${updates}",2,null,'info')
+        	LOG("resumeProgram() ${updates}",2,null,'info')
         	child.generateEvent(updates)			// force-update the calling device attributes that it can't see
         }
         atomicState.forcePoll = true 		// force next poll to get updated data
+    } else {
+    	if (atomicState.connected?.toString() != 'full') {
+			LOG("API connection lost, queueing failed call to resumeProgram(${child}, ${deviceId}, ${resumeAll})", 2, child, 'warn')
+        	queueFailedCall('resumeProgram', child.device.deviceNetworkId, 2, deviceId, resumeAll)
+    	}
     }
     return result
 }
@@ -3448,12 +3688,24 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
 def setHVACMode(child, deviceId, mode) {
 	LOG("setHVACMode(${mode})", 4, child)
     def result = setMode(child, mode, deviceId)
-    LOG("setHVACMode(${mode}) returned ${result}", 3, child,'info')    
+    LOG("setHVACMode(${mode}) returned ${result}", 3, child,result?'info':'warn')    
 	// if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+    // if (!result) queue failed request
     return result
 }
+
 def setMode(child, mode, deviceId) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setMode(${child}, ${mode}, ${deviceId}", 2, child, 'warn')
+        queueFailedCall('setMode', child.device.deviceNetworkId, 2, mode, deviceId)
+        return false
+    }
+    
 	LOG("setMode(${mode}) for ${deviceId}", 5, child, 'trace')
+    // queueFailedCall('setMode', child, mode, deviceId)
         
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"hvacMode":"'+"${mode}"+'"}}}'  
 	LOG("Mode Request Body = ${jsonRequestBody}", 4, child, 'trace')
@@ -3461,15 +3713,29 @@ def setMode(child, mode, deviceId) {
 	def result = sendJson(child, jsonRequestBody)
     LOG("setMode to ${mode} with result ${result}", 4, child, 'trace')
 	if (result) {
-    	LOG("setMode(${mode}) returned ${result}", 4, child, "info")
+    	LOG("setMode(${mode}) - Succeeded", 1, child, 'info')
     	atomicState.forcePoll = true 		// force next poll to get updated data
     } else {
-    	LOG("setMode(${mode}) - Failed", 1, child, "warn")
+        if (atomicState.connected?.toString() != 'full') {
+            LOG("API is connection lost, queueing failed call to setMode(${child}, ${mode}, ${deviceId}", 2, child, 'warn')
+            queueFailedCall('setMode', child.device.deviceNetworkId, 2, mode, deviceId)
+        } else {
+        	LOG("setMode(${mode}) - Failed", 1, child, 'warn')
+        }
     }
 	return result
 }
 
 def setHumidifierMode(child, mode, deviceId) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setHumidifierMode(${child}, ${mode}, ${deviceId}", 2, child, 'warn')
+        queueFailedCall('setHumidifierMode', child.device.deviceNetworkId, 2, mode, deviceId)
+        return false
+    }
+    
 	LOG ("setHumidifierMode(${mode}) for ${deviceId}", 5, child, 'trace')
     
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"humidifierMode":"'+"${mode}"+'"}}}'  
@@ -3479,12 +3745,27 @@ def setHumidifierMode(child, mode, deviceId) {
     	LOG("setHumidifierMode(${mode}) - Succeeded", 2, child, 'info')
         atomicState.forcePoll = true 		// force next poll to get updated data
     } else {
-    	LOG("setHumidifierMode(${mode}) - Failed", 1, child, 'warn')
+        if (atomicState.connected?.toString() != 'full') {
+            LOG("API connection lost, queueing failed call to setHumidifierMode(${child}, ${mode}, ${deviceId}", 2, child, 'warn')
+            queueFailedCall('setHumidifierMode', child.device.deviceNetworkId, 2, mode, deviceId)
+            return false
+        } else {
+        	LOG("setHumidifierMode(${mode}) - Failed", 1, child, 'warn')
+        }
     }
 	return result
 }
 
 def setHumiditySetpoint(child, value, deviceId) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setHumiditySetpoint(${child}, ${value}, ${deviceId}", 2, child, 'warn')
+        queueFailedCall('setHumiditySetpoint', child.device.deviceNetworkId, 2, value, deviceId)
+        return false
+    }
+    
 	LOG ("setHumiditySetpoint${value}) for ${deviceId}", 5, child, 'trace')
                         
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"humidity":"'+"${value}"+'"}}}'  
@@ -3492,15 +3773,29 @@ def setHumiditySetpoint(child, value, deviceId) {
     def result = sendJson(child, jsonRequestBody)
     LOG("setHumiditySetpoint to ${value} with result ${result}", 4, child, 'trace')
 	if (result) {
-    	LOG("setHumiditySetpoint (${value}) - Succeeded", 2, child, 'info')
+    	LOG("setHumiditySetpoint(${value}) - Succeeded", 2, child, 'info')
         atomicState.forcePoll = true 		// force next poll to get updated data
     } else {
-    	LOG("setHumiditySetpoint (${mode}) - Failed", 1, child, 'warn')
+        if (atomicState.connected?.toString() != 'full') {
+            LOG("API connection lost, queueing failed call to setHumiditySetpoint(${child}, ${value}, ${deviceId}", 2, child, 'warn')
+            queueFailedCall('setHumiditySetpoint', child.device.deviceNetworkId, 2, value, deviceId)
+        } else {
+        	LOG("setHumiditySetpoint(${value}) - Failed", 1, child, 'warn')
+        }
     }
 	return result	
 }
 
 def setDehumidifierMode(child, mode, deviceId) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setDehumidifierMode(${child}, ${mode}, ${deviceId}", 2, child, 'warn')
+        queueFailedCall('setDehumidifierMode', child.device.deviceNetworkId, 2, mode, deviceId)
+        return false
+    }
+    
 	LOG ("setDehumidifierMode(${mode}) for ${deviceId}", 5, child, 'trace')
                         
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"dehumidifierMode":"'+"${mode}"+'"}}}'  
@@ -3511,12 +3806,26 @@ def setDehumidifierMode(child, mode, deviceId) {
     	LOG("setDehumidifierMode(${mode}) - Succeeded", 2, child, 'info')
         atomicState.forcePoll = true 		// force next poll to get updated data
     } else {
-    	LOG("setDehumidifierMode(${mode}) - Failed", 1, child, 'warn')
+        if (atomicState.connected?.toString() != 'full') {
+            LOG("API connection lost, queueing failed call to setDehumidifierMode(${child}, ${mode}, ${deviceId}", 2, child, 'warn')
+            queueFailedCall('setDehumidifierMode', child.device.deviceNetworkId, 2, mode, deviceId)
+        } else {
+        	LOG("setDehumidifierMode(${mode}) - Failed", 1, child, 'warn')
+        }
     }
 	return result
 }
 
 def setDehumiditySetpoint(child, value, deviceId) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setDehumiditySetpoint(${child}, ${value}, ${deviceId}", 2, child, 'warn')
+        queueFailedCall('setDehumiditySetpoint', child.device.deviceNetworkId, 2, value, deviceId)
+        return false
+    }
+    
 	LOG ("setDehumiditySetpoint${value}) for ${deviceId}", 5, child, 'trace')
                         
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"dehumidifierLevel":"'+"${value}"+'"}}}'  
@@ -3527,12 +3836,26 @@ def setDehumiditySetpoint(child, value, deviceId) {
     	LOG("setDehumiditySetpoint (${value}) - Succeeded", 2, child, 'info')
         atomicState.forcePoll = true 		// force next poll to get updated data
     } else {
-    	LOG("setDehumiditySetpoint (${mode}) - Failed", 1, child, 'warn')
+        if (atomicState.connected?.toString() != 'full') {
+            LOG("API connection lost, queueing failed call to setDehumiditySetpoint(${child}, ${value}, ${deviceId}", 2, child, 'warn')
+            queueFailedCall('setDehumiditySetpoint', child.device.deviceNetworkId, 2, value, deviceId)
+        } else {
+    		LOG("setDehumiditySetpoint (${mode}) - Failed", 1, child, 'warn')
+        }
     }
 	return result	
 }
 
 def setFanMinOnTime(child, deviceId, howLong) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setFanMinOnTime(${child}, ${deviceId}, ${howLong}", 2, child, 'warn')
+        queueFailedCall('setFanMinOnTime', child.device.deviceNetworkId, 2, deviceId, howLong)
+        return false
+    }
+    
 	String statName = getThermostatName(deviceId)
 	LOG("setFanMinOnTime(${howLong}) for thermostat ${statName}", 4, child, 'trace')
     
@@ -3546,12 +3869,27 @@ def setFanMinOnTime(child, deviceId, howLong) {
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
     def result = sendJson(child, jsonRequestBody)
-    LOG("setFanMinOnTime(${howLong}) for thermostat ${statName} returned ${result}", 4, child,'trace')    
+    LOG("setFanMinOnTime(${howLong}) for thermostat ${statName} returned ${result}", result?2:4, child,result?'info':'warn')    
 	// if (result) atomicState.forcePoll = true 		// force next poll to get updated runtime data
+    if (!result) {
+    	if (atomicState.connected?.toString() != 'full') {
+            LOG("API connection lost, queueing failed call to setFanMinOnTime(${child}, ${deviceId}, ${howLong}", 2, child, 'warn')
+            queueFailedCall('setFanMinOnTime', child.device.deviceNetworkId, 2, deviceId, howLong)
+        }
+    }
     return result
 }
 
 def setVacationFanMinOnTime(child, deviceId, howLong) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setVacationFanMinOnTime(${child}, ${deviceId}, ${howLong}", 2, child, 'warn')
+        queueFailedCall('setVacationFanMinOnTime', child.device.deviceNetworkId, 2, deviceId, howLong)
+        return false
+    }
+    
 	String statName = getThermostatName(deviceId)
 	LOG("setVacationFanMinOnTime(${howLong}) for thermostat ${statName}", 4, child)   
     if (!howLong.isNumber() || (howLong.toInteger() < 0) || howLong.toInteger() > 55) {		// Documentation says 60 is the max, but the Ecobee3 thermostat maxes out at 55 (makes 60 = 0)
@@ -3584,9 +3922,21 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
         LOG("setVacationFanMinOnTime() for thermostat ${statName} - before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, "info")
 
         def result = sendJson(child, jsonRequestBody)
-        LOG("setVacationFanMinOnTime(${howLong}) for thermostat ${statName} returned ${result}", 4, child, 'info') 
+        LOG("setVacationFanMinOnTime(${howLong}) for thermostat ${statName} returned ${result}", 4, child, result?'info':'warn') 
         // if (result) atomicState.forcePoll = true 		// force next poll to get updated data
+        if (!result) {
+            if (atomicState.connected?.toString() != 'full') {
+                LOG("API connection lost, queueing Failed call to setVacationFanMinOnTime(${child}, ${deviceId}, ${howLong}", 2, child, 'warn')
+                queueFailedCall('setVacationFanMinOnTime', child.device.deviceNetworkId, 2, deviceId, howLong)
+            }        
+        }
         return result
+    } else {
+    	if (atomicState.connected?.toString() != 'full') {
+            LOG("API connection lost, queueing failed call to setVacationFanMinOnTime(${child}, ${deviceId}, ${howLong}", 2, child, 'warn')
+            queueFailedCall('setVacationFanMinOnTime', child.device.deviceNetworkId, 2, deviceId, howLong)
+            return false
+    	}
     }
 }
 
@@ -3605,7 +3955,8 @@ private def createVacationTemplate(child, deviceId) {
 	
     LOG("before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, 'trace')
     def result = sendJson(child, jsonRequestBody)
-    LOG("createVacationTemplate(${vacationName}) for thermostat ${statName} returned ${result}", 4, child, 'trace')
+    LOG("createVacationTemplate(${vacationName}) for thermostat ${statName} returned ${result}", 4, child, result?'info':'warn')
+    // if (!result) queue failed request
     
     // Now, delete the temporary vacation
     result = deleteVacation(child, deviceId, vacationName)
@@ -3630,7 +3981,7 @@ def deleteVacation(child, deviceId, vacationName=null ) {
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
     def result = sendJson(child, jsonRequestBody)
-    LOG("deleteVacation() for thermostat ${statName} returned ${result}", 4, child,'info')
+    LOG("deleteVacation() for thermostat ${statName} returned ${result}", 4, child,result?'info':'warn')
     
     if (vacationName == null) {
     	resumeProgram(child, deviceId, true)		// force back to previously scheduled program
@@ -3642,6 +3993,15 @@ def deleteVacation(child, deviceId, vacationName=null ) {
 
 // Should only be called by child devices, and they MUST provide sendHoldType and sendHoldHours as of version 1.2.0
 def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHoldHours=2) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setHold(${child}, ${heating}, ${cooling}, ${deviceId}, ${sendHoldType} ${sendHoldHours}", 2, child, 'warn')
+        queueFailedCall('setHold', child.device.deviceNetworkId, 5, heating, cooling, deviceId, sendHoldType, sendHoldHours)
+        return false
+    }
+    
     def currentThermostatHold = child.device.currentValue('thermostatHold')
     String statName = getThermostatName(deviceId)
     if (currentThermostatHold == 'vacation') {
@@ -3679,7 +4039,7 @@ def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHo
    	LOG("setHold() for thermostat ${child.device.displayName} - about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
     
 	def result = sendJson(child, jsonRequestBody)
-    LOG("setHold() for thermostat ${statName} returned ${result}", 4, child,'info')
+    LOG("setHold() for thermostat ${statName} returned ${result}", 4, child,result?'info':'error')
     if (result) { 
     	// send the new heat/cool setpoints and ProgramId to the DTH - it will update the rest of the related displayed values itself
     	Integer apiPrecision = usingMetric ? 2 : 1					// highest precision available from the API
@@ -3695,12 +4055,26 @@ def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHo
         LOG("setHold() for thermostat ${statName} - ${updates}",3,null,'info')
         child.generateEvent(updates)			// force-update the calling device attributes that it can't see
         atomicState.forcePoll = true 			// force next poll to get updated data
-	}
+	} else {
+        if (atomicState.connected?.toString() != 'full') {
+            LOG("API connection lost, queueing failed call to setHold(${child}, ${heating}, ${cooling}, ${deviceId}, ${sendHoldType} ${sendHoldHours}", 2, child, 'warn')
+            queueFailedCall('setHold', child.device.deviceNetworkId, 5, heating, cooling, deviceId, sendHoldType, sendHoldHours)
+        }
+    }
     return result
 }
 
 // Should only be called by child devices, and they MUST provide sendHoldType and sendHoldHours as of version 1.2.0
 def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite', sendHoldHours=2) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setFanMode(${child}, ${fanMode}, ${fanMinOnTime}, ${deviceId}, ${sendHoldType} ${sendHoldHours}", 2, child, 'warn')
+        queueFailedCall('setFanMode', child.device.deviceNetworkId, 5, fanMode, fanMinOnTime, deviceId, sendHoldType, sendHoldHours)
+        return false
+    }
+    
 	String statName = getThermostatName(deviceId)
 	LOG("setFanMode(${fanMode}) for for thermostat ${statName}", 5, null, 'trace') 
     def isMetric = (getTemperatureScale() == "C")
@@ -3761,15 +4135,30 @@ def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite'
     LOG("setFanMode() for thermostat ${statName} - about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child, 'trace')
     
 	def result = sendJson(child, jsonRequestBody)
-    LOG("setFanMode(${fanMode}) for thermostat ${statName} returned ${result}", 4, child, 'info')
+    LOG("setFanMode(${fanMode}) for thermostat ${statName} returned ${result}", 4, child, result?'info':'warn')
     // if (result) atomicState.forcePoll = true 		// force next poll to get updated data
+    if (!result) {
+        if (atomicState.connected?.toString() != 'full') {
+            LOG("API connection lost, queueing failed call to setFanMode(${child}, ${fanMode}, ${fanMinOnTime}, ${deviceId}, ${sendHoldType} ${sendHoldHours}", 2, child, 'warn')
+            queueFailedCall('setFanMode', child.device.deviceNetworkId, 5, fanMode, fanMinOnTime, deviceId, sendHoldType, sendHoldHours)
+        }
+    }
     return result    
 }
 
 def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendHoldHours=2) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setProgram(${child}, ${program}, ${deviceId}, ${sendHoldType} ${sendHoldHours}", 2, child, 'warn')
+        queueFailedCall('setProgram', child.device.deviceNetworkId, 4, program, deviceId, sendHoldType, sendHoldHours)
+        return false
+    }
+
 	String statName = getThermostatName(deviceId)
 	// NOTE: Will use only the first program if there are two with the same exact name
-	LOG("setProgram(${program}) for for thermostat ${statName}", 3, child, 'info')     
+	LOG("setProgram(${program}) for for thermostat ${statName}", 2, child, 'info')     
     
     def currentThermostatHold = child.device.currentValue('thermostatHold') 
     if (currentThermostatHold == 'vacation') {									// shouldn't happen, child device should have already verified this
@@ -3816,10 +4205,18 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
         LOG("setProgram() for thermostat ${statName} ${updates}",3,null,'info')
         child.generateEvent(updates)			// force-update the calling device attributes that it can't see
         atomicState.forcePoll = true 		// force next poll to get updated data
-	}
+	} else {
+        if (atomicState.connected?.toString() != 'full') {
+            LOG("API is not fully connected, queueing call to setProgram(${child}, ${program}, ${deviceId}, ${sendHoldType} ${sendHoldHours}", 2, child, 'warn')
+            queueFailedCall('setProgram', child.device.deviceNetworkId, 4, program, deviceId, sendHoldType, sendHoldHours)
+        } else {
+    		LOG("setProgram(${program}) for for thermostat ${statName} FAILED", 1, child, 'warn') 
+        }
+    }
     return result
 }
 
+////////////////////////////////////////////////////////////////
 def addSensorToProgram(child, deviceId, sensorId, programId) {
 	String statName = getThermostatName( deviceId )
     String sensName = child.device?.displayName
@@ -3865,7 +4262,7 @@ def addSensorToProgram(child, deviceId, sensorId, programId) {
     LOG("addSensorToProgram() - couldn't find ${programId.capitalize()} program for thermostat ${statName}",2,child,'warn')
     return false
 }
-
+/////////////////////////////////////////////////////////////////////
 def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 	String statName = getThermostatName( deviceId )
     String sensName = child.device?.displayName
@@ -3911,6 +4308,15 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 }
 
 def setProgramSetpoints(child, deviceId, programName, heatingSetpoint = null, coolingSetpoint = null) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setProgramSetpoints(${child}, ${deviceId}, ${heatingSetpoint} ${coolingSetpoint}", 2, child, 'warn')
+        queueFailedCall('setProgramSetpoint', child.device.deviceNetworkId, 3, deviceId, heatingSetpoint, coolingSetpoint)
+        return false
+    }
+    
 	String statName = getThermostatName( deviceId )
 	LOG("setProgramSetpoints(${deviceId} (${statName}): ${programName} heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})",3,child,'trace')
     
@@ -3937,7 +4343,6 @@ def setProgramSetpoints(child, deviceId, programName, heatingSetpoint = null, co
     	LOG("setProgramSetpoints() - Error: heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
         return false
     }
-    
         
     int c = 0
     while ( program.climates[c] ) {	
@@ -3964,6 +4369,7 @@ def setProgramSetpoints(child, deviceId, programName, heatingSetpoint = null, co
             	return true
             } else {
             	LOG("setProgramSetpoints(): ${programName} setpoints change failed", 1, child, 'warn')
+                // queue failed request
                 return false
             }
         }
@@ -3975,10 +4381,19 @@ def setProgramSetpoints(child, deviceId, programName, heatingSetpoint = null, co
 }
 
 def updateClimates(data) {
-	updateClimatesDirec(data.deviceId, data.child)
+	updateClimatesDirect(data.child, data.deviceId)
 }
 
-def updateClimatesDirect(deviceId, child) {
+def updateClimatesDirect(child, deviceId) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to updateClimateChangeDirect(${child}, ${deviceId})", 2, child, 'warn')
+        queueFailedCall('updateClimateDirect', child.device.deviceNetworkId, 1, deviceId)
+        return false
+    }
+    
     def statName = getThermostatName( deviceId )
 	LOG("Updating Program settings for ${statName}", 4, child, 'info')
     def climateChange = atomicState.climateChange
@@ -3992,8 +4407,15 @@ def updateClimatesDirect(deviceId, child) {
     	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
         result = sendJson(child, jsonRequestBody)
     	LOG("Updating Program settings for ${statName} returned ${result}", 4, child, result?'info':'warn')
-        climateChange[deviceId] = null
-        atomicState.climateChange = climateChange
+        if (result) {
+        	climateChange[deviceId] = null
+        	atomicState.climateChange = climateChange
+    	} else {
+            if (atomicState.connected?.toString() != 'full') {
+                LOG("API connection lost, queueing failed call to updateClimateChangeDirect(${child}, ${deviceId})", 2, child, 'warn')
+                queueFailedCall('updateClimateDirect', child.device.deviceNetworkId, 1, deviceId)
+            }
+        }
     }
     // atomicState.forcePoll = true
     return result    
@@ -4020,15 +4442,15 @@ private def sendJson(child=null, String jsonBody) {
             
 	try{
 		httpPost(cmdParams) { resp ->
-   	    	returnStatus = resp.data.status.code
+   	    	returnStatus = resp.data?.status?.code
 
 			if (debugLevelFour) LOG("sendJson() resp.status ${resp.status}, resp.data: ${resp.data}, returnStatus: ${returnStatus}", 4, child)
 				
            	// TODO: Perhaps add at least two tries incase the first one fails?
 			if(resp.status == 200) {				
 				if (debugLevelFour) LOG("Updated ${resp.data}", 4, child, 'trace')
-				returnStatus = resp.data.status.code
-				if (resp.data.status.code == 0) {
+				returnStatus = resp.data?.status?.code
+				if (resp.data?.status?.code == 0) {
 					if (debugLevelFour) LOG("Successful call to ecobee API.", 4, child, 'trace')
                     result = true
                 	// Tell the children that we are once again connected to the Ecobee API Cloud
@@ -4037,7 +4459,7 @@ private def sendJson(child=null, String jsonBody) {
                     	generateEventLocalParams() // Update the connection status
                 	}
 				} else {
-					LOG("Error return code = ${resp.data.status.code}", 1, child, "error")
+					LOG("Error return code = ${resp.data?.status?.code}", 1, child, "error")
 				}
                 // Reset saved state
                 atomicState.savedActionJsonBody = null
@@ -4049,8 +4471,8 @@ private def sendJson(child=null, String jsonBody) {
 		} // HttpPost
 	} catch (groovyx.net.http.HttpResponseException e) {
     	result = false // this thread failed...hopefully we can succeed after we refresh the auth_token
-        LOG("sendJson() ${e.statusCode} ${e.response.data.status.code}",3,null,"trace")
-        if ((e.statusCode == 500) && (e.response.data.status.code == 14)) {
+        LOG("sendJson() ${e.statusCode} ${e.response?.data?.status?.code}",3,null,"trace")
+        if ((e.statusCode == 500) && (e.response?.data?.status?.code == 14)) {
         	LOG("sendJson() - HttpResponseException occurred: Auth_token has expired", 3, null, "info")
             // atomicState.savedActionJsonBody = jsonBody
         	// atomicState.savedActionChild = child.deviceNetworkId
@@ -4070,7 +4492,7 @@ private def sendJson(child=null, String jsonBody) {
                 LOG( "Sending: Auth_token refresh failed", 1, null, 'error') 
             }
         } else {
-        	LOG("sendJson() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} || ${e.response.data.status.code}", 1, null, "error")
+        	LOG("sendJson() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} || ${e.response?.data?.status?.code}", 1, null, "error")
         }
     // These appear to be transient errors, treat them all as if a Timeout...
     } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
@@ -4151,6 +4573,10 @@ private String getThermostatName(String tid) {
         tstatName = getChildDevice(DNI)?.displayName		// better than displaying 'null' as the name
     }
     return tstatName
+}
+
+private String getThermostatDNI(String tid) {
+	return [app.id, tid].join('.')
 }
 
 private def LOG(message, level=3, child=null, String logType='debug', event=false, displayEvent=true) {
@@ -4426,6 +4852,7 @@ private def apiRestored() {
 	atomicState.connected = "full"
 	unschedule("notifyApiLost")
     atomicState.reAttemptPoll = 0
+    runIn(10, runCallQueue)
 }
 
 private def getDebugDump() {
@@ -4627,3 +5054,43 @@ List getGuestList(statId, String type='modeOff') {
     }
     return []
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
