@@ -33,9 +33,10 @@
  *	1.6.14 - Clean up digits display
  *  1.6.15 - Shortcut the 'TestingForInstall' installed()
  *	1.6.16 - Log uninstalls also
+ *	1.7.00 - Universal code supports now both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.6.16" }
-private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00a" }
+private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getHubPlatform()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
@@ -246,6 +247,8 @@ void uninstalled() {
 }
 
 void updated() {
+	atomicState?.hubPlatform = null
+	LOG("${getVersionLabel()} updated",1,null,'info')
 	sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
 }
 
@@ -406,14 +409,15 @@ private roundIt( BigDecimal value, decimals=0 ) {
 }
 
 private debugLevel(level=3) {
-	Integer debugLvlNum = parent.settings.debugLevel?.toInteger() ?: 3
-    return ( debugLvlNum >= level?.toInteger() )
+	Integer debugLvlNum = (getParentSetting('debugLevel') ?: level) as Integer
+    return ( debugLvlNum >= (level as Integer))
 }
 
-private def LOG(message, level=3, child=null, logType="debug", event=false, displayEvent=false) {
+private def LOG(message, Integer level=3, child=null, logType="debug", event=false, displayEvent=false) {
 	def prefix = ""
-	if ( parent.settings.debugLevel?.toInteger() == 5 ) { prefix = "LOG: " }
-	if ( debugLevel(level) ) { 
+	Integer dbgLvl = (getParentSetting('debugLevel') ?: level) as Integer
+	if ( dbgLvl == 5 ) { prefix = "LOG: " }
+	if ( dbgLvl >= (level as Integer) ) { 
     	log."${logType}" "${prefix}${message}"
         if (event) { debugEvent(message, displayEvent) }        
 	}    
@@ -491,3 +495,42 @@ def getStockTempColors() {
         [value: 98, color: "#bc2323"]
     ]       
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
