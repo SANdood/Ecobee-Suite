@@ -27,9 +27,10 @@
  *	1.6.00 - Release number synchronization
  *	1.6.10 - Resync for parent-based reservations
  *	1.6.11 - Removed use of *SetpointDisplay
+ *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.6.11" }
-private def getVersionLabel() { return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00a" }
+private def getVersionLabel() { return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Smart Zones",
@@ -57,14 +58,14 @@ def mainPage() {
         
         section(title: "Select Master Thermostat") {
         	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."}
-        	else {input ("masterThermostat", "capability.Thermostat", title: "Pick Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)}            
+        	else {input ("masterThermostat", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Pick Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)}            
 		}
         
         if (!settings.tempDisable) {
         	if (masterThermostat) {
         		section(title: "Select Slave Thermostats") {
         			// Settings option for using Mode or Routine
-            		input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "device.ecobeeSuiteThermostat", required: true, multiple: true, submitOnChange: true)
+            		input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", required: true, multiple: true, submitOnChange: true)
 				}
                 if (slaveThermostats) {
             		section(title: "Slave Thermostat Actions") {
@@ -101,7 +102,7 @@ def updated() {
 }
 
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
 	
 	// Get slaves into a known state
 	slaveThermostats.each { stat ->
@@ -187,11 +188,11 @@ def theAdjuster() {
                     	// See if we are holding the fan but don't need the heat any more
                         if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {
                       		def heatTo = stat.currentValue('heatingSetpoint')
-                        	if (heatTo.isNumber()) {
+                        	if (heatTo != null) {
                         		def temp = stat.currentValue('temperature')
-                            	if (temp.isNumber()) {
+                            	if (temp != null) {
                             		def heatAt = stat.currentValue('heatAtSetpoint')
-                                	if (heatAt.isNumber()) {
+                                	if (heatAt != null) {
                             			if ((temp >= heatTo) || (temp < heatAt)) { 
                                         	// This Zone has reached its target, stop stealing heat
                                 			setFanAuto(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat
@@ -202,11 +203,11 @@ def theAdjuster() {
                         }
                     } else if (statOpState == 'idle') {
                     	def heatTo = stat.currentValue('heatingSetpoint')
-                        if (heatTo.isNumber()) {
+                        if (heatTo != null) {
                         	def temp = stat.currentValue('temperature')
-                            if (temp.isNumber()) {
+                            if (temp != null) {
                             	def heatAt = stat.currentValue('heatAtSetpoint')
-                                if (heatAt.isNumber()) {
+                                if (heatAt != null) {
                             		if ((temp < heatTo) && (temp > heatAt)) { 
                                 		setFanOn(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat		
                                     }
@@ -241,11 +242,11 @@ def theAdjuster() {
                     	// Check if we are holding the fan but don't need the cool any more
                         if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {
                       		def coolTo = stat.currentValue('coolingSetpoint')
-                        	if (coolTo.isNumber()) {
+                        	if (coolTo != null) {
                         		def temp = stat.currentValue('temperature')
-                            	if (temp.isNumber()) {
+                            	if (temp != null) {
                             		def coolAt = stat.currentValue('coolAtSetpoint')
-                                	if (coolAt.isNumber()) {
+                                	if (coolAt != null) {
                             			if ((temp <= coolTo) || (temp > coolAt)) { 
                                         	// This Zone has reached its target, stop stealing cool
                                 			setFanAuto(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat
@@ -257,11 +258,11 @@ def theAdjuster() {
                     } else if (statOpState == 'idle') {
                     	// Check if we need the cool
                     	def coolTo = stat.currentValue('coolingSetpoint')
-                        if (coolTo.isNumber()) {
+                        if (coolTo != null) {
                         	def temp = stat.currentValue('temperature')
-                            if (temp.isNumber()) {
+                            if (temp != null) {
                             	def coolAt = stat.currentValue('coolAtSetpoint')
-                                if (coolAt.isNumber()) {
+                                if (coolAt != null) {
                             		if ((temp > coolSp) && (temp < coolAt)) {
                                 	   	setFanOn(stat)
                                     }
@@ -302,7 +303,7 @@ def setFanAuto(stat) {
         state."${stat.displayName}-holdType" = null
     }
 	def fanMOT = stat.currentValue('fanMinOnTime')
-    if (fanMOT.isNumber() && (fanMOT != 0)) {
+    if ((fanMOT != null) && (fanMOT != 0)) {
     	if (stat.currentValue('thermostatFanModeDisplay') != 'circulate') {
         	stat.setThermostatFanMode('circulate')
             LOG("${stat.displayName} fanMode = circulate", 3)
@@ -333,3 +334,43 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 	parent.LOG(message, level, null, logType, event, displayEvent)
     log."${logType}" message
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
