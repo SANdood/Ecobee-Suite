@@ -51,9 +51,10 @@
  *	1.6.22 - Expanded to include ALL settings as attributes
  *	1.6.23 - Changed equipment operating state to 'de/humidifying'
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
+ *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.6.24" }
-private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00b" }
+private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
  
 metadata {
@@ -301,6 +302,8 @@ metadata {
         attribute "setpointDisplay", "string"
         attribute "lastHoldType", "string"
         attribute "lastOpState", "string"				// keeps track if we were most recently heating or cooling
+		attribute "debugLevel", "number"
+		attribute "mobile", "string"
 		
 		// attribute "debugLevel", "number"
 		
@@ -861,13 +864,17 @@ def generateEvent(Map results) {
 	def startMS = now()
 	boolean debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("generateEvent(): parsing data ${results}", 4)
-    //LOG("Debug level of parent: ${parent.settings.debugLevel}", 4, null, "debug")
+    //LOG("Debug level of parent: ${getParentSetting('debugLevel')}", 4, null, "debug")
 	def linkText = device.displayName
     def tu = getTemperatureScale()
     def isMetric = (tu == 'C')
     def forceChange = false
-    def isIOS = ((parent.settings.mobile == null) || (parent.settings.mobile == 'iOS'))
-    def isAndroid = !isIOS
+	def ps, isIOS, isAndroid
+	if (isST) {
+		ps = device.currentValue('mobile') ?: getParentSetting('mobile')
+    	isIOS = ((ps == null) || (ps == 'iOS'))
+    	isAndroid = !isIOS
+	}
 
 	def updateTempRanges = false
     def precision = device.currentValue('decimalPrecision')
@@ -1516,7 +1523,7 @@ def generateEvent(Map results) {
 				case 'holdEndsAt':
                     def schedText = ''
                     def cpn = ''
-                    log.debug "holdEndsAt: ${sendValue}"
+                    // log.debug "holdEndsAt: ${sendValue}"
                     if (sendValue.startsWith('a l' /*ong time from now*/)) {
                         // Record the lastHoldType for permanent holds effected through the Thermostat itself, the WebApp, or the Ecobee Mobile app
                         sendEvent(name: 'lastHoldType', value: 'indefinite', displayed: false)
@@ -1650,6 +1657,7 @@ def generateEvent(Map results) {
                 case 'dehumidifyWhenHeating':
                 case 'ventilatorDuhumidify':
                 case 'debugLevel':
+				case 'mobile':
 				case 'decimalPrecision':
 				case 'currentProgramId':
 				case 'scheduledProgramName':
@@ -1853,7 +1861,7 @@ def setTemperature(setpoint) { 	// Obsolete as of v1.2.21
 //}
 void setHeatingSetpointDelay(setpoint) {
 	LOG("Slider requested heat setpoint: ${setpoint}",4,null,'trace')
-    def runWhen = parent.settings?.arrowPause.toInteger() ?: 4
+    def runWhen = (getParentSetting('arrowPause')?: 4) as Integer
     runIn( runWhen, 'sHS', [data: [setpoint:setpoint.toBigDecimal()]] )
 }
 void sHS(data) {
@@ -1898,7 +1906,7 @@ void setHeatingSetpoint(setpoint, String sendHold=null) {
 //}
 void setCoolingSetpointDelay(setpoint) {
 	LOG("Slider requested cool setpoint: ${setpoint}",4,null,'trace')
-    def runWhen = parent.settings?.arrowPause.toInteger() ?: 4
+    def runWhen = (getParentSetting('arrowPause') ?: 4 ) as Integer
     runIn( runWhen, 'sCS', [data: [setpoint:setpoint.toBigDecimal()]] )
 }
 void sCS(data) {
@@ -1947,7 +1955,7 @@ def updateThermostatSetpoints() {
     def sendHoldType = state.useThisHold
     if (sendHoldType) { state.useThisHold = null } else { sendHoldType = whatHoldType() }
     def sendHoldHours = null
-    if (sendHoldType.isNumber()) {
+    if ((sendHoldType != null) && sendHoldType.isNumber()) {
     	sendHoldHours = sendHoldType
     	sendHoldType = 'holdHours'
 	}
@@ -2051,7 +2059,7 @@ void raiseSetpoint() {
     //if (precision == null) precision = isMetric ? 1 : 0
 	def targetValue
     def smartAuto = usingSmartAuto()
-    def runWhen = parent.settings?.arrowPause.toInteger() ?: 4
+    def runWhen = (getParentSetting('arrowPause') ?: 4 ) as Integer
     if ((mode == 'auto') && smartAuto) {
         raiseSmartSetpoint(heatingSetpoint, coolingSetpoint)
         return
@@ -2112,7 +2120,7 @@ void lowerSetpoint() {
     //if (precision == null) precision = isMetric ? 1 : 0
 	def targetValue
     def smartAuto = usingSmartAuto()
-    def runWhen = parent.settings?.arrowPause.toInteger() ?: 4
+    def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
     
     if ((mode == 'auto') && smartAuto) {
         lowerSmartSetpoint(heatingSetpoint, coolingSetpoint)
@@ -2353,7 +2361,7 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
         if (holdType == 'holdHours') sendHoldHours = holdHours
     } else { 
 		sendHoldType =  whatHoldType()
-    	if (sendHoldType.isNumber()) {
+    	if ((sendHoldType != null) && sendHoldType.isNumber()) {
     		sendHoldHours = sendHoldType
     		sendHoldType = 'holdHours'
 		}
@@ -2621,7 +2629,7 @@ def setThermostatFanMode(String value, holdType=null, holdHours=2) {
         if (holdType == 'holdHours') sendHoldHours = holdHours
     } else { 
 		sendHoldType =  whatHoldType()
-    	if (sendHoldType.isNumber()) {
+    	if ((sendHoldType != null) && sendHoldType.isNumber()) {
     		sendHoldHours = sendHoldType
     		sendHoldType = 'holdHours'
 		}
@@ -2739,7 +2747,7 @@ void fanOff() {
 
 void setFanMinOnTimeDelay(minutes) {
 	LOG("Slider requested Minutes: ${minutes}",4,null,'trace')
-    def runWhen = parent.settings?.arrowPause.toInteger() ?: 4
+    def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
     runIn( runWhen, 'sFMOT', [data: [mins:minutes]] )
 }
 void sFMOT(data) {
@@ -2806,8 +2814,8 @@ void setHumidifierMode(String value) {
 void setHumiditySetpoint(Integer setpoint) {
 	LOG("Humidity setpoint change to ${setpoint} requested", 2, null, 'trace')
     def dehumSP = device.currentValue('dehumiditySetpoint')
-    if (dehumSP && dehumSP.isNumber() && (dehumSP < setpoint)) LOG('Request to set Humidify Setpoint higher than Dehumidify Setpoint',1,null,'warn')
-    def runWhen = parent.settings?.arrowPause.toInteger() ?: 4
+    if ((dehumSP != null) && dehumSP.isNumber() && (dehumSP < setpoint)) LOG('Request to set Humidify Setpoint higher than Dehumidify Setpoint',1,null,'warn')
+    def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
     runIn( runWhen, 'sHumSP', [data: [setpoint:setpoint]] )
 }
 void sHumSP(data) {
@@ -2874,8 +2882,8 @@ void setDehumidifierMode(String value) {
 void setDehumiditySetpoint(Integer setpoint) {
 	LOG("Dehumidity setpoint change to ${setpoint} requested", 2, null, 'trace')
     def humSP = device.currentValue('humiditySetpoint')
-    if (humSP && humSP.isNumber() && (humSP > setpoint)) LOG('Request to set Dehumidify Setpoint lower than Humidify Setpoint',1,null,'warn')
-    def runWhen = parent.settings?.arrowPause.toInteger() ?: 4
+    if ((humSP != null) && humSP.isNumber() && (humSP > setpoint)) LOG('Request to set Dehumidify Setpoint lower than Humidify Setpoint',1,null,'warn')
+    def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
     runIn( runWhen, 'sDehumSP', [data: [setpoint:setpoint]] )
 }
 void sDehumSP(data) {
@@ -2914,7 +2922,8 @@ void setVacationFanMinOnTime(Integer minutes=0) {
     }
 	LOG("setVacationFanMinOnTime(${minutes})", 5, null, "trace")
     Integer howLong = 0	// default to 0 minutes for vacations, if no value supplied
-	if (minutes.isNumber()) howLong = minutes.toInteger()    
+	// if (minutes.isNumber()) howLong = minutes.toInteger()    
+	howLong = minutes as Integer
     def fanMinOnTime = device.currentValue('fanMinOnTime')
     LOG("Current fanMinOnTime: ${fanMinOnTime}, requested ${minutes}/${howLong}",3,null,'info')
     if (fanMinOnTime && (fanMinOnTime.toInteger() == howLong)) return // allready there - all done!
@@ -3042,7 +3051,7 @@ private def getDeviceId() {
 private def usingSmartAuto() {
 	LOG("Entered usingSmartAuto() ", 5)
 	if (settings.smartAuto) { return settings.smartAuto }
-    if (parent.settings.smartAuto) { return parent.settings.smartAuto }
+    if (getParentSetting('smartAuto')) return true 	// { return parent.settings.smartAuto }
     return false
 }
 
@@ -3052,6 +3061,8 @@ def whatHoldType() {
     def theHoldType = myHoldType
     def sendHoldType = null
     def parentHoldType
+	def ht = getParentSetting('holdType')
+	def hh = getParentSetting('holdHours')
     switch (myHoldType) {
       	case 'Temporary':
            	sendHoldType = 'nextTransition'
@@ -3060,13 +3071,13 @@ def whatHoldType() {
             sendHoldType = 'indefinite'
             break;   
         case 'Hourly':
-            if (myHoldHours && myHoldHours.isNumber()) {
+            if ((myHoldHours != null) && myHoldHours.isNumber()) {
             	sendHoldType = myHoldHours
-            } else if ((parent.settings.holdType == 'Specified Hours') && parent.settings.holdHours && parent.settings.holdHours.isNumber()) {
-            	sendHoldType = parent.settings.holdHours
-            } else if ( parent.settings.holdType == '2 Hours') {
+            } else if ((ht == 'Specified Hours') && (hh != null) && hh.isNumber()) {
+            	sendHoldType = hh as Integer
+            } else if ( ht == '2 Hours') {
             	sendHoldType = 2
-            } else if ( parent.settings.holdType == '4 Hours') {
+            } else if ( ht == '4 Hours') {
             	sendHoldType = 4            
             } else {
             	sendHoldType = 2
@@ -3075,7 +3086,7 @@ def whatHoldType() {
         case null :		// null means use parent value
             theHoldType = 'Parent'
         case 'Parent':
-            parentHoldType = parent.settings.holdType
+            parentHoldType = ht
             if (parentHoldType && (parentHoldType == 'Thermostat Setting')) theHoldType = 'Thermostat'
         case 'Thermostat':
 			if (theHoldType == 'Thermostat') {
@@ -3113,7 +3124,7 @@ def whatHoldType() {
                         sendHoldType = 4
                         break;
                     case 'Specified Hours':
-                        if (parent.settings.holdHours && parent.settings.holdHours.isNumber()) {sendHoldType = parent.settings.holdHours} else {sendHoldType = 2}
+                        if ((hh != null) && hh.isNumber()) {sendHoldType = hh as Integer} else {sendHoldType = 2}
                         break;
                     case null :		// if not set in Parent, should probably use Thermostat setting, but precendence was set that null = indefinite
                     default :
@@ -3123,7 +3134,7 @@ def whatHoldType() {
            	}
     }
     if (sendHoldType) {
-    	LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
+    	LOG("Using holdType ${((sendHoldType != null) && sendHoldType.isNumber())?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
         return sendHoldType
     } else {
     	LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
@@ -3170,19 +3181,22 @@ void cancelReservation( String childId, String type='modeOff') {
 
 private Integer howManyHours() {
 	Integer sendHoldHours = 2
-	if (holdHours && holdHours.isNumber()) {
+	if ((holdHours != null) && holdHours.isNumber()) {
     	sendHoldHours = holdHours.toInteger()
         LOG("Using ${device.displayName} holdHours: ${sendHoldHours}",2,this,'info')
-    } else if (parent.settings.holdHours && (parent.settings.holdHours.isNumber())) {
-    	sendHoldHours = parent.settings.holdHours.toInteger()
-        LOG("Using ${parent.displayName} holdHours: ${sendHoldHours}",2,this,'info')
-    }
+	} else {
+		def hh = getParentSetting('holdHours')
+		if ((hh != null) && hh.isNumber()) {
+    		sendHoldHours = hh as Integer
+        	LOG("Using ${parent.displayName} holdHours: ${sendHoldHours}",2,this,'info')
+    	}
+	}
     return sendHoldHours
 }
 
 private debugLevel(level=3) {
 	Integer dbg = device.currentValue('debugLevel')?.toInteger()
-	Integer debugLvlNum = dbg ? dbg : (parent.settings.debugLevel ? parent.settings.debugLevel.toInteger() : 3)
+	Integer debugLvlNum = (dbg ?: (getParentSetting('debugLevel') ?: level)) as Integer
     return ( debugLvlNum >= level?.toInteger() )
 }
 
@@ -3195,6 +3209,7 @@ private def LOG(message, level=3, child=null, logType="debug", event=false, disp
         if (event) { debugEvent(message, displayEvent) }        
 	}  
 }
+
 
 private def debugEvent(message, displayEvent = false) {
 	def results = [
@@ -3270,3 +3285,43 @@ def getStockTempColors() {
         [value: 96, color: "#bc2323"]
     ]       
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
