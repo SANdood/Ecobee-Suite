@@ -24,15 +24,16 @@
  *	1.5.01 - Allow Ecobee Suite Thermostats only
  *	1.6.00 - Release number synchronization
  *	1.6.10 - Resync for parent-based reservations
+ *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.6.10" }
-private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00a" }
+private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Smart Switches",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates SmartThings-controlled switches, dimmers and generic vents based on thermostat operating state",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled switches, dimmers and generic vents based on thermostat operating state",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -56,15 +57,15 @@ def mainPage() {
             if (settings.tempDisable) {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to enable handler."
             } else {
-				input(name: "theThermostats", type: "device.ecobeeSuiteThermostat", title: "Monitor these thermostat(s) for operating state changes", multiple: true, required: true, submitOnChange: true)
+				input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Monitor these thermostat(s) for operating state changes", 
+					  multiple: true, required: true, submitOnChange: true)
             }
 		}
         
         if (!settings.tempDisable && (theThermostats?.size() > 0)) {
         	section(title: "Smart Switches: Operating State") {
         		input(name: "theOpState", type: "enum", title: "When ${theThermostats?theThermostats:'thermostat'} changes to one of these Operating States", 
-                	metadata:[values:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer']],
-                    required: true, multiple: true, submitOnChange: true)
+					  options:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer'], required: true, multiple: true, submitOnChange: true)
         	}
        
         	section(title: "Smart Switches: Actions") {
@@ -80,8 +81,8 @@ def mainPage() {
 				}
             
             	if (!settings.theOpState?.contains('idle')) {
-            		input(name: 'reverseOnIdle', type: 'bool', title: "Reverse above actions when ${settings.theThermostats?.size()>1?'all thermostats':'thermostat'} return to 'idle'?", 
-						defaultValue: false, submitOnChange: true)
+            		input(name: 'reverseOnIdle', type: 'bool', title: "Reverse above actions when ${settings.theThermostats?.size()>1?'all thermostats return':'thermostat returns'} to 'idle'?", 
+						  defaultValue: false, submitOnChange: true)
             	}
         	}
         }
@@ -109,7 +110,7 @@ void uninstalled() {
 }
 
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
     atomicState.scheduled = false
     // Now, just exit if we are disabled...
 	if(tempDisable == true) {
@@ -213,3 +214,43 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 	message = "${app.label} ${message}"
 	parent?.LOG(message, level, null, logType, event, displayEvent)
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
