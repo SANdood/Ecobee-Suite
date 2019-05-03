@@ -544,50 +544,58 @@ def calcTemps() {
 	}
     def newOnTime = roundIt(currentOnTime, 0)
 	def tid = getDeviceId(theThermostat.deviceNetworkId)
-	if (delta >= deltaTemp.toBigDecimal()) {			// need to increase recirculation (fanMinOnTime)
-		newOnTime = roundIt(currentOnTime + fanOnTimeDelta, 0)
+	if (delta >= settings.deltaTemp.toBigDecimal()) {			// need to increase recirculation (fanMinOnTime)
+    	log.trace "Need to increase fanMinOnTime (${delta}), it is currently ${currentOnTime}"
+		newOnTime = roundIt(currentOnTime + settings.fanOnTimeDelta.toInteger(), 0)
 		if (newOnTime > settings.maxFanOnTime) {
-			newOnTime = settings.maxFanOnTime
+			newOnTime = settings.maxFanOnTime.toInteger()
 		}
-		if (currentOnTime != newOnTime) {
-			LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",deltaTemp.toBigDecimal())}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
+		if (currentOnTime?.toInteger() != newOnTime?.toInteger()) {
+			LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",settings.deltaTemp.toBigDecimal())}°, increasing circulation time for ${theThermostat} to ${newOnTime.toInteger()} min/hr",3,"",'info')
 			if (vacationHold) {
             	cancelReservation( tid, 'vacaCircOff')
-            	theThermostat.setVacationFanMinOnTime(newOnTime)
+            	theThermostat.setVacationFanMinOnTime(newOnTime.toInteger())
             } else {
-            	LOG("deltaHandler: calling setFanMinOnTime(${newOnTime})",3,null,'info')
                 cancelReservation( tid, 'circOff')
-            	theThermostat.setFanMinOnTime(newOnTime)
+            	theThermostat.setFanMinOnTime(newOnTime.toInteger())
             }
             atomicState.fanSinceLastAdjustment = false
 			atomicState.lastAdjustmentTime = now()
             return
-		}
+		} else {
+        	log.trace "Looks like we're maxed out - cur: ${currentOnTime}, new: ${newOnTime}, max: ${settings.maxFanOnTime}"
+        }
 	} else {
-        // Double target = (getTemperatureScale() == "C") ? 0.55 : 1.0
-        //atomicState.target = target
-        // if (target > deltaTemp.toDouble()) target = (deltaTemp.toDouble() * 0.66667).round(2)	// arbitrary - we have to be less than deltaTemp
-    	// if (delta <= target) {			// start adjusting back downwards once we get within 1F or .5556C
+    	log.trace "Can we decrease fanMinOnTime? (${delta})"
+        def target = (getTemperatureScale() == "C") ? 0.55 : 1.0
+        atomicState.target = target
+        if (target > settings.deltaTemp.toBigDecimal()) target = roundIt( (settings.deltaTemp.toDBigDecimal() * 0.66667), 2)	// arbitrary - we have to be less than deltaTemp
+        log.trace "Target = ${target}"
+    	if (delta <= target) {			// start adjusting back downwards once we get within 1F or .5556C
 			newOnTime = roundIt(currentOnTime - fanOnTimeDelta, 0)
 			if (newOnTime < settings.minFanOnTime) {
 				newOnTime = settings.minFanOnTime
 			}
-            if (currentOnTime != newOnTime) {
+            if (currentOnTime.toInteger() != newOnTime.toInteger()) {
            		LOG("Temperature delta is ${String.format("%.2f",delta)}°/${String.format("%.2f",deltaTemp.toBigDecimal())}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
 				if (vacationHold) {
                 	LOG("Calling setVacationFanMinOnTime(${newOnTime})",3,null,'info')
                     cancelReservation( tid, 'vacaCircOff')
-                	theThermostat.setVacationFanMinOnTime(newOnTime)
+                	theThermostat.setVacationFanMinOnTime(newOnTime.toInteger())
                 } else {
                 	LOG("Calling setFanMinOnTime(${newOnTime})",3,null,'info')
                     cancelReservation( tid, 'circOff')
-                	theThermostat.setFanMinOnTime(newOnTime)
+                	theThermostat.setFanMinOnTime(newOnTime.toInteger())
                 }
                 atomicState.fanSinceLastAdjustment = false
 				atomicState.lastAdjustmentTime = now()
                 return
+            } else {
+            	log.trace "Looks like we're where we need to be - curr: ${currentOnTime}, new: ${newOnTime}, min: ${settings.minFanOnTime}"
             }
-		// }
+		} else {
+        	log.trace "Looks like we're min'd out- curr: ${currentOnTime}, new: ${newOnTime}, min: ${settings.minFanOnTime}"
+        }
 	}
 	LOG("No adjustment made",4,"",'info')
 }
