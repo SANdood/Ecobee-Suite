@@ -53,8 +53,8 @@
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00c" }
-private def getVersionLabel() { return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
+def getVersionNum() { return "1.7.00d" }
+private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
  
 metadata {
@@ -3324,4 +3324,5 @@ private def getParentSetting(String settingName) {
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
 //
+
 // **************************************************************************************************************************
