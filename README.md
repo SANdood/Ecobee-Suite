@@ -8,9 +8,12 @@ Latest Updates Released 3 May 2019 at 12:50am EDT
 ***NOTE: When updating/installing, you MUST include ALL of the Suite's components***
 
 ## Highlights
-The most significant changes in the August 2018 update to 1.6.1* include the following:
-
-***The Reservation System have been totally re-implemented as of the 1.6.10 release - now part of Ecobee Suite Manager instead of Thermostats***
+The most significant changes in this May release are:
+- Universal code dynamically detects and adapts to the host hub hlatform (SmartThings and Hubbitat only) - no configuration required
+- New retry mechanism will re-run command requests that did not complete because the Ecobee servers were unavailable. Note, however, that this code is new and has not been fully tested on both hub platforms.
+- Hubitat Caveats:
+    - Does not support AskAlexa when running on Hubitat
+    - Since Hubitat doesn't yet have push notifications, the Smart Mode/Routine/Program Helper SmartApp doesn't support Routines - so it is renamed (on Hubitat only) to Smart Mode/Program Helper
 
 #### General changes to the Ecobee Suite
 - New **schedule/setSchedule support** - Documentation coming soon!
