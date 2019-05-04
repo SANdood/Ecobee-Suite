@@ -42,8 +42,8 @@
  *	1.6.17 - Minor text edits
  *	1.7.00 - Universal release supporting both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00a" }
-private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+def getVersionNum() { return "1.7.00d" }
+private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Open Contacts",
@@ -702,7 +702,7 @@ private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 private def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	log.debug "isST: ${isST}, isHE: ${isHE}"
+	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
 //
