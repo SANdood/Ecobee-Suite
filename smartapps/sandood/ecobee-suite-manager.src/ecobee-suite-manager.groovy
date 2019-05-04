@@ -45,20 +45,21 @@
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00- Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00b" }
-private def getVersionLabel() { return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
+def getVersionNum() { return "1.7.00d" }
+private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
 import groovy.json.*
 
 private def getHelperSmartApps() {
+	String mrpTitle = isST ? 'New Mode/Routine/Program Helper...' : 'New Mode/Program Helper...'
 	return [ 
 		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",  
             namespace: myNamespace, multiple: true, 
             title: "New Contacts & Switches Helper..."],
     	[name: "ecobeeRoutinesChild", appName: "ecobee Suite Routines",  
             namespace: myNamespace, multiple: true, 
-		 title: "New Mode${isST?'/Routine':''}/Program Helper..."],
+        	title: mrpTitle],
         [name: "ecobeeQuietTimeChild", appName: "ecobee Suite Quiet Time",
         	namespace: myNamespace, multiple: true,
             title: "New Quiet Time Helper..."],
@@ -290,7 +291,7 @@ def authPage() {
 				href url:redirectUrl, style: "embedded", state: "complete", title: "ecobee Account Authorization", description: description
 			}
 		}           
-	}
+	} 
 }
 
 // Select which Thermostats are to be used
@@ -680,8 +681,10 @@ def acknowledgeEcobeeAlert( String deviceId, String ackRef ) {
 def oauthInitUrl() {
 	LOG("oauthInitUrl with callback: ${callbackUrl}", 2)
 	atomicState.oauthInitState = isST ? UUID.randomUUID().toString() : stateUrl // HE does redirect a little differently
-	log.debug "oauthInitState: ${atomicState.oauthInitState}"
+	//log.debug "oauthInitState: ${atomicState.oauthInitState}"
 	
+	def chg = false
+	if (isST && atomicState?.initialized && (atomicState?.apiKey == null)) chg = true; atomicState.initialized = false;  // Force changing over the the new ST key
 	def oauthParams = [
 		response_type: 	"code",
 		client_id: 		ecobeeApiKey,					// actually, the Ecobee Suite app's client ID
@@ -689,6 +692,7 @@ def oauthInitUrl() {
 		redirect_uri: 	callbackUrl,
 		state: 			atomicState.oauthInitState
 	]
+	if (isST && chg) atomicState.initialized = true
 		
 	LOG("oauthInitUrl - ${isST?'Before redirect:':''} location: ${apiEndpoint}/authorize?${toQueryString(oauthParams)}", 2, null, 'debug')
 	if (isST) {
@@ -757,7 +761,7 @@ def callback() {
 def success() {
 	def message = """
     <p>Your ecobee Account is now connected to SmartThings!</p>
-    <p>Click 'Done' to finish setup.</p>
+	<p>${isHE?'Close this window and c':'C'}lick 'Done' to finish setup.</p>
     """
 	connectionStatus(message)
 }
@@ -765,7 +769,7 @@ def success() {
 def fail() {
 	def message = """
         <p>The connection could not be established!</p>
-        <p>Click 'Done' to return to the menu.</p>
+        <p>${isHE?'Close this window and c':'C'}lick 'Done' to return to the menu.</p>
     """
 	connectionStatus(message)
 }
@@ -865,7 +869,7 @@ def getEcobeeThermostats() {
                 atomicState.numAvailTherms = resp.data.thermostatList?.size() ?: 0
                 
             	resp.data.thermostatList.each { stat ->
-					def dni = [app.id, stat.identifier].join('.')
+					def dni = (isHE?'ecobee_suite-thermostat-':'') + ([app.id, stat.identifier].join('.'))	// HE App.ID is just too short :)
 					stats[dni] = getThermostatDisplayName(stat)
                     statLocation[stat.identifier] = stat.location
                 }
@@ -1189,7 +1193,7 @@ private def createChildrenThermostats() {
             try {
 				d = addChildDevice(myNamespace, getChildThermostatName(), dni, location.hubs[0]?.id, ["label":"EcobeeTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
 			} catch (Exception e) {
-				if ("${e}".startsWith("${state.isST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) {
+				if ("${e}".startsWith("${isST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) {
             		LOG("You MUST add the ${getChildThermostatName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
                 	return false
 				}
@@ -1213,8 +1217,8 @@ private def createChildrenSensors() {
             try {
 				d = addChildDevice(myNamespace, getChildSensorName(), dni, location.hubs[0]?.id, ["label":"EcobeeSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
 			} catch (Exception e) { //(physicalgraph.app.exception.UnknownDeviceTypeException e) {
-				if ("${e}".startsWith("${state.isST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) {
-					LOG("You MUST add the ${getChildSensorName()} Device ${state.isST?'Handler':'Driver'} to the ${getHubPlatform} IDE BEFORE running the setup.", 1, null, "error")
+				if ("${e}".startsWith("${isST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) {
+					LOG("You MUST add the ${getChildSensorName()} Device ${isST?'Handler':'Driver'} to the ${getHubPlatform} IDE BEFORE running the setup.", 1, null, "error")
                 	return false
 				}
             }
@@ -1773,7 +1777,9 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                         def ttu = false
 						if (lastDetails) {			// if we have prior revision details
 							if (lastDetails[2] != latestDetails[2]) tru = true 	// runtime
-                            if (settings.askAlexa && (lastDetails[1] != latestDetails[1])) tau = true	// alerts
+                            //if (settings.askAlexa && (lastDetails[1] != latestDetails[1])) tau = true	// alerts
+							if (lastDetails[1] != latestDetails[1]) tau = true	// alerts
+							// log.debug "alertsChanged? ${tau}"
 							if (lastDetails[0] != latestDetails[0]) ttu = true	// thermostat 
                         } else {					// no priors, assume all have been updated
                             tru = true 
@@ -1804,7 +1810,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                         // update global flags (we update the superset of changes for all requested tstats)
                         if (tru || tau || ttu) {
                             runtimeUpdated = (runtimeUpdated || tru) 		// || atomicState.runtimeUpdated)
-                            alertsUpdated = (alertsUpdated || tau) 			//  || atomicState.alertsUpdated)
+                            alertsUpdated = (alertsUpdated || tau) 			// || atomicState.alertsUpdated)
                             thermostatUpdated = (thermostatUpdated || ttu) 	// || atomicState.thermostatUpdated)
                             result = true
                             if (!getAllStats) tstatsStr = (tstatsStr=="") ? tstat : (tstatsStr.contains(tstat)) ? tstatsStr : tstatsStr + ",${tstat}"
@@ -1815,7 +1821,8 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                     
 					atomicState.latestRevisions = latestRevisions		// let pollEcobeeAPI update last with latest after it finishes the poll
                     atomicState.thermostatUpdated = thermostatUpdated	// Revised: settings, program, event, device
-                    atomicState.alertsUpdated = askAlexa ? alertsUpdated : false // Revised: alerts (no need to get them if we're not doing AskAlexa)
+                    //atomicState.alertsUpdated = askAlexa ? alertsUpdated : false // Revised: alerts (no need to get them if we're not doing AskAlexa)
+					atomicState.alertsUpdated = alertsUpdated 			// Revised: alerts (no need to get them if we're not doing AskAlexa)
 					atomicState.runtimeUpdated = runtimeUpdated			// Revised: runtime, equip status, remote sensors, weather?
                     atomicState.changedThermostatIds = tstatsStr    	// only these thermostats need to be requested in pollEcobeeAPI
                 	// Tell the children that we are once again connected to the Ecobee API Cloud
@@ -1988,8 +1995,8 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
 	def pollParams = [
 			uri: apiEndpoint,
 			path: "/1/thermostat",
-			headers: ["Content-Type": "application/json", "Authorization": "Bearer ${atomicState.authToken}"],
-			query: [format: 'json', body: jsonRequestBody]
+			headers: ["Content-Type": "${isST?'application':'text'}/json", "Authorization": "Bearer ${atomicState.authToken}"],
+		query: [format: 'json', body: jsonRequestBody, 'contenttype': "${isST?'application':'text'}/json" ]
 	]
 	def pollState = [
 			debugLevelFour: 	debugLevelFour,
@@ -2006,7 +2013,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
 	]
     
     atomicState.asyncPollStart = now()
-	if (state.isST) {
+	if (isST) {
 		include 'asynchttp_v1'
     	asynchttp_v1.get( pollEcobeeAPICallback, pollParams, pollState )
 	} else {
@@ -2252,9 +2259,19 @@ def pollEcobeeAPICallback( resp, pollState ) {
         def iStatus = resp.status ? resp.status?.toInteger() : null
 		// Handle recoverable / retryable errors
 		if (iStatus && (iStatus == 500)) {
-			LOG("${preText}Poll returned (recoverable??) http status ${resp.status}, ${resp.errorMessage}", 2, null, "warn")
+			LOG("${preText}Poll returned (recoverable??) http status ${resp.status}, data ${resp.errorData}, message ${resp.errorMessage}", 2, null, "warn")
   			// Ecobee server error
-        	if (resp.errorJson?.status && resp.errorJson.status?.code && (resp.errorJson?.status.code?.toInteger() == 14)) {
+			def statusCode
+			//if (resp.containsKey('errorJson')) {
+			//	statusCode = resp.errorJson.status?.code
+			//} else 
+			if (resp.errorData) {
+				// Hubitat doesn't return errorJson
+				def errorJson = new JsonSlurper().parseText(response.errorData)
+				statusCode = errorJson?.status?.code
+			}
+			log.debug "statusCode: ${statusCode}"
+        	if (statusCode?.toInteger() == 14) {
             	// Auth_token expired
             	if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "warn")
                 atomicState.action = "pollChildren"
@@ -2268,7 +2285,7 @@ def pollEcobeeAPICallback( resp, pollState ) {
             	return result
             } else { 
             	// All other Ecobee Server (500) errors here
-            	LOG("Ecobee Server error ${resp.errorJson?.status?.code}: ${resp.errorJson?.status?.message}", 1, null, 'error')
+				LOG("Ecobee Server error ${resp.status} - ${resp.errorMessage}: ${resp.errordata}", 1, null, 'error')
                 // Don't retry for now...may change in the future
                 return result
             }
@@ -4596,7 +4613,7 @@ private def getChildThermostatName() { return "Ecobee Suite Thermostat" }
 private def getChildSensorName()     { return "Ecobee Suite Sensor" }
 private def getServerUrl()           { return (isST) ? "https://graph.api.smartthings.com" : getFullApiServerUrl()}	// hubitat: /oauth/authorize}
 private def getShardUrl()            { return (isST) ? getApiServerUrl() : getFullApiServerUrl()+"?access_token=${atomicState.accessToken}" }
-private def getCallbackUrl()         { return isST ? "${serverUrl}/oauth/callback" : "https://cloud.hubitat.com/oauth/stateredirect" } // : */ "${serverUrl}/callback" } // &" + URLEncoder.encode("access_token", "UTF-8") + "=" + URLEncoder.encode(atomicState.accessToken, "UTF-8") } // #access_token=${atomicState.accessToken}" }
+private def getCallbackUrl()         { return (isST) ? "${serverUrl}/oauth/callback" : "https://cloud.hubitat.com/oauth/stateredirect" } // : */ "${serverUrl}/callback" } // &" + URLEncoder.encode("access_token", "UTF-8") + "=" + URLEncoder.encode(atomicState.accessToken, "UTF-8") } // #access_token=${atomicState.accessToken}" }
 private def getBuildRedirectUrl()    { return (isST) ? "${serverUrl}/oauth/initialize?appId=${app.id}&access_token=${atomicState.accessToken}&apiServerUrl=${shardUrl}" : 
 									  				   "${serverUrl}/oauth/stateredirect?access_token=${atomicState.accessToken}" }
 private def getStateUrl() 			 { return "${getHubUID()}/apps/${app?.id}/callback?access_token=${atomicState?.accessToken}" }
@@ -4610,7 +4627,8 @@ private def getError()				 { return 'error' }
 // This is the API Key from the Ecobee developer page. Can be provided by the app provider or use the appSettings
 private def getEcobeeApiKey() { 
 	if (isHE) {
-		return "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"						// Ecobee key for Ecobee Suite 1.7.** on Hubitat
+		if (atomicState.apiKey == null) atomicState.apiKey = "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"		// Ecobee key for Ecobee Suite 1.7.** on Hubitat
+		return "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"
 	} else if (!appSettings.clientId) {
 		if (atomicState.initialized) {
 			if (atomicState.apiKey == null) {
@@ -4619,8 +4637,8 @@ private def getEcobeeApiKey() {
 				return atomicState.apiKey
 			}
 		} else {
-			atomicState.apiKey = "EnJClRbJeT7DqPnlc29goR1hQvnV33tE"		// NEW Ecobee key for Ecobee Suite 1.7.** on SmartThings
-			return atmomicState.apiKey
+			atomicState.apiKey = 	"EnJClRbJeT7DqPnlc29goR1hQvnV33tE"	// NEW Ecobee key for Ecobee Suite 1.7.** on SmartThings
+			return					"EnJClRbJeT7DqPnlc29goR1hQvnV33tE"
 		}
 	} else {
 		return appSettings.clientId 
@@ -5165,7 +5183,7 @@ private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 private def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	log.debug "isST: ${isST}, isHE: ${isHE}"
+	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
 //
