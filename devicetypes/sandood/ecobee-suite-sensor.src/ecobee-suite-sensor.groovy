@@ -35,8 +35,8 @@
  *	1.6.16 - Log uninstalls also
  *	1.7.00 - Universal code supports now both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00a" }
-private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getHubPlatform()}" }
+def getVersionNum() { return "1.7.00c" }
+private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
@@ -247,7 +247,8 @@ void uninstalled() {
 }
 
 void updated() {
-	atomicState?.hubPlatform = null
+	state?.hubPlatform = null
+	getHubPlatform()
 	LOG("${getVersionLabel()} updated",1,null,'info')
 	sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
 }
@@ -256,6 +257,8 @@ void noOp() {}
 
 def generateEvent(Map results) {
 	LOG("generateEvent(): parsing data ${results}",3,null,'trace')
+	def startMS = now()
+	Integer objectsUpdated = 0
 	String tempScale = getTemperatureScale()
     def precision = device.currentValue('decimalPrecision')
     if (!precision) precision = (tempScale == 'C') ? 1 : 0
@@ -263,7 +266,8 @@ def generateEvent(Map results) {
 
 	if(results) {
 		String tempDisplay = ''
-		results.each { name, value ->			
+		results.each { name, value ->
+			objectsUpdated++
 			def linkText = getLinkText(device)
 			def isChange = false
 			def isDisplayed = true
@@ -293,6 +297,7 @@ def generateEvent(Map results) {
                     	}
                         sendEvent( name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 						event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+						objectsUpdated++
                     }
                 }
 			} else if (name=='motion') {        
@@ -308,6 +313,7 @@ def generateEvent(Map results) {
             	isChange = isStateChange(device, name, sendValue)
                 if (isChange) {
                 	isConnected = (sendValue != 'Offline')		// update if it changes
+					objectsUpdated++
 					event = [name: name, linkText: linkText, value: sendValue, descriptionText: 'Program is '+sendValue.replaceAll(':',''), isStateChange: true, displayed: true]
                 }
             } else if (name=='checkInterval') {
@@ -322,6 +328,8 @@ def generateEvent(Map results) {
 		//	sendEvent( name: "temperatureDisplay", linkText: linkText, value: "${tempDisplay}", handlerName: "temperatureDisplay", descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 		//}
 	}
+	def elapsed = now() - startMS
+    LOG("Updated ${objectsUpdated} object${objectsUpdated!=1?'s':''} (${elapsed}ms)",2,this,'info')
 }
 
 //generate custom mobile activity feeds event
@@ -506,11 +514,11 @@ def getStockTempColors() {
 //    Device Handler or Application
 //
 //	1.0.0	Initial Release
-//	1.0.1	Use atomicState so that it is universal
+//	1.0.1	Use state so that it is universal
 //
 private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+private Boolean getIsST()     { return (state?.isST != null) ? state.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (state?.isHE != null) ? state.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
@@ -519,17 +527,17 @@ private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState
 //
 private String getHubPlatform() {
 	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+    state?.hubPlatform = pf			// if (state.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    state?.isST = pf.startsWith('S')	// if (state.isST) ...
+    state?.isHE = pf.startsWith('H')	// if (state.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+private Boolean getIsSTHub() { return state.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return state.isHE }					// if (isHEHub) ...
 
 private def getParentSetting(String settingName) {
-	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	// def ST = (state?.isST != null) ? state?.isST : isST
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
 //
