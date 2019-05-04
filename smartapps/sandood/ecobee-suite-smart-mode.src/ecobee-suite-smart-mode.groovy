@@ -46,10 +46,9 @@
  *	1.6.21 - Added option to change heat/cool setpoints instead of/in addition to changing the mode
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00a" }
-private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
-import groovy.json.JsonOutput
-import groovy.json.JsonSlurper
+def getVersionNum() { return "1.7.00d" }
+private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+import groovy.json.*
 
 definition(
 	name: "ecobee Suite Smart Mode",
@@ -1100,7 +1099,7 @@ private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 private def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	log.debug "isST: ${isST}, isHE: ${isHE}"
+	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
 //
