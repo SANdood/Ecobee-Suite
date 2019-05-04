@@ -35,8 +35,8 @@
  *	1.6.16 - Log uninstalls also
  *	1.7.00 - Universal code supports now both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00c" }
-private def getVersionLabel() { return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
+def getVersionNum() { return "1.7.00d" }
+private def getVersionLabel() { return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
