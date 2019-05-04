@@ -35,10 +35,9 @@
  *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
  *	1.7.00 - Universal version supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00a" }
-private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
-import groovy.json.JsonSlurper
-import groovy.json.JsonOutput
+def getVersionNum() { return "1.7.00d" }
+private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+import groovy.json.*
 
 definition(
 	name: "ecobee Suite Smart Circulation",
@@ -71,7 +70,7 @@ def mainPage() {
                 submitOnChange: true)
             }
 		}
- 
+        
         if (!settings.tempDisable) {
         	section(title: "Select Indoor Temperature Sensors") {
             	input(name: "theSensors", title: "Use which indoor temperature sensor(s)", type: "capability.temperatureMeasurement", required: true, multiple: true, submitOnChange: true)
@@ -690,7 +689,7 @@ private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 private def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	log.debug "isST: ${isST}, isHE: ${isHE}"
+	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
 //
