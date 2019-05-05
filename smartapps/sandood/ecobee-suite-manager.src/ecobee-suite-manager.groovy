@@ -45,7 +45,7 @@
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00- Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00d" }
+def getVersionNum() { return "1.7.00e" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -749,15 +749,7 @@ def callback() {
     	LOG("callback() failed oauthState != atomicState.oauthInitState", 1, null, "warn")
 	}
 }
-/*
- 	def requestBody = '{"selection":{"selectionType":"registered","selectionMatch":"","includeRuntime":true,"includeSensors":true,"includeLocation":true,"includeProgram":true}}'
-	def deviceListParams = [
-			uri: apiEndpoint,
-			path: "/1/thermostat",
-			headers: ["Content-Type": "application/json", "Authorization": "Bearer ${state.authToken}"],
-			query: [format: 'json', body: requestBody]
-	]
-*/
+
 def success() {
 	def message = """
     <p>Your ecobee Account is now connected to SmartThings!</p>
@@ -2259,18 +2251,18 @@ def pollEcobeeAPICallback( resp, pollState ) {
         def iStatus = resp.status ? resp.status?.toInteger() : null
 		// Handle recoverable / retryable errors
 		if (iStatus && (iStatus == 500)) {
-			LOG("${preText}Poll returned (recoverable??) http status ${resp.status}, data ${resp.errorData}, message ${resp.errorMessage}", 2, null, "warn")
+			//LOG("${preText}Poll returned (recoverable??) http status ${resp.status}, data ${resp.errorData}, message ${resp.errorMessage}", 2, null, "warn")
   			// Ecobee server error
 			def statusCode
 			//if (resp.containsKey('errorJson')) {
 			//	statusCode = resp.errorJson.status?.code
 			//} else 
-			if (resp.errorData) {
+			if (resp.errorData != null) {
 				// Hubitat doesn't return errorJson
-				def errorJson = new JsonSlurper().parseText(response.errorData)
+				def errorJson = new JsonSlurper().parseText(resp.errorData)
 				statusCode = errorJson?.status?.code
 			}
-			log.debug "statusCode: ${statusCode}"
+			//log.debug "statusCode: ${statusCode}"
         	if (statusCode?.toInteger() == 14) {
             	// Auth_token expired
             	if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "warn")
@@ -3629,7 +3621,7 @@ def runCallQueue() {
 	def dbgLvl = 1
 	LOG("runCallQueue() connected: ${atomicState.connected}, callQueue: ${atomicState.callQueue}, runningCallQueue: ${atomicState.runningCallQueue}", dbgLvl, null, 'trace')
 	if (atomicState.connected?.toString() != 'full') return
-    if (atomicState.callQueue?.size() == 0) {atomicState.runningCallQueue = false; return;}
+    if ((atomicState.callQueue == null) || (atomicState.callQueue?.size() == 0)) {atomicState.runningCallQueue = false; return;}
     if (atomicState.runningCallQueue) return
     atomicState.runningCallQueue = true
     
