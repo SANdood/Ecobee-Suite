@@ -1,20 +1,32 @@
 Free Ecobee Suite, version: 1.7.** 
 ======================================================
-Latest Updates Released 3 May 2019 at 12:50am EDT
+Hubitat users now can utilize the latest functionality of my Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
 # WARNING: Work in progress - Universal Ecobee Suite
-## Single code base supporting both SmartThings and Hubitat
-
-***NOTE: When updating/installing, you MUST include ALL of the Suite's components***
 
 ## Highlights
-The most significant changes in this May release are:
-- Universal code dynamically detects and adapts to the host hub hlatform (SmartThings and Hubbitat only) - no configuration required
+Single code base supporting both SmartThings and Hubitat
+
+The most significant changes in this release are:
+- Universal code dynamically detects and adapts to the host hub platform (SmartThings and Hubitat only) - no configuration required.
 - New retry mechanism will re-run command requests that did not complete because the Ecobee servers were unavailable. Note, however, that this code is new and has not been fully tested on both hub platforms.
+- Numerous bug fixes (applies to both platforms)- Reduced network transactions when not using AskAlexa
+- Uses the Authentication Code method of connecting to the Ecobee API. This is far simpler than the PIN approach used by the prior port of my code (v1.4.14)
+  - **Hubitat**: Thanks to the Hubitat staff for assisting me in getting this working, as the documented Hubitat OAuth path doesn't work for Ecobee. Read the OAuth init code to learn the (clever) trick they helped me employ.
+  - **SmartThings**: This version implements ***a new Ecobee API Key for the Ecobee Suite on SmartThings.*** This key will be used for all new installations, and it will automatically swap to the new key the next time you re-login/authenticate with Ecobee. I recommend that all SmartThings users re-authenticate after installing this new version over their existing code.
 - Hubitat Caveats:
     - Does not support AskAlexa when running on Hubitat
     - Since Hubitat doesn't yet have push notifications, the Smart Mode/Routine/Program Helper SmartApp doesn't support Routines - so it is renamed (on Hubitat only) to Smart Mode/Program Helper
 
+### Performance
+Since all of this code runs locally on the Hubitat hub, its performance is different than in the SmartThings environment where all the code runs on Amazon's server farms around the world. Network traffic will typically take longer to your local hub than across the cloud (from Ecobee's cloud servers to SmartThings'). My observations are that it can take 2-3x as long to do an update cycle on Hubitat than on SmartThings; depending on the number of thermostats and sensors you have, what takes perhaps 4 seconds on SmartThings (2 thermostats + 10 sensors) can take 12 seconds on Hubitat.
+
+That said, at the end of the 12 seconds, your Hubitat-based Ecobee Thermostat is up to date - it takes only 10s of milliseconds to update the attributes in the Thermostat/Sensor devices. On SmartThings, the data still has to be sent to your mobile device(s).
+
+Note that ALL of the interactions between the Helper Applications and the Devices is local on Hubitat, so there is less network latency and operational delay. Importantly, the code only runs at most 12-20 seconds per minute; this does NOT appear to have any performance impact on your Hubitat hub in any way.
+
+## Everything below is from the 1.6.** release - documentation for the Universal Version will be added soon
+---------------------------------------
 #### General changes to the Ecobee Suite
 - New **schedule/setSchedule support** - Documentation coming soon!
 - New **Android Optimizations** - Via a new preference setting in Ecobee Suite Manager (under Preferences), users can now specify the type of mobile device they are using (iOS or Android). Where SmartThings operates differently on these devices, the code now tries to optimize for the platform. Primary differences are Heat/Cool **At** and Heat/Cool **To** on iOS (but not Android), and OperatingState 'Off' on iOS (but not Android). Default is 'iOS', so if you have an Android, please go change the preference setting. *Added to Ecobee Suite Manager v1.6.13 and Ecobee Thermostat v1.6.15*
