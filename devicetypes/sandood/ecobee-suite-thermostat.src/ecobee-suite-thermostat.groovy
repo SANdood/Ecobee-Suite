@@ -53,7 +53,7 @@
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00d" }
+def getVersionNum() { return "1.7.00e" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
  
@@ -3059,11 +3059,9 @@ private def usingSmartAuto() {
 // returns the holdType keyword, OR the number of hours to hold
 // precedence: 1. device preferences, 2. parent settings.holdType, 3. indefinite (must specify to use the thermostat setting)
 def whatHoldType() {
-    def theHoldType = myHoldType
+    def theHoldType = settings.myHoldType
     def sendHoldType = null
     def parentHoldType
-	def ht = getParentSetting('holdType')
-	def hh = getParentSetting('holdHours')
     switch (myHoldType) {
       	case 'Temporary':
            	sendHoldType = 'nextTransition'
@@ -3072,13 +3070,14 @@ def whatHoldType() {
             sendHoldType = 'indefinite'
             break;   
         case 'Hourly':
-            if ((myHoldHours != null) && myHoldHours.toString().isNumber()) {
-            	sendHoldType = myHoldHours
-            } else if ((ht == 'Specified Hours') && (hh != null) && hh.toString().isNumber()) {
-            	sendHoldType = hh as Integer
-            } else if ( ht == '2 Hours') {
+        	parentHoldType = getParentSetting('holdType')
+            if (settings.myHoldHours) {
+            	sendHoldType = myHoldHours as Integer
+            } else if ((parentHoldType == 'Specified Hours') && (getParentSetting('holdHours') != null)) {
+            	sendHoldType = getParentSettings('holdHours')
+            } else if ( parentHoldType == '2 Hours') {
             	sendHoldType = 2
-            } else if ( ht == '4 Hours') {
+            } else if ( parentHoldType == '4 Hours') {
             	sendHoldType = 4            
             } else {
             	sendHoldType = 2
@@ -3087,7 +3086,7 @@ def whatHoldType() {
         case null :		// null means use parent value
             theHoldType = 'Parent'
         case 'Parent':
-            parentHoldType = ht
+            parentHoldType = getParentSetting('holdType')
             if (parentHoldType && (parentHoldType == 'Thermostat Setting')) theHoldType = 'Thermostat'
         case 'Thermostat':
 			if (theHoldType == 'Thermostat') {
@@ -3125,7 +3124,7 @@ def whatHoldType() {
                         sendHoldType = 4
                         break;
                     case 'Specified Hours':
-                        if ((hh != null) && hh.toString().isNumber()) {sendHoldType = hh as Integer} else {sendHoldType = 2}
+                        sendHoldType = getParentSetting('holdHours')?: 2
                         break;
                     case null :		// if not set in Parent, should probably use Thermostat setting, but precendence was set that null = indefinite
                     default :
@@ -3135,7 +3134,7 @@ def whatHoldType() {
            	}
     }
     if (sendHoldType) {
-    	LOG("Using holdType ${((sendHoldType != null) && sendHoldType.toString().isNumber())?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
+    	LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
         return sendHoldType
     } else {
     	LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
