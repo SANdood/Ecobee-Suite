@@ -45,7 +45,7 @@
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00- Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00e" }
+def getVersionNum() { return "1.7.00f" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -80,7 +80,10 @@ private def getHelperSmartApps() {
             title: "New Smart Vents Helper..."],
 		[name: "ecobeeZonesChild", appName: "ecobee Suite Smart Zones",
 			 namespace: myNamespace, multiple: true,
-			 title: "New Smart Zones Helper..."]
+			 title: "New Smart Zones Helper..."],
+    	[name: "ecobeeWorkHomeChild", appName: "ecobee Suite Working From Home",
+        	namespace: myNamespace, multiple: true,
+            title: "New Working From Home Helper..."]
 	]
 }
  
@@ -749,7 +752,15 @@ def callback() {
     	LOG("callback() failed oauthState != atomicState.oauthInitState", 1, null, "warn")
 	}
 }
-
+/*
+ 	def requestBody = '{"selection":{"selectionType":"registered","selectionMatch":"","includeRuntime":true,"includeSensors":true,"includeLocation":true,"includeProgram":true}}'
+	def deviceListParams = [
+			uri: apiEndpoint,
+			path: "/1/thermostat",
+			headers: ["Content-Type": "application/json", "Authorization": "Bearer ${state.authToken}"],
+			query: [format: 'json', body: requestBody]
+	]
+*/
 def success() {
 	def message = """
     <p>Your ecobee Account is now connected to SmartThings!</p>
@@ -1731,14 +1742,16 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 				if (debugLevelFour) LOG("checkThermostatSummary() - poll results returned resp.data ${resp.data}", 4, null, 'trace')
                 if (resp.data == null) {
                 	LOG("checkThermostatSummary() - resp.data is null", 2, null, 'warn')
+					runIn( 2, 'refreshAuthToken', [overwrite: true] )
                 } else if ((resp.data instanceof CharSequence) || (resp.data instanceof String)) {
                 	LOG("checkThermostatSummary() - poll results returned resp.data as a String: (${resp.data})", 2, null, 'warn')
 					// this usually means that it's time to refresh the AuthToken
 					runIn( 2, 'refreshAuthToken', [overwrite: true] )
-                } else if (resp?.data?.containsKey("status")) {
+                } else if (resp.data?.containsKey("status")) {
                 	if ((resp.data.status == null) || (resp.data.status instanceof CharSequence)) {
                     	// Ooops - status is a string!
                         LOG("checkThermostatSummary() - poll results returned resp.data.status as a String (${resp.data.status})", 2, null, 'warn')
+						runIn( 2, 'refreshAuthToken', [overwrite: true] )
                     } else {
                     	if (resp.data?.status?.containsKey("code")) statusCode = resp.data.status.code
                     }
@@ -2251,18 +2264,18 @@ def pollEcobeeAPICallback( resp, pollState ) {
         def iStatus = resp.status ? resp.status?.toInteger() : null
 		// Handle recoverable / retryable errors
 		if (iStatus && (iStatus == 500)) {
-			//LOG("${preText}Poll returned (recoverable??) http status ${resp.status}, data ${resp.errorData}, message ${resp.errorMessage}", 2, null, "warn")
+			LOG("${preText}Poll returned (recoverable??) http status ${resp.status}, data ${resp.errorData}, message ${resp.errorMessage}", 2, null, "warn")
   			// Ecobee server error
 			def statusCode
 			//if (resp.containsKey('errorJson')) {
 			//	statusCode = resp.errorJson.status?.code
 			//} else 
-			if (resp.errorData != null) {
+			if (resp.errorData) {
 				// Hubitat doesn't return errorJson
 				def errorJson = new JsonSlurper().parseText(resp.errorData)
 				statusCode = errorJson?.status?.code
 			}
-			//log.debug "statusCode: ${statusCode}"
+			// log.debug "statusCode: ${statusCode}"
         	if (statusCode?.toInteger() == 14) {
             	// Auth_token expired
             	if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "warn")
@@ -4217,7 +4230,7 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
 
 	String statName = getThermostatName(deviceId)
 	// NOTE: Will use only the first program if there are two with the same exact name
-	LOG("setProgram(${program}) for for thermostat ${statName}", 2, child, 'info')     
+	LOG("setProgram(${program}) for for thermostat ${statName} - holdType: ${sendHoldType}, holdHours: ${sendHoldHours}", 2, child, 'info')     
     
     def currentThermostatHold = child.device.currentValue('thermostatHold') 
     if (currentThermostatHold == 'vacation') {									// shouldn't happen, child device should have already verified this
@@ -4482,8 +4495,8 @@ def updateClimatesDirect(child, deviceId) {
 
 // API Helper Functions
 private def sendJson(child=null, String jsonBody) {
-	def debugLevelFour = debugLevel(4)
-    LOG("sendJson() - ${jsonBody}",3,child,'debug')
+	def debugLevelFour = false // debugLevel(4)
+    if (debugLevelFour) LOG("sendJson() - ${jsonBody}",1,child,'debug')
 	def returnStatus
     def result = false
     
@@ -4503,14 +4516,14 @@ private def sendJson(child=null, String jsonBody) {
 		httpPost(cmdParams) { resp ->
    	    	returnStatus = resp.data?.status?.code
 
-			if (debugLevelFour) LOG("sendJson() resp.status ${resp.status}, resp.data: ${resp.data}, returnStatus: ${returnStatus}", 4, child)
+			if (debugLevelFour) LOG("sendJson() resp.status ${resp.status}, resp.data: ${resp.data}, returnStatus: ${returnStatus}", 1, child)
 				
            	// TODO: Perhaps add at least two tries incase the first one fails?
 			if(resp.status == 200) {				
-				if (debugLevelFour) LOG("Updated ${resp.data}", 4, child, 'trace')
+				if (debugLevelFour) LOG("Updated ${resp.data}", 1, child, 'trace')
 				returnStatus = resp.data?.status?.code
 				if (resp.data?.status?.code == 0) {
-					if (debugLevelFour) LOG("Successful call to ecobee API.", 4, child, 'trace')
+					if (debugLevelFour) LOG("Successful call to ecobee API.", 1, child, 'trace')
                     result = true
                 	// Tell the children that we are once again connected to the Ecobee API Cloud
                 	if (apiConnected() != "full") {
@@ -4530,9 +4543,9 @@ private def sendJson(child=null, String jsonBody) {
 		} // HttpPost
 	} catch (groovyx.net.http.HttpResponseException e) {
     	result = false // this thread failed...hopefully we can succeed after we refresh the auth_token
-        LOG("sendJson() ${e.statusCode} ${e.response?.data?.status?.code}",3,null,"trace")
+        LOG("sendJson() ${e.statusCode} ${e.response?.data?.status?.code}",1,null,"trace")
         if ((e.statusCode == 500) && (e.response?.data?.status?.code == 14)) {
-        	LOG("sendJson() - HttpResponseException occurred: Auth_token has expired", 3, null, "info")
+        	LOG("sendJson() - HttpResponseException occurred: Auth_token has expired", 1, null, "info")
             // atomicState.savedActionJsonBody = jsonBody
         	// atomicState.savedActionChild = child.deviceNetworkId
         	// atomicState.action = "sendJsonRetry"
