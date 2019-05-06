@@ -53,7 +53,7 @@
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00e" }
+def getVersionNum() { return "1.7.00f" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
  
@@ -3073,7 +3073,7 @@ def whatHoldType() {
         	parentHoldType = getParentSetting('holdType')
             if (settings.myHoldHours) {
             	sendHoldType = myHoldHours as Integer
-            } else if ((parentHoldType == 'Specified Hours') && (getParentSetting('holdHours') != null)) {
+            } else if ((parentHoldType != null) && (parentHoldType == 'Specified Hours') && (getParentSetting('holdHours') != null)) {
             	sendHoldType = getParentSettings('holdHours')
             } else if ( parentHoldType == '2 Hours') {
             	sendHoldType = 2
@@ -3087,7 +3087,7 @@ def whatHoldType() {
             theHoldType = 'Parent'
         case 'Parent':
             parentHoldType = getParentSetting('holdType')
-            if (parentHoldType && (parentHoldType == 'Thermostat Setting')) theHoldType = 'Thermostat'
+            if ((parentHoldType != null) && (parentHoldType == 'Thermostat Setting')) theHoldType = 'Thermostat'
         case 'Thermostat':
 			if (theHoldType == 'Thermostat') {
        			def holdType = device.currentValue('statHoldAction')
@@ -3109,7 +3109,7 @@ def whatHoldType() {
                 		sendHoldType = 'indefinite'
                     	break;
             	}
-        	} else {		// assert (theHoldType == Parent)           
+        	} else {		// assert (theHoldType == Parent)   
                 switch (parentHoldType) {
                     case 'Until I Change':
                         sendHoldType = 'indefinite'
@@ -3323,5 +3323,4 @@ private def getParentSetting(String settingName) {
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
 //
-
 // **************************************************************************************************************************
