@@ -26,7 +26,7 @@
  *	1.6.10 - Resync for parent-based reservations
  *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00d" }
+def getVersionNum() { return "1.7.00f" }
 private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -88,9 +88,10 @@ def mainPage() {
         }
 		section(title: "Smart Switches: Operation") {
         	mode(title: "Enable only for specific mode(s)")
-        	input(name: "tempDisable", title: "Temporarily Disable this Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
+        	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                   
         }
-        section (getVersionLabel())
+        
+        section (getVersionLabel()) {}
     }
 }
 
