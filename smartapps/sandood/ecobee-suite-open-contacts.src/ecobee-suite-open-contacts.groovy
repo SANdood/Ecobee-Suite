@@ -2,7 +2,7 @@
  *  ecobee Suite Open Contacts
  *
  *  Copyright 2016 Sean Kendall Schneyer
- *	Copyright 2017 Barry A. Burke 
+ *	Copyright 2017 Barry A. Burke *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -42,7 +42,7 @@
  *	1.6.17 - Minor text edits
  *	1.7.00 - Universal release supporting both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00d" }
+def getVersionNum() { return "1.7.00f" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -145,7 +145,7 @@ def mainPage() {
 		} // End if (myThermostats?.size() > 0)
 
 		section(title: "Temporarily Disable?") {
-			input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
+			input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
         section (getVersionLabel()) {}
@@ -165,7 +165,6 @@ def updated() {
 	unsubscribe()
 	unschedule()
 	initialize()
-    // tester()
 }
 
 def clearReservations() {
@@ -181,7 +180,7 @@ def initialize() {
 		LOG("Teporarily Disabled as per request.", 2, null, "warn")
 		return true
 	}
-    subscribe(app, appTouch)
+    // subscribe(app, appTouch)
 
 	boolean contactOffState = false
 	if (contactSensors) {
