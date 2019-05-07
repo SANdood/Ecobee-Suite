@@ -30,7 +30,7 @@
  *	1.6.13 - Use 'fanAuto' if fanMinutes is explicitly set to 0
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00d" }
+def getVersionNum() { return "1.7.00f" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -147,7 +147,7 @@ def mainPage() {
                         }
             	   		// input(name: "useSunriseSunset", title: "Also at Sunrise or Sunset? (optional) ", type: "enum", required: false, multiple: true, description: "Tap to choose...", metadata:[values:["Sunrise", "Sunset"]], submitOnChange: true)                
                 	} else {
-						input(name: "runModeOrRoutine", title: "Change Mode${isST?' or Execute Routine':'to'}:", type: "enum", required: true, multiple: false, defaultValue: "Mode", description: "Tap to choose...", 
+						input(name: "runModeOrRoutine", title: "Change Mode${isST?' or Execute Routine':' to'}:", type: "enum", required: true, multiple: false, defaultValue: "Mode", description: "Tap to choose...", 
 							  options:(isST?["Mode", "Routine"]:["Mode"]), submitOnChange: true)
                         if (settings.runModeOrRoutine == "Mode") {
     	                	input(name: "runMode", type: "mode", title: "Change Hello Mode to: ", required: true, multiple: false)
@@ -179,7 +179,7 @@ def mainPage() {
             } // End if myThermostats size
         }   
         section(title: "Temporarily Disable?") {
-           	input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
+           	input(name: "tempDisable", title: "Temporarily disable this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
 		section (getVersionLabel()) {}
@@ -464,10 +464,11 @@ def changeProgramHandler(evt) {
                 		}
                         def sendHoldType = whatHoldType(stat)
     					def sendHoldHours = null
-    					if (sendHoldType != null) {
+    					if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
     						sendHoldHours = sendHoldType
     						sendHoldType = 'holdHours'
 						}
+                        log.debug "sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}"
             			stat.setThermostatProgram(state.programParam, sendHoldType, sendHoldHours)
                 		if (state.fanCommand != null) {
                    			stat."${state.fanCommand}"()				// set fan on/auto AFTER changing the program, because we are overriding the program's setting
@@ -504,17 +505,17 @@ def changeProgramHandler(evt) {
 def whatHoldType(statDevice) {
     def theHoldType = settings.holdType
     def sendHoldType = null
-	def ht = getParentSetting('holdType')
-	def hh = getParentSetting('holdHours')
+    def parentHoldType = getParentSetting('holdType')
     if ((settings.holdType == null) || (settings.holdType == "Parent Ecobee (Connect) Setting")) {
-        if (ht == null) {	// default for Ecobee (Connect) is permanent hold (legacy)
+        if (parentHoldType == null) {	// default for Ecobee (Connect) is permanent hold (legacy)
         	LOG('Using holdType indefinite',2,null,'info')
         	return 'indefinite'
-        } else if (ht != 'Thermostat Setting') {
-        	theHoldType = ht
+        } else if (parentHoldType != 'Thermostat Setting') {
+        	theHoldType = parentHoldType
         }
     }
     
+    def parentHoldHours = getParentSetting('holdHours')
     switch (theHoldType) {
       	case 'Until I Change':
             sendHoldType = 'indefinite'
@@ -528,13 +529,13 @@ def whatHoldType(statDevice) {
         case '4 Hours':
         	sendHoldType = 4
         case 'Specified Hours':
-            if (settings.holdHours != null) {
-            	sendHoldType = settings.holdHours as Integer
-            } else if ((ht == 'Specified Hours') && (hh != null)) {
-            	sendHoldType = hh as Integer
-            } else if ( ht == '2 Hours') {
+            if (settings.holdHours && settings.holdHours.isNumber()) {
+            	sendHoldType = settings.holdHours
+            } else if ((parentHoldType == 'Specified Hours') && (parentHoldHours != null)) {
+            	sendHoldType = parentHoldHours
+            } else if ( parentHoldType == '2 Hours') {
             	sendHoldType = 2
-            } else if ( ht == '4 Hours') {
+            } else if ( parentHoldType == '4 Hours') {
             	sendHoldType = 4            
             } else {
             	sendHoldType = 2
@@ -561,8 +562,8 @@ def whatHoldType(statDevice) {
                     break;
            }
     }
-    if (sendHoldType != null) {
-    	LOG("Using holdType ${sendHoldType.toString().isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
+    if (sendHoldType) {
+    	LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
         return sendHoldType
     } else {
     	LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
