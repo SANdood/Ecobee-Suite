@@ -31,8 +31,8 @@
  *	1.6.15 - Added scheduled Auto Off for Quiet Time
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00d" }
-private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+def getVersionNum() { return "1.7.00f" }
+private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Quiet Time",
@@ -150,7 +150,7 @@ def mainPage() {
        }
 */
 		section(title: "Temporarily Disable?") {
-			input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
+			input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
         section (getVersionLabel()) {}
@@ -182,7 +182,7 @@ def updated() {
 	initialize()
 }
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 3, null, 'info')
+	LOG("${getVersionLabel()}\nInitializing...", 3, null, 'info')
     log.debug "${app.name}, ${app.label}"
 	if(tempDisable == true) {
     	clearReservations()
