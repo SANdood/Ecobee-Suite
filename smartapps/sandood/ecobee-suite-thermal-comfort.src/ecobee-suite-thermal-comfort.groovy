@@ -129,7 +129,7 @@ def mainPage() {
                 }
             }
 			section(title: "Enable only for specific modes and programs? (optional)") {
-        		paragraph("Thermostat Modes will only be changed while ${location.name} is in these SmartThings Modes.")
+        		paragraph("Thermostat Setpoints will only be changed while ${location.name} is in these Modes or Programs.")
                 input(name: "thePrograms", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Program is", multiple: true, required: false, options: getProgramsList())
                 input(name: "statModes", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, options: getThermostatModesList())
         	}
@@ -262,16 +262,12 @@ def humidityUpdate( Integer humidity ) {
     LOG("Humidity is: ${humidity}%",3,null,'info')
 
     def currentProgram = theThermostat.currentValue('currentProgram')
-    def currentMode = theThermostat.currentValue('thermostatMode')
-    boolean isOK = true
-    if (thePrograms || statModes) {
-        isOK = ((thePrograms && thePrograms.contains(currentProgram)) ?
-                ((statModes && statModes.contains(currentMode)) ? true : false) :
-                false)
-        if (!isOK) {
-            LOG("Mode \"${currentMode}\" or program \"${currentProgram}\" is ignored, not adjusting", 3, null, "info")
-            return
-        }
+    def currentMode = theThermostat.currentValue('currentMode')
+    def isOK = (thePrograms && !thePrograms.contains(currentProgram) ? false :
+            (statModes && !statModes.contains(currentMode) ? false : true))
+    if (!isOK) {
+        LOG("Mode \"${currentMode}\" is ignored, not adjusting", 3, null, "info")
+        return
     }
 
     def heatSetpoint, coolSetpoint
