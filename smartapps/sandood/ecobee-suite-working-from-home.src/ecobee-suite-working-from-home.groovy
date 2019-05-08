@@ -15,7 +15,7 @@
  * <snip>
  * 	1.7.00 - Initial Release
  */
-def getVersionNum() { return "1.7.00d" }
+def getVersionNum() { return "1.7.00f" }
 private def getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -48,7 +48,7 @@ def mainPage() {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to activate handler."
             } else {
         		input (name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Pick Ecobee Thermostat(s)", description: "Tap to choose...", 
-                	   required: true, multiple: true, submitOnChange: true)            
+                	   required: true, multiple: true, submitOnChange: true)  
 			}
         }
 
@@ -81,7 +81,7 @@ def mainPage() {
             }
         }
         section(title: "Temporarily Disable?") {
-           	input(name: "tempDisable", title: "Temporarily disable this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
+           	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
 		section (getVersionLabel()) {}
     }
