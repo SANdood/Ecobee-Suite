@@ -1,7 +1,7 @@
 /**
  *  Based on original code Copyright 2015 SmartThings
  *	Additional changes Copyright 2016 Sean Kendall Schneyer
- *  Additional changes Copyright 2017, 2018 Barry A. Burke
+ *  Additional changes Copyright 2017, 2018, 2019 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -17,7 +17,7 @@
  *	Original Author: scott
  *	Date: 2013
  *
- *	Updates by Barry A. Burke (storageanarchy@gmail.com) 2016, 2017, & 2018
+ *	Updates by Barry A. Burke (storageanarchy@gmail.com) 2016, 2017, 2018 & 2019
  *
  *  See Github Changelog for complete change history
  * 	<snip>
@@ -45,7 +45,7 @@
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00- Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00h" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -79,8 +79,11 @@ private def getHelperSmartApps() {
         	namespace: myNamespace, multiple: true,
             title: "New Smart Vents Helper..."],
 		[name: "ecobeeZonesChild", appName: "ecobee Suite Smart Zones",
-			 namespace: myNamespace, multiple: true,
-			 title: "New Smart Zones Helper..."],
+			namespace: myNamespace, multiple: true,
+			title: "New Smart Zones Helper..."],
+		[name: "ecobeeThermalComfort", appName: "ecobee Suite Thermal Comfort",
+		 	namespace: myNamespace, multiple: true,
+		 	title: "New Thermal Comfort Helper..."],
     	[name: "ecobeeWorkHomeChild", appName: "ecobee Suite Working From Home",
         	namespace: myNamespace, multiple: true,
             title: "New Working From Home Helper..."]
@@ -394,11 +397,43 @@ def askAlexaPage() {
 def preferencesPage() {
     LOG("=====> preferencesPage() entered. settings: ${settings}", 5)
     dynamicPage(name: "preferencesPage", title: "Update Ecobee Suite Manager Preferences", nextPage: "") {
-		section("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour." +
-					" You can have them sent ${location.contactBookEnabled?'to selected Contacts':'via SMS'} or as a Push notification (default).") {
-           	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-            input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false 
-        }
+		if (isST) {
+			section("Notifications") {
+				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour."
+				input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+				input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+				input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+				if (settings.speak) {
+					input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+					input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+					if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+				}
+				if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+				paragraph("A notification is always sent to the Hello Home log whenever an action is taken")
+			}
+		} else {		// isHE
+			section("Use Notification Device(s)") {
+				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour."
+				input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+					  description: "Select notification devices", submitOnChange: true)
+				paragraph ""
+			}
+			section("Use SMS to Phone(s) (limit 10 messages per day)") {
+				input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+					  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+				paragraph ""
+			}
+			section("Use Speech Device(s)") {
+				input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+				if (settings.speak) {
+					input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+					input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+					if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+				}
+				paragraph "A 'HelloHome' notification is always sent to the Location Event log\n"
+			}
+		}
+		
         section("Select your mobile device type to enable device-specific optimizations") {
         	input(name: 'mobile', type: 'enum', options: ["Android", "iOS"], title: 'Tap to select your mobile device type', defaultValue: 'iOS', submitOnChange: true, required: true, multiple: false)
         }
@@ -1030,6 +1065,8 @@ def initialize() {
     
 	LOG("Running on ${getHubPlatform()}.", 1, null, 'info')
 	
+	atomicState.timers = false
+	
     atomicState.connected = "full"        
     atomicState.reAttempt = 0
     atomicState.reAttemptPoll = 0
@@ -1580,16 +1617,13 @@ def pollScheduled() {
 
 // Called during initialization to get the inital poll
 def pollInit() {
-	// log.debug "pollInit()"
 	if (debugLevel(4)) LOG("pollInit()", 4)
-    // atomicState.forcePoll = true // Initialize the variable and force a poll even if there was one recently    
 	runIn(2, pollChildren, [overwrite: true]) 		// Hit the ecobee API for update on all thermostats, in 2 seconds
 }
 
 def pollChildren(deviceId=null,force=false) {
-	def startMS = now()
-    
-    // Just in case we need to re-initialize anything
+
+	// Just in case we need to re-initialize anything
     def version = getVersionLabel()
     if (atomicState.versionLabel != version) {
     	LOG("Code updated: ${version}",1,null,'debug')
@@ -1617,7 +1651,7 @@ def pollChildren(deviceId=null,force=false) {
 			LOG("pollChildren() - Was able to recover the lost connection. Please ignore any notifications received.", 1, null, "warn")
         } else {        
 			LOG("pollChildren() - Unable to schedule handlers do to loss of API Connection. Please ensure you are authorized.", 1, null, "error")
-			return false
+			return
 		}
 	}
 
@@ -1626,18 +1660,16 @@ def pollChildren(deviceId=null,force=false) {
     
     if (settings.thermostats?.size() < 1) {
     	LOG("pollChildren() - Nothing to poll as there are no thermostats currently selected", 1, null, "warn")
-		return true
-    }    
+		return
+	}    
     
     // Check if anything has changed in the thermostatSummary (really don't need to call EcobeeAPI if it hasn't).
     String thermostatsToPoll = (deviceId != null) ? deviceId : getChildThermostatDeviceIdsString()
     
-    boolean somethingChanged = forcePoll ? forcePoll : checkThermostatSummary(thermostatsToPoll)
+    boolean somethingChanged = forcePoll ?: checkThermostatSummary(thermostatsToPoll)
+	// log.info "pollChildren() somethingChanged ${somethingChanged}"
     if (!forcePoll) thermostatsToPoll = atomicState.changedThermostatIds
-    // def checkedMS = now()
-    
-    //def results = false
-    //def alertsUpdated = false
+
     String preText = debugLevel(2) ? '' : 'pollChildren() - ' 
     if (forcePoll || somethingChanged) {
     	//alertsUpdated = forcePoll || atomicState.alertsUpdated
@@ -1646,25 +1678,10 @@ def pollChildren(deviceId=null,force=false) {
         String names = ""
         tids.each { names = names == "" ? getThermostatName(it) : names+", "+getThermostatName(it) }
         LOG("${preText}Polling thermostat${thermostatsToPoll.contains(',')?'s':''} ${names} (${thermostatsToPoll})${forcePoll?' (forced)':''}", 2, null, 'info')
-    	// results = pollEcobeeAPI(thermostatsToPoll)  
         pollEcobeeAPI(thermostatsToPoll)		// This will queue the async request, and values will be generated and sent from pollEcobeeAPICallback
-//        if (results) {
-//			LOG('pollEcobeeAPI() returned true',4,null,'trace')
-//       	def polledMS = now()
-//        	def prepTime = (polledMS-startMS)
-//        	if (debugLevelFour) LOG("Completed prep (${prepTime}ms)",4,null,'trace')
-//    		if (alertsUpdated) {
-//        		if (prepTime > 11000) { runIn(2, 'generateAlertsAndEvents', [overwrite: true]) } else { generateAlertsAndEvents() }
-//        	} else {
-//        		if (prepTime > 11000) { runIn(2, 'generateTheEvents', [overwrite: true]) } else { generateTheEvents() }
-//        	}
-//        } else {
-//        	LOG('pollEcobeeAPI() returned false',1,null,'warn')
-//        }
 	} else {   	 
         LOG(preText+'No updates...', 2, null, 'trace')
     }
-    return true
 }
 
 def generateAlertsAndEvents() {
@@ -1720,6 +1737,8 @@ private def generateEventLocalParams() {
 // NOTE: Despite the documentation, Runtime Revision CAN change more frequently than every 3 minutes - equipmentStatus is 
 //       apparently updated in real time (or at least very close to real time)
 private boolean checkThermostatSummary(thermostatIdsString) {
+	def startMS 
+	if (atomicState.timers) startMS = now()
 	String preText = getDebugLevel() <= 2 ? '' : 'checkThermostatSummary() - '
     def debugLevelFour = debugLevel(4)
     if (debugLevelFour) LOG("checkThermostatSummary() - ${thermostatIdsString}",4,null,'trace')
@@ -1740,22 +1759,13 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 		httpGet(pollParams) { resp ->
 			if(resp?.status == 200) {
 				if (debugLevelFour) LOG("checkThermostatSummary() - poll results returned resp.data ${resp.data}", 4, null, 'trace')
-                if (resp.data == null) {
-                	LOG("checkThermostatSummary() - resp.data is null", 2, null, 'warn')
-					runIn( 2, 'refreshAuthToken', [overwrite: true] )
-                } else if ((resp.data instanceof CharSequence) || (resp.data instanceof String)) {
-                	LOG("checkThermostatSummary() - poll results returned resp.data as a String: (${resp.data})", 2, null, 'warn')
-					// this usually means that it's time to refresh the AuthToken
-					runIn( 2, 'refreshAuthToken', [overwrite: true] )
-                } else if (resp.data?.containsKey("status")) {
-                	if ((resp.data.status == null) || (resp.data.status instanceof CharSequence)) {
-                    	// Ooops - status is a string!
-                        LOG("checkThermostatSummary() - poll results returned resp.data.status as a String (${resp.data.status})", 2, null, 'warn')
-						runIn( 2, 'refreshAuthToken', [overwrite: true] )
-                    } else {
-                    	if (resp.data?.status?.containsKey("code")) statusCode = resp.data.status.code
-                    }
-                }
+				// This is crazy, I know, but ST & HE return different junk on a failed call, thus the exhaustive verification to avoid throwing errors
+				if ((resp.data != null) && (resp.data instanceof Map) && resp.data.containsKey('status')  && (resp.data.status != null) 
+					&& (resp.data.status instanceof Map) && resp.data.status.containsKey('code') && (resp.data.status.code != null)) {
+					statusCode = resp.data.status.code
+				} else {
+					LOG("checkThermostatSummary() - malformed resp.data", 2, null, 'warn')
+				}
 				if (statusCode == 0) { 
                     def revisions = resp.data?.revisionList
                     // log.debug "${atomicState.thermostatUpdated}, ${atomicState.runtimeUpdated}, ${atomicState.alertsUpdated}"
@@ -1835,9 +1845,13 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 						apiRestored()
         				generateEventLocalParams() // Update the connection status
     				}
+				} else if ( [14, 1, 2, 3].contains(statusCode)) {
+					LOG("checkThermostatSummary() - status code: ${statusCode}, message: ${resp.data.status.message}", 2, null, 'warn')
+					runIn(2, 'refreshAuthToken', [overwrite: true])
 				} else {
                 	// if we get here, we had http status== 200, but API status != 0
-					LOG("${preText}ThermostatSummary poll got API status ${statusCode}", 1, null, 'warn')
+					LOG("checkThermostatSummary() - Ecobee API status ${statusCode}, message: ${resp.data?.status?.message}", 1, null, 'warn')
+					runIn(2, 'refreshAuthToken', [overwrite: true])
                 }
 			} else {
 				LOG("${preText}ThermostatSummary poll got http status ${resp.status}", 1, null, "error")
@@ -1889,7 +1903,8 @@ private boolean checkThermostatSummary(thermostatIdsString) {
         throw e
     }
 
-    if (debugLevel4) LOG("<===== Leaving checkThermostatSummary() result: ${result}, tstats: ${tstatsStr}", 4, null, "info")
+    if (debugLevelFour) LOG("<===== Leaving checkThermostatSummary() result: ${result}, tstats: ${tstatsStr}", 4, null, "info")
+	if (atomicState.timers) log.debug "TIMER: checkThermostatSummary done (${now()-startMS}ms)"
 	return result
 }
 
@@ -1905,13 +1920,20 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
     boolean runtimeUpdated = atomicState.runtimeUpdated
     boolean getWeather = atomicState.getWeather
     String preText = getDebugLevel() <= 2 ? '' : 'pollEcobeeAPI() - '
-	def somethingChanged = false
+	def somethingChanged = (thermostatIdsString != null)
     String allMyChildren = getChildThermostatDeviceIdsString()
-    String checkTherms = allMyChildren
+    String checkTherms = thermostatIdsString?:allMyChildren
 
 	// forcePoll = true
-	somethingChanged = checkThermostatSummary(thermostatIdsString)
-    
+	if (thermostatIdsString == '') {
+		somethingChanged = checkThermostatSummary(thermostatIdsString)
+		if (somethingChanged) {
+        	thermostatUpdated = atomicState.thermostatUpdated				// update these again after checkThermostatSummary
+        	alertsUpdated = atomicState.alertsUpdated
+    		runtimeUpdated = atomicState.runtimeUpdated
+        }
+		// log.info "pollEcobeeAPI() - somethingChanged ${somethingChanged}"
+	}
 	if (forcePoll) {
     	// if it's a forcePoll, and thermostatIdString specified, we check only the specified thermostat, else we check them all
         if (thermostatIdsString) {
@@ -1921,18 +1943,19 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
         	atomicState.hourlyForcedUpdate = 0		// reset the hourly check counter if we are forcePolling ALL the thermostats
         } 
         somethingChanged = true
-    } else if (atomicState.lastRevisions != atomicState.latestRevisions) {
+    } /* else if (atomicState.lastRevisions != atomicState.latestRevisions) {
         // we already know there are changes
     	somethingChanged = true	
     } else {
         // log.debug "Shouldn't be checkingThermostatSummary() again!"
     	somethingChanged = checkThermostatSummary(thermostatIdsString)
+		// log.debug "somethingChanged ${somethingChanged}"
         if (somethingChanged) {
         	thermostatUpdated = atomicState.thermostatUpdated				// update these again after checkThermostatSummary
         	alertsUpdated = atomicState.alertsUpdated
     		runtimeUpdated = atomicState.runtimeUpdated
         }
-    }
+    } */
     
     // if nothing has changed, and this isn't a forced poll, just return (keep count of polls we have skipped)
     // This probably can't happen anymore...shouldn't event be here if nothing has changed and not a forced poll...
@@ -1941,7 +1964,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
        	return true		// act like we completed the heavy poll without error
 	} else {
        	// if getting the weather, get for all thermostats at the same time. Else, just get the thermostats that changed
-       	checkTherms = (runtimeUpdated && getWeather) ? allMyChildren : (forcePoll ? checkTherms : atomicState.changedThermostatIds)
+       	checkTherms = (runtimeUpdated && getWeather) ? allMyChildren : checkTherms // (forcePoll ? checkTherms : atomicState.changedThermostatIds)
     }  
     
     // Let's only check those thermostats that actually changed...unless this is a forcePoll - or if we are getting the weather 
@@ -2017,6 +2040,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
         	checkTherms:		checkTherms,
 	]
     
+	if (atomicState.timers) log.debug "TIMER: asyncPollPrep done (${now() - atomicState.pollEcobeeAPIStart}ms)"
     atomicState.asyncPollStart = now()
 	if (isST) {
 		include 'asynchttp_v1'
@@ -2031,7 +2055,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
 def pollEcobeeAPICallback( resp, pollState ) {
 	def startMS = now()
     atomicState.waitingForCallback = false
-    LOG("Poll callback (${startMS - atomicState.asyncPollStart}ms)",3,null,'info')
+    if (atomicState.timers) log.debug "Poll callback (${startMS - atomicState.asyncPollStart}ms)"
 	boolean debugLevelFour = 	pollState.debugLevelFour
     boolean debugLevelThree = 	pollState.debugLevelThree
 	boolean forcePoll = 		pollState.forcePoll
@@ -2264,18 +2288,13 @@ def pollEcobeeAPICallback( resp, pollState ) {
         def iStatus = resp.status ? resp.status?.toInteger() : null
 		// Handle recoverable / retryable errors
 		if (iStatus && (iStatus == 500)) {
-			LOG("${preText}Poll returned (recoverable??) http status ${resp.status}, data ${resp.errorData}, message ${resp.errorMessage}", 2, null, "warn")
+			if (debugLevelFour) LOG("${preText}Poll returned (recoverable??) http status ${resp.status}, data ${resp.errorData}, message ${resp.errorMessage}", 2, null, "warn")
   			// Ecobee server error
 			def statusCode
-			//if (resp.containsKey('errorJson')) {
-			//	statusCode = resp.errorJson.status?.code
-			//} else 
 			if (resp.errorData) {
-				// Hubitat doesn't return errorJson
 				def errorJson = new JsonSlurper().parseText(resp.errorData)
 				statusCode = errorJson?.status?.code
 			}
-			// log.debug "statusCode: ${statusCode}"
         	if (statusCode?.toInteger() == 14) {
             	// Auth_token expired
             	if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "warn")
@@ -2336,7 +2355,7 @@ def pollEcobeeAPICallback( resp, pollState ) {
 def sendAlertEvents() {
 	if (atomicState.alerts == null) return				// silently return until we get the alerts environment initialized
     boolean debugLevelFour = debugLevel(4)
-	log.debug "askAlexa: ${askAlexa}"
+	// log.debug "askAlexa: ${askAlexa}"
     if (!settings.askAlexa) {
     	if (debugLevelFour) LOG("Ask Alexa support not configured, nothing to do, returning",4, null, 'trace')
     	return							// Nothing to do (at least for now)
@@ -4719,23 +4738,70 @@ private def sendPushAndFeeds(notificationMessage) {
     Boolean sendNotification = (atomicState.timeSendPush && ((now() - atomicState.timeSendPush) < 3600000)) ? false : true
     if (sendNotification) {
     	String msg = "Your ${location.name} Ecobee${settings.thermostats.size()>1?'s':''} " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (phone) { // check that the user did select a phone number
-            if ( phone.indexOf(";") > 0){
-                def phones = phone.split(";")
-                for ( def i = 0; i < phones.size(); i++) {
-                    LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                    sendSmsMessage(phones[i], msg)
-                }
-                sendNotificationEvent( msg )
-            } else {
-                LOG("Sending SMS to ${phone}",2,null,'info')
-                sendSms(phone, msg)
-            }
-        } else {
-        	LOG("No phones specified, sending Push to everyone",2,null,'warn')
-			sendPush(msg)
-    	}
-        sendActivityFeeds(notificationMessage)
+		if (isST) {
+			if (phone) { // check that the user did select a phone number
+				if ( phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${phone}", 3, null, 'info')
+					sendSmsMessage(phone, msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			sendNotificationEvent( notificationMessage )			// Always send to hello home
+		} else {		// isHE
+			if (settings.notifiers != null) {
+				settings.notifiers.each {							// Use notification devices on Hubitat
+					it.deviceNotification(msg)
+				}
+			}
+			if (settings.phone != null) {
+				if ( phone.indexOf(",") > 0){
+					def phones = phone.split(",")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${phone}", 3, null, 'info')
+					sendSmsMessage(phone, msg)						// Only to SMS contact
+				}
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+		}		
         atomicState.timeSendPush = now()
     }
 }
