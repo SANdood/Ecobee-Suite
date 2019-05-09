@@ -50,15 +50,13 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Room Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Room"      
-        }
-        
-        section(title: "Smart Room Ecobee Sensor(s)") {
+    	section(title: "") {
+        	label title: "Name for this Smart Room Helper", required: true, defaultValue: "Smart Room"
+			if (isHE && !app.label) app.updateLabel("Smart Room")
         	if (settings.tempDisable) {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn back on to Enable handler."
             } else {
-            	paragraph("A Smart Room is defined by one or more Ecobee Sensors")
+            	paragraph("\nA Smart Room is defined by one or more Ecobee Sensors")
             	// IMPORTANT NOTE: theSensors is NOT a list of sensors, but instead is the list of selected [DNI:names] of the sensors that our parent is supporting
             	// Unfortunately, type: "devices.ecobeeSensor" returns a null list, even though the Device Name is indeed "Ecobee Sensor" as required by the documentation
         		input(name: "theSensors", type:"enum", title: "Use which Ecobee Sensor(s)", options: getEcobeeSensorsList(), required: true, multiple: true, submitOnChange: true)
@@ -67,7 +65,7 @@ def mainPage() {
             }
 		}
 		
-        if (!settings.tempDisable) {
+        if (!settings?.tempDisable && (settings?.theSensors?.size() > 0)) {
         	section(title: "Smart Room Doors") {
             	paragraph("Smart Room Activation is controlled by how long doors are left open or closed")
             	input(name: "theDoors", title: "Select Door contact sensor(s)", type: "capability.contactSensor", required: true, multiple: true, submitOnChange: true)
@@ -93,7 +91,7 @@ def mainPage() {
         		paragraph("You can have specified Econet, Keen or Generic(dimmer) vents opened while a Smart Room is Active, and closed when Inactive")
 				input(name: "theEconetVents", type: "${isST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, submitOnChange: true)
 				input(name: "theKeenVents", type: "${isST?'device.keenHomeSmartVent':'deviceKeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", required: false, multiple:true, submitOnChange: true)
-                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
+                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", required: false, multiple: true, submitOnChange: true)
             	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage")
             		input(name: "minimumVentLevel", type: "number", title: "Minimum vent level when closed?", required: true, defaultValue:0, description: '0', range: "0..100")
@@ -101,24 +99,52 @@ def mainPage() {
         	}
         
       		section("Smart Room Notifications (optional)") {
-        		input(name: "notify", type: "boolean", title: "Notify on Activations?", required: true, defaultValue: false, submitOnChange: true)
-            	if (settings.notify) {
-       				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-       				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
-                    if (!settings.phone) {
-                        input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", /* defaultValue: false, */ required: true, submitOnChange: true)
-                    }
-                    if (!settings.phone && !settings.pushNotify) paragraph "WARNING: Notifications configured, but nobody to send them to!"
-                }
-                if (isST) paragraph("A notification is always sent to the Hello Home log whenever a Smart Room is activated or de-activated")
-        	}
+        		input(name: "notify", type: "bool", title: "Notify on Activations?", required: true, defaultValue: false, submitOnChange: true)
+				paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
+			}
+			
+            if (settings.notify) {
+				if (isST) {
+					section("Notifications") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+					}
+				} else {		// isHE
+					section("Use Notification Device(s)") {
+						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+							  description: "Select notification devices", submitOnChange: true)
+						paragraph ""
+					}
+					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+						paragraph ""
+					}
+					section("Use Speech Device(s)") {
+						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						paragraph ""
+					}
+				}
+			}
         }
         	
 		section(title: "Temporarily Disable?") {
         	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
-        section (getVersionLabel())
+		section (getVersionLabel()) {}
     }
 }
 
@@ -139,7 +165,7 @@ void uninstalled() {
 	generateSensorsEvents([doors:'default', windows:'default', vents:'default',SmartRoom:'default'])
 }
 
-def getProgramsList() { return theThermostat ? new JsonSlurper().parseText(theThermostat.currentValue('programsList')) : ["Away","Home","Sleep"] }
+def getProgramsList() { return /* theThermostat ? new JsonSlurper().parseText(theThermostat.currentValue('programsList')) : */ ["Away","Home","Sleep"] }
 
 def getEcobeeSensorsList() { return parent.getEcobeeSensors().sort { it.value } }    
 
@@ -512,26 +538,78 @@ private def generateSensorsEvents( Map dataMap ) {
 
 private def sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
-    
     if (settings.notify) {
-        String msg = "${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (phone) { // check that the user did select a phone number
-            if ( phone.indexOf(";") > 0){
-                def phones = phone.split(";")
-                for ( def i = 0; i < phones.size(); i++) {
-                    LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                    sendSmsMessage(phones[i], msg)									// Only to SMS contact
-                }
-            } else {
-                LOG("Sending SMS to ${phone}",2,null,'info')
-                sendSmsMessage(phone, msg)											// Only to SMS contact
-            }
-        } else if (settings.sendPush) {
-            LOG("Sending Push to everyone",2,null,'warn')
-            sendPushMessage(msg)													// Push to everyone
-        }
+        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+		if (isST) {
+			if (settings.phone) { // check that the user did select a phone number
+				if ( settings.phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+		} else {		// isHE
+			if (settings.notifiers != null) {
+				settings.notifiers.each {							// Use notification devices on Hubitat
+					it.deviceNotification(msg)
+				}
+			}
+			if (settings.phone != null) {
+				if ( settings.phone.indexOf(",") > 0){
+					def phones = phone.split(",")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			
+		}
     }
-    if (isST) sendNotificationEvent( notificationMessage )								// Always send to hello home
+	// Always send to Hello Home / Location Event log
+	if (isST) { 
+		sendNotificationEvent( notificationMessage )					
+	} else {
+		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
