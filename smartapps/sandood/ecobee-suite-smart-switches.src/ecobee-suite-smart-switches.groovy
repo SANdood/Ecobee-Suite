@@ -26,7 +26,7 @@
  *	1.6.10 - Resync for parent-based reservations
  *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -49,23 +49,23 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Switch/Dimmer/Vent Helper App") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Switch/Dimmer/Vent"      
-        }
-        
-        section(title: "Smart Switches: Thermostat(s)") {
+    	section(title: "") {
+        	label title: "Name for this Smart Switch/Dimmer/Vent Helper", required: true, defaultValue: "Smart Switch/Dimmer/Vent"  
+			// mode(title: "Enable only for specific mode(s)")
+			if (isHE && !app.label) app.updateLabel("Smart Switch/Dimmer/Vent")
             if (settings.tempDisable) {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to enable handler."
             } else {
-				input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Monitor these thermostat(s) for operating state changes", 
+				input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Monitor these Ecobee thermostat(s) for operating state changes:", 
 					  multiple: true, required: true, submitOnChange: true)
             }
 		}
         
-        if (!settings.tempDisable && (theThermostats?.size() > 0)) {
+        if (!settings.tempDisable && (settings?.theThermostats?.size() > 0)) {
         	section(title: "Smart Switches: Operating State") {
         		input(name: "theOpState", type: "enum", title: "When ${theThermostats?theThermostats:'thermostat'} changes to one of these Operating States", 
 					  options:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer'], required: true, multiple: true, submitOnChange: true)
+				// mode(title: "Enable only for specific mode(s)")
         	}
        
         	section(title: "Smart Switches: Actions") {
@@ -86,8 +86,8 @@ def mainPage() {
             	}
         	}
         }
-		section(title: "Smart Switches: Operation") {
-        	mode(title: "Enable only for specific mode(s)")
+		
+		section(title: "Temporarily Disable?") {
         	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                   
         }
         
