@@ -30,7 +30,7 @@
  *	1.6.13 - Use 'fanAuto' if fanMinutes is explicitly set to 0
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -53,32 +53,32 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-		section(title: "Name for Mode${isST?'/Routine':''}/Program Helper") {						// Hubitat doesn't have "Routines" yet
-        	label title: "Name this Helper", required: true, defaultValue: "Mode${isST?'/Routine':''}/Program"
-        }
-        
-        section(title: "Select Thermostats") {
+		section(title: '') {						// Hubitat doesn't have "Routines" yet
+        	label title: "Name for this Mode${isST?'/Routine':''}/Program Helper", required: true, defaultValue: "Mode${isST?'/Routine':''}/Program"
+			if (isHE && !app.label) app.updateLabel("Mode${isST?'/Routine':''}/Program")
         	if(settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to activate handler."
             } else {
-        		input ("myThermostats", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Pick Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)            
+        		input ("myThermostats", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)            
 			}
         }
         
-        if (!settings.tempDisable) {
-			section(title: "Select ST Mode ${isST?'or Routine, ':''}or Ecobee Program") {
+        if (!settings?.tempDisable && (settings?.myThermostats?.size()>0)) {
+			section(title: "Select Trigger") {
         		// Settings option for using Mode or Routine
-				input(name: "modeOrRoutine", title: "Use Mode Change${isST?', Routine Execution':''} or Ecobee Program: ", type: "enum", required: true, multiple: false, description: "Tap to choose...", 
+				input(name: "modeOrRoutine", title: "Use Mode change${isST?', Routine execution':''} or Ecobee Program change: ", type: "enum", required: true, multiple: false, 
 					  options:(isST?["Mode", "Routine", "Ecobee Program"]:["Mode","Ecobee Program"]), submitOnChange: true)
+				paragraph ''
 			}
         
-	        if (settings?.myThermostats?.size() > 0) {
+	        if (settings?.modeOrRoutine != null) {
             	if(settings?.modeOrRoutine == "Mode") {
 	    	    	// Start defining which Modes(s) to allow the SmartApp to execute in
                     // TODO: Need to run in all modes now and then filter on which modes were selected!!!
     	            //mode(title: "When Hello Mode(s) changes to: ", required: true)
                     section(title: "Modes") {
-                    	input(name: "modes", type: "mode", title: "When Hello Mode(s) change to: ", description: "Tap to choose Modes...", required: true, multiple: true)
+                    	input(name: "modes", type: "mode", title: "When Location Mode changes to: ", required: true, multiple: true)
+						paragraph ''
 					}
                 } else if (isST && (settings?.modeOrRoutine == "Routine")) {
                 	// Routine based inputs
@@ -89,7 +89,8 @@ def mainPage() {
 						LOG("Actions found: ${actions}", 4)
 						// use the actions as the options for an enum input
                         section(title: "Routines") {
-							input(name:"action", type:"enum", title: "When these Routines execute: ", description: "Tap to choose Routines...", options: actions, required: true, multiple: true)
+							input(name:"action", type:"enum", title: "When these Routines execute: ", options: actions, required: true, multiple: true)
+							paragraph ''
                         }
 					} // End if (actions)
                 } else if (settings.modeOrRoutine == "Ecobee Program") {
@@ -99,7 +100,8 @@ def mainPage() {
                     section(title: "Programs") {
                     	def n = myThermostats?.size()
                     	if (n > 1) paragraph("NOTE: It is recommended (but not required) to select only one thermostat when using Ecobee Programs to control SmartThings Modes or Routines")
-                    	input(name: "ctrlProgram", title: "When Ecobee${n>1?'s':''} change${n>1?'':'s'} to Program: ", type: "enum", description: "Tap to choose Programs...", options: programs, required: true, multiple: true)
+                    	input(name: "ctrlProgram", title: "When Ecobee${n>1?'s':''} change${n>1?'':'s'} to Program: ", type: "enum", options: programs, required: true, multiple: true)
+						paragraph ''
                     }
                 }
 
@@ -110,12 +112,10 @@ def mainPage() {
                 		LOG("Found the following programs: ${programs}", 4)
                     
                     	input(name: "cancelVacation", title: "Cancel Vacation hold if active?", type: "bool", required: true, defaultValue: false)
-	               		input(name: "whichProgram", title: "Switch to this Ecobee Program:", type: "enum", required: true, multiple:false, description: "Tap to choose...", 
-                        	  options: programs, submitOnChange: true)
+	               		input(name: "whichProgram", title: "Switch to this Ecobee Program:", type: "enum", required: true, multiple:false, options: programs, submitOnChange: true)
     	       	    	if (settings?.whichProgram != 'Resume Program') {
                         	if ((settings?.fanMinutes == null) || ((settings.fanMinutes != null) && (settings.fanMinutes != 0))) {
-                        		input(name: "fanMode", title: "Select a Fan Mode (optional)", type: "enum", required: false, multiple: false, description: "Tap to choose...", 
-                            			options: getThermostatFanModes(), submitOnChange: true, /* defaultValue: (settings?.fanMinutes == null)?:((settings?.fanMinutes == 0)?'Auto':'Circulate') */)
+                        		input(name: "fanMode", title: "Fan Mode (optional)", type: "enum", required: false, multiple: false, options: getThermostatFanModes(), submitOnChange: true)
                         	} else if ((settings?.fanMinutes != null) && (settings.fanMinutes == 0)) {
                             	paragraph("Note than the Fan Mode will be set to 'Auto' because you specified 0 Fan Minimum Minutes")
                             }
@@ -123,34 +123,33 @@ def mainPage() {
                         if (settings.fanMode == 'Auto') {
                         	paragraph("Note that the fan circulation time will also be set to 0 because you selected Fan Mode 'Auto'")
                         } else if (settings.fanMode == 'Off') {
-                        	// this can never happen, because 'off' is not a value fanMod
+                        	// this can never happen, because 'off' is not a value fanMode
                         	input(name: 'statOff', title: 'Do you want to turn off the HVAC entirely?', type: 'bool', defaultValue: false)
                         } else if ((settings.fanMode == null) || (settings.fanMode == 'Circulate')) {
-                        	input(name: "fanMinutes", title: "Specify Fan Minimum Minutes per Hour (optional)", type: "number", 
-								  required: false, multiple: false, description: "Tap to choose...", range:"0..55", submitOnChange: true, 
+                        	input(name: "fanMinutes", title: "Fan Minimum Minutes per Hour (optional)", type: "number", 
+								  required: false, multiple: false, range:"0..55", submitOnChange: true, 
 								  defaultValue: (settings.fanMode==null?settings.fanMinutes:20))
 							// defaultValue: (settings.fanMode==null?(settings.fanMinutes!=null?settings.fanMinutes:0):20))
-                            
                         }
         	       		if (settings.whichProgram != "Resume Program") {
-                        	input(name: "holdType", title: "Select the Hold Type (optional)", type: "enum", required: false, 
-								  multiple: false, description: "Tap to choose...", submitOnChange: true, defaultValue: "Parent Ecobee (Connect) Setting",
+                        	input(name: "holdType", title: "Hold Type (optional)", type: "enum", required: false, 
+								  multiple: false, submitOnChange: true, defaultValue: "Parent Ecobee Manager Setting",
 								  options:["Until I Change", "Until Next Program", "2 Hours", "4 Hours", "Specified Hours", "Thermostat Setting", 
-                               							"Parent Ecobee (Connect) Setting"])
+                               							"Ecobee Manager Setting"]) //, "Parent Ecobee (Connect) Setting"])
                         	if (settings.holdType=="Specified Hours") {
             					input(name: 'holdHours', title:'How many hours (1-48)?', type: 'number', range:"1..48", required: true, description: '2', defaultValue: 2)
             				} else if (settings.holdType=='Thermostat Setting') {
             					paragraph("Thermostat Setting at the time of hold request will be applied.")
-            				} else if ((settings.holdType == null) || (settings.holdType == 'Parent Ecobee (Connect) Setting')) {
-                            	paragraph("Ecobee (Connect) Setting at the time of hold request will be applied.")
+            				} else if ((settings.holdType == null) || (settings.holdType == 'Ecobee Manager Setting') || (settings.holdType == 'Parent Ecobee (Connect) Setting')) {
+                            	paragraph("Ecobee Manager Setting at the time of hold request will be applied.")
                             }
                         }
             	   		// input(name: "useSunriseSunset", title: "Also at Sunrise or Sunset? (optional) ", type: "enum", required: false, multiple: true, description: "Tap to choose...", metadata:[values:["Sunrise", "Sunset"]], submitOnChange: true)                
                 	} else {
-						input(name: "runModeOrRoutine", title: "Change Mode${isST?' or Execute Routine':' to'}:", type: "enum", required: true, multiple: false, defaultValue: "Mode", description: "Tap to choose...", 
+						input(name: "runModeOrRoutine", title: "Change Mode${isST?' or Execute Routine':' to'}:", type: "enum", required: true, multiple: false, defaultValue: "Mode", 
 							  options:(isST?["Mode", "Routine"]:["Mode"]), submitOnChange: true)
                         if (settings.runModeOrRoutine == "Mode") {
-    	                	input(name: "runMode", type: "mode", title: "Change Hello Mode to: ", required: true, multiple: false)
+    	                	input(name: "runMode", type: "mode", title: "Change Location Mode to: ", required: true, multiple: false)
                 		} else if (settings.runModeOrRoutine == "Routine") {
                 			// Routine based inputs
                     		def actions = location.helloHome?.getPhrases()*.label
@@ -163,19 +162,46 @@ def mainPage() {
 							} // End if (actions)
                         } // End if (Routine)
                     } // End else Program --> Mode/Routine
+					paragraph ''
+					input(name: "notify", type: "bool", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
+					paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
                 } // End of "Actions" section
-                section("Notifications (optional)") {
-                    input(name: "notify", type: "boolean", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
-                    if (settings.notify) {
-                        paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-                        input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
-                        if (!settings.phone) {
-                            input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", /* defaultValue: false, */ required: true, submitOnChange: true)
-                        }
-                        if (!settings.phone && !settings.pushNotify) paragraph "WARNING: Notifications configured, but nobody to send them to!"
-                    }
-                    if (isST) paragraph("A notification is always sent to the Hello Home log whenever an action is taken")
-        		}// End of Notifications
+				
+				if (settings.notify) {
+					if (isST) {
+						section("Notifications") {
+							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+							input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+						}
+					} else {		// isHE
+						section("Use Notification Device(s)") {
+							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+								  description: "Select notification devices", submitOnChange: true)
+							paragraph ""
+						}
+						section("Use SMS to Phone(s) (limit 10 messages per day)") {
+							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+							paragraph ""
+						}
+						section("Use Speech Device(s)") {
+							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+							paragraph ""
+						}
+					}
+				}
             } // End if myThermostats size
         }   
         section(title: "Temporarily Disable?") {
@@ -506,7 +532,7 @@ def whatHoldType(statDevice) {
     def theHoldType = settings.holdType
     def sendHoldType = null
     def parentHoldType = getParentSetting('holdType')
-    if ((settings.holdType == null) || (settings.holdType == "Parent Ecobee (Connect) Setting")) {
+    if ((settings.holdType == null) || (settings.holdType == "Ecobee Manager Setting") || (settings.holdType == 'Parent Ecobee (Connect) Setting')) {
         if (parentHoldType == null) {	// default for Ecobee (Connect) is permanent hold (legacy)
         	LOG('Using holdType indefinite',2,null,'info')
         	return 'indefinite'
@@ -609,28 +635,79 @@ def getThermostatModes() {
 
 private def sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
-
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (phone) { // check that the user did select a phone number
-            if ( phone.indexOf(";") > 0){
-                def phones = phone.split(";")
-                for ( def i = 0; i < phones.size(); i++) {
-                    LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                    sendSmsMessage(phones[i], msg)				// Only to SMS contact
-                }
-            } else {
-                LOG("Sending SMS to ${phone}",2,null,'info')
-                sendSmsMessage(phone, msg)						// Only to SMS contact
-            }
-        } else if (settings.pushNotify) {
-            LOG("Sending Push to everyone",2,null,'warn')
-            sendPushMessage(msg)								// Push to everyone
-        }
+		if (isST) {
+			if (settings.phone) { // check that the user did select a phone number
+				if ( settings.phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+		} else {		// isHE
+			if (settings.notifiers != null) {
+				settings.notifiers.each {							// Use notification devices on Hubitat
+					it.deviceNotification(msg)
+				}
+			}
+			if (settings.phone != null) {
+				if ( settings.phone.indexOf(",") > 0){
+					def phones = phone.split(",")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			
+		}
     }
-    if (isST) sendNotificationEvent( notificationMessage )		// Always send to hello home (not available on Hubitat yet)
+	// Always send to Hello Home / Location Event log
+	if (isST) { 
+		sendNotificationEvent( notificationMessage )					
+	} else {
+		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
 }
-
 
 // return all the fan modes that ALL thermostats support
 def getThermostatFanModes() {
