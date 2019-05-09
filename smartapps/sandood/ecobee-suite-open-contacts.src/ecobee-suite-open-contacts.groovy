@@ -42,7 +42,7 @@
  *	1.6.17 - Minor text edits
  *	1.7.00 - Universal release supporting both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -65,14 +65,12 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for this Contacts & Switches Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Contacts & Switches"
-        }
-        
-        section(title: "Select Thermostats") {
+    	section(title: "") {
+        	label title: "Name for this Contacts & Switches Helper", required: true, defaultValue: ""
+			if (isHE && !app.label) app.updateLabel("Contacts & Switches")
         	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn on below to activate handler." }
         	else { 
-				input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, /*options: parent.getEcobeeThermostats(),*/ submitOnChange: true)
+				input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
                 input(name: 'defaultMode', type: 'enum',  title: "Default Mode for thermostat${((settings.myThermostats==null)||(settings.myThermostats.size()>1))?'s':''}", 
                 		multiple: false, required: true, options: ['auto', 'cool', 'heat', 'off'], defaultValue: 'auto', submitOnChange: true)
             }          
@@ -104,7 +102,7 @@ def mainPage() {
             }
             
 			section(title: "Select Contact Sensors") {
-				input(name: "contactSensors", title: "Contact Sensors: ", type: "capability.contactSensor", required: false, multiple: true, description: "", submitOnChange: true)
+				input(name: "contactSensors", title: "Contact Sensors: ", type: "capability.contactSensor", required: false, multiple: true,  submitOnChange: true)
                 if (settings.contactSensors) {
                 	input(name: 'contactOpen', type: 'bool', title: "Run HVAC Off Actions when ${settings.contactSensors.size()>1?'any of the contacts are':'the contact is'} open?", required: true, defaultValue: true, submitOnChange: true)
                    	paragraph("HVAC Off Actions will be taken when a contact sensor is ${((settings.contactOpen==null)||settings.contactOpen)?'Open':'Closed'}.")
@@ -112,7 +110,7 @@ def mainPage() {
 			}
             
             section(title: "Select Switches") {
-            	input(name: "theSwitches", title: "Switches: ", type: "capability.switch", required: false, multiple: true, description: "", submitOnChange: true)
+            	input(name: "theSwitches", title: "Switches: ", type: "capability.switch", required: false, multiple: true,  submitOnChange: true)
                 if (settings.theSwitches) {
                 	input(name: 'switchOn', type: 'bool', title: "Run HVAC Off Actions when ${settings.theSwitches.size()>1?'any of the switches are':'the switch is'} turned on?", required: true, defaultValue: true, submitOnChange: true)
                     paragraph("HVAC Off Actions will be taken off when a switch is turned ${((settings.switchOn==null)||settings.switchOn)?'On':'Off'}")
@@ -130,22 +128,49 @@ def mainPage() {
             	section(title: "Action Preferences") {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
                     	options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
+				}
                         
-					if (settings.whichAction != "HVAC Actions Only") {
-                    	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-            			input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
-                        if (!settings.phone) {
-                        	input( name: 'sendPush', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
-                        }
-                        if (!settings.phone && !settings.sendPush) paragraph "WARNING: Notifications configured, but nobody to send them to!"
-                	}
-                    paragraph("All notifications are always sent to the Hello Home log")
+				if (settings.whichAction != "HVAC Actions Only") {
+					if (isST) {
+						section("Notifications") {
+							paragraph "A notification will also be sent to the Hello Home log\n"
+							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+							input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+						}
+					} else {		// isHE
+						section("Use Notification Device(s)") {
+							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+								  description: "Select notification devices", submitOnChange: true)
+							paragraph ""
+						}
+						section("Use SMS to Phone(s) (limit 10 messages per day)") {
+							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+							paragraph ""
+						}
+						section("Use Speech Device(s)") {
+							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+							paragraph "A 'HelloHome' notification will also be sent to the Location Event log\n"
+						}
+					}
             	}
             }          
 		} // End if (myThermostats?.size() > 0)
 
 		section(title: "Temporarily Disable?") {
-			input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
+			input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
         section (getVersionLabel()) {}
@@ -165,6 +190,7 @@ def updated() {
 	unsubscribe()
 	unschedule()
 	initialize()
+    // tester()
 }
 
 def clearReservations() {
@@ -172,7 +198,9 @@ def clearReservations() {
     	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff') 
 	}
 }
-
+//
+// TODO - if stat goes offline, then comes back online, then re-initialize states...
+//
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
 	if(tempDisable == true) {
@@ -642,22 +670,70 @@ List getGuestList(String tid, String type='modeOff') {
 private def sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
     String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-    if (phone) { // check that the user did select a phone number
-        if ( phone.indexOf(";") > 0){
-            def phones = phone.split(";")
-            for ( def i = 0; i < phones.size(); i++) {
-                LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                sendSmsMessage(phones[i], msg)
-            }
-        } else {
-            LOG("Sending SMS to ${phone}",2,null,'info')
-            sendSmsMessage(phone, msg)
-        }
-    } else if (settings.sendPush) {
-        LOG("Sending Push to everyone",2,null,'warn')
-        sendPushMessage(msg)
-    }
-    if (isST) sendNotificationEvent( notificationMessage )	// Always send to hello home (no notifications on HE yet)
+	if (isST) {
+		if (phone) { // check that the user did select a phone number
+			if ( phone.indexOf(";") > 0){
+				def phones = settings.phone.split(";")
+				for ( def i = 0; i < phones.size(); i++) {
+					LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+					sendSmsMessage(phones[i], msg)				// Only to SMS contact
+				}
+			} else {
+				LOG("Sending SMS to ${phone}", 3, null, 'info')
+				sendSmsMessage(phone, msg)						// Only to SMS contact
+			}
+		} 
+		if (settings.pushNotify) {
+			LOG("Sending Push to everyone", 3, null, 'warn')
+			sendPushMessage(msg)								// Push to everyone
+		}
+		if (settings.speak) {
+			if (settings.speechDevices != null) {
+				settings.speechDevices.each {
+					it.speak( "From " + msg )
+				}
+			}
+			if (settings.musicDevices != null) {
+				settings.musicDevices.each {
+					it.setLevel( settings.volume )
+					it.playText( "From " + msg )
+				}
+			}
+		}
+		sendNotificationEvent( notificationMessage )			// Always send to hello home
+	} else {		// isHE
+		if (settings.notifiers != null) {
+			settings.notifiers.each {							// Use notification devices on Hubitat
+				it.deviceNotification(msg)
+			}
+		}
+		if (settings.phone != null) {
+			if ( phone.indexOf(",") > 0){
+				def phones = phone.split(",")
+				for ( def i = 0; i < phones.size(); i++) {
+					LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+					sendSmsMessage(phones[i], msg)				// Only to SMS contact
+				}
+			} else {
+				LOG("Sending SMS to ${phone}", 3, null, 'info')
+				sendSmsMessage(phone, msg)						// Only to SMS contact
+			}
+		}
+		if (settings.speak) {
+			if (settings.speechDevices != null) {
+				settings.speechDevices.each {
+					it.speak( "From " + msg )
+				}
+			}
+			if (settings.musicDevices != null) {
+				settings.musicDevices.each {
+					it.setLevel( settings.volume )
+					it.playText( "From " + msg )
+				}
+			}
+		}
+		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
