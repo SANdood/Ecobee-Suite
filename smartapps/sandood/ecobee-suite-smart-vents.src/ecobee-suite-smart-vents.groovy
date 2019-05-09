@@ -37,7 +37,7 @@
  *	1.6.12 - Added "Generic" (dimmer/switchLevel) Vents
  *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -61,20 +61,19 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Vents Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Vents"      
-        }
-        
-        section(title: "Smart Vents: Temperature Sensor(s)") {
+    	section(title: "") {
+        	label title: "Name for this Smart Vents Helper", required: true, defaultValue: "Smart Vents"
+			if (isHE && !app.label) app.updateLabel("Smart Vents")
         	if (settings.tempDisable) {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn on below to re-enable this Helper."
             } else {
-            	paragraph("Select temperature sensors for this handler. If you select multiple sensors, the temperature will be averaged across all of them.${settings.theSensors?'\n\nCurrent temperature is '+getCurrentTemperature().toString()+'°.':''}")
-        		input(name: "theSensors", type:"capability.temperatureMeasurement", title: "Use which temperature Sensor(s)", description: 'Tap to choose...', required: true, multiple: true, submitOnChange: true)
+            	paragraph("Select temperature sensors for this Helper. If you select multiple sensors, the temperature will be averaged across all of them.") 
+        		input(name: "theSensors", type:"capability.temperatureMeasurement", title: "Use which Temperature Sensor(s)", required: true, multiple: true, submitOnChange: true)
+				if (settings.theSensors) paragraph "The current ${settings.theSensors?.size()>1?'average ':''}temperature for ${settings.theSensors?.size()==1?'this sensor':'these sensors'} is ${getCurrentTemperature()}°"
             }
 		}
         
-        if (!settings.tempDisable) {
+        if (!settings.tempDisable && settings?.theSensors) {
        		section(title: "Smart Vents: Windows (optional)") {
         		paragraph("Windows will temporarily deactivate Smart Vents while they are open")
             	input(name: "theWindows", type: "capability.contactSensor", title: "Which Window contact sensor(s)? (optional)", description: 'Tap to choose...', required: false, multiple: true)
