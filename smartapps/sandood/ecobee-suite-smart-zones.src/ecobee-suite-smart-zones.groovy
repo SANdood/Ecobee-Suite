@@ -29,7 +29,7 @@
  *	1.6.11 - Removed use of *SetpointDisplay
  *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "Ecobee Suite Smart Zones Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -52,33 +52,32 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Zones Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Zones"
-        }
-        
-        section(title: "Select Master Thermostat") {
-        	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."}
-        	else {input ("masterThermostat", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Pick Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)}            
+    	section(title: "") {
+        	label title: "Name for this Smart Zones Helper", required: true, defaultValue: "Smart Zones"
+			if (isHE && !app.label) app.updateLabel("Smart Zones")
+        	if(settings.tempDisable) { 
+				paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
+			} else {
+				input ("masterThermostat", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)
+			}            
 		}
         
-        if (!settings.tempDisable) {
-        	if (masterThermostat) {
-        		section(title: "Select Slave Thermostats") {
-        			// Settings option for using Mode or Routine
-            		input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", required: true, multiple: true, submitOnChange: true)
+        if (!settings?.tempDisable && settings?.masterThermostat) {
+			section(title: "Select Slave Thermostats") {
+				// Settings option for using Mode or Routine
+				input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", required: true, multiple: true, submitOnChange: true)
+			}
+			if (slaveThermostats) {
+				section(title: "Slave Thermostat Actions") {
+					input(name: 'shareHeat', title: "Share ${masterThermostat.displayName} heating?", type: "bool", required: true, defaultValue: false, submitOnChange: true)
+					input(name: 'shareCool', title: "Share ${masterThermostat.displayName} cooling?", type: "bool", required: true, defaultValue: false, submitOnChange: true)
+					if (!settings.shareHeat && !settings.shareCool && !settings.shareFan) {
+						input(name: 'shareFan',  title: "Share ${masterThermostat.displayName} fan only?", type: "bool", required: true, defaultValue: true, submitOnChange: true)
+					} else {
+						input(name: 'shareFan',  title: "Share ${masterThermostat.displayName} fan only?", type: "bool", required: true, /*defaultValue: true,*/ submitOnChange: true)
+					}
 				}
-                if (slaveThermostats) {
-            		section(title: "Slave Thermostat Actions") {
-            			input(name: 'shareHeat', title: "Share ${masterThermostat.displayName} heating?", type: "bool", required: true, defaultValue: false, submitOnChange: true)
-                		input(name: 'shareCool', title: "Share ${masterThermostat.displayName} cooling?", type: "bool", required: true, defaultValue: false, submitOnChange: true)
-                		if (!settings.shareHeat && !settings.shareCool && !settings.shareFan) {
-                			input(name: 'shareFan',  title: "Share ${masterThermostat.displayName} fan only?", type: "bool", required: true, defaultValue: true, submitOnChange: true)
-                		} else {
-                			input(name: 'shareFan',  title: "Share ${masterThermostat.displayName} fan only?", type: "bool", required: true, /*defaultValue: true,*/ submitOnChange: true)
-                		}
-                    }
-            	}
-            }
+			}
 		}
         
 		section(title: "Temporarily Disable?") {
