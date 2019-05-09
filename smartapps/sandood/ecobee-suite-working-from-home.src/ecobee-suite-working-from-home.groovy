@@ -15,7 +15,7 @@
  * <snip>
  * 	1.7.00 - Initial Release
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -39,46 +39,83 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-		section(title: "Name for this Working Fom Home Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Working From Home"
-        }
-        
-        section(title: "Select Thermostats") {
+		section("") {
+        	label title: "Name for this Working Fom Home Helper", required: true, defaultValue: "Working From Home", submitOnChange: true
+			if (isHE && !app.label) app.updateLabel("Working From Home")
         	if(settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to activate handler."
             } else {
-        		input (name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Pick Ecobee Thermostat(s)", description: "Tap to choose...", 
-                	   required: true, multiple: true, submitOnChange: true)  
+        		input (name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)",
+                	   required: true, multiple: true, submitOnChange: true)
+				paragraph ''
 			}
         }
 
-		if ((settings?.myThermostats?.size() > 0) && (settings.tempDisable == false)) {
-            section (title: "Select Presence Sensors") {
-                input(name: "people", type: "capability.presenceSensor", title: "When any of these are present...", description: "Tap to choose...", multiple: true, required: true, submitOnChange: true)
-                input(name: "onAway", type: "bool", title: "When thermostat(s) change to 'Away'", defaultValue: false, required: (settings.timeOfDay == null), submitOnChange: true)
-                input(name: "timeOfDay", type: "time", title: "At this time of day", description: "Tap to choose...", required: (settings.onAway == null), submitOnChange: true)
+		if (settings?.myThermostats && !settings?.tempDisable) {
+            section (title: "Conditions") {
+                input(name: "people", type: "capability.presenceSensor", title: "When any of these are present...",  multiple: true, required: true, submitOnChange: true)
+				input(name: "timeOfDay", type: "time", title: "At this time of day",  required: (settings.onAway == null), submitOnChange: true)
+				paragraph ''
+				input(name: "onAway", type: "bool", title: "When thermostat${settings?.myThermostats?.size()>1?'s change':'changes'} to 'Away'", defaultValue: false, required: (settings.timeOfDay == null), submitOnChange: true)
+				paragraph ''
             }
             
-			section( title: "Perform these actions") {
+			section( title: "Actions") {
                 if (isST) {
                     def phrases = location.helloHome?.getPhrases()*.label
                     if (phrases) {
                         phrases.sort()
-                        input(name: "wfhPhrase", type: "enum", title: "Run this Routine", description: "Tap to choose...", required: false, options: phrases, submitOnChange: true)
+                        input(name: "wfhPhrase", type: "enum", title: "Run this Routine", required: false, options: phrases, submitOnChange: true)
                     }
             	}
-                input(name: "setMode", type: "mode", title: "Set location mode", description: "Tap to choose...", required: false, multiple: false, submitOnChange: true)
-        		input(name: "setHome", type: "bool", title: "Set thermostat${myThermostats.size()>1?'s':''} to the 'Home' schedule/program?", defaulValue: true, submitOnChange: true)
+                input(name: "setMode", type: "mode", title: "Set Location Mode", required: false, multiple: false, submitOnChange: true)
+        		input(name: "setHome", type: "bool", title: "Set thermostat${settings?.myThermostats?.size()>1?'s':''} to the 'Home' program?", defaulValue: true, submitOnChange: true)
+				paragraph ''
             }
                 
-
-            section (title: "Advanced options", hidden: hideOptions(), hideable: true) {
-                input(name: "days", type: "enum", title: "Only on certain days of the week", description: "Tap to choose...", multiple: true, required: false, submitOnChange: true,
+            section (title: "Advanced Options") {
+                input(name: "days", type: "enum", title: "Only on certain days of the week", multiple: true, required: false, submitOnChange: true,
                     options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
-                input(name: "modes", type: "mode", title: "Only when Location Mode is", description: "Tap to choose...", multiple: true, required: false, submitOnChange: true)
-                if (isST) input(name: "sendPushMessage", type: "enum", title: "Send a push notification?", options:["Yes","No"], required: false, submitOnChange: true)
-                input(name: "phone", type: "phone", title: "Send a Text Message?", required: false, description: "Tap to choose...", submitOnChange: true)
+                input(name: "modes", type: "mode", title: "Only when Location Mode is", multiple: true, required: false, submitOnChange: true)
+				input(name: "notify", type: "bool", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
+				paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
             }
+			
+			if (settings.notify) {
+				if (isST) {
+					section("Notifications") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+					}
+				} else {		// isHE
+					section("Use Notification Device(s)") {
+						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+							  description: "Select notification devices", submitOnChange: true)
+						paragraph ""
+					}
+					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+						paragraph ""
+					}
+					section("Use Speech Device(s)") {
+						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						paragraph ""
+					}
+				}
+			}				
         }
         section(title: "Temporarily Disable?") {
            	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
@@ -117,12 +154,12 @@ def checkPresence() {
         if (isST && wfhPhrase) {
             location.helloHome.execute(wfhPhrase)
         	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
-			send("${app.label} at ${location.name} executed '${wfhPhrase}' because someone is still home.")
+			sendMessage("I executed '${wfhPhrase}' because someone is still home.")
             multiple = true
         }
         if (settings.setMode) {
         	location.setMode(settings.setMode)
-            send("${app.label} ${multiple?'also ':''}changed Location Mode to ${settings.setMode} because someone is still home.")
+            sendMessage("I ${multiple?'also ':''}changed Location Mode to ${settings.setMode}.")
             multiple = true
         }
         if (settings.setHome) {
@@ -131,7 +168,7 @@ def checkPresence() {
         	}
             def tc = myThermostats.size()
             def also = multiple ? 'also ' : ''
-            send("${app.label} at ${location.name} ${also}verified that thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} ${tc>1?'are':'is'} set to the 'Home' program because someone is still home.")
+            sendMessage("I ${also}verified that thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} ${tc>1?'are':'is'} set to the 'Home' program because someone is still home.")
             runIn(300, checkHome, [overwrite: true])
         }
     }
@@ -143,17 +180,17 @@ def checkProgram(evt) {
     def multiple = false
     if (settings.onAway && (evt.value == 'Away') && anyoneIsHome() && daysOk && modeOk) {
     	evt.device.home()
-        send("Thermostat ${evt.device.displayName} changed to 'Away', so ${app.label} at ${location.name} reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because someone is still home.")
+        sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because Thermostat ${evt.device.displayName} changed to 'Away' and someone is still home.")
         runIn(300, checkHome, [overwrite: true])
         
     	if (isST && wfhPhrase) {
             location.helloHome.execute(wfhPhrase)
         	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
-			send("${app.label} also executed '${wfhPhrase}' because someone is still home.")
+			send("I also executed '${wfhPhrase}'.")
         }
     	if (settings.setMode) {
         	location.setMode(settings.setMode)
-            send("${app.label} also changed Location Mode to ${settings.setMode} because someone is still home.")
+            send("And I changed Location Mode to ${settings.setMode}.")
             multiple = true
         } 
     }
@@ -184,16 +221,80 @@ private anyoneIsHome() {
   result
 }
 
-private send(msg) {
-    if (isST && sendPushMessage != "No") {
-        if (isST) sendPush(msg)
+private def sendMessage(notificationMessage) {
+	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
+    if (settings.notify) {
+        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+		if (isST) {
+			if (settings.phone) { // check that the user did select a phone number
+				if ( settings.phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+		} else {		// isHE
+			if (settings.notifiers != null) {
+				settings.notifiers.each {							// Use notification devices on Hubitat
+					it.deviceNotification(msg)
+				}
+			}
+			if (settings.phone != null) {
+				if ( settings.phone.indexOf(",") > 0){
+					def phones = phone.split(",")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			
+		}
     }
-
-    if (phone) {
-        sendSms(phone, msg)
-    }
-
-    LOG(msg, 2, null, 'info')
+	// Always send to Hello Home / Location Event log
+	if (isST) { 
+		sendNotificationEvent( notificationMessage )					
+	} else {
+		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
 }
 
 private getModeOk() {
