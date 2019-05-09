@@ -3,14 +3,24 @@ Free Ecobee Suite, version: 1.7.**
 Hubitat users now can utilize the latest functionality of my Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
 # WARNING: Work in progress - Universal Ecobee Suite
+##Latest Update: v1.7.00i - posted 9 May 2019 at 4:45pm EDT
 
 ## Highlights
 Single code base supporting both SmartThings and Hubitat
 
-The most significant changes in this release are:
+The most significant changes in the latest release include:
+- ***NEW in 1.7.00i*** *New Notifications Engine* is now used by all Ecobee Suite Manager and all Helpers that employ notifications.
+    - Supports both SmartThings & Hubitat
+    - Uses the native `capability.notification` on Hubitat, plus SMS (remember, max 10 SMS per day)
+    - Supports spoken notifications via both SpeechDevices and MusicPlayers on both platforms
+- ***NEW in 1.7.00i*** *Working From Home Helper:* Automatically overrides the thermostat's scheduled change to the "Away" program if any selected presence sensor is still `present`
+- ***New in 1.7.00i*** *Thermal Comfort Helper:* Automatically adjusts heating and/or cooling setpoints to maintain ***[Thermal Comfort (Google search link)](https://www.google.com/search?safe=off&ei=bXzUXKeqIOKb5wLslKmICw&q=thermal+comfort&oq=thermal+comfort&gs_l=psy-ab.3..0i71l8.0.0..107452...0.0..0.0.0.......0......gws-wiz.KQLS1yIx3qE)*** based on relative humidity, desired PMV, activity and clothing type. Thanks to [Richard Peng](https://community.smartthings.com/u/richardpeng) for adapting the model for use with the Ecobee Suite. Note that you can create multiple Thermal Comfort Helper instances to cover different Ecobee programs and/or modes.
 - Universal code dynamically detects and adapts to the host hub platform (SmartThings and Hubitat only) - no configuration required.
-- New retry mechanism will re-run command requests that did not complete because the Ecobee servers were unavailable. Note, however, that this code is new and has not been fully tested on both hub platforms.
-- Numerous bug fixes (applies to both platforms)- Reduced network transactions when not using AskAlexa
+- ***New in 1.7.00d*** *Retry mechanism* will re-run command requests that did not complete because the Ecobee servers were unavailable. Note that this code is new and has not been fully tested on both hub platforms.
+- Numerous bug fixes (applies to both platforms)
+   - ***New in 1.7.00i*** Significantly reduces Ecobee server load for each check/poll cycle
+   - ***New in 1.7.00i*** Improved error recovery and auth token refresh mechanisms
+   - Reduces network transactions when not using AskAlexa
 - Uses the Authentication Code method of connecting to the Ecobee API. This is far simpler than the PIN approach used by the prior port of my code (v1.4.14)
   - **Hubitat**: Thanks to the Hubitat staff for assisting me in getting this working, as the documented Hubitat OAuth path doesn't work for Ecobee. Read the OAuth init code to learn the (clever) trick they helped me employ.
   - **SmartThings**: This version implements ***a new Ecobee API Key for the Ecobee Suite on SmartThings.*** This key will be used for all new installations, and it will automatically swap to the new key the next time you re-login/authenticate with Ecobee. I recommend that all SmartThings users re-authenticate after installing this new version over their existing code.
@@ -19,13 +29,13 @@ The most significant changes in this release are:
     - Since Hubitat doesn't yet have push notifications, the Smart Mode/Routine/Program Helper SmartApp doesn't support Routines - so it is renamed (on Hubitat only) to Smart Mode/Program Helper
 
 ### Performance
-Since all of this code runs locally on the Hubitat hub, its performance is different than in the SmartThings environment where all the code runs on Amazon's server farms around the world. Network traffic will typically take longer to your local hub than across the cloud (from Ecobee's cloud servers to SmartThings'). My observations are that it can take 2-3x as long to do an update cycle on Hubitat than on SmartThings; depending on the number of thermostats and sensors you have, what takes perhaps 4 seconds on SmartThings (2 thermostats + 10 sensors) can take 12 seconds on Hubitat.
+Since all of this code runs locally on the Hubitat hub, its performance is different than in the SmartThings environment where all the code runs on Amazon's server farms around the world. Network traffic will typically take longer to your local hub than across the cloud (from Ecobee's cloud servers to SmartThings'). My observations are that it can take 2-3x as long to do an update cycle on Hubitat than on SmartThings; depending on the number of thermostats and sensors you have, what takes perhaps 3 seconds on SmartThings (2 thermostats + 10 sensors) can take 9 seconds on Hubitat.
 
-That said, at the end of the 12 seconds, your Hubitat-based Ecobee Thermostat is up to date - it takes only 10s of milliseconds to update the attributes in the Thermostat/Sensor devices. On SmartThings, the data still has to be sent to your mobile device(s).
+That said, at the end of the 9 seconds, your Hubitat-based Ecobee Thermostat is up to date - it takes only 10s of milliseconds to update the attributes in the Thermostat/Sensor devices. On SmartThings, the data still has to be sent to your mobile device(s).
 
-Note that ALL of the interactions between the Helper Applications and the Devices is local on Hubitat, so there is less network latency and operational delay. Importantly, the code only runs at most 12-20 seconds per minute; this does NOT appear to have any performance impact on your Hubitat hub in any way.
+Note that ALL of the interactions between the Helper Applications and the Devices is local on Hubitat, so there is less network latency and operational delay. Importantly, the code only runs typically 3-6 seconds per minute; this does NOT appear to have any performance impact on your Hubitat hub in any way.
 
-## Everything below is from the 1.6.** release - documentation for the Universal Version will be added soon
+## Everything below is from the 1.6.** release - documentation for the Universal Version will be updated soon
 ---------------------------------------
 #### General changes to the Ecobee Suite
 - New **schedule/setSchedule support** - Documentation coming soon!
