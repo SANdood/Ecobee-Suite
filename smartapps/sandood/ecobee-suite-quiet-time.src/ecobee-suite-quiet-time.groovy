@@ -31,8 +31,8 @@
  *	1.6.15 - Added scheduled Auto Off for Quiet Time
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
-private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+def getVersionNum() { return "1.7.00i" }
+private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Quiet Time",
@@ -54,14 +54,13 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for this Quiet Time Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Quiet Time"
-        }
-        
-        section(title: "Select Thermostats") {
-        	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn back on below to activate handler." }
-        	else { 
-            	input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+    	section(title: "") {
+        	label title: "Name for this Quiet Time Helper", required: true, defaultValue: "Quiet Time"
+			if (isHE && !app.label) app.updateLabel("Quiet Time")
+        	if(settings.tempDisable) { 
+				paragraph "WARNING: Temporarily Disabled per request. Turn back on below to activate handler." 
+			} else { 
+            	input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
             }          
 		}
     
@@ -69,92 +68,114 @@ def mainPage() {
 			def hasH = hasHumidifier()
 			def hasD = hasDehumidifier()
 			
-		section(title: 'Quiet Time Control Switch') {
-        	paragraph("Quiet Time is enabled by turning on (or off) a physical or virtual switch.")
-            input(name: 'qtSwitch', type: 'capability.switch', required: true, title: 'Which switch controls Quiet Time?', multiple: false, submitOnChange: true)
-            if (settings.qtSwitch) {
-                input(name: "qtOn", type: "enum", title: "Effect Quiet Time Actions when switch '${settings.qtSwitch.displayName}' is turned", defaultValue: 'on', required: true, multiple: false, submitOnChange: true,
-                		options: ["on","off"])
-                input(name: "qtAutoOff", type: "enum", title: "Auto-disable Quiet Time after ", descriptionText: (settings?.qtAutoOff != null)?:'(Disabled)', defaultValue: '(Disabled)', required: true, multiple: false, submitOnChange: true,
-                		options: ["(Disabled)", "10 Minutes", "15 Minutes", "30 Minutes", "45 Minutes", "1 Hour", "2 Hours", "3 Hours", "4 Hours", "6 Hours"])
-            }
-        }
-	
-    	section(title: "Quiet Time Actions") {
-        	input(name: 'hvacOff', type: "bool", title: "Turn off HVAC?", required: true, defaultValue: false, submitOnChange: true)
-            if (settings.hvacOff) {
-                paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.")
-            }
-            if (!settings.hvacOff) {
-            	input(name: 'hvacMode', type: 'bool', title: 'Change HVAC Mode?', required: true, defaultValue: false, submitOnChange: true)
-            	if (settings.hvacMode) {
-            		input(name: 'quietMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: true, multiple: false, 
-                			options:getThermostatModes())
-                	if (settings.quietMode) paragraph("HVAC mode will be set to ${settings.quietMode} Mode.${(settings.quietMode=='off')?' Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.':''}")
-                }
-            }
-            if (settings.hvacOff || settings.hvacMode) paragraph("HVAC mode will be returned to its original value when Quiet Time ends")
+			section(title: 'Quiet Time Control Switch') {
+				paragraph("Quiet Time is enabled by turning on (or off) a physical or virtual switch.")
+				input(name: 'qtSwitch', type: 'capability.switch', required: true, title: 'Which switch controls Quiet Time?', multiple: false, submitOnChange: true)
+				if (settings.qtSwitch) {
+					input(name: "qtOn", type: "enum", title: "Effect Quiet Time Actions when switch '${settings.qtSwitch.displayName}' is turned", defaultValue: 'on', required: true, multiple: false, submitOnChange: true,
+							options: ["on","off"])
+					input(name: "qtAutoOff", type: "enum", title: "Auto-disable Quiet Time after ", descriptionText: (settings?.qtAutoOff != null)?:'(Disabled)', defaultValue: '(Disabled)', required: true, multiple: false, submitOnChange: true,
+							options: ["(Disabled)", "10 Minutes", "15 Minutes", "30 Minutes", "45 Minutes", "1 Hour", "2 Hours", "3 Hours", "4 Hours", "6 Hours"])
+				}
+			}
 
-            input(name: 'fanOff', type: "bool", title: "Turn off the Fan?", required: true, defaultValue: false, submitOnChange: true)
-            if (settings.fanOff) {
-            	paragraph('Turning off the fan will not stop automatic circulation, even if the HVAC is also off.')
-            	input(name: 'circOff', type: "bool", title: 'Also disable Circulation?', required: true, defaultValue: false, submitOnChange: true)
-                if (settings.circOff) {
-                   	paragraph("Circulation will also be disabled.")
-                } else {
-                	paragraph("Circulation will not be modified.")
-                }
-                paragraph("At the end of Quiet Time, the Fan Mode will be restored to its prior setting${settings.circOff?', and circulation will be re-enabled':''}.")
-            }
-            if (settings.hvacOff || settings.hvacMode || settings.fanOff) {
-            	input(name: 'modeResume', type: 'bool', title: 'Also resume current program at the end of Quiet Time (recommended)?', defaultValue: true, required: true)
-            }
-            
-            if (!settings.hvacOff && !settings.hvacMode) {
-            	input(name: 'adjustSetpoints', type: 'bool', title: 'Adjust heat/cool setpoints?', required: true, defaultValue: false, submitOnChange: true)
-                if (settings.adjustSetpoints) {
-                   	input(name: 'heatAdjust', type: 'decimal', title: 'Heating setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
-                    input(name: 'coolAdjust', type: 'decimal', title: 'Cooling setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
-                	input(name: 'setpointResume', type: 'enum', title: 'At the end of Quiet Time', description: 'Tap to choose...', multiple: false, required: true,
-                			options: ['Restore prior Setpoints','Resume Current Program', 'Resume Scheduled Program'], submitOnChange: true)
-                    if (settings.setpointResume) paragraph("At the end of Quiet Time, ${settings.setpointResume.startsWith('Resu')?'the currently scheduled program will be resumed.':'the prior setpoints will be restored.'}")
-                }
-            }
-			if ((settings.theThermostats?.size() != 0) && atomicState.hasHumidifier) {
-				input(name: 'humidOff', type: 'bool', title: 'Turn off the Humidifier?', required: true, defaultValue: false, submitOnChange: true)
-                if (settings.humidOff) paragraph("At the end of Quiet Time, the humidifier(s) will be turned back on.")
-            }
-            if ((settings.theThermostats?.size() != 0) && atomicState.hasDehumidifier) {
-				input(name: 'dehumOff', type: 'bool', title: 'Turn off the Dehumidifier?', required: true, defaultValue: false, submitOnChange: true)
-                if (settings.dehumOff) paragraph("At the end of Quiet Time, the dehumidifier(s) will be turned back on.")
-            }
-        }
-//        section(title: 'Actions when Quiet Time Ends') {
-//        	input(name: 'loudActions', type: 'enum', title: 'When quiet time ends', description: 'Tap to choose...', required: true, defaultValue: 'Resume Current Program', 
-//            		options: ['Resume Current Program', "${adjustSetpoints?'Set Hold with Prior Setpoints':''}", 
-//        }
-        
-/* NOTIFICATIONS NOT YET IMPLEMENTED 
-		section(title: "Notification Preferences") {
-        	input(name: "whichAction", title: "Select which notification actions to take [Default=Notify Only]", type: "enum", required: true, 
-               	metadata: [values: ["Notify Only", "Quiet Time Actions Only", "Notify and Quiet Time Actions"]], defaultValue: "Notify Only", submitOnChange: true)
-			if (settings.whichAction != "Quiet Time Actions Only") {
-            	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-            	input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false 
-                
-                if (!settings.phone) {
-                    input( name: 'sendPush', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false)
-                }
-                if (!settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
-            }               
-       }
-*/
+			section(title: "Quiet Time Actions") {
+				input(name: 'hvacOff', type: "bool", title: "Turn off HVAC?", required: true, defaultValue: false, submitOnChange: true)
+				if (settings.hvacOff) {
+					paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.")
+				}
+				if (!settings.hvacOff) {
+					input(name: 'hvacMode', type: 'bool', title: 'Change HVAC Mode?', required: true, defaultValue: false, submitOnChange: true)
+					if (settings.hvacMode) {
+						input(name: 'quietMode', title: 'Set thermostat mode to', type: 'enum', required: true, multiple: false, 
+								options:getThermostatModes())
+						if (settings.quietMode) paragraph("HVAC mode will be set to ${settings.quietMode} Mode.${(settings.quietMode=='off')?' Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.':''}")
+					}
+				}
+				if (settings.hvacOff || settings.hvacMode) paragraph("HVAC mode will be returned to its original value when Quiet Time ends")
+
+				input(name: 'fanOff', type: "bool", title: "Turn off the Fan?", required: true, defaultValue: false, submitOnChange: true)
+				if (settings.fanOff) {
+					paragraph('Turning off the fan will not stop automatic circulation, even if the HVAC is also off.')
+					input(name: 'circOff', type: "bool", title: 'Also disable Circulation?', required: true, defaultValue: false, submitOnChange: true)
+					if (settings.circOff) {
+						paragraph("Circulation will also be disabled.")
+					} else {
+						paragraph("Circulation will not be modified.")
+					}
+					paragraph("At the end of Quiet Time, the Fan Mode will be restored to its prior setting${settings.circOff?', and circulation will be re-enabled':''}.")
+				}
+				if (settings.hvacOff || settings.hvacMode || settings.fanOff) {
+					input(name: 'modeResume', type: 'bool', title: 'Also resume current program at the end of Quiet Time (recommended)?', defaultValue: true, required: true)
+				}
+
+				if (!settings.hvacOff && !settings.hvacMode) {
+					input(name: 'adjustSetpoints', type: 'bool', title: 'Adjust heat/cool setpoints?', required: true, defaultValue: false, submitOnChange: true)
+					if (settings.adjustSetpoints) {
+						input(name: 'heatAdjust', type: 'decimal', title: 'Heating setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
+						input(name: 'coolAdjust', type: 'decimal', title: 'Cooling setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
+						input(name: 'setpointResume', type: 'enum', title: 'At the end of Quiet Time', description: 'Tap to choose...', multiple: false, required: true,
+								options: ['Restore prior Setpoints','Resume Current Program', 'Resume Scheduled Program'], submitOnChange: true)
+						if (settings.setpointResume) paragraph("At the end of Quiet Time, ${settings.setpointResume.startsWith('Resu')?'the currently scheduled program will be resumed.':'the prior setpoints will be restored.'}")
+					}
+				}
+				if ((settings.theThermostats?.size() != 0) && atomicState.hasHumidifier) {
+					input(name: 'humidOff', type: 'bool', title: 'Turn off the Humidifier?', required: true, defaultValue: false, submitOnChange: true)
+					if (settings.humidOff) paragraph("At the end of Quiet Time, the humidifier(s) will be turned back on.")
+				}
+				if ((settings.theThermostats?.size() != 0) && atomicState.hasDehumidifier) {
+					input(name: 'dehumOff', type: 'bool', title: 'Turn off the Dehumidifier?', required: true, defaultValue: false, submitOnChange: true)
+					if (settings.dehumOff) paragraph("At the end of Quiet Time, the dehumidifier(s) will be turned back on.")
+				}
+			}
+	//        section(title: 'Actions when Quiet Time Ends') {
+	//        	input(name: 'loudActions', type: 'enum', title: 'When quiet time ends', description: 'Tap to choose...', required: true, defaultValue: 'Resume Current Program', 
+	//            		options: ['Resume Current Program', "${adjustSetpoints?'Set Hold with Prior Setpoints':''}", 
+	//        }
+
+	/* NOTIFICATIONS NOT YET IMPLEMENTED 
+			if (settings.notify) {
+				if (isST) {
+					section("Notifications") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+					}
+				} else {		// isHE
+					section("Use Notification Device(s)") {
+						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+							  description: "Select notification devices", submitOnChange: true)
+						paragraph ""
+					}
+					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+						paragraph ""
+					}
+					section("Use Speech Device(s)") {
+						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						paragraph ""
+					}
+				}
+			}
+	*/
+		}
 		section(title: "Temporarily Disable?") {
 			input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
-        }
-        
-        section (getVersionLabel()) {}
-        }
+		}
+
+		section (getVersionLabel()) {}
     }
 }
 
@@ -590,24 +611,79 @@ log.debug "${app.name}, ${app.label}"
 
 /* NOTIFICATIONS NOT YET IMPLEMENTED
 private def sendMessage(notificationMessage) {
-	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
-
-    String msg = "${app.Label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-    if (phone) { // check that the user did select a phone number
-        if ( phone.indexOf(";") > 0){
-            def phones = phone.split(";")
-            for ( def i = 0; i < phones.size(); i++) {
-                LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                sendSms(phones[i], msg)
-            }
-        } else {
-            LOG("Sending SMS to ${phone}",2,null,'info')
-            sendSms(phone, msg)
-        }
-    } else if (settings.sendPush) {
-        LOG("Sending Push to everyone",2,null,'warn')
-        sendPush(msg)
+	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
+    if (settings.notify) {
+        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+		if (isST) {
+			if (settings.phone) { // check that the user did select a phone number
+				if ( settings.phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+		} else {		// isHE
+			if (settings.notifiers != null) {
+				settings.notifiers.each {							// Use notification devices on Hubitat
+					it.deviceNotification(msg)
+				}
+			}
+			if (settings.phone != null) {
+				if ( settings.phone.indexOf(",") > 0){
+					def phones = phone.split(",")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			
+		}
     }
+	// Always send to Hello Home / Location Event log
+	if (isST) { 
+		sendNotificationEvent( notificationMessage )					
+	} else {
+		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
 }
 */
 
