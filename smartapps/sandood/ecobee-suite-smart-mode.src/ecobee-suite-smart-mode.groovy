@@ -46,7 +46,7 @@
  *	1.6.21 - Added option to change heat/cool setpoints instead of/in addition to changing the mode
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -69,17 +69,19 @@ preferences {
 
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Mode & Setpoints Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Mode & Setpoints"
-        }
-        section(title: "${settings.tempDisable?'':'Select Thermostat(s)'}") {
-        	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."}
-        	else {input ("thermostats", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Pick Ecobee Thermostat(s)", required: true, 
-						 multiple: true, submitOnChange: true)}            
+    	section(title: "") {
+        	label title: "Name for this Smart Mode & Setpoints Helper", required: true, defaultValue: "Smart Mode & Setpoints"
+			if (isHE && !app.label) app.updateLabel("Smart Mode & Setpoints")
+        	if(settings.tempDisable) { 
+					paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
+			} else {
+				input ("thermostats", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, 
+					   multiple: true, submitOnChange: true)
+			}
 		}
-        if (!settings.tempDisable) {
-			section(title: "Select Outdoor Weather Source") {
-				input(name: 'tempSource', title: 'Monitor this weather source', type: 'enum', required: true, multiple: false, description: 'Tap to choose...', 
+        if (!settings?.tempDisable && (settings?.thermostats?.size()>0)) {
+			section(title: "Outdoor Weather Source") {
+				input(name: 'tempSource', title: 'Monitor this weather source', type: 'enum', required: true, multiple: false,  
 					  options: (isST?[
 						  'ecobee':"Ecobee Thermostat's Weather", 
 						  'location':"SmartThings/TWC Weather for ${location.name}", 
@@ -97,33 +99,32 @@ def mainPage() {
                     	paragraph "Using The Weather Company weather for the current location (${location.name})."
                         if (!settings.latLon) input(name: "zipCode", type: 'text', title: 'Zipcode (Default is location Zip code)', defaultValue: getZIPcode(), required: true, submitOnChange: true )
                         if (location.latitude && location.longitude) input(name: "latLon", type: 'bool', title: "Use ${isST?'SmartThings':'Hubitat'} hub's GPS coordinates instead (better precision)?", submitOnChange: true)
-						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', 
+						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, 
                         	options:['1','5','10','15','30','60','180'])
 					} else if (settings.tempSource == 'sensors') {
                     	paragraph "Using ${isST?'SmartThings':'Hubitat'} sensors. Note: Both Temperature & Humidity sensors are required for dew point-based actions."
-						input(name: 'thermometer', type: 'capability.temperatureMeasurement', title: "Which Temperature Sensor?", description: 'Tap to choose...', required: true, multiple: false)
-                        input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", description: 'Tap to choose...', 
+						input(name: 'thermometer', type: 'capability.temperatureMeasurement', title: "Which Temperature Sensor?", required: true, multiple: false)
+                        input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?",  
                         	required: (settings.dewBelowOverride), multiple: false) 
 					} else if (settings.tempSource == "ecobee") {
                     	paragraph "Using weather data from the (notoriously inaccurate) Ecobee thermostat${(settings.thermostats.size()==1)?' '+settings.thermostats.displayName:':'}"
 						if (settings.thermostats.size() > 1) {
-							input(name: 'tstatTemp', type: 'enum', title: "Which Ecobee thermostat?", description: 'Tap to choose...', required: true, multiple: false, submitOnChange: true,
+							input(name: 'tstatTemp', type: 'enum', title: "Which Ecobee Thermostat?", required: true, multiple: false, submitOnChange: true,
                             		options:thermostats.displayName)
 						}
 					} else if (settings.tempSource == 'station') {
 						paragraph "Using a ${isST?'SmartThings':'Hubitat'}-based Weather Station - please select ${isST?'ONE ':''}from the list of the supported Weather Station devices below..."
 						if (isST) {
-							input(name: "smartWeather", type: "device.smartWeatherStationTile", title: 'Which SmartWeather Station Tile?', description: "Tap to choose...", required: false, 
+							input(name: "smartWeather", type: "device.smartWeatherStationTile", title: 'Which SmartWeather Station Tile?', required: false, 
 									multiple: false, hideWhenEmpty: true)
-							input(name: "smartWeather2", type: "device.smartWeatherStationTile2.0", title: 'Which SmartWeather Station Tile 2.0?', description: "Tap to choose...", required: false, 
+							input(name: "smartWeather2", type: "device.smartWeatherStationTile2.0", title: 'Which SmartWeather Station Tile 2.0?', required: false, 
 									multiple: false, hideWhenEmpty: true)
 						}
-						input(name: "meteoWeather", type: "${isST?'device.meteobridgeWeatherStation':'device.MeteobridgeWeatherStation'}", title: 'Which Meteobridge Weather Station?', description: "Tap to choose...", required: false, 
+						input(name: "meteoWeather", type: "${isST?'device.meteobridgeWeatherStation':'device.MeteobridgeWeatherStation'}", title: 'Which Meteobridge Weather Station?', required: false, 
                         		multiple: false, hideWhenEmpty: true)      
                     } else if (settings.tempSource == "wunder") {
                     	paragraph "Using a specific Weather Underground Weather Station"
-						input(name: 'stationID', type: 'string', title: 'Enter WeatherUnderground Station identifier', description: "Tap to choose...", 
-                        		defaultValue: "${settings.nearestPWS?getPWSID():''}", required: true)
+						input(name: 'stationID', type: 'string', title: 'Enter WeatherUnderground Station identifier', defaultValue: "${settings.nearestPWS?getPWSID():''}", required: true)
                         input(name: 'nearestPWS', type: 'bool', title: 'Use nearest available station', options: ['true', 'false'], defaultValue: true, submitOnChange: true)
         				href(title: "Or, Search WeatherUnderground.com for your desired PWS",
         					description: 'After page loads, select "Change Station" for a list of weather stations.  ' +
@@ -131,8 +132,7 @@ def mainPage() {
              				required: false, style:'embedded',             
              				url: (location.latitude && location.longitude)? "http://www.wunderground.com/cgi-bin/findweather/hdfForecast?query=${location.latitude},${location.longitude}" :
              		 		"http://www.wunderground.com/q/${location.zipCode}")
-                        input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', 
-                        	options:['1','5','10','15','30','60','180'])
+                        input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, options:['1','5','10','15','30','60','180'])
 					}
 				}
 			}
@@ -143,15 +143,14 @@ def mainPage() {
                 input(name: "dewAboveTemp", title: "Or, (optionally) when the outdoor dewpoint is at or above...", type: 'decimal', description: "Enter decimal dewpoint", 
                 		required: false, submitOnChange: true)
 				if (settings.aboveTemp || settings.dewAboveTemp) {
-					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: (!settings.aboveSetpoints), multiple: false, options:getThermostatModes(), 
-                    		submitOnChange: true)
+					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', required: (!settings.aboveSetpoints), multiple: false, options:getThermostatModes(), submitOnChange: true)
                     if (settings.aboveMode == 'off') {
                     	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
                     }
                     input(name: 'aboveSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.aboveMode), defaultValue: false, submitOnChange: true) 
                     if (settings.aboveSetpoints) {
                     	if (!settings.aboveProgram && (!settings.aboveHeatTemp || !settings.aboveCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
-                    	input(name: 'aboveProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                    	input(name: 'aboveProgram', title: 'Change Setpoints for Program', type: 'enum', required: true, submitOnChange: true, multiple: false, 
                         		options:getEcobeePrograms())
                     	input(name: 'aboveHeatTemp', title: "Desired heating setpoint (${getHeatRange()})", type: 'decimal', description: 'Default = no change...', required: (!settings.aboveCoolTemp), 
                         		range: getHeatRange(), submitOnChange: true)
@@ -164,7 +163,7 @@ def mainPage() {
             	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'decimal', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", 
                 		range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
 				if (settings.belowTemp) {
-					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: (!settings.belowSetpoints), multiple: false, 
+					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', required: (!settings.belowSetpoints), multiple: false, 
                     		options:getThermostatModes(), submitOnChange: true)
                     if (!(settings.aboveMode == 'off') && (settings.belowMode == 'off')) {
                     	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
@@ -172,7 +171,7 @@ def mainPage() {
                     input(name: 'belowSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.belowMode), defaultValue: false, submitOnChange: true) 
                     if (settings.belowSetpoints) {
                     	if (!settings.belowProgram && (!settings.belowHeatTemp || !settings.belowCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
-                    	input(name: 'belowProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                    	input(name: 'belowProgram', title: 'Change Setpoints for Program', type: 'enum', required: true, submitOnChange: true, multiple: false, 
                         		options:getEcobeePrograms())
                     	input(name: 'belowHeatTemp', title: "Desired heating setpoint (${getHeatRange()})", type: 'decimal', description: 'Default = no change...', required: (!settings.belowCoolTemp), 
                         		range: getHeatRange(), submitOnChange: true)
@@ -191,11 +190,11 @@ def mainPage() {
 			if ((settings.belowTemp && settings.aboveTemp) && (settings.belowTemp != settings.aboveTemp)) {
             	section(title: "Outdoor Temperature 'Between' Settings") {
 					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', 
-                    		description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
+                    		required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
             		input(name: 'betweenSetpoints', title: 'Change Program Setpoints', type: 'bool', required: false, defaultValue: false, submitOnChange: true) 
                     if (settings.betweenSetpoints) {
                     	if (!settings.betweenProgram && (!settings.betweenHeatTemp || !settings.betweenCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
-                    	input(name: 'betweenProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                    	input(name: 'betweenProgram', title: 'Change Setpoints for Program', type: 'enum', required: true, submitOnChange: true, multiple: false, 
                         		options:getEcobeePrograms())
                     	input(name: 'betweenHeatTemp', title: 'Desired heating setpoint', type: 'decimal', description: 'Default = no change...', required: (!settings.betweenCoolTemp), 
                         		range: getHeatRange(), submitOnChange: true)
@@ -218,23 +217,45 @@ def mainPage() {
                     		submitOnChange: true)
                 }
 			}
-			section(title: "Enable only for specific modes or programs? (optional)") {
-				paragraph("Thermostat Modes will only be changed while ${location.name} is in these ${isST?'SmartThings':'Hubitat'} Modes.")
-            	input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
+			section(title: "Options") {
+            	input(name: "theModes",type: "mode", title: "Change Thermostat Mode only when the Location Mode is", multiple: true, required: false)
+				input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
         	}            
-      		section("Notifications (optional)") {
-        		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
-                
-            	if (settings.notify) {
-       				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-       				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false, submitOnChange: true 
-                    if (!settings.phone) {
-                        input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
-                    }
-                    if (!settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
-                }
-            	if (isST) paragraph("A notification is always sent to the Hello Home log whenever Smart Mode changes a thermostat's Mode")
-        	}
+			if (settings.notify) {
+				if (isST) {
+					section("Notifications") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+					}
+				} else {		// isHE
+					section("Use Notification Device(s)") {
+						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+							  description: "Select notification devices", submitOnChange: true)
+						paragraph ""
+					}
+					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+						paragraph ""
+					}
+					section("Use Speech Device(s)") {
+						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						paragraph ""
+					}
+				}
+			}
         }
         section(title: "Temporary Disable") {
         	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
@@ -1042,27 +1063,79 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 }
 
 private def sendMessage(notificationMessage) {
-	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 5, null, "trace")
-    
+	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
-        String msg = "${location.name} ${app.label}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (phone) { // check that the user did select a phone number
-            if ( phone.indexOf(";") > 0){
-                def phones = phone.split(";")
-                for ( def i = 0; i < phones.size(); i++) {
-                    LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                    sendSmsMessage(phones[i], msg)									// Only to SMS contact
-                }
-            } else {
-                LOG("Sending SMS to ${phone}",2,null,'info')
-                sendSmsMessage(phone, msg)											// Only to SMS contact
-            }
-        } else if (settings.pushNotify) {
-            LOG("Sending Push to everyone",2,null,'warn')
-            sendPushMessage(msg)													// Push to everyone
-        }
+        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+		if (isST) {
+			if (settings.phone) { // check that the user did select a phone number
+				if ( settings.phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+		} else {		// isHE
+			if (settings.notifiers != null) {
+				settings.notifiers.each {							// Use notification devices on Hubitat
+					it.deviceNotification(msg)
+				}
+			}
+			if (settings.phone != null) {
+				if ( settings.phone.indexOf(",") > 0){
+					def phones = phone.split(",")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			
+		}
     }
-    if (isST) sendNotificationEvent( ${app.label}+ ': ' + notificationMessage )		// Always send to hello home (Hubitat doesn't have notifications yet)
+	// Always send to Hello Home / Location Event log
+	if (isST) { 
+		sendNotificationEvent( notificationMessage )					
+	} else {
+		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
 }
 
 // **************************************************************************************************************************
