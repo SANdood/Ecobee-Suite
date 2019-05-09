@@ -35,7 +35,7 @@
  *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
  *	1.7.00 - Universal version supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00i" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -59,19 +59,17 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Circulation Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Circulation"  
-        }
-        
-        section(title: "Select Thermostat") {
+    	section(title: "") {
+        	label title: "Name for this Smart Circulation Helper", required: true, defaultValue: "Smart Circulation"  
+			if (isHE && !app.label) app.updateLabel("Smart Circulation")
         	if(settings.tempDisable) {paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to activate handler."}
             else {
-        		input(name: "theThermostat", type:"${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Use which Ecobee Thermostat", required: true, multiple: false, 
+        		input(name: "theThermostat", type:"${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", required: true, multiple: false, 
                 submitOnChange: true)
             }
 		}
         
-        if (!settings.tempDisable) {
+        if (!settings.tempDisable && settings.theThermostat) {
         	section(title: "Select Indoor Temperature Sensors") {
             	input(name: "theSensors", title: "Use which indoor temperature sensor(s)", type: "capability.temperatureMeasurement", required: true, multiple: true, submitOnChange: true)
 			}
