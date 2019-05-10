@@ -3,12 +3,13 @@ Free Ecobee Suite, version: 1.7.**
 Hubitat users now can utilize the latest functionality of my Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
 # WARNING: Work in progress - Universal Ecobee Suite
-***Latest Update: v1.7.00i - posted 9 May 2019 at 4:45pm EDT***
+***Latest Update: v1.7.00k - posted 10 May 2019 at 2:30pm EDT***
 
 ## Highlights
 Single code base supporting both SmartThings and Hubitat
 
 The most significant changes in the latest release include:
+- ***NEW in 1.7.00k*** *New `setEcobeeSetting( name, value )` command.* Allows programmatically changing ***most*** *(but not all)* documented [Ecobee Settings](https://www.ecobee.com/home/developer/api/documentation/v1/objects/Settings.shtml). Arguments generally are Strings, but temperature values can also be a `Number` or a `BigDecimal` in either F or C based on your locale. Read Only settings cannot be changed, and some settings can only be changed using the supplied commands (e.g., use `setHumiditySetpoint(setpoint)` instead of `setEcobeeSetting(humidity)` - required for internal consistency). Use `device.currentValue('settingName')` to get the current value of any setting.
 - ***NEW in 1.7.00i*** *New Notifications Engine* is now used by all Ecobee Suite Manager and all Helpers that employ notifications.
     - Supports both SmartThings & Hubitat
     - Uses the native `capability.notification` on Hubitat, plus SMS (remember, max 10 SMS per day)
