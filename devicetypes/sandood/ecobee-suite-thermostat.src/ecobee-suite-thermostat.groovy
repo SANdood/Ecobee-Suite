@@ -815,7 +815,6 @@ void refresh(force=false) {
 	// No longer require forcePoll on every refresh - just get whatever has changed
 	LOG("refresh() - calling pollChildren ${force?'(forced)':''}, deviceId = ${getDeviceId()}",2,null,'info')
 	parent.pollChildren(getDeviceId(),force) // tell parent to just poll me silently -- can't pass child/this for some reason
-	log.debug "returned from pollChildren()"
 	return
 }
 void doRefresh() {
