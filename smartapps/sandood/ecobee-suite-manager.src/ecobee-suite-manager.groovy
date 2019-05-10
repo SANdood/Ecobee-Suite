@@ -45,11 +45,12 @@
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00- Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00i" }
+def getVersionNum() { return "1.7.00k" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
 import groovy.json.*
+import groovy.transform.Field
 
 private def getHelperSmartApps() {
 	String mrpTitle = isST ? 'New Mode/Routine/Program Helper...' : 'New Mode/Program Helper...'
@@ -1633,7 +1634,8 @@ def pollChildren(deviceId=null,force=false) {
     }
     
 	boolean debugLevelFour = debugLevel(4)
-	if (debugLevelFour) LOG("pollChildren() - deviceId ${deviceId}", 4, child, 'trace')
+	//debugLevelFour = true
+	if (debugLevelFour) LOG("pollChildren() - deviceId ${deviceId}", 1, child, 'trace')
     def forcePoll
     if (deviceId != null) {
     	atomicState.forcePoll = force 	//true
@@ -1641,7 +1643,7 @@ def pollChildren(deviceId=null,force=false) {
     } else {
     	forcePoll = atomicState.forcePoll
     }
-	if (debugLevelFour) LOG("=====> pollChildren(${deviceId}) - atomicState.forcePoll(${forcePoll}) atomicState.lastPoll(${atomicState.lastPoll}) now(${now()}) atomicState.lastPollDate(${atomicState.lastPollDate})", 2, child, "trace")
+	if (debugLevelFour) LOG("=====> pollChildren(${deviceId}) - atomicState.forcePoll(${forcePoll}) atomicState.lastPoll(${atomicState.lastPoll}) now(${now()}) atomicState.lastPollDate(${atomicState.lastPollDate})", 1, child, "trace")
     
 	if(apiConnected() == "lost") {
     	// Possibly a false alarm? Check if we can update the token with one last fleeting try...
@@ -1669,7 +1671,7 @@ def pollChildren(deviceId=null,force=false) {
     boolean somethingChanged = forcePoll ?: checkThermostatSummary(thermostatsToPoll)
 	// log.info "pollChildren() somethingChanged ${somethingChanged}"
     if (!forcePoll) thermostatsToPoll = atomicState.changedThermostatIds
-
+	
     String preText = debugLevel(2) ? '' : 'pollChildren() - ' 
     if (forcePoll || somethingChanged) {
     	//alertsUpdated = forcePoll || atomicState.alertsUpdated
@@ -1919,7 +1921,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
     boolean alertsUpdated = atomicState.alertsUpdated
     boolean runtimeUpdated = atomicState.runtimeUpdated
     boolean getWeather = atomicState.getWeather
-    String preText = getDebugLevel() <= 2 ? '' : 'pollEcobeeAPI() - '
+    String preText = debugLevel(2) ? '' : 'pollEcobeeAPI() - '
 	def somethingChanged = (thermostatIdsString != null)
     String allMyChildren = getChildThermostatDeviceIdsString()
     String checkTherms = thermostatIdsString?:allMyChildren
@@ -2830,10 +2832,6 @@ def updateThermostatData() {
         }
      
      // EQUIPMENT SPECIFICS
-		//def hasHeatPump =  statSettings?.hasHeatPump
-		//def hasForcedAir = statSettings?.hasForcedAir
-		//def hasElectric =  statSettings?.hasElectric
-		//def hasBoiler =    statSettings?.hasBoiler
 		def auxHeatMode =  (statSettings?.hasHeatPump) && (statSettings?.hasForcedAir || statSettings?.hasElectric || statSettings?.hasBoiler) // 'auxHeat1' == 'emergency' if using a heatPump
         
 	// handle[tid] things that only change when the thermostat object is updated
@@ -2911,26 +2909,20 @@ def updateThermostatData() {
         }
         
         // store the currently running event (in case we need to modify or delete it later, as in Vacation handling)
-        //log.debug "before tempRunningEvent"
         def tempRunningEvent = [:]
        	tempRunningEvent[tid] = (runningEvent != [:]) ? runningEvent : [:]
 		if (tempRunningEvent[tid] != [:]) {
         	if (atomicState.runningEvent) tempRunningEvent = atomicState.runningEvent + tempRunningEvent
         	atomicState.runningEvent = tempRunningEvent
 		}
-        //log.debug "after tempRunningEvent"
-            
 		def thermostatHold = ''
         String holdEndsAt = ''
-        // log.debug "connected: ${runtime?.connected}"
         
         def isConnected = runtime?.connected
         if (!isConnected) {
         	LOG("${tstatName} is not connected!",1,null,'warn')
         	// Ecobee Cloud lost connection with the thermostat - device, wifi, power or network outage
             currentClimateName = 'Offline'
-            // currentClimate = currentClimateName
-            // currentClimateId = 'offline'
             occupancy = 'unknown'
             
             // Oddly, the runtime.lastModified is returned in UTC, so we have to convert it to the time zone of the thermostat
@@ -2968,7 +2960,6 @@ def updateThermostatData() {
                 } else {
                 	// It is past the expiry time, delete the message from the Ask Alexa queue(s)
                     if (askAlexaAppAlerts && askAlexaAppAlerts[tid] && (askAlexaAppAlerts[tid] != [])) { 
-                		// log.debug "Expiry: ${askAlexaAppAlerts}, ${messageID}"
         				if (askAlexaAppAlerts[tid]?.toString().contains(messageID)) {
 							deleteAskAlexaAlert('Ecobee Status', messageID)
         					askAlexaAppAlerts[tid].removeAll{ it == messageID }
@@ -2982,7 +2973,6 @@ def updateThermostatData() {
         	// We are connected, and Ask Alexa is enabled - check if we need to delete a prior Ask Alexa Alert
         	if (askAlexaAppAlerts && askAlexaAppAlerts[tid] && (askAlexaAppAlerts[tid] != [])) { 
         		String msgID = tid.toString()+'*disconnected'
-                // log.debug "Connected! ${askAlexaAppAlerts}, ${msgID}"
         		if (askAlexaAppAlerts[tid]?.toString().contains(msgID)) {
 					deleteAskAlexaAlert('Ecobee Status', msgID)
         			askAlexaAppAlerts[tid].removeAll{ it == msgID }
@@ -2995,7 +2985,6 @@ def updateThermostatData() {
         if (runningEvent && isConnected) {
         	if (debugLevelFour) LOG("Found a running Event: ${runningEvent}", 4, null, 'trace') 
             holdEndsAt = fixDateTimeString( runningEvent.endDate, runningEvent.endTime, stat.thermostatTime)
-            // log.debug "holdEndsAt: ${holdEndsAt}"
 			thermostatHold = runningEvent.type
             String tempClimateRef = runningEvent.holdClimateRef ? runningEvent.holdClimateRef : ''
             switch (runningEvent.type) {
@@ -3232,9 +3221,6 @@ def updateThermostatData() {
         
         // Alerts & Read Only
         if (alertsUpdated || forcePoll) {
-            def alertNamesList = ["coldTempAlertEnabled", "hotTempAlertEnabled", "wifiOfflineAlert", "auxRuntimeAlert", "auxRuntimeAlertNotify", "auxOutdoorTempAlertNotify", "humidityHighAlert", 
-            					  "humidityLowAlert", "disableHeatPumpAlerts", "disableAlertsOnIdt", "humidityAlertNotify", "tempAlertNotify", "randomStartDelayCool", "randomStartDelayHeat", 
-                                  "ventilatorOffDateTime"]
             if (!changeAlerts?.containsKey(tid)) changeAlerts[tid] = [:]
             def alertValues = []
             int i = 0
@@ -3250,19 +3236,14 @@ def updateThermostatData() {
             atomicState.changeAlerts = changeAlerts
         }
         
-        // Configuration Attributes
+        // Configuration Settings
         if (thermostatUpdated || forcePoll) {
-            def attrNamesList = ['hasHeatPump', 'hasForcedAir', 'hasElectric', 'hasBoiler', "hasErv", "hasHrv", "heatPumpGroundWater", "ventilatorType",
-								 'stage1CoolingDissipationTime', 'stage1HeatingDissipationTime', 'compressorProtectionMinTime', 'heatPumpReversalOnCool', 
-								 'condensationAvoid', 'backlightOnIntensity', 'backlightSleepIntensity', 'backlightOffTime', 'compressorProtectionMinTime', 'fanControlRequired', 
-                                 'dehumidifyWithAC', 'disablePreHeating', 'disablePreCooling', 'ventilatorMinOnTimeHome', 'ventilatorMinOnTimeAway', 'backlightOffDuringSleep', 'autoAway', 
-                                 'followMeComfort', 'smartCirculation', 'isVentilatorTimerOn', 'hasUVFilter', 'coolingLockout', 'ventilatorFreeCooling', 'dehumidifyWhenHeating', 
-                                 'ventilatorDehumidify']
             if (!changeAttrs?.containsKey(tid)) changeAttrs[tid] = [:]
             def attrValues = []
             int i = 0
-            attrNamesList.each { attr ->
+            settingsNamesList.each { attr ->
             	def attrVal = statSettings."${attr}"
+				if (attrVal == '') attrVal = 'null'
                 attrValues <<  attrVal 
                 if (forcePoll || (changeAttrs[tid]?.getAt(i) != attrVal)) {
                     data += [ "${attr}": attrVal, ]
@@ -3275,13 +3256,10 @@ def updateThermostatData() {
         
         // Temperatures - need to convert from internal F*10 to standard Thermostat units
         if (thermostatUpdated || forcePoll) {
-        	def tempNamesList = ['stage1CoolingDifferentialTemp', 'stage1HeatingDifferentialTemp', 'compressorProtectionMinTemp', 'auxMaxOutdoorTemp', 'maxSetBack', 'maxSetForward', 
-            					 'quickSaveSetBack', 'quickSaveSetForward', 'compressorProtectionMinTemp',  'tempCorrection', 'dehumidifyOvercoolOffset', "coldTempAlert", 
-                                 "hotTempAlert", "auxOutdoorTempAlert", "auxMaxOutdoorTemp"]
     		if (!changeTemps?.containsKey(tid)) changeTemps[tid] = [:]
             def tempValues = []
             int i = 0
-            tempNamesList.each { temp ->
+            tempSettingsList.each { temp ->
             	def tempVal = String.format("%.${apiPrecision}f", roundIt((usingMetric ? roundIt((statSettings."${temp}" / 1.8), 0) / 10.0 : statSettings."${temp}" / 10.0),apiPrecision))
                 tempValues <<  tempVal 
                 if (forcePoll || (changeTemps[tid]?.getAt(i) != tempVal)) {
@@ -4398,13 +4376,13 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
     return true
 }
 
-def setProgramSetpoints(child, deviceId, programName, heatingSetpoint = null, coolingSetpoint = null) {
+def setProgramSetpoints(child, deviceId, String programName, String heatingSetpoint = null, String coolingSetpoint = null) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
 	if (atomicState.connected?.toString() != 'full') {
 		LOG("API is not fully connected, queueing call to setProgramSetpoints(${child}, ${deviceId}, ${heatingSetpoint} ${coolingSetpoint}", 2, child, 'warn')
-        queueFailedCall('setProgramSetpoint', child.device.deviceNetworkId, 3, deviceId, heatingSetpoint, coolingSetpoint)
+        queueFailedCall('setProgramSetpoint', child.device.deviceNetworkId, 4, deviceId, programName, heatingSetpoint, coolingSetpoint)
         return false
     }
     
@@ -4425,8 +4403,8 @@ def setProgramSetpoints(child, deviceId, programName, heatingSetpoint = null, co
     
     // convert C temps to F
     def isMetric = (getTemperatureScale() == "C")
-	def ht = (heatingSetpoint && heatingSetpoint.isNumber()) ? (roundIt((isMetric ? (cToF(heatingSetpoint) * 10.0) : (heatingSetpoint * 10.0)), 0)) : null		// better precision using BigDecimal round-half-up
-	def ct = (coolingSetpoint && coolingSetpoint.isNumber()) ? (roundIt((isMetric ? (cToF(coolingSetpoint) * 10.0) : (coolingSetpoint * 10.0)), 0)) : null
+	def ht = ((heatingSetpoint != null) && heatingSetpoint.isNumber()) ? (roundIt((isMetric ? (cToF(heatingSetpoint) * 10.0) : (heatingSetpoint * 10.0)), 0)) : null		// better precision using BigDecimal round-half-up
+	def ct = ((coolingSetpoint != null) && coolingSetpoint.isNumber()) ? (roundIt((isMetric ? (cToF(coolingSetpoint) * 10.0) : (coolingSetpoint * 10.0)), 0)) : null
     
     // enforce the minimum delta
     def delta = atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null
@@ -4481,7 +4459,7 @@ def updateClimatesDirect(child, deviceId) {
     }
 	if (atomicState.connected?.toString() != 'full') {
 		LOG("API is not fully connected, queueing call to updateClimateChangeDirect(${child}, ${deviceId})", 2, child, 'warn')
-        queueFailedCall('updateClimateDirect', child.device.deviceNetworkId, 1, deviceId)
+        queueFailedCall('updateClimatesDirect', child.device.deviceNetworkId, 1, deviceId)
         return false
     }
     
@@ -4504,12 +4482,71 @@ def updateClimatesDirect(child, deviceId) {
     	} else {
             if (atomicState.connected?.toString() != 'full') {
                 LOG("API connection lost, queueing failed call to updateClimateChangeDirect(${child}, ${deviceId})", 2, child, 'warn')
-                queueFailedCall('updateClimateDirect', child.device.deviceNetworkId, 1, deviceId)
+                queueFailedCall('updateClimatesDirect', child.device.deviceNetworkId, 1, deviceId)
             }
         }
     }
     // atomicState.forcePoll = true
     return result    
+}
+
+def setEcobeeSetting(child, String deviceId, String name, String value) {
+	if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setEcobeeSetting(${child}, ${deviceId}, ${name} ${value}", 2, child, 'warn')
+        queueFailedCall('setEcobeeSetting', child.device.deviceNetworkId, 3, deviceId, name, value)
+        return false
+    }
+	String statName = getThermostatName( deviceId )
+    name = name.trim()				// be a little lenient
+
+	def dItem = EcobeeDirectSettings.find{ it.name == name }
+	if (dItem != null) {
+		LOG("setEcobeeSetting() - Invalid command, use '${dItem.command}' to change '${name}'", 1, child, 'error')
+		return false
+	}
+	def sendValue = null
+	def found = false
+	if (EcobeeTempSettings.contains(name)) {
+		// Is a temperature setting - need to convert to F*10 for Ecobee
+		found = true
+		def isMetric = (getTemperatureScale() == "C")
+		sendValue = ((value != null) && value.isBigDecimal()) ? (roundIt((isMetric ? (cToF(value) * 10.0) : ((value as BigDecimal) * 10.0)), 0)) : null
+	} else if (EcobeeSettings.contains(name)) {
+		found = true
+		sendValue = value.trim()	// leniency is kindness
+	} else if (EcobeeROSettings.contains(name)) {
+		LOG("setEcobeeSetting(name: '${name}', value: '${value}') - Setting is Read Only", 1, child, 'error')
+		return false
+	}
+	if (sendValue == null) {
+		if (!found) {
+			LOG("setEcobeeSetting(name: '${name}', value: '${value}') - Invalid name", 1, child, 'error')
+		} else {
+			LOG("setEcobeeSetting(name: '${name}', value: '${value}') - Invalid value", 2, child, 'error')
+		}
+		return false
+	}                 
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"'+name+'":"'+"${sendValue}"+'"}}}'  
+	LOG("setEcobeeSetting() - Request Body: ${jsonRequestBody}", 4, child, 'trace')
+    def result = sendJson(child, jsonRequestBody)
+	LOG("setEcobeeSetting ${name} to ${sendValue} with result ${result}", 4, child, 'trace')
+	if (result) {
+		if (value == sendValue) {
+			LOG("Ecobee Setting '${name}' on thermostat ${statName} was successfully changed to '${value}'", 2, child, 'info')
+		} else {
+			LOG("Ecobee Setting '${name}' on thermostat ${statName} was successfully changed to '${value}' ('${sendValue}')", 2, child, 'info')
+		}
+        return true
+	} else {
+		if (atomicState.connected?.toString() != 'full') {
+			LOG("API connection lost, queueing failed call to setEcobeeSetting(${child}, ${deviceId})", 1, child, 'warn')
+			queueFailedCall('setEcobeeSetting', child.device.deviceNetworkId, 3, deviceId, name, value)
+		}
+		return false
+	}
 }
 
 // API Helper Functions
@@ -5219,6 +5256,53 @@ def runEvery3Minutes(handler) {
     int randomSeconds = rand.nextInt(59)
 	schedule("${randomSeconds} 0/3 * * * ?", handler)
 }
+
+// Alert settings
+@Field final List alertNamesList = 		['auxOutdoorTempAlertNotify','auxRuntimeAlert','auxRuntimeAlertNotify','coldTempAlertEnabled','disableAlertsOnIdt','disableHeatPumpAlerts','hotTempAlertEnabled','humidityAlertNotify',
+										 'humidityHighAlert','humidityLowAlert','randomStartDelayCool','randomStartDelayHeat','tempAlertNotify','ventilatorOffDateTime','wifiOfflineAlert'
+										]
+// Settings (attributes)
+@Field final List settingsNamesList = 	['autoAway','auxOutdoorTempAlertNotifyTechnician','auxRuntimeAlertNotifyTechnician','backlightOffDuringSleep','backlightOffTime','backlightOnIntensity','backlightSleepIntensity',
+										 'compressorProtectionMinTime','compressorProtectionMinTime','condensationAvoid','coolingLockout','dehumidifyWhenHeating','dehumidifyWithAC','disablePreCooling','disablePreHeating','drAccept',
+										 'eiLocation','electricityBillCycleMonths','electricityBillStartMonth','electricityBillingDayOfMonth','enableElectricityBillAlert','enableProjectedElectricityBillAlert','fanControlRequired',
+										 'followMeComfort','groupName','groupRef','groupSetting','hasBoiler','hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasUVFilter','heatPumpGroundWater','heatPumpReversalOnCool',
+										 'holdAction','humidityAlertNotify','humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired','isRentalProperty','isVentilatorTimerOn','lastServiceDate',
+										 'locale','monthlyElectricityBillLimit','monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation','soundAlertVolume','soundTickVolume',
+										 'stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','userAccessCode','userAccessSetting','ventilatorDehumidify','ventilatorFreeCooling',
+										 'ventilatorMinOnTimeAway','ventilatorMinOnTimeHome','ventilatorOffDateTime','ventilatorType'
+										]
+// Temperature Settings
+@Field final List tempSettingsList = 	['auxMaxOutdoorTemp','auxOutdoorTempAlert','coldTempAlert','compressorProtectionMinTemp','compressorProtectionMinTemp','coolMaxTemp','coolMinTemp',
+										 'dehumidifyOvercoolOffset','heatMaxTemp','heatMinTemp','hotTempAlert','maxSetBack','maxSetForward','quickSaveSetBack','quickSaveSetForward','stage1CoolingDifferentialTemp',
+										 'stage1HeatingDifferentialTemp','tempCorrection'
+										]
+// Settings that require Temperature Conversion (callers use native C/F temps)
+@Field final List EcobeeTempSettings = 	['auxMaxOutdoorTemp','auxOutdoorTempAlert','compressorProtectionMinTemp','coldTempAlert','coolRangeHigh','coolRangeLow','dehumidifyOvercoolOffset',
+										 'heatCoolMinDelta','heatRangeHigh','heatRangeLow','hotTempAlert','maxSetBack','maxSetForward','quickSaveSetBack','quickSaveSetForward','stage1CoolingDifferentialTemp',
+										 'stage1HeatingDifferentialTemp','tempCorrection'
+										]
+// Settings that are passed directly as Strings (including numbers and logicals)
+@Field final List EcobeeSettings = 		['autoAway','auxOutdoorTempAlertNotifyTechnician','auxRuntimeAlertNotifyTechnician','backlightOffDuringSleep','backlightOffTime','backlightOnIntensity','backlightSleepIntensity',
+										 'coldTempAlertEnabled','compressorProtectionMinTime','compressorProtectionMinTime','condensationAvoid','coolingLockout','dehumidifyWhenHeating','dehumidifyWithAC',
+										 'disablePreCooling','disablePreHeating','drAccept','eiLocation','electricityBillCycleMonths','electricityBillStartMonth','electricityBillingDayOfMonth','enableElectricityBillAlert',
+										 'enableProjectedElectricityBillAlert','fanControlRequired','followMeComfort','groupName','groupRef','groupSetting','heatPumpReversalOnCool','holdAction','hotTempAlertEnabled','humidityAlertNotify',
+										 'humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired','isRentalProperty','isVentilatorTimerOn','lastServiceDate','locale',
+										 'monthlyElectricityBillLimit','monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation','soundAlertVolume','soundTickVolume',
+										 'stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','ventilatorDehumidify','ventilatorFreeCooling','ventilatorMinOnTimeAway','ventilatorMinOnTimeHome'
+										]
+// Commands that are Read Only and cannot be changed
+@Field final List EcobeeROSettings =	['coolMaxTemp','coolMinTemp','coolStages','hasBoiler','hasDehumidifier','hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasHumidifier','hasUVFilter','heatMaxTemp','heatMinTemp',
+										 'heatPumpGroundWater','heatStages','userAccessCode','userAccessSetting'
+										]
+// Commands that must be changed only by specific commands
+@Field final List EcobeeDirectSettings= [
+											[name: 'fanMinOnTime',		command: 'setFanMinOnTime(minutes)'],
+											[name: 'dehumidifierMode',	command: 'setDehumidifierMode(mode)'],
+											[name: 'dehumidifierLevel', command: 'setDehumiditySetpoint(setpoint)'],
+											[name: 'humidity',			command: 'setHumiditySetpoint(setpoint)'],
+											[name: 'humidifierMode',	command: 'setHumidifierMode(mode)']
+										]
+
 
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
