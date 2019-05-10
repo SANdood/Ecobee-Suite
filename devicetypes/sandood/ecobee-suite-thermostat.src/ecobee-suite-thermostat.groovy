@@ -53,7 +53,7 @@
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00k" }
+def getVersionNum() { return "1.7.00l" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -310,7 +310,7 @@ metadata {
 		attribute 'userAccessSetting', 'string'			// Read Only
 		attribute 'vent', 'string'						// same as 'ventMode'
 		attribute 'ventMode', 'string'					// Ecobee actually calls it only 'vent'
-		attribute 'ventilatorDuhumidify', 'string'
+		attribute 'ventilatorDehumidify', 'string'
 		attribute 'ventilatorFreeCooling', 'string'
 		attribute 'ventilatorMinOnTime', 'number'
 		attribute 'ventilatorMinOnTimeAway', 'number'
