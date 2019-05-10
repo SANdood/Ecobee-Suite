@@ -2,6 +2,9 @@ Free Ecobee Suite, version: 1.6.**
 ======================================================
 Latest Updates Released 7 April, 2019 at 7:15am EDT
 
+## NEW: Universal Ecobee Suite
+BETA testing is underway - find the latest version here: https://github.com/SANdood/Ecobee-Suite/tree/universal-dev 
+
 ***NOTE: When updating/installing, you MUST include ALL of the Suite's components***
 
 ## Highlights
