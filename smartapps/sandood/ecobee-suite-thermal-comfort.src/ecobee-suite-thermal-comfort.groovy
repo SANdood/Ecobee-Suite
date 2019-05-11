@@ -351,7 +351,7 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
 	def delta = theThermostat.currentValue('heatCoolMinDelta')
 	def fixed
-	if ((settings.coolTemp - heatTemp) < delta) {
+	if ((coolTemp - heatTemp) < delta) {
 		fixed = false
 		// Uh-oh, the temps are too close together!
 		if (heatPmv == null) {
