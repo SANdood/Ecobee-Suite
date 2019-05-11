@@ -14,7 +14,7 @@
  *
  * 1.7.00 - Initial release
  */
-def getVersionNum() { return "1.7.00i" }
+def getVersionNum() { return "1.7.00m" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -147,7 +147,7 @@ def mainPage() {
                 	  multiple: true, required: false, options: getProgramsList(), submitOnChange: true)
                 if (settings.statModes && settings.thePrograms) {
                 	input(name: "enable", type: "enum", title: "Require Both or Either condition?", options: ['and':'Both (AND)', 'or':'Either (OR)'], required: true, 
-                    	  defaultValue: 'Either (OR)', multiple: false)
+                    	  defaultValue: 'or', multiple: false)
                 }
 				paragraph ''
         	}
@@ -307,21 +307,25 @@ def humidityUpdate( Integer humidity ) {
 
     def currentProgram = theThermostat.currentValue('currentProgram')
     def currentMode = theThermostat.currentValue('thermostatMode')
-    boolean isOK = false
-    if ((settings.thePrograms != []) && (currentProgram != null)) {
-        isOK = settings.thePrograms.contains(currentProgram)
-    }
-    if (isOK && settings.enable && (settings.enable == 'and')) {
-    	if ((settings.statModes != []) && (currentMode != null)) {
-        	isOK = settings.statModes.contains(currentMode)
-        } else {
-        	isOK = false
-        }
-    } else if (!isOK && settings.enable && (settings.enable == 'or') && (settings.statModes != []) && (currentMode != null)) {
-        isOK = settings.statModes.contains(currentMode)
-    }
+	def andOr = (settings.enable != null) ? settings.enable : 'or'
+	if ((settings.thePrograms == null) || (settings.statModes == null)) andOr = 'or'		// if they only provided one of them, ignore 'and'
+    boolean isOK = ((settings.thePrograms == null) && (settings.statModes == null)) ? true: false // isOK if both are null
+	if (!isOK) {
+		if ((settings.thePrograms != null) && (currentProgram != null)) {
+			isOK = settings.thePrograms.contains(currentProgram)
+		}
+		if (isOK && (andOr == 'and')) {
+			if ((settings.statModes != null) && (currentMode != null)) {
+				isOK = settings.statModes.contains(currentMode)
+			} else {
+				isOK = false
+			}
+		} else if (!isOK && (andOr == 'or') && (settings.statModes != null) && (currentMode != null)) {
+			isOK = settings.statModes.contains(currentMode)
+		}
+	}
     if (!isOK) {
-        LOG("${theThermostat.displayName}'s current Mode (${currentMode}) and Program (${currentProgram}) are both ignored, not adjusting", 3, null, "info")
+		LOG("${theThermostat.displayName}'s current Mode (${currentMode}/${settings.statModes}) ${settings.enable} Program (${currentProgram}/${settings.thePrograms}) don't match settings, not adjusting setpoints", 3, null, "info")
         return false
     }
 
@@ -335,19 +339,18 @@ def humidityUpdate( Integer humidity ) {
     if (settings.coolPmv) {
         coolSetpoint = calculateCoolSetpoint()
     }
-	if ((heatSetpoint != curHeat) && (coolSetpoint != curCool)) {
+	if ((heatSetpoint != curHeat) || (coolSetpoint != curCool)) {
     	changeSetpoints(currentProgram, heatSetpoint, coolSetpoint)
 	} else {
 		// Could be outside of the allowed range, or just too small of a difference...
-		LOG("Humidity changed, but the calculated Thermal Comfort setpoint(s) are the same as current setpoint(s)", 2, null, 'info')
+		LOG("The calculated Thermal Comfort setpoint(s) are the same as the current setpoints (${heatSetpoint}/${coolSetpoint})", 3, null, 'info')
 	}
 }
 
 private def changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
 	def msg = "Setting ${theThermostat.displayName}'s heatingSetpoint to ${heatTemp}°${unit} and coolingSetpoint to ${coolTemp}°${unit} for the ${program} program, because the relative humidity is now ${atomicState.humidity}%"
-	sendMessage( msg )
-	LOG(msg, 2, null, 'info')
+	if (settings.notify) { sendMessage( msg ); } else { LOG(msg, 2, null, 'info'); }
     theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
 }
 
@@ -436,19 +439,25 @@ private def calculateHeatSetpoint() {
     def clo = settings.heatClo=='custom' ? settings.heatCloCustom : settings.heatClo as BigDecimal
 
     def units = getTemperatureScale()
+	def step = (units == 'C') ? 0.5 : 1.0
     def range = getHeatRange()
     def min = range[0]
     def max = range[1]
     def preferred = max
+    def goodSP = preferred
     def pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
+    def goodPMV = pmv
     while (preferred >= min && pmv >= targetPmv) {
-        preferred = preferred - 1
+    	goodSP = preferred
+        preferred = preferred - step
+        goodPMV = pmv
         pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     }
-    preferred = preferred + 1
-    pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
-    LOG("Heating preferred set point: ${preferred}°${units} (PMV: ${pmv})",3,null,'info')
-    return preferred
+    //preferred = preferred + step
+	//if (preferred > max) preferred = max
+    //pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
+    LOG("Heating preferred set point: ${goodSP}°${units} (PMV: ${goodPMV})",3,null,'info')
+    return goodSP
 }
 
 private def calculateCoolSetpoint() {
@@ -457,19 +466,25 @@ private def calculateCoolSetpoint() {
     def clo = settings.coolClo=='custom' ? settings.coolCloCustom : settings.coolClo as BigDecimal
 
     def units = getTemperatureScale()
+	def step = (units == 'C') ? 0.5 : 1.0
     def range = getCoolRange()
     def min = range[0]
     def max = range[1]
     def preferred = min
+    def goodSP = preferred
     def pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
+    def goodPMV = pmv
     while (preferred <= max && pmv <= targetPmv) {
-        preferred = preferred + 1
+    	goodSP = preferred
+        preferred = preferred + step
+        goodPMV = pmv
         pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     }
-    preferred = preferred - 1
-    pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
-    LOG("Cooling preferred set point: ${preferred}°${units} (PMV: ${pmv})",3,null,'info')
-    return preferred
+    // preferred = preferred - step
+	// if (preferred < min) preferred = min
+    // pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
+    LOG("Cooling preferred set point: ${goodSP}°${units} (PMV: ${goodPMV})",3,null,'info')
+    return goodSP
 }
 
 def getHeatRange() {
@@ -493,7 +508,7 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 }
 
 private def sendMessage(notificationMessage) {
-	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
+	LOG("Notification Message (notify=${settings.notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (isST) {
