@@ -53,7 +53,7 @@
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00l" }
+def getVersionNum() { return "1.7.00m" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2931,7 +2931,7 @@ def setProgramSetpoints(programName, heatingSetpoint, coolingSetpoint) {
 	def scale = getTemperatureScale()
 	LOG("setProgramSetpoints( ${programName}, heatSP: ${heatingSetpoint}°${scale}, coolSP: ${coolingSetpoint}°${scale} )",2,null,'info')
 	def deviceId = getDeviceId()
-	if (parent.setProgramSetpoints( this, deviceId, programName, heatingSetpoint, coolingSetpoint )) {
+	if (parent.setProgramSetpoints( this, deviceId as String, programName as String, heatingSetpoint as String, coolingSetpoint as String)) {
 		if (device.currentValue('currentProgram') == programName) {
 			def updates = []
 			if (coolingSetpoint) updates << ['coolingSetpoint': coolingSetpoint]
