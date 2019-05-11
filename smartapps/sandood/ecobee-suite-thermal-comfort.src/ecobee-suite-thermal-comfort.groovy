@@ -349,30 +349,33 @@ def humidityUpdate( Integer humidity ) {
 
 private def changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
-	def delta = theThermostat.currentValue('heatCoolMinDelta')
+	def delta = theThermostat.currentValue('heatCoolMinDelta') as BigDecimal
 	def fixed
-	if ((coolTemp - heatTemp) < delta) {
-		fixed = false
+	def ht = heatTemp.toBigDecimal()
+	def ct = coolTemp.toBigDecimal()
+	log.debug "${ht} - ${ct}"
+	if ((ht >= ct) || ((ct - ht) < delta)) {
+		fixed = null
 		// Uh-oh, the temps are too close together!
 		if (heatPmv == null) {
 			// We are only adjusting cool, so move heat out of the way
-			heatTemp = coolTemp - delta
-			fixed = true
+			ht = ct - delta
+			fixed = 'heat'
 		} else if (settings.coolPmv == null) {
 			// We are only adjusting heat, so move cool out of the way
-			coolTemp = heatTemp + delta
-			fixed = true
+			ct = ht + delta
+			fixed = 'cool'
 		}
 		if (!fixed) {
 			if ((settings.statModes != null) && (settings.statModes.size() == 1)) {
 				if (settings.statModes.contains('cool')) {
 					// we are ONLY adjusting PMV in cool mode, move the heat setpoint
-					heatTemp = coolTemp - delta
-					fixed = true
+					ht = ct - delta
+					fixed = 'heat'
 				} else if (settings.statModes.contains('heat')) {
 					// we are ONLY adjusting PMV in heat mode, move the cool setpoint
-					coolTemp = heatTemp + delta
-					fixed = true
+					ct = ht + delta
+					fixed = 'cool'
 				}
 			}
 		}
@@ -381,11 +384,11 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 			def lastMode = theThermostat.currentValue('lastOpState')	// what did the thermostat most recently do?
 			if (lastMode != null) {
 				if (lastMode.contains('cool')) {
-					heatTemp = coolTemp - delta							// move the other one
-					fixed = true
+					ht = ct - delta							// move the other one
+					fixed = 'heat'
 				} else if (lastMode.contains('heat')) {
-					coolTemp = heatTemp + delta							
-					fixed = true
+					ct = ht + delta							
+					fixed = 'cool'
 				}
 			}
 		}
@@ -393,9 +396,13 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 			// Nothing left to try - we're screwed!!!!
 			LOG("Unable to adjust PMV, calculated setpoints are too close together (less than ${delta}°${unit}", 1, null, 'warn')
 			return
+		} else {
+			coolTemp = ct
+			heatTemp = ht
 		}
 	}
-	def msg = "Setting ${theThermostat.displayName}'s heatingSetpoint to ${heatTemp}°${unit} and coolingSetpoint to ${coolTemp}°${unit} for the ${program} program, because the relative humidity is now ${atomicState.humidity}%${fixed?' (fixed)':''}"
+	def msg = "Setting ${theThermostat.displayName}'s heatingSetpoint to ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and coolingSetpoint to " +
+			  "${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}for the ${program} program, because the relative humidity is now ${atomicState.humidity}%"
 	if (settings.notify) { sendMessage( msg ); } else { LOG(msg, 2, null, 'info'); }
     theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
 }
