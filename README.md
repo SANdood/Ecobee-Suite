@@ -3,7 +3,7 @@ Free Ecobee Suite, version: 1.7.**
 Hubitat users now can utilize the latest functionality of my Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
 # WARNING: Work in progress - Universal Ecobee Suite
-***Latest Update: v1.7.00k - posted 10 May 2019 at 2:30pm EDT***
+***Latest Update: v1.7.00klmn - posted 11 May 2019 at 9:20am EDT***
 
 ## Highlights
 Single code base supporting both SmartThings and Hubitat
