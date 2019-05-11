@@ -53,7 +53,7 @@
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00m" }
+def getVersionNum() { return "1.7.00n" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2771,7 +2771,7 @@ void setHumidifierMode(String value) {
 	}
 }
 
-void setHumiditySetpoint(Integer setpoint) {
+void setHumiditySetpoint(setpoint) {
 	LOG("Humidity setpoint change to ${setpoint} requested", 2, null, 'trace')
 	def dehumSP = device.currentValue('dehumiditySetpoint')
 	if ((dehumSP != null) && dehumSP.toString().isNumber() && (dehumSP < setpoint)) LOG('Request to set Humidify Setpoint higher than Dehumidify Setpoint',1,null,'warn')
@@ -2782,7 +2782,7 @@ void sHumSP(data) {
 	LOG("Setting humidity setpoint to: ${data.setpoint}",4,null,'trace')
 	setHumiditySetpointDelay(data.setpoint)
 }
-void setHumiditySetpointDelay(Integer setpoint) {
+void setHumiditySetpointDelay(setpoint) {
 	LOG("setHumiditySetpointDelay ${setpoint}",4,null,'trace')
 	// verify that the stat hasDehumidifer
 	def hasHumidifier = device.currentValue('hasHumidifier')
@@ -2839,7 +2839,7 @@ void setDehumidifierMode(String value) {
 		LOG("Changing ${device.displayName}'s dehumidifier to ${value} failed, dehumidifier is still ${device.currentValue('humidifierMode')}", 1, null, 'warn')
 	}
 }
-void setDehumiditySetpoint(Integer setpoint) {
+void setDehumiditySetpoint(setpoint) {
 	LOG("Dehumidity setpoint change to ${setpoint} requested", 2, null, 'trace')
 	def humSP = device.currentValue('humiditySetpoint')
 	if ((humSP != null) && humSP.toString().isNumber() && (humSP > setpoint)) LOG('Request to set Dehumidify Setpoint lower than Humidify Setpoint',1,null,'warn')
@@ -2850,7 +2850,7 @@ void sDehumSP(data) {
 	LOG("Setting dehumidity setpoint to: ${data.setpoint}",4,null,'trace')
 	setDehumiditySetpointDelay(data.setpoint)
 }
-void setDehumiditySetpointDelay(Integer setpoint) {
+void setDehumiditySetpointDelay(setpoint) {
 	LOG("setDehumiditySetpointDelay ${setpoint}",4,null,'trace')
 	// verify that the stat hasDehumidifer
 	def hasDehumidifier = device.currentValue('hasDehumidifier')
@@ -2943,8 +2943,16 @@ def setProgramSetpoints(programName, heatingSetpoint, coolingSetpoint) {
 }
 
 def setEcobeeSetting( String name, value ) {
-	String deviceId = getDeviceId()
-	if (parent.setEcobeeSetting( this, deviceId, name, value as String)) {
+	def result
+	def dItem = EcobeeDirectSettings.find{ it.name == name }
+	if (dItem != null) {
+		LOG("setEcobeeSetting( ${name}, ${value} ) - calling ${dItem.command}( ${value} )", 2, child, 'info')
+		result = "${dItem.command}"(value)
+	} else {
+		String deviceId = getDeviceId()
+		result = parent.setEcobeeSetting( this, deviceId, name, value as String)
+	}
+	if (result == true){
 		LOG("setEcobeeSetting( ${name}, ${value} ) completed.", 2, null, 'info')
 	} else {
 		LOG("setEcobeeSetting( ${name}, ${value} ) FAILED.", 1, null, 'warn')
@@ -3252,6 +3260,14 @@ def getStockTempColors() {
 		[value: 96, color: "#bc2323"]
 	]
 }
+// Ecobee Settings that must be changed only by specific commands
+@Field final List EcobeeDirectSettings= [
+											[name: 'fanMinOnTime',		command: 'setFanMinOnTime'],
+											[name: 'dehumidifierMode',	command: 'setDehumidifierMode'],
+											[name: 'dehumidifierLevel', command: 'setDehumiditySetpoint'],
+											[name: 'humidity',			command: 'setHumiditySetpoint'],
+											[name: 'humidifierMode',	command: 'setHumidifierMode']
+										]
 
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
