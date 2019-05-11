@@ -14,7 +14,7 @@
  *
  * 1.7.00 - Initial release
  */
-def getVersionNum() { return "1.7.00m" }
+def getVersionNum() { return "1.7.00n" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -293,13 +293,13 @@ def humidityUpdate( humidity ) {
 	if (humidity?.toString().isNumber()) {
     	humidityUpdate(humidity as Integer)
     } else {
-    	return false
+    	return
     }
 }
 def humidityUpdate( Integer humidity ) {
     if (humidity == null) {
     	log("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
-        return false
+        return
     }
 
     atomicState.humidity = humidity
@@ -326,17 +326,17 @@ def humidityUpdate( Integer humidity ) {
 	}
     if (!isOK) {
 		LOG("${theThermostat.displayName}'s current Mode (${currentMode}/${settings.statModes}) ${settings.enable} Program (${currentProgram}/${settings.thePrograms}) don't match settings, not adjusting setpoints", 3, null, "info")
-        return false
+        return
     }
 
     def heatSetpoint = theThermostat.currentValue('heatingSetpoint')
     def coolSetpoint = theThermostat.currentValue('coolingSetpoint')
 	def curHeat = heatSetpoint
 	def curCool = coolSetpoint
-    if (settings.heatPmv) {
+    if (settings.heatPmv != null) {
         heatSetpoint = calculateHeatSetpoint()
     }
-    if (settings.coolPmv) {
+    if (settings.coolPmv != null) {
         coolSetpoint = calculateCoolSetpoint()
     }
 	if ((heatSetpoint != curHeat) || (coolSetpoint != curCool)) {
@@ -349,7 +349,53 @@ def humidityUpdate( Integer humidity ) {
 
 private def changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
-	def msg = "Setting ${theThermostat.displayName}'s heatingSetpoint to ${heatTemp}°${unit} and coolingSetpoint to ${coolTemp}°${unit} for the ${program} program, because the relative humidity is now ${atomicState.humidity}%"
+	def delta = theThermostat.currentValue('heatCoolMinDelta')
+	def fixed
+	if ((settings.coolTemp - heatTemp) < delta) {
+		fixed = false
+		// Uh-oh, the temps are too close together!
+		if (heatPmv == null) {
+			// We are only adjusting cool, so move heat out of the way
+			heatTemp = coolTemp - delta
+			fixed = true
+		} else if (settings.coolPmv == null) {
+			// We are only adjusting heat, so move cool out of the way
+			coolTemp = heatTemp + delta
+			fixed = true
+		}
+		if (!fixed) {
+			if ((settings.statModes != null) && (settings.statModes.size() == 1)) {
+				if (settings.statModes.contains('cool')) {
+					// we are ONLY adjusting PMV in cool mode, move the heat setpoint
+					heatTemp = coolTemp - delta
+					fixed = true
+				} else if (settings.statModes.contains('heat')) {
+					// we are ONLY adjusting PMV in heat mode, move the cool setpoint
+					coolTemp = heatTemp + delta
+					fixed = true
+				}
+			}
+		}
+		if (!fixed) {
+			// Hmmm...looks like we're adjusting both, and so we don't know which to fix
+			def lastMode = theThermostat.currentValue('lastOpState')	// what did the thermostat most recently do?
+			if (lastMode != null) {
+				if (lastMode.contains('cool')) {
+					heatTemp = coolTemp - delta							// move the other one
+					fixed = true
+				} else if (lastMode.contains('heat')) {
+					coolTemp = heatTemp + delta							
+					fixed = true
+				}
+			}
+		}
+		if (!fixed) {
+			// Nothing left to try - we're screwed!!!!
+			LOG("Unable to adjust PMV, calculated setpoints are too close together (less than ${delta}°${unit}", 1, null, 'warn')
+			return
+		}
+	}
+	def msg = "Setting ${theThermostat.displayName}'s heatingSetpoint to ${heatTemp}°${unit} and coolingSetpoint to ${coolTemp}°${unit} for the ${program} program, because the relative humidity is now ${atomicState.humidity}%${fixed?' (fixed)':''}"
 	if (settings.notify) { sendMessage( msg ); } else { LOG(msg, 2, null, 'info'); }
     theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
 }
