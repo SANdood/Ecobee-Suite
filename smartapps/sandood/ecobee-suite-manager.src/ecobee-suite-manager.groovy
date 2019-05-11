@@ -45,7 +45,7 @@
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00- Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00k" }
+def getVersionNum() { return "1.7.00m" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -4376,7 +4376,7 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
     return true
 }
 
-def setProgramSetpoints(child, deviceId, String programName, String heatingSetpoint = null, String coolingSetpoint = null) {
+def setProgramSetpoints(child, String deviceId, String programName, String heatingSetpoint, String coolingSetpoint) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4387,7 +4387,7 @@ def setProgramSetpoints(child, deviceId, String programName, String heatingSetpo
     }
     
 	String statName = getThermostatName( deviceId )
-	LOG("setProgramSetpoints(${deviceId} (${statName}): ${programName} heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})",3,child,'trace')
+	LOG("setProgramSetpoints(${deviceId} (${statName}): ${programName}, heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})", 2, child, 'trace')
     
 	def program
     def climateChange = atomicState.climateChange
@@ -4403,9 +4403,11 @@ def setProgramSetpoints(child, deviceId, String programName, String heatingSetpo
     
     // convert C temps to F
     def isMetric = (getTemperatureScale() == "C")
-	def ht = ((heatingSetpoint != null) && heatingSetpoint.isNumber()) ? (roundIt((isMetric ? (cToF(heatingSetpoint) * 10.0) : (heatingSetpoint * 10.0)), 0)) : null		// better precision using BigDecimal round-half-up
-	def ct = ((coolingSetpoint != null) && coolingSetpoint.isNumber()) ? (roundIt((isMetric ? (cToF(coolingSetpoint) * 10.0) : (coolingSetpoint * 10.0)), 0)) : null
-    
+	// log.debug "hs: ${heatingSetpoint}, null? ${(heatingSetpoint != null)}, bigD? ${heatingSetpoint.isBigDecimal()}, *10: ${(heatingSetpoint * 10.0)}" // , ri: ${roundIt((heatingSetpoint * 10.0), 0)}"
+	def ht = ((heatingSetpoint != null) && heatingSetpoint.isBigDecimal() ) ? (roundIt((isMetric ? (cToF(heatingSetpoint.toBigDecimal()) * 10.0) : (heatingSetpoint.toBigDecimal() * 10.0)), 0)) : null		// better precision using BigDecimal round-half-up
+	def ct = ((coolingSetpoint != null) && coolingSetpoint.isBigDecimal() ) ? (roundIt((isMetric ? (cToF(coolingSetpoint.toBigDecimal()) * 10.0) : (coolingSetpoint.toBigDecimal() * 10.0)), 0)) : null
+	// log.debug "ht: ${ht}, ct: ${ct}"
+	
     // enforce the minimum delta
     def delta = atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null
     if ((delta != null) && (ht != null) && (ct != null) && ((ct - ht) < delta)) {
@@ -4433,7 +4435,7 @@ def setProgramSetpoints(child, deviceId, String programName, String heatingSetpo
             program.climates[c].coolTemp = ct
             climateChange[deviceId] = program
             atomicState.climateChange = climateChange		// save for later 
-            if (updateClimatesDirect( deviceId, child )) {
+            if (updateClimatesDirect( child, deviceId )) {
             	LOG("setProgramSetpoints(): ${programName} setpoints changed successfully", 2, child, 'info')
             	return true
             } else {
@@ -4513,7 +4515,7 @@ def setEcobeeSetting(child, String deviceId, String name, String value) {
 		// Is a temperature setting - need to convert to F*10 for Ecobee
 		found = true
 		def isMetric = (getTemperatureScale() == "C")
-		sendValue = ((value != null) && value.isBigDecimal()) ? (roundIt((isMetric ? (cToF(value) * 10.0) : ((value as BigDecimal) * 10.0)), 0)) : null
+		sendValue = ((value != null) && value.isBigDecimal()) ? (roundIt((isMetric ? (cToF(value as BigDecimal) * 10.0) : ((value as BigDecimal) * 10.0)), 0)) : null
 	} else if (EcobeeSettings.contains(name)) {
 		found = true
 		sendValue = value.trim()	// leniency is kindness
