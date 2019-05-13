@@ -18,7 +18,7 @@ def getVersionNum() { return "1.7.00p" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
-
+ 
 definition(
 	name: "ecobee Suite Thermal Comfort",
 	namespace: "sandood",
