@@ -15,7 +15,7 @@
  * <snip>
  * 	1.7.00 - Initial Release
  */
-def getVersionNum() { return "1.7.00i" }
+def getVersionNum() { return "1.7.00p" }
 private def getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -293,7 +293,7 @@ private def sendMessage(notificationMessage) {
 	if (isST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
-		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
 }
 
