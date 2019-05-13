@@ -14,7 +14,7 @@
  *
  * 1.7.00 - Initial release
  */
-def getVersionNum() { return "1.7.00n" }
+def getVersionNum() { return "1.7.00p" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -239,8 +239,8 @@ def initialize() {
 
     subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
     subscribe(settings.theThermostat, 'currentProgram', modeOrProgramHandler)
-    if (thePrograms) subscribe(theThermostat, "currentProgram", modeOrProgramHandler)
-    if (statModes) subscribe(theThermostat, "thermostatMode", modeOrProgramHandler)
+    // if (thePrograms) subscribe(settings.theThermostat, "currentProgram", modeOrProgramHandler)
+    if (statModes) subscribe(settings.theThermostat, "thermostatMode", modeOrProgramHandler)
 
     def h = settings.humidistat.currentHumidity
     atomicState.humidity = h
@@ -305,8 +305,8 @@ def humidityUpdate( Integer humidity ) {
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
 
-    def currentProgram = theThermostat.currentValue('currentProgram')
-    def currentMode = theThermostat.currentValue('thermostatMode')
+    def currentProgram = settings.theThermostat.currentValue('currentProgram')
+    def currentMode = settings.theThermostat.currentValue('thermostatMode')
 	def andOr = (settings.enable != null) ? settings.enable : 'or'
 	if ((settings.thePrograms == null) || (settings.statModes == null)) andOr = 'or'		// if they only provided one of them, ignore 'and'
     boolean isOK = ((settings.thePrograms == null) && (settings.statModes == null)) ? true: false // isOK if both are null
@@ -325,12 +325,12 @@ def humidityUpdate( Integer humidity ) {
 		}
 	}
     if (!isOK) {
-		LOG("${theThermostat.displayName}'s current Mode (${currentMode}/${settings.statModes}) ${settings.enable} Program (${currentProgram}/${settings.thePrograms}) don't match settings, not adjusting setpoints", 3, null, "info")
+		LOG("${settings.theThermostat.displayName}'s current Mode (${currentMode}/${settings.statModes}) ${andOr} Program (${currentProgram}/${settings.thePrograms}) don't match settings, not adjusting setpoints", 3, null, "info")
         return
     }
 
-    def heatSetpoint = theThermostat.currentValue('heatingSetpoint')
-    def coolSetpoint = theThermostat.currentValue('coolingSetpoint')
+    def heatSetpoint = settings.theThermostat.currentValue('heatingSetpoint')
+    def coolSetpoint = settings.theThermostat.currentValue('coolingSetpoint')
 	def curHeat = heatSetpoint
 	def curCool = coolSetpoint
     if (settings.heatPmv != null) {
@@ -349,15 +349,15 @@ def humidityUpdate( Integer humidity ) {
 
 private def changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
-	def delta = theThermostat.currentValue('heatCoolMinDelta') as BigDecimal
+	def delta = settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal
 	def fixed
 	def ht = heatTemp.toBigDecimal()
 	def ct = coolTemp.toBigDecimal()
 	log.debug "${ht} - ${ct}"
-	if ((ht >= ct) || ((ct - ht) < delta)) {
+	if ((ct - ht) < delta) {
 		fixed = null
 		// Uh-oh, the temps are too close together!
-		if (heatPmv == null) {
+		if (settings.heatPmv == null) {
 			// We are only adjusting cool, so move heat out of the way
 			ht = ct - delta
 			fixed = 'heat'
@@ -381,7 +381,7 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 		}
 		if (!fixed) {
 			// Hmmm...looks like we're adjusting both, and so we don't know which to fix
-			def lastMode = theThermostat.currentValue('lastOpState')	// what did the thermostat most recently do?
+			def lastMode = settings.theThermostat.currentValue('lastOpState')	// what did the thermostat most recently do?
 			if (lastMode != null) {
 				if (lastMode.contains('cool')) {
 					ht = ct - delta							// move the other one
@@ -401,9 +401,9 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 			heatTemp = ht
 		}
 	}
-	def msg = "Setting ${theThermostat.displayName}'s heatingSetpoint to ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and coolingSetpoint to " +
+	def msg = "Setting ${settings.theThermostat.displayName}'s heatingSetpoint to ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and coolingSetpoint to " +
 			  "${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}for the ${program} program, because the relative humidity is now ${atomicState.humidity}%"
-	if (settings.notify) { sendMessage( msg ); } else { LOG(msg, 2, null, 'info'); }
+	sendMessage( msg )
     theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
 }
 
@@ -541,14 +541,14 @@ private def calculateCoolSetpoint() {
 }
 
 def getHeatRange() {
-    def low = theThermostat.currentValue('heatRangeLow')
-    def high = theThermostat.currentValue('heatRangeHigh')
+    def low = settings.theThermostat.currentValue('heatRangeLow')
+    def high = settings.theThermostat.currentValue('heatRangeHigh')
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
 def getCoolRange() {
-    def low = theThermostat.currentValue('coolRangeLow')
-    def high = theThermostat.currentValue('coolRangeHigh')
+    def low = settings.theThermostat.currentValue('coolRangeLow')
+    def high = settings.theThermostat.currentValue('coolRangeHigh')
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
@@ -634,7 +634,7 @@ private def sendMessage(notificationMessage) {
 	if (isST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
-		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
 }
 
