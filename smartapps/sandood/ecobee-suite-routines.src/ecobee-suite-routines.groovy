@@ -30,7 +30,7 @@
  *	1.6.13 - Use 'fanAuto' if fanMinutes is explicitly set to 0
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00p" }
+def getVersionNum() { return "1.7.00q" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -178,7 +178,7 @@ def mainPage() {
                     } // End else Program --> Mode/Routine
 					// switches
 					paragraph ''
-					input(name: 'doneSwitches', type: 'capability.switch', title: "Also change these switches (optional)...", multiple: true, submitOnChange: true)
+					input(name: 'doneSwitches', type: 'capability.switch', title: "Also change these switches (optional)", required: false, multiple: true, submitOnChange: true)
 					if (settings.doneSwitches) {
 						def s = (settings.doneSwitches.size() > 1)
 						input(name: "doneOn", type: "enum", title: "To be...", required: true, multiple: false, defaultValue: 'off', options: ["on","off"], submitOnChange: true)
