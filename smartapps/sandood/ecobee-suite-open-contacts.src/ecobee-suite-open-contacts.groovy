@@ -42,7 +42,7 @@
  *	1.6.17 - Minor text edits
  *	1.7.00 - Universal release supporting both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00i" }
+def getVersionNum() { return "1.7.00p" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -732,7 +732,7 @@ private def sendMessage(notificationMessage) {
 				}
 			}
 		}
-		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
 }
 
