@@ -30,14 +30,14 @@
  *	1.6.13 - Use 'fanAuto' if fanMinutes is explicitly set to 0
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00i" }
-private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+def getVersionNum() { return "1.7.00p" }
+private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Routines",
 	namespace: "sandood",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nChange Ecobee Programs based on ${isST?'SmartThings Routine execution or':'Hubitat'} Mode changes, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
+	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nChange Ecobee Programs based on ${isST?'SmartThings Routine execution or':'Hubitat'} Mode changes, Switch(es) state change, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
 	category: "Convenience",
 	parent: "sandood:Ecobee Suite Manager",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -54,8 +54,8 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
 		section(title: '') {						// Hubitat doesn't have "Routines" yet
-        	label title: "Name for this Mode${isST?'/Routine':''}/Program Helper", required: true, defaultValue: "Mode${isST?'/Routine':''}/Program"
-			if (isHE && !app.label) app.updateLabel("Mode${isST?'/Routine':''}/Program")
+        	label title: "Name for this Mode${isST?'/Routine':''}/Switches/Program Helper", required: true, defaultValue: "Mode${isST?'/Routine':''}/Program"
+			if (isHE && !app.label) app.updateLabel("Mode${isST?'/Routine':''}/Switches/Program")
         	if(settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to activate handler."
             } else {
@@ -66,8 +66,8 @@ def mainPage() {
         if (!settings?.tempDisable && (settings?.myThermostats?.size()>0)) {
 			section(title: "Select Trigger") {
         		// Settings option for using Mode or Routine
-				input(name: "modeOrRoutine", title: "Use Mode change${isST?', Routine execution':''} or Ecobee Program change: ", type: "enum", required: true, multiple: false, 
-					  options:(isST?["Mode", "Routine", "Ecobee Program"]:["Mode","Ecobee Program"]), submitOnChange: true)
+				input(name: "modeOrRoutine", title: "Use Mode change${isST?', Routine execution':''}, one or more Switch(es), or Ecobee Program change: ", type: "enum", required: true, multiple: false, 
+					  options:(isST?["Mode","Routine","Switch(es)","Ecobee Program"]:["Mode","Switch(es)","Ecobee Program"]), submitOnChange: true)
 				paragraph ''
 			}
         
@@ -89,10 +89,24 @@ def mainPage() {
 						LOG("Actions found: ${actions}", 4)
 						// use the actions as the options for an enum input
                         section(title: "Routines") {
-							input(name:"action", type:"enum", title: "When these Routines execute: ", options: actions, required: true, multiple: true)
+							input(name: "action", type: "enum", title: "When these Routines execute: ", options: actions, required: true, multiple: true)
 							paragraph ''
                         }
-					} // End if (actions)
+					}
+				} else if (settings.modeOrRoutine == "Switch(es)") {
+					section(title: "Switches") {
+						input(name: 'startSwitches', type: 'capability.switch', required: true, title: 'When any of these switches...', multiple: true, submitOnChange: true)
+						if (settings.startSwitches) {
+							def s = (settings.startSwitches.size() > 1)
+							input(name: "startOn", type: "enum", title: "${s?'Are':'Is'} turned:", required: true, multiple: false, options: ["on","off"], submitOnChange: true)
+							if (settings.startOn != null) {
+								input(name: "startOff", type: 'bool', title: "Turn the switch${s?'es':''} ${settings.startOn=='on'?'off':'on'} after running Actions?", defaultValue: 'false', submitOnChange: true)
+								String explain = "This Helper will run the Actions below when ${s?'any of these switches are':'the switch is'} turned ${settings.startOn?'On':'Off'}"
+								if (settings.startOff) explain += ", and the switch${s?'es':''} will be turned ${settings.startOn=='on'?'off':'on'} when the Actions are completed"
+								paragraph explain
+                    		}
+						}
+					}
                 } else if (settings.modeOrRoutine == "Ecobee Program") {
                 	def programs = getEcobeePrograms()
                     programs = programs + ["Vacation"]
@@ -141,14 +155,14 @@ def mainPage() {
             				} else if (settings.holdType=='Thermostat Setting') {
             					paragraph("Thermostat Setting at the time of hold request will be applied.")
             				} else if ((settings.holdType == null) || (settings.holdType == 'Ecobee Manager Setting') || (settings.holdType == 'Parent Ecobee (Connect) Setting')) {
-                            	paragraph("Ecobee Manager Setting at the time of hold request will be applied.")
+                            	paragraph("Ecobee Manager Setting at the time of hold request will be applied")
                             }
                         }
             	   		// input(name: "useSunriseSunset", title: "Also at Sunrise or Sunset? (optional) ", type: "enum", required: false, multiple: true, description: "Tap to choose...", metadata:[values:["Sunrise", "Sunset"]], submitOnChange: true)                
                 	} else {
 						input(name: "runModeOrRoutine", title: "Change Mode${isST?' or Execute Routine':' to'}:", type: "enum", required: true, multiple: false, defaultValue: "Mode", 
 							  options:(isST?["Mode", "Routine"]:["Mode"]), submitOnChange: true)
-                        if (settings.runModeOrRoutine == "Mode") {
+                        if ((settings.runModeOrRoutine == null) || (settings.runModeOrRoutine == "Mode")) {
     	                	input(name: "runMode", type: "mode", title: "Change Location Mode to: ", required: true, multiple: false)
                 		} else if (settings.runModeOrRoutine == "Routine") {
                 			// Routine based inputs
@@ -162,6 +176,14 @@ def mainPage() {
 							} // End if (actions)
                         } // End if (Routine)
                     } // End else Program --> Mode/Routine
+					// switches
+					paragraph ''
+					input(name: 'doneSwitches', type: 'capability.switch', title: "Also change these switches (optional)...", multiple: true, submitOnChange: true)
+					if (settings.doneSwitches) {
+						def s = (settings.doneSwitches.size() > 1)
+						input(name: "doneOn", type: "enum", title: "To be...", required: true, multiple: false, defaultValue: 'off', options: ["on","off"], submitOnChange: true)
+					}
+					
 					paragraph ''
 					input(name: "notify", type: "bool", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
 					paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
@@ -231,11 +253,13 @@ def initialize() {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
-
+	
 	if (settings.modeOrRoutine == "Routine") {
     	subscribe(location, "routineExecuted", changeProgramHandler)
     } else if (settings.modeOrRoutine == "Mode") {
     	subscribe(location, "mode", changeProgramHandler)
+	} else if (settings.modeOrRoutine == "Switch(es)") {
+		subscribe(startSwitches, "switch.${startOn}", changeSwitchHandler)
     } else { // has to be "Ecobee Program"
     	subscribe(myThermostats, "currentProgram", changeSTHandler)
     }
@@ -252,7 +276,7 @@ def initialize() {
 }
 
 private def normalizeSettings() {
-	if (settings.modeOrRoutine == "Ecobee Program") return		// no normalization required
+	if (["Switch(es)","Ecobee Program"].contains(settings.modeOrRoutine)) return		// no normalization required
     
 	// whichProgram
 	state.programParam = null
@@ -324,6 +348,29 @@ private def normalizeSettings() {
 	LOG("state.expectedEvent set to ${state.expectedEvent}", 4)
 }
 
+def changeSwitchHandler(evt) {
+	LOG("changeSwitchHandler() entered with evt: ${evt.name}: ${evt.value}", 5)
+	
+	if (settings.modeOrRoutine && (settings.modeOrRoutine != 'Ecobee Program')) {
+		changeProgramHandler( evt )
+	} else {
+		if ((settings.runModeOrRoutine == null) || (settings.runModeOrRoutine == "Mode")) {
+			LOG("Changing Mode to ${settings.runMode} because ${evt.device.displayName} was turned ${settings.startOn}",2,null,'info')
+			changeMode(true) 
+		} else {
+			LOG("Executing Routine ${settings.runAction} because ${evt.device.displayName} was turned ${settings.startOn}",2,null,'info')
+			runRoutine(true) 
+		}
+		if (settings.doneSwitches) changeSwitches()
+	}
+	
+	if (settings.startOff) {
+		settings.startSwitches.each {
+			it."${settings.startOn=='on'?'off()':'on()'}"
+		}
+	}
+}
+
 def changeSTHandler(evt) {
 	LOG("changeSTHandler() entered with evt: ${evt.name}: ${evt.value}", 5)
     if (settings.ctrlProgram.contains(evt.value)) {
@@ -347,45 +394,76 @@ def changeSTHandler(evt) {
             	runRoutine() 
             } else {
             	parent.poll()
-            	runIn(15, runRoutine, [overwrite: true]) 
+            	runIn(10, runRoutine, [overwrite: true]) 
             }
         }
+		if (settings.doneSwitches) runin(15, changeSwitches, [overwrite: true])
     }
 }
 
-def changeMode() {
-	if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
-        if (state.ecobeeThatChanged) {
-        	if (location.modes?.find {it.name == settings.runMode}) {
-                sendMessage("Changing Mode to ${settings.runMode} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}")
-    			location.setMode(settings.runMode)
-            } else {
-            	sendMessage("${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}, but requested Mode change (${settings.runMode}) is no longer supported by this location")
-            }
-        }
-    } else {
-    	sendMessage("${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}, and your location is already in the requested ${settings.runMode} mode")
-    }
-    state.ecobeeThatChanged = null
+def changeMode(aSwitch = null) {
+	if (aSwitch != null) {
+		if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
+			if (location.modes?.find {it.name == settings.runMode}) {
+				sendMessage("Changing Mode to ${settings.runMode} because ${aSwitch} was turned ${settings.startOn}")
+				location.setMode(settings.runMode)
+			} else {
+				sendMessage("${aSwitch} was turned ${settings.startOn}, but the requested Mode change (${settings.runMode}) is no longer supported by this location.")
+			}
+		} else {
+			sendMessage("${aSwitch} was turned ${settings.startOn}, and your location is already in the requested ${settings.runMode} mode.")
+		}
+	} else {
+		if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
+			if (state.ecobeeThatChanged) {
+				if (location.modes?.find {it.name == settings.runMode}) {
+					sendMessage("Changing Mode to ${settings.runMode} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}.")
+					location.setMode(settings.runMode)
+				} else {
+					sendMessage("${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}, but the requested Mode change (${settings.runMode}) is no longer supported by this location.")
+				}
+			}
+		} else {
+			sendMessage("${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}, and your location is already in the requested ${settings.runMode} mode.")
+		}
+		state.ecobeeThatChanged = null
+	}
 }
 
-def runRoutine() {
-	if (state.ecobeeThatChanged) sendMessage("Executing Routine ${settings.runAction} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}")
-    state.ecobeeThatChanged = null
+def runRoutine(aSwitch = null) {
+	if (aSwitch != null) {
+		sendMessage("Executing Routine ${settings.runAction} because ${aSwitch} was turned ${settings.startOn}.")
+	} else {
+		if (state.ecobeeThatChanged) {
+			sendMessage("Executing Routine ${settings.runAction} because ${state.ecobeeThatChanged} changed to ${state.ecobeeNewProgram}.")
+    		state.ecobeeThatChanged = null
+		}
+	}
 	location.helloHome?.execute(settings.runAction)
+}
+
+def changeSwitches() {
+	if (settings.doneSwitches) {
+		settings.doneSwitches.each() {
+			it."${doneOn}()"
+		}
+		def s = settings.doneSwitches.size() > 1
+		sendMessage("Plus, I made sure that the ${s?'switches':'switch'} ${settings.doneSwitches.toString()[1..-2]} ${s?'are all':'is'} ${settings.doneOn}.")
+	}
 }
 
 def changeProgramHandler(evt) {
 	LOG("changeProgramHander() entered with evt: ${evt.name}: ${evt.value}", 5)
 	
-    def gotEvent = (settings.modeOrRoutine == "Routine") ? evt.displayName?.toLowerCase() : evt.value?.toLowerCase()
-    LOG("Event name received (in lowercase): ${gotEvent} and current expected: ${state.expectedEvent}", 5)
+	if (!settings.startSwitches || !settings.startSwitches.contains(evt.device)) {
+		def gotEvent = (settings.modeOrRoutine == "Routine") ? evt.displayName?.toLowerCase() : evt.value?.toLowerCase()
+		LOG("Event name received (in lowercase): ${gotEvent} and current expected: ${state.expectedEvent}", 5)
 
-    if ( !state.expectedEvent*.toLowerCase().contains(gotEvent) ) {
-    	LOG("Received an mode/routine that we aren't watching. Nothing to do.", 4)
-        return true
-    }
-    
+		if ( !state.expectedEvent*.toLowerCase().contains(gotEvent) ) {
+			LOG("Received an mode/routine that we aren't watching. Nothing to do.", 4)
+			return true
+		}
+	}
     settings.myThermostats.each { stat ->
     	LOG("In each loop: Working on stat: ${stat}", 4, null, 'trace')
         def thermostatHold = stat.currentValue('thermostatHold')
@@ -523,6 +601,9 @@ def changeProgramHandler(evt) {
             }
 		}
     }
+	if (settings.doneSwitches) {
+		changeSwitches()
+	}
     return true
 }
 
@@ -705,7 +786,7 @@ private def sendMessage(notificationMessage) {
 	if (isST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
-		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
 }
 
