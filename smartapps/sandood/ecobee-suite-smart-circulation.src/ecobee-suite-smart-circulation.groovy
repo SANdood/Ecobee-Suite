@@ -35,7 +35,7 @@
  *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
  *	1.7.00 - Universal version supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00i" }
+def getVersionNum() { return "1.7.00p" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
