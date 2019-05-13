@@ -26,7 +26,7 @@
  *	1.6.12 - Added support for "generic" vents (dimmers), as with Smart Vents
  *	1.7.00 - Universal code now supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00f" }
+def getVersionNum() { return "1.7.00p" }
 private def getVersionLabel() { return "Ecobee Suite Smart Room Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
