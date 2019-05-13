@@ -45,7 +45,7 @@
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00- Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00n" }
+def getVersionNum() { return "1.7.00p" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -53,7 +53,7 @@ import groovy.json.*
 import groovy.transform.Field
 
 private def getHelperSmartApps() {
-	String mrpTitle = isST ? 'New Mode/Routine/Program Helper...' : 'New Mode/Program Helper...'
+	String mrpTitle = isST ? 'New Mode/Routine/Switches/Program Helper...' : 'New Mode/Switches/Program Helper...'
 	return [ 
 		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",  
             namespace: myNamespace, multiple: true, 
@@ -1220,6 +1220,7 @@ def initialize() {
         atomicState.initializedEpic = nowTime
         atomicState.initializedDate = nowDate
 	}
+	runIn(60, forceNextPoll, [overwrite: true])		// get ALL the data once things settle down
     LOG("${getVersionLabel()} - initialization complete",1,null,'debug')
     atomicState.versionLabel = getVersionLabel()
     return aOK
@@ -1439,8 +1440,8 @@ def scheduleWatchdog(evt=null, local=false) {
         counter = (!counter) ? 1 : counter + 1
         if (counter == 6) {
         	counter = 0
-            // atomicState.forcePoll = true
-			log.debug "Skipping hourly forcePoll"
+            atomicState.forcePoll = true
+			// log.debug "Skipping hourly forcePoll"
         }
         atomicState.hourlyForcedUpdate = counter
 	}
@@ -1621,6 +1622,10 @@ def pollScheduled() {
 def pollInit() {
 	if (debugLevel(4)) LOG("pollInit()", 4)
 	runIn(2, pollChildren, [overwrite: true]) 		// Hit the ecobee API for update on all thermostats, in 2 seconds
+}
+
+def forceNextPoll() {
+	atomicState.forcePoll = true
 }
 
 def pollChildren(deviceId=null,force=false) {
@@ -2759,6 +2764,7 @@ def updateThermostatData() {
         String DNI = (isHE?'ecobee_suite-thermostat-':'') + ([ app.id, stat.identifier ].join('.'))
         String tstatName = getThermostatName(tid)
         
+		
 		if (debugLevelThree) LOG("updateThermostatData() - Updating event data for thermostat ${tstatName} (${tid})", 3, null, 'info')
 
 	// grab a local copy from the atomic storage all at once (avoid repetive reads from backing store)
@@ -3173,7 +3179,7 @@ def updateThermostatData() {
         if (isConnected) {
 			statusMsg = (holdEndsAt == '') ? '' : ((thermostatHold=='hold') ? 'Hold' : (thermostatHold=='vacation') ? 'Vacation' : 'Event')+" ends ${holdEndsAt}"
 		} else {
-        	statusMsg = "Last updated ${holdEndsAt}"
+        	statusMsg = "Thermostat Offline?\nLast updated ${holdEndsAt}"
             equipOpStat = 'offline'					// override if Ecobee Cloud has lost connection with the thermostat
             thermOpStat = 'offline'
         }
@@ -3186,6 +3192,7 @@ def updateThermostatData() {
         def changeOften =  atomicState.changeOften  ? atomicState.changeOften  : [:]
         def changeAlerts = atomicState.changeAlerts ? atomicState.changeAlerts : [:]
         def changeAttrs =  atomicState.changeAttrs  ? atomicState.changeAttrs  : [:]
+		def changeDevice=  atomicState.changeDevice ? atomicState.changeDevice : [:]
         def changeTemps =  atomicState.changeTemps  ? atomicState.changeTemps  : [:]
         
         //changeEquip was initialized earlier
@@ -3254,6 +3261,24 @@ def updateThermostatData() {
             changeAttrs[tid] = attrValues
             atomicState.changeAttrs = changeAttrs
         }
+		
+		// Thermostat Device Data
+		if (thermostatUpdated || forcePoll) {
+			if (!changeDevice?.containsKey(tid)) changeDevice[tid] = [:]
+            def deviceValues = []
+            int i = 0
+            EcobeeDeviceInfo.each { attr ->
+            	def deviceVal = stat."${attr}"
+				if (deviceVal == '') deviceVal = 'null'
+                deviceValues <<  deviceVal 
+                if (forcePoll || (changeDevice[tid]?.getAt(i) != deviceVal)) {
+                    data += [ "${attr}": deviceVal, ]
+                }
+                i++
+            }
+            changeDevice[tid] = deviceValues
+            atomicState.changeDevice = changeDevice
+		}
         
         // Temperatures - need to convert from internal F*10 to standard Thermostat units
         if (thermostatUpdated || forcePoll) {
@@ -4858,7 +4883,7 @@ private def sendPushAndFeeds(notificationMessage) {
 					}
 				}
 			}
-			sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+			sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 		}		
         atomicState.timeSendPush = now()
     }
@@ -5311,11 +5336,11 @@ def runEvery3Minutes(handler) {
 										 'monthlyElectricityBillLimit','monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation','soundAlertVolume','soundTickVolume',
 										 'stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','ventilatorDehumidify','ventilatorFreeCooling','ventilatorMinOnTimeAway','ventilatorMinOnTimeHome'
 										]
-// Commands that are Read Only and cannot be changed
+// Settings that are Read Only and cannot be changed
 @Field final List EcobeeROSettings =	['coolMaxTemp','coolMinTemp','coolStages','hasBoiler','hasDehumidifier','hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasHumidifier','hasUVFilter','heatMaxTemp','heatMinTemp',
 										 'heatPumpGroundWater','heatStages','userAccessCode','userAccessSetting'
 										]
-// Commands that must be changed only by specific commands
+// Settings that must be changed only by specific commands
 @Field final List EcobeeDirectSettings= [
 											[name: 'fanMinOnTime',		command: 'setFanMinOnTime'],
 											[name: 'dehumidifierMode',	command: 'setDehumidifierMode'],
@@ -5323,6 +5348,7 @@ def runEvery3Minutes(handler) {
 											[name: 'humidity',			command: 'setHumiditySetpoint'],
 											[name: 'humidifierMode',	command: 'setHumidifierMode']
 										]
+@Field final List EcobeeDeviceInfo =    [ 'brand','features','identifier','isRegistered','lastModified','modelNumber','name','thermostatRev']
 
 
 // **************************************************************************************************************************
