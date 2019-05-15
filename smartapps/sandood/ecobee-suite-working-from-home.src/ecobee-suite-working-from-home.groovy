@@ -41,7 +41,6 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
 		section("") {
         	label title: "Name for this Working Fom Home Helper", required: true, defaultValue: "Working From Home", submitOnChange: true
-			if (isHE && !app.label) app.updateLabel("Working From Home")
 			if (isHE) {
 				if (!app.label) {
 					app.updateLabel("Working From Home")
