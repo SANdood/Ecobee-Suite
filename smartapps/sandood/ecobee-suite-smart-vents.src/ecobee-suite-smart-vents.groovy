@@ -37,7 +37,7 @@
  *	1.6.12 - Added "Generic" (dimmer/switchLevel) Vents
  *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00p" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -63,9 +63,22 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
         	label title: "Name for this Smart Vents Helper", required: true, defaultValue: "Smart Vents"
-			if (isHE && !app.label) app.updateLabel("Smart Vents")
+			if (isHE) {
+				if (!app.label) {
+					app.updateLabel("Smart Vents")
+					atomicState.appDisplayName = "Smart Vents"
+				} else if (app.label.contains('<span')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(atomicState.appDisplayName)
+					}
+				}
+			}
         	if (settings.tempDisable) {
-            	paragraph "WARNING: Temporarily Disabled as requested. Turn on below to re-enable this Helper."
+            	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
             	paragraph("Select temperature sensors for this Helper. If you select multiple sensors, the temperature will be averaged across all of them.") 
         		input(name: "theSensors", type:"capability.temperatureMeasurement", title: "Use which Temperature Sensor(s)", required: true, multiple: true, submitOnChange: true)
@@ -117,7 +130,7 @@ def mainPage() {
       		}
         }        	
 		section(title: "Temporarily Disable?") {
-        	input(name: "tempDisable", title: "Temporarily Disable this Helper?", type: "bool", description: "", defaultValue: false, submitOnChange: true)                
+        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", description: "", defaultValue: false, submitOnChange: true)                
         }
         
         section (getVersionLabel()) {}
@@ -143,14 +156,16 @@ void uninstalled() {
 
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
+	updateMyLabel()
+	
     atomicState.scheduled = false
     // Now, just exit if we are disabled...
 	if (tempDisable) {
         if (disabledVents && (disabledVents != 'unchanged')) {
         	setTheVents(disabledVents)
-            LOG("Temporarily disabled as per request, setting vents to ${disabledVents}.", 1, null, "warn")
+            LOG("Temporarily Paused, setting vents to ${disabledVents}.", 1, null, "warn")
         } else {
-        	LOG("Temporarily disabled as per request, vents unchanged", 1, null, "warn")
+        	LOG("Temporarily Paused, vents unchanged", 1, null, "warn")
         }
         return true
     }
@@ -307,6 +322,28 @@ private def ventOn( theVent ) {
     } else {
     	LOG("${theVent.displayName} is already open",3,null,'info')
     }
+}
+
+private def updateMyLabel() {
+	if (isST) return	// ST doesn't support the colored label approach
+
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains('<span')) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
 }
 
 // Ask our parents for help sending the events to our peer sensor devices
