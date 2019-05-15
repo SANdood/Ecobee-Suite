@@ -29,7 +29,7 @@
  *	1.6.11 - Removed use of *SetpointDisplay
  *	1.7.00 - Universal code supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00p" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "Ecobee Suite Smart Zones Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -54,9 +54,22 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
         	label title: "Name for this Smart Zones Helper", required: true, defaultValue: "Smart Zones"
-			if (isHE && !app.label) app.updateLabel("Smart Zones")
+			if (isHE) {
+				if (!app.label) {
+					app.updateLabel("Smart Zones")
+					atomicState.appDisplayName = "Smart Zones"
+				} else if (app.label.contains('<span')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(atomicState.appDisplayName)
+					}
+				}
+			}
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
+				paragraph "WARNING: Temporarily Paused - re-enable below."
 			} else {
 				input ("masterThermostat", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)
 			}            
@@ -81,7 +94,7 @@ def mainPage() {
 		}
         
 		section(title: "Temporarily Disable?") {
-        	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
+        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
         section (getVersionLabel()) {}
@@ -102,6 +115,7 @@ def updated() {
 
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
+	updateMyLabel()
 	
 	// Get slaves into a known state
 	slaveThermostats.each { stat ->
@@ -120,7 +134,7 @@ def initialize() {
 	
 	// Now, just exit if we are disabled...
 	if(tempDisable == true) {
-    	LOG("Temporarily Disabled as per request.", 2, null, "warn")
+    	LOG("Temporarily Paused", 2, null, "warn")
     	return true
     }
 	
@@ -327,6 +341,29 @@ def setFanOn(stat) {
 }
 
 // Helper Functions
+
+private def updateMyLabel() {
+	if (isST) return	// ST doesn't support the colored label approach
+
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains('<span')) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
+}
+
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
 	if (logType == null) logType = 'debug'
