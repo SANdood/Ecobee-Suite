@@ -53,7 +53,7 @@
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00n" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -61,14 +61,13 @@ import groovy.transform.Field
 metadata {
 	definition (name: "Ecobee Suite Thermostat", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)",
 					mnmn: "SmartThings", vid: "SmartThings-smartthings-Z-Wave_Thermostat") {		// add (rough) approximations for the new Samsung (Connect) app
-		capability "Actuator"
 		capability "Thermostat"
-		capability "Sensor"
-		capability "Refresh"
+		capability "Actuator"
 		capability "Relative Humidity Measurement"
 		capability "Temperature Measurement"
-		// capability "Presence Sensor"
 		capability "Motion Sensor"
+		capability "Sensor"
+		capability "Refresh"
 
 		// Extended Set of Thermostat Capabilities
 		capability "Thermostat Cooling Setpoint"
@@ -79,70 +78,53 @@ metadata {
 		capability "Thermostat Setpoint"
 		capability "Health Check"
 
-		command "setTemperature"
-		command "auxHeatOnly"
-
-		command "generateEvent"
-		command "raiseSetpoint"
-		command "lowerSetpoint"
-		command "resumeProgram"
-		command "setHeatingSetpointDelay"
-		command "setCoolingSetpointDelay"
-
-		command "switchMode"
-		command "setThermostatProgram"
-		command "setSchedule"
-		command "setProgramSetpoints"
-		command "setThermostatMode"
-		command "setThermostatFanMode"
-		command "setFanMinOnTime"
-		command "setFanMinOnTimeDelay"
-		command	"setHumidifierMode"
-		command "setDehumidifierMode"
-		command "setHumiditySetpoint"
-		command "setDehumiditySetpoint"
-		command "setVacationFanMinOnTime"
-		command "deleteVacation"
-		command "cancelVacation"
-		command "home"
-		command "present"
-
-// Unfortunately we cannot overload the internal Java/Groovy definition of 'sleep()', and calling this will silently fail (actually, it does a
-// "sleep(0)")
-//		command "sleep"
-		command "asleep"
-		command "night"				// this is probably the appropriate SmartThings device command to call, matches ST mode
-		command "away"
-		command "wakeup"
-		command "awake"
-
-		command "off"				// redundant - should be predefined by the Thermostat capability
+		command "asleep"			// We cannot overload the internal Java/Groovy definition of 'sleep()'
 		command "auto"
-		command "cool"
-		command "heat"
-		command "emergencyHeat"
-		command "emergency"
 		command "auxHeatOnly"
-
-		command "fanOff"			// Missing from the Thermostat standard capability set
-		command "fanOn"
+		command "auxHeatOnly"
+		command "awake"
+		command "away"
+		command "cancelReservation"
+		command "cancelVacation"
+		command "cool"
+		command "deleteVacation"
+		command "doRefresh"			// internal use by the refresh button
+		command "emergency"
+		command "emergencyHeat"
 		command "fanAuto"
 		command "fanCirculate"
-
-		command "noOp"				// Workaround for formatting issues
-		command "setEcobeeSetting"	// Allows changes to (most) Ecobee Settings
-		command "doRefresh"			// internal use by the refresh button
+		command "fanOff"			// Missing from the Thermostat standard capability set
+		command "fanOn"
 		command "forceRefresh"
-
-		// Reservation Handling
+		command "generateEvent"
+		command "heat"
+		command "home"
+		command "lowerSetpoint"
 		command "makeReservation"
-		command "cancelReservation"
+		command "night"				// this is probably the appropriate SmartThings device command to call, matches ST mode
+		command "noOp"				// Workaround for formatting issues
+		command "off"				// redundant - should be predefined by the Thermostat capability
+		command "present"
+		command "raiseSetpoint"
+		command "resumeProgram"
+		command "setCoolingSetpointDelay"
+		command "setDehumidifierMode"
+		command "setDehumiditySetpoint"
+		command "setEcobeeSetting"	// Allows changes to (most) Ecobee Settings
+		command "setFanMinOnTime"
+		command "setFanMinOnTimeDelay"
+		command "setHeatingSetpointDelay"
+		command	"setHumidifierMode"
+		command "setHumiditySetpoint"
+		command "setProgramSetpoints"
+		command "setSchedule"
+		command "setThermostatFanMode"
+		command "setThermostatMode"
+		command "setThermostatProgram"
+		command "setVacationFanMinOnTime"
+		command "switchMode"
+		command "wakeup"
 
-		// command "getManufacturerName"
-		// command "getModelName"
-
-		// attribute 'newCoolSetpoint', 'number'
-		// attribute 'newHeatSetpoint', 'number'
 		attribute 'apiConnected','string'
 		attribute 'autoAway', 'string'
 		attribute 'autoHeatCoolFeatureEnabled', 'string'
@@ -159,6 +141,7 @@ metadata {
 		attribute 'backlightOffTime', 'number'
 		attribute 'backlightOnIntensity', 'number'
 		attribute 'backlightSleepIntensity', 'number'
+		attribute 'brand', 'string'
 		attribute 'coldTempAlert', 'number'
 		attribute 'coldTempAlertEnabled', 'string'		// or boolean?
 		attribute 'compressorProtectionMinTemp', 'number'
@@ -209,6 +192,7 @@ metadata {
 		attribute 'equipmentStatus', 'string'
 		attribute 'fanControlRequired', 'string'
 		attribute 'fanMinOnTime', 'number'
+		attribute 'features','string'
 		attribute 'followMeComfort', 'string'
 		attribute 'groupName', 'string'
 		attribute 'groupRef', 'string'
@@ -251,10 +235,13 @@ metadata {
 		attribute 'humidityLowAlert', 'number'
 		attribute 'humiditySetpoint', 'number'
 		attribute 'humiditySetpointDisplay', 'string'
+		attribute 'identifier', 'string'
 		attribute 'installerCodeRequired', 'string'
+		attribute 'isRegistered', 'string' 
 		attribute 'isRentalProperty', 'string'
 		attribute 'isVentilatorTimerOn', 'string'
 		attribute 'lastHoldType', 'string'
+		attribute 'lastModified', 'string' 
 		attribute 'lastOpState', 'string'				// keeps track if we were most recently heating or cooling
 		attribute 'lastPoll', 'string'
 		attribute 'lastServiceDate', 'string'
@@ -263,9 +250,11 @@ metadata {
 		attribute 'maxSetBack', 'number'
 		attribute 'maxSetForward', 'number'
 		attribute 'mobile', 'string'
+		attribute 'modelNumber', 'string' 
 		attribute 'monthlyElectricityBillLimit', 'string'
 		attribute 'monthsBetweenService', 'string'
 		attribute 'motion', 'string'
+		attribute 'name', 'string'
 		attribute 'programsList', 'string'				// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
 		attribute 'quickSaveSetBack', 'number'
 		attribute 'quickSaveSetForward', 'number'
@@ -305,6 +294,7 @@ metadata {
 		attribute 'thermostatSetpointRange', 'vector3'
 		attribute 'thermostatStatus','string'
 		attribute 'thermostatTime', 'string'
+		attribute 'thermostatRev', 'string'
 		attribute 'timeOfDay', 'enum', ['day', 'night']
 		attribute 'userAccessCode', 'string'			// Read Only
 		attribute 'userAccessSetting', 'string'			// Read Only
@@ -1811,14 +1801,6 @@ private getTemperatureDescriptionText(name, value, linkText) {
 // Thermostat setpoint commands
 // API calls and UI handling
 // ***************************************************************************
-def setTemperature(setpoint) {	// Obsolete as of v1.2.21
-	LOG('setTemperature called in error',1,null,'error')
-	return
-}
-//void setHeatingSetpoint(setpoint) {
-//	LOG("setHeatingSetpoint() request with setpoint value = ${setpoint} before toDouble()", 4)
-//	setHeatingSetpoint(setpoint.toBigDecimal())
-//}
 void setHeatingSetpointDelay(setpoint) {
 	LOG("Slider requested heat setpoint: ${setpoint}",4,null,'trace')
 	def runWhen = (getParentSetting('arrowPause')?: 4) as Integer
