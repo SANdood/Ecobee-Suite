@@ -35,7 +35,7 @@
  *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
  *	1.7.00 - Universal version supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00p" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -61,8 +61,21 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
         	label title: "Name for this Smart Circulation Helper", required: true, defaultValue: "Smart Circulation"  
-			if (isHE && !app.label) app.updateLabel("Smart Circulation")
-        	if(settings.tempDisable) {paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to activate handler."}
+			if (isHE) {
+				if (!app.label) {
+					app.updateLabel("Smart Circulation")
+					atomicState.appDisplayName = "Smart Circulation"
+				} else if (app.label.contains('<span')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(atomicState.appDisplayName)
+					}
+				}
+			}
+        	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Paused - re-enable below." }
             else {
         		input(name: "theThermostat", type:"${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", required: true, multiple: false, 
                 submitOnChange: true)
@@ -132,7 +145,7 @@ def mainPage() {
 		}
         
 		section(title: "Temporarily Disable?") {
-        	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
+        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
 		section (getVersionLabel()) {}
@@ -188,11 +201,12 @@ def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 3, "", 'info')
 	atomicState.amIRunning = null // Now using runIn to collapse multiple calls into single calcTemps()
     def mode = location.mode
+	updateMyLabel()
     
 	// Now, just exit if we are disabled...
 	if(tempDisable == true) {
     	clearReservations()
-    	LOG("temporarily disabled as per request.", 2, null, "warn")
+    	LOG("Temporarily Paused", 2, null, "warn")
     	return true
     }
     
@@ -246,7 +260,9 @@ def initialize() {
     	if (settings.theHumidistat.currentHumidity.toInteger() <= settings.highHumidity) {
         	isOK == false
             LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
-        }
+		} else {
+			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), adjusting", 3, null, "info")
+		}
     }
     
     // Quiet Time?
@@ -358,7 +374,9 @@ def modeOrProgramHandler(evt=null) {
     	if (settings.theHumidistat.currentHumidity.toInteger() <= settings.highHumidity) {
         	isOK == false
             LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
-        }
+		} else {
+			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), adjusting enabled", 3, null, "info")
+		}
     }
     
     // Quiet Time?
@@ -600,6 +618,28 @@ def calcTemps() {
         }
 	}
 	LOG("No adjustment made",4,"",'info')
+}
+
+private def updateMyLabel() {
+	if (isST) return	// ST doesn't support the colored label approach
+
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains('<span')) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
 }
 
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
