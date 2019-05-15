@@ -45,7 +45,7 @@
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00- Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00p" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -136,8 +136,10 @@ def mainPage() {
     def readyToInstall 
     
     // Request the Ask Alexa Message Queue list as early as possible (isn't a problem if Ask Alexa isn't installed)
-    if (isST) subscribe(location, "AskAlexaMQ", askAlexaMQHandler)
-    sendLocationEvent(name: "AskAlexaMQRefresh", value: "refresh", isStateChange: true)
+	if (isST) {
+		subscribe(location, "AskAlexaMQ", askAlexaMQHandler)
+    	sendLocationEvent(name: "AskAlexaMQRefresh", value: "refresh", isStateChange: true)
+	}
         
     // Only create the dummy devices if we aren't initialized yet
     if (!atomicState.initialized) {
@@ -225,7 +227,21 @@ def mainPage() {
 		}            
 		
 		section ("Name this instance of Ecobee Suite Manager") {
-			label name: "name", title: "Assign a name", required: false, defaultValue: app.name, description: app.name, submitOnChange: true
+			label name: "name", title: "Assign a name", required: false, defaultValue: app.name, submitOnChange: true
+			if (isHE) {
+				if (!app.label) {
+					app.updateLabel(app.name)
+					atomicState.appDisplayName = app.name
+				} else if (app.label.contains('<span')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(atomicState.appDisplayName)
+					}
+				}
+			}
 		}
      
 		section (getVersionLabel()) {}
@@ -400,7 +416,7 @@ def preferencesPage() {
     dynamicPage(name: "preferencesPage", title: "Update Ecobee Suite Manager Preferences", nextPage: "") {
 		if (isST) {
 			section("Notifications") {
-				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour."
+				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most once per hour."
 				input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
 				input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 				input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
@@ -435,9 +451,12 @@ def preferencesPage() {
 			}
 		}
 		
-        section("Select your mobile device type to enable device-specific optimizations") {
-        	input(name: 'mobile', type: 'enum', options: ["Android", "iOS"], title: 'Tap to select your mobile device type', defaultValue: 'iOS', submitOnChange: true, required: true, multiple: false)
+		if (isST) {
+			section("Select your mobile device type to enable device-specific optimizations") {
+        		input(name: 'mobile', type: 'enum', options: ["Android", "iOS"], title: 'Tap to select your mobile device type', defaultValue: 'iOS', submitOnChange: true, required: true, multiple: false)
+			}
         }
+		
       	section("How long do you want Hold events to last?") {
             input(name: "holdType", title:"Select Hold Type", type: "enum", required:false, multiple:false, defaultValue: "Until I Change", submitOnChange: true, description: "Until I Change", 
             	options: ["Until I Change", "Until Next Program", "2 Hours", "4 Hours", "Specified Hours", "Thermostat Setting"])
@@ -1061,6 +1080,38 @@ def updated() {
     initialize()
 }
 
+private def updateMyLabel() {
+	if (isST) return								// ST doesn't support the colored label approach
+	
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains('<span')) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		atomicState.appDisplayName = myLabel
+	}
+	def newLabel
+	switch (atomicState.connected?.toString()) {
+		case 'full':
+			newLabel = myLabel + "<span style=\"color:green\"> Online</span>"
+			break;
+		case 'warn':
+			newLabel = myLabel + "<span style=\"color:orange\"> Warning</span>"
+			break;
+		case 'lost':
+			newLabel = myLabel + "<span style=\"color:red\"> Offline</span>"
+			break;
+		default:
+			newLabel = myLabel
+			break;
+	}
+	if (newLabel && (app.label != newLabel)) app.updateLabel(newLabel)
+}
+
 def initialize() {	
     LOG("=====> initialize()", 4)    
     
@@ -1068,10 +1119,11 @@ def initialize() {
 	
 	atomicState.timers = false
 	
-    atomicState.connected = "full"        
+    atomicState.connected = "full"
+	updateMyLabel()
     atomicState.reAttempt = 0
     atomicState.reAttemptPoll = 0
-    
+			
 	try {
 		unsubscribe()
     	unschedule() // reset all the schedules
@@ -1080,7 +1132,7 @@ def initialize() {
     }    
     
     subscribe(app, appHandler)
-    subscribe(location, "AskAlexaMQ", askAlexaMQHandler)
+    if (isST) subscribe(location, "AskAlexaMQ", askAlexaMQHandler) // HE version doesn't support Ask Alexa yet
 	// if (!askAlexa) atomicState.askAlexaAlerts = null
     
     def nowTime = now()
@@ -1197,7 +1249,7 @@ def initialize() {
     
     // Add subscriptions as little "daemons" that will check on our health    
     subscribe(location, scheduleWatchdog)
-    subscribe(location, "routineExecuted", scheduleWatchdog)
+    if (isST) subscribe(location, "routineExecuted", scheduleWatchdog)		// HE doesn't support Routines
     subscribe(location, "sunset", sunsetEvent)
     subscribe(location, "sunrise", sunriseEvent)
     subscribe(location, "position", scheduleWatchdog)
@@ -1895,6 +1947,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
     	LOG("checkThermostatSummary() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
         if (apiConnected != 'warn') {
         	atomicState.connected = 'warn'
+			updateMyLabel()
         	atomicState.lastPoll = now()
         	atomicState.lastPollDate = getTimestamp()
 			generateEventLocalParams()
@@ -2327,6 +2380,7 @@ def pollEcobeeAPICallback( resp, pollState ) {
             LOG("pollEcobeeAPICallback() Polling error: ${iStatus}, ${resp.errorMessage} - Will Retry", 1, null, 'warn') 	// Just log it, and hope for better next time...
         	if (apiConnected != 'warn') {
         		atomicState.connected = 'warn'
+				updateMyLabel()
         		atomicState.lastPoll = now()
         		atomicState.lastPollDate = getTimestamp()
 				generateEventLocalParams()
@@ -3598,6 +3652,7 @@ private refreshAuthToken(child=null) {
     		LOG("refreshAuthToken() - ${e}.",1,child,'warn')  // Just log it, and hope for better next time...
         	if (apiConnected != 'warn') {
         		atomicState.connected = 'warn'
+				updateMyLabel()
         		atomicState.lastPoll = now()
         		atomicState.lastPollDate = getTimestamp()
 				generateEventLocalParams()
@@ -3960,7 +4015,7 @@ def setFanMinOnTime(child, deviceId, howLong) {
 	String statName = getThermostatName(deviceId)
 	LOG("setFanMinOnTime(${howLong}) for thermostat ${statName}", 4, child, 'trace')
     
-    if (!howLong.isNumber() || (howLong.toInteger() < 0) || howLong.toInteger() > 55) {
+    if ((howLong < 0) || (howLong > 55)) {
     	LOG("setFanMinOnTime() for thermostat ${statName} - Invalid Argument ${howLong}",2,child,'warn')
         return false
     }
@@ -4673,6 +4728,7 @@ private def sendJson(child=null, String jsonBody) {
     	LOG("sendJson() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
         if (apiConnected != 'warn') {
         	atomicState.connected = 'warn'
+			updateMyLabel()
         	atomicState.lastPoll = now()
         	atomicState.lastPollDate = getTimestamp()
 			generateEventLocalParams()
@@ -5079,12 +5135,13 @@ private String getZipCode() {
 // Are we connected with the Ecobee service?
 private String apiConnected() {
 	// values can be "full", "warn", "lost"
-	if (atomicState.connected == null) atomicState.connected = "warn"
+	if (atomicState.connected == null) { atomicState.connected = "warn"; updateMyLabel(); }
 	return atomicState.connected?.toString() ?: "lost"
 }
 
 private def apiRestored() {
 	atomicState.connected = "full"
+	updateMyLabel()
 	unschedule("notifyApiLost")
     atomicState.reAttemptPoll = 0
     runIn(10, runCallQueue)
@@ -5112,6 +5169,7 @@ private def apiLost(where = "[where not specified]") {
     // provide cleanup steps when API Connection is lost
 	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from SmartThings/Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager SmartApp and re-enter your account login credentials."
     atomicState.connected = "lost"
+	updateMyLabel()
     atomicState.authToken = null
     
     sendPushAndFeeds(notificationMessage)
