@@ -51,8 +51,6 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
         	label title: "Name for this Smart Switch/Dimmer/Vent Helper", required: true, defaultValue: "Smart Switch/Dimmer/Vent"  
-			// mode(title: "Enable only for specific mode(s)")
-			if (isHE && !app.label) app.updateLabel("Smart Switch/Dimmer/Vent")
 			if (isHE) {
 				if (!app.label) {
 					app.updateLabel("Smart Switch/Dimmer/Vent")
