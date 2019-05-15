@@ -15,7 +15,7 @@
  * <snip>
  * 	1.7.00 - Initial Release
  */
-def getVersionNum() { return "1.7.00p" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -42,8 +42,22 @@ def mainPage() {
 		section("") {
         	label title: "Name for this Working Fom Home Helper", required: true, defaultValue: "Working From Home", submitOnChange: true
 			if (isHE && !app.label) app.updateLabel("Working From Home")
+			if (isHE) {
+				if (!app.label) {
+					app.updateLabel("Working From Home")
+					atomicState.appDisplayName = "Working From Home"
+				} else if (app.label.contains('<span')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(atomicState.appDisplayName)
+					}
+				}
+			}
         	if(settings.tempDisable == true) {
-            	paragraph "WARNING: Temporarily Disabled as requested. Turn back on below to activate handler."
+            	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
         		input (name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)",
                 	   required: true, multiple: true, submitOnChange: true)
@@ -74,6 +88,8 @@ def mainPage() {
             }
                 
             section (title: "Advanced Options") {
+				input(name: 'statMode', title: 'Only when thermostat mode is', type: 'enum', required: false, multiple: true, 
+                    		options:getThermostatModes(), submitOnChange: true)
                 input(name: "days", type: "enum", title: "Only on certain days of the week", multiple: true, required: false, submitOnChange: true,
                     options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
                 input(name: "modes", type: "mode", title: "Only when Location Mode is", multiple: true, required: false, submitOnChange: true)
@@ -118,7 +134,7 @@ def mainPage() {
 			}				
         }
         section(title: "Temporarily Disable?") {
-           	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
+           	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
 		section (getVersionLabel()) {}
     }
@@ -138,8 +154,10 @@ def updated() {
 
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 2, null, 'info')
+	updateMyLabel()
+	
     if(tempDisable == true) {
-    	LOG("Temporarily Disabled as per request.", 2, null, "warn")
+    	LOG("Temporarily Paused", 2, null, "warn")
     	return true
     }
     if (settings.timeOfDay != null) schedule(timeToday(settings.timeOfDay, location.timeZone), "checkPresence")
@@ -148,7 +166,7 @@ def initialize() {
 
 def checkPresence() {
 	LOG("Check presence", 4, null, 'trace')
-    if (anyoneIsHome() && getDaysOk() && getModeOk()) {
+    if (anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
     	def multiple = false
 		LOG("Someone is present", 4, null, 'trace')
         if (isST && wfhPhrase) {
@@ -178,7 +196,7 @@ def checkProgram(evt) {
 	LOG("Check program: ${evt.device.displayName} changed to ${evt.value}", 4, null, 'trace')
     
     def multiple = false
-    if (settings.onAway && (evt.value == 'Away') && anyoneIsHome() && daysOk && modeOk) {
+    if (settings.onAway && (evt.value == 'Away') && anyoneIsHome() && daysOk && modeOk && statModeOk) {
     	evt.device.home()
         sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because Thermostat ${evt.device.displayName} changed to 'Away' and someone is still home.")
         runIn(300, checkHome, [overwrite: true])
@@ -220,6 +238,52 @@ private anyoneIsHome() {
 
   result
 }
+
+// return all the modes that ALL thermostats support
+def getThermostatModes() {
+	def theModes = []
+    
+    settings.myThermostats?.each { stat ->
+    	if (theModes == []) {
+        	theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", ")
+        } else {
+        	theModes = theModes.intersect(stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", "))
+        }   
+    }
+    return theModes.sort(false)
+}
+
+private getStatModeOk() {
+	if (settings.statMode == null) return true
+	settings.myThermostats?.each { stat ->
+		if (settings.statMode.contains(stat.currentValue('thermostatMode'))) {
+			return true
+		}
+	}
+	return false
+}
+
+private getModeOk() {
+    def result = !modes || modes.contains(location.mode)
+    result
+}
+
+private getDaysOk() {
+    def result = true
+    if (days) {
+        def df = new java.text.SimpleDateFormat("EEEE")
+        if (location.timeZone) {
+            df.setTimeZone(location.timeZone)
+        }
+        else {
+            df.setTimeZone(TimeZone.getTimeZone("America/New_York"))
+        }
+        def day = df.format(new Date())
+        result = days.contains(day)
+    }
+    result
+}
+
 
 private def sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
@@ -297,25 +361,26 @@ private def sendMessage(notificationMessage) {
 	}
 }
 
-private getModeOk() {
-    def result = !modes || modes.contains(location.mode)
-    result
-}
+private def updateMyLabel() {
+	if (isST) return	// ST doesn't support the colored label approach
 
-private getDaysOk() {
-    def result = true
-    if (days) {
-        def df = new java.text.SimpleDateFormat("EEEE")
-        if (location.timeZone) {
-            df.setTimeZone(location.timeZone)
-        }
-        else {
-            df.setTimeZone(TimeZone.getTimeZone("America/New_York"))
-        }
-        def day = df.format(new Date())
-        result = days.contains(day)
-    }
-    result
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains('<span')) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
 }
 
 private hideOptions() {
