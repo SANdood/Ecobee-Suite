@@ -35,49 +35,50 @@
  *	1.6.16 - Log uninstalls also
  *	1.7.00 - Universal code supports now both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00d" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
 	definition (name: "Ecobee Suite Sensor", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)",
     				mnmn: "SmartThings", vid: "generic-motion") {				// for the new Samsung (Connect) app
-		capability "Sensor"
+
 		capability "Temperature Measurement"
 		capability "Motion Sensor"
+		capability "Sensor"
 		capability "Refresh"
-		// capability "Polling"
         capability "Health Check"
 		
+		attribute "Awake", "string"
+		attribute "Away", "string"
+		attribute "Home", "string"
+		attribute "Sleep", "string"
+		attribute "SmartRoom", "string"
+		attribute "Wakeup", "string"	   
+		attribute "currentProgramName", "string"
 		attribute "decimalPrecision", "number"
+		attribute "doors", "string"
+		attribute "humidity", "string"
 		attribute "temperatureDisplay", "string"
-        attribute "Home", "string"
-        attribute "Away", "string"
-        attribute "Sleep", "string"
-        attribute "Awake", "string"
-        attribute "Wakeup", "string"       
-        attribute "thermostatId", "string"
-        attribute "doors", "string"
-        attribute "windows", "string"
-        attribute "vents", "string"
-        attribute "SmartRoom", "string"
-        attribute "currentProgramName", "string"
-        attribute "humidity", "string"
-        
-        command "noOp"					// these are really for internal use only
-        command "enableSmartRoom"
-        command "disableSmartRoom"
-        command "doRefresh"
-        
-        command "addSensorToHome"
-        command "addSensorToAway"
-        command "addSensorToSleep"
-        command "deleteSensorFromHome"
-        command "deleteSensorFromAway"
-        command "deleteSensorFromSleep"
-        command "removeSensorFromHome"
-        command "removeSensorFromAway"
-        command "removeSensorFromSleep"
+		attribute "thermostatId", "string"
+		attribute "vents", "string"
+		attribute "windows", "string"
+		
+	// These commands are all really internal-use only
+		command "addSensorToAway"
+		command "addSensorToHome"
+		command "addSensorToSleep"
+		command "deleteSensorFromAway"
+		command "deleteSensorFromHome"
+		command "deleteSensorFromSleep"
+		command "disableSmartRoom"
+		command "doRefresh"
+		command "enableSmartRoom"
+		command "noOp"
+		command "removeSensorFromAway"
+		command "removeSensorFromHome"
+		command "removeSensorFromSleep"
+
 	}
 
 	simulator {
