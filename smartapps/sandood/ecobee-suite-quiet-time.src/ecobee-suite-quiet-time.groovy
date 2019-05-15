@@ -31,7 +31,7 @@
  *	1.6.15 - Added scheduled Auto Off for Quiet Time
  *	1.7.00 - Universal support for both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00p" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -56,9 +56,22 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
         	label title: "Name for this Quiet Time Helper", required: true, defaultValue: "Quiet Time"
-			if (isHE && !app.label) app.updateLabel("Quiet Time")
+			if (isHE) {
+				if (!app.label) {
+					app.updateLabel("Quiet Time")
+					atomicState.appDisplayName = "Quiet Time"
+				} else if (app.label.contains('<span')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(atomicState.appDisplayName)
+					}
+				}
+			}
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Disabled per request. Turn back on below to activate handler." 
+				paragraph "WARNING: Temporarily Paused - re-enable below." 
 			} else { 
             	input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
             }          
@@ -172,7 +185,7 @@ def mainPage() {
 	*/
 		}
 		section(title: "Temporarily Disable?") {
-			input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
+			input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
 		}
 
 		section (getVersionLabel()) {}
@@ -205,9 +218,11 @@ def updated() {
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 3, null, 'info')
     log.debug "${app.name}, ${app.label}"
+	updateMyLabel()
+	
 	if(tempDisable == true) {
     	clearReservations()
-		LOG("Temporarily Disabled as per request.", 2, null, "warn")
+		LOG("Temporarily Paused", 2, null, "warn")
 		return true
 	}
     // Initialize the saved states
@@ -686,6 +701,28 @@ private def sendMessage(notificationMessage) {
 	}
 }
 */
+
+private def updateMyLabel() {
+	if (isST) return	// ST doesn't support the colored label approach
+
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains('<span')) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
+}
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${app.label} ${message}"
