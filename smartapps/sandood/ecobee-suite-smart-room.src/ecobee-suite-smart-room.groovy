@@ -26,7 +26,7 @@
  *	1.6.12 - Added support for "generic" vents (dimmers), as with Smart Vents
  *	1.7.00 - Universal code now supports both SmartThings and Hubitat
  */
-def getVersionNum() { return "1.7.00p" }
+def getVersionNum() { return "1.7.00rc2" }
 private def getVersionLabel() { return "Ecobee Suite Smart Room Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -53,8 +53,22 @@ def mainPage() {
     	section(title: "") {
         	label title: "Name for this Smart Room Helper", required: true, defaultValue: "Smart Room"
 			if (isHE && !app.label) app.updateLabel("Smart Room")
+			if (isHE) {
+				if (!app.label) {
+					app.updateLabel("Smart Room")
+					atomicState.appDisplayName = "Smart Room"
+				} else if (app.label.contains('<span')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(atomicState.appDisplayName)
+					}
+				}
+			}
         	if (settings.tempDisable) {
-            	paragraph "WARNING: Temporarily Disabled as requested. Turn back on to Enable handler."
+            	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
             	paragraph("\nA Smart Room is defined by one or more Ecobee Sensors")
             	// IMPORTANT NOTE: theSensors is NOT a list of sensors, but instead is the list of selected [DNI:names] of the sensors that our parent is supporting
@@ -141,7 +155,7 @@ def mainPage() {
         }
         	
 		section(title: "Temporarily Disable?") {
-        	input(name: "tempDisable", title: "Temporarily disable this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
+        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
 		section (getVersionLabel()) {}
@@ -171,6 +185,7 @@ def getEcobeeSensorsList() { return parent.getEcobeeSensors().sort { it.value } 
 
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 3, "", 'info')
+	updateMyLabel()
     
     atomicState.isSmartRoomActive = false
     atomicState.isWaitingForWindows = false
@@ -179,7 +194,7 @@ def initialize() {
     // Now, just exit if we are disabled...
 	if(tempDisable == true) {
     	generateSensorsEvents([SmartRoom:'disabled',vents:'default',windows:'default',doors:'default'])
-    	LOG("temporarily disabled as per request.", 2, null, "warn")
+    	LOG("Temporarily Paused", 2, null, "warn")
     	return true
     }
     
@@ -609,6 +624,28 @@ private def sendMessage(notificationMessage) {
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
+}
+
+private def updateMyLabel() {
+	if (isST) return	// ST doesn't support the colored label approach
+
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains('<span')) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
 
