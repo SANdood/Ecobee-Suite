@@ -52,7 +52,6 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
         	label title: "Name for this Smart Room Helper", required: true, defaultValue: "Smart Room"
-			if (isHE && !app.label) app.updateLabel("Smart Room")
 			if (isHE) {
 				if (!app.label) {
 					app.updateLabel("Smart Room")
