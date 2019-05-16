@@ -1015,22 +1015,23 @@ Because the current SmartThings defined capabilities do not fully expose ALL of 
 ### <a name="attributes">Annotated List of Supported Device Attributes (States)</a>
 Follows is the complete list of attributes (states) that the DTH maintains and exposes. You can find more information on the ES and EC attributes in the [Ecobee API documentation](https://www.ecobee.com/home/developer/api/documentation/v1/objects/Settings.shtml)
 
-(Types: **ES**=Ecobee Setting, **EC**=Ecobee Configuration, **int**=Ecobee Suite internal-use)
+(Src: **ES**=Ecobee Setting, **EC**=Ecobee Configuration, **int**=Ecobee Suite internal-use)
 
-| Attribute | Value | Type | Read Only | Type | Description |
-|---------- |------ |----- |---------- |----- |------------ |
+
+| Attribute | Sample Value | Data Type | Read Only | Src | Description |
+|---------- |------------- |----- |---------- |----- |------------ |
 | apiConnected | full | string | yes | int | Status of Ecobee Server accessibility. One of 'full', 'warn', 'lost' |
 | autoAway | false | string | no | ES | If true, switch to away when no motion detected |
-| autoHeatCoolFeatureEnabled | true | string | no | ES | Enable "Auto" mode |
+| autoHeatCoolFeature<br>Enabled | true | string | no | ES | Enable "Auto" mode |
 | autoMode | true | string | yes | int | Short-name status of `autoHeatCoolFeatureEnabled` |
 | auxHeatMode | false | string | yes | int | True if currently using auxHeat |
 | auxMaxOutdoorTemp | 70.0 | number | no | ES | Max temp that auxHeat will be called for |
 | auxOutdoorTempAlert | 50.0 | number | no | ES | Send alert if auxHeat being used above this temp |
-| auxOutdoorTempAlertNotify | false | string | no | ES | Send `auxOutdoorTempAlerts` to the user |
-| auxOutdoorTempAlertNotifyTechnician | false | string | no | ES | Send `auxOutdoorTempAlerts` to the Technician |
+| auxOutdoorTempAlert<br>Notify | false | string | no | ES | Send `auxOutdoorTempAlerts` to the user |
+| auxOutdoorTempAlert<br>NotifyTechnician | false | string | no | ES | Send `auxOutdoorTempAlerts` to the Technician |
 | auxRuntimeAlert | 10800 | number | no | ES | Send alert if auxHeat runs longer than this number of seconds |
 | auxRuntimeAlertNotify | false | string | no | ES | Send `auxRuntimeAlerts` to user |
-| auxRuntimeAlertNotifyTechnician | false | string | no | ES | Send `auxRuntimeAlerts` to technician |
+| auxRuntimeAlert<br>NotifyTechnician | false | string | no | ES | Send `auxRuntimeAlerts` to technician |
 | backlightOffDuringSleep | true | string | no | ES | Turn backlight off when running the Sleep program |
 | backlightOffTime | 10 | number | no | ES | Turn off the backlight after this many seconds |
 | backlightOnIntensity | 10 | number | no | ES | Sets backlight intensity (0-10) |
@@ -1039,8 +1040,8 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | checkInterval | 960 | number | yes | int | Health Check Interval |
 | coldTempAlert | 53.0 | number | no | ES | Alert when thermostat reads internal temperature below this |
 | coldTempAlertEnabled | true | string | no | ES | Send `coldTempAlerts` to user |
-| compressorProtectionMinTemp | 40.0 | number | no | ES | Minimum outside temp to run the A/C compressor |
-| compressorProtectionMinTime | 300 | number | no | ES | Minimum rest time after compressor is shut off |
+| compressorProtection<br>MinTemp | 40.0 | number | no | ES | Minimum outside temp to run the A/C compressor |
+| compressorProtection<br>MinTime | 300 | number | no | ES | Minimum rest time after compressor is shut off |
 | condensationAvoid | false | string | no | ES | Auto adjust humidity levels based on outside temps & window efficiency |
 | coolAtSetpoint | 78.5 | number | yes | int | Actual temperature above which a demand for Cool will be made |
 | coolDifferential | 0.5 | number | yes | int | Temperature adder to `coolingSetpoint` to calculate `coolAtSetpoint` |
@@ -1077,12 +1078,12 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | drAccept | always | string | no | ES | Whether Demand Response requests are accepted by this thermostat (always, askMe, customerSelect, defaultAccept, defaultDecline, never) |
 | ecobeeConnected | true | string | yes | int | Whether or not Ecobee Suite Manager is able to communicate with the thermostat |
 | eiLocation | null | string | no | ES | A note about the physical location where the SMART or EMS Equipment Interface module is located. |
-| electricityBillCycleMonths | 1 | number | no | ES | Self-explanatory |
-| electricityBillStartMonth | 1 | number | no | ES | Self-explanatory |
-| electricityBillingDayOfMonth | 1 | number | no | ES | Self-explanatory |
-| enableElectricityBillAlert | false | string | no | ES | Whether `electricityBillAllerts` are enabled |
-| enableProjectedElectricityBillAlert | false | string | no | ES | Whether `projected...Alerts` are enabled |
-| equipmentOperatingState | idle | string | yes | int | List of equipment that is currently running (heating/cooling with stages,heat pump,humidifying,dehumidifying,fan only,auxHeat,idle,...) |
+| electricityBill<br>CycleMonths | 1 | number | no | ES | Self-explanatory |
+| electricityBill<br>StartMonth | 1 | number | no | ES | Self-explanatory |
+| electricityBilling<br>DayOfMonth | 1 | number | no | ES | Self-explanatory |
+| enableElectricity<br>BillAlert | false | string | no | ES | Whether `electricityBillAllerts` are enabled |
+| enableProjected<br>ElectricityBillAlert | false | string | no | ES | Whether `projected...Alerts` are enabled |
+| equipmentOperating<br>State | idle | string | yes | int | List of equipment that is currently running (heating/cooling with stages,heat pump,humidifying,dehumidifying,fan only,auxHeat,idle,...) |
 | equipmentStatus | idle | string | yes | int | Equipment status (idle, off, offline, ...) |
 | fanControlRequired | true | string | no | ES | Whether thermostat or HVAC is controlling the fan |
 | fanMinOnTime | 20 | number | no | ES | Minimum number of minutes per hour the fan should run (sum of heat/cool + fan only runtime) |
@@ -1107,7 +1108,7 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | heatMinTemp | 45.0 | number | yes | ES | Minimum temp that the thermostat hardware will accept for a heating setpoint |
 | heatMode | true | string | no | ES | Whether this thermostat is controlling an HVAC that can provide heat |
 | heatPumpGroundWater | false | string | yes | ES | Whether this heat pump uses underground water, or is air-cooled |
-| heatPumpReversalOnCool | true | string | no | ES | Whether the thermostat should reverse the heat pump's coolant direction when cooling |
+| heatPumpReversal<br>OnCool | true | string | no | ES | Whether the thermostat should reverse the heat pump's coolant direction when cooling |
 | heatRange | (45..78) | string | yes | int | Range of temps allowed for `heatingSetpoint` - use `heatRangeHigh` and `heatRangeLow` to change this  |
 | heatRangeHigh | 78.0 | number | no | ES | Maximum configured `heatingSetpoint` allowed |
 | heatRangeLow | 45.0 | number | no | ES | Minimum configured `heatingSetpoint` allowed |
@@ -1126,7 +1127,7 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | humidifierMode | auto | string | no | ES | One of (auto, manual, off) |
 | humidity | 36 | number | no | ES | Current Relative Humidity reading at the thermostat |
 | humidityAlertNotify | true | string | no | ES | Should humidity alerts be sent to the user |
-| humidityAlertNotifyTechnician | false | string | no | ES | Should humidity alerts be sent to the technician |
+| humidityAlert<br>NotifyTechnician | false | string | no | ES | Should humidity alerts be sent to the technician |
 | humidityHighAlert | 80 | number | no | ES | Alert if inside relative humidity is above this % |
 | humidityLowAlert | -1 | number | no | ES | Alert if inside relative humidity is below this % |
 | humiditySetpoint | 50 | number | no | ES | Current humidify-to setpoint |
@@ -1146,7 +1147,7 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | maxSetForward | 8.0 | number | no | ES | Max setforward that a demandResponse can execute |
 | mobile | iOS | string | yes | int | Use Ecobee Suite Manager/Preferences to change |
 | modelNumber | athenaSmart | string | yes | EC | Model number (string) for this thermostat |
-| monthlyElectricityBillLimit | 0 | number | no | ES | Self-explanatory |
+| monthlyElectricity<br>BillLimit | 0 | number | no | ES | Self-explanatory |
 | monthsBetweenService | 6 | number | no | ES | Self-explanatory |
 | motion | inactive | string | yes | int | Whether motion has been detected |
 | name | Downstairs | string | yes | EC | Thermostat name (configured at the thermostat only) |
@@ -1160,32 +1161,32 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | schedule | Away | string | yes | int | Same as `currenProgram` - use `setThermostatProgram()` or `setSchedule()` to change |
 | scheduledProgram | Away | string | yes | int | The program that is scheduled to be running now (may be different than `currentProgram` |
 | scheduledProgramId | away | string | yes | int | Internal ID of the scheduled program |
-| scheduledProgramName | Away | string | yes | int | The proper name of the scheduled program |
+| scheduledProgram<br>Name | Away | string | yes | int | The proper name of the scheduled program |
 | serviceRemindMe | true | string | no | ES | Whether the thermostat should remind you of upcoming service |
-| serviceRemindTechnician | false | string | no | ES | Whether the technician should be notified of service |
+| serviceRemind<br>Technician | false | string | no | ES | Whether the technician should be notified of service |
 | smartCirculation | false | string | no | ES | If enabled, thermostat *should* operate like Smart Circulation. Unfortunately, at this time it does nothing |
 | soundAlertVolume | 0 | number | no | ES | (Deprecated) Volume for alerts |
 | soundTickVolume | 0 | number | no | ES | (Deprecated) Volume for ticks |
-| stage1CoolingDifferentialTemp | 0.5 | number | no | ES | The difference between current temperature and set-point that will trigger stage 2 cooling. |
-| stage1CoolingDissipationTime | 31 | number | no | ES | Seconds after a cooling cycle that the fan will run for to extract any cooling left in the system. '31' means "auto" |
-| stage1HeatingDifferentialTemp | 0.5 | number | no | ES | The difference between current temperature and set-point that will trigger stage 2 heating. |
-| stage1HeatingDissipationTime | 31 | number | no | ES | The time after a heating cycle that the fan will run for to extract any heating left in the system. '31' means "auto" |
+| stage1Cooling<br>DifferentialTemp | 0.5 | number | no | ES | The difference between current temperature and set-point that will trigger stage 2 cooling. |
+| stage1Cooling<br>DissipationTime | 31 | number | no | ES | Seconds after a cooling cycle that the fan will run for to extract any cooling left in the system. '31' means "auto" |
+| stage1Heating<br>DifferentialTemp | 0.5 | number | no | ES | The difference between current temperature and set-point that will trigger stage 2 heating. |
+| stage1Heating<br>DissipationTime | 31 | number | no | ES | The time after a heating cycle that the fan will run for to extract any heating left in the system. '31' means "auto" |
 | statHoldAction | nextPeriod | string | yes | int | Same as `holdAction` |
-| supportedThermostatFanModes | [on, auto, circulate, off] | JSON_OBJECT | yes | int | Self-explanatory. USAGE: `List theFanModes = ` `stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(', ')` |
-| supportedThermostatModes | [off, auto, cool, heat] | JSON_OBJECT | yes | int | Self-explanatory. USAGE: `List theModes = ` `stat.currentValue('supportedThermostatModes')[1..-2].tokenize(', ')` |
-| supportedVentModes | [off] | JSON_OBJECT | yes | int | Self-explanatory. USAGE: `List theModes = ` `stat.currentValue('supportedVentModes')[1..-2].tokenize(', ')` |
+| supportedThermostat<br>FanModes | [on, auto, circulate, off] | JSON_<br>OBJECT | yes | int | Self-explanatory. USAGE: `List theFanModes = ` `stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(', ')` |
+| supportedThermostat<br>Modes | [off, auto, cool, heat] | JSON_<br>OBJECT | yes | int | Self-explanatory. USAGE: `List theModes = ` `stat.currentValue('supportedThermostatModes')[1..-2].tokenize(', ')` |
+| supportedVentModes | [off] | JSON_<br>OBJECT | yes | int | Self-explanatory. USAGE: `List theModes = ` `stat.currentValue('supportedVentModes')[1..-2].tokenize(', ')` |
 | tempAlertNotify | true | string | no | ES | Send temperature alerts to user |
-| tempAlertNotifyTechnician | false | string | no | ES | Send temperature alerts to techinician |
+| tempAlertNotify<br>Technician | false | string | no | ES | Send temperature alerts to techinician |
 | tempCorrection | -1.0 | number | no | ES | Degrees added/subtracted to thermostat temp readings |
 | temperature | 72.9 | number | yes | ES | Current temperature |
 | temperatureDisplay | 72.9° | string | yes | int | Display value of current temperature |
 | temperatureScale | F | string | yes | int | Temperature scale in use |
 | thermostatFanMode | auto | string | yes | ES | Current fan mode. Must be one of `supportedThermostatFanModes` |
-| thermostatFanModeDisplay | circulate | string | yes | int | Current fan mode display ("circulate" when fanMinOnTime != 0) |
+| thermostatFanMode<br>Display | circulate | string | yes | int | Current fan mode display ("circulate" when fanMinOnTime != 0) |
 | thermostatHold | hold | string | yes | int | If not null, type of hold (hold, vacation, temp) |
 | thermostatMode | heat | string | no | ES | Current thermostat mode. Must be one of `supportedThermostatModes` |
-| thermostatOperatingState | idle | string | yes | int | One of (heating,cooling,fan only, idle,heat pending, cool pending) |
-| thermostatOperatingStateDisplay | idle | string | yes | int | Display value of `thermostatOperatingState` |
+| thermostatOperating<br>State | idle | string | yes | int | One of (heating,cooling,fan only, idle,heat pending, cool pending) |
+| thermostatOperating<br>StateDisplay | idle | string | yes | int | Display value of `thermostatOperatingState` |
 | thermostatRev | XXX | string | yes | ES | Hardware revision of this thermostat |
 | thermostatSetpoint | 60.0 | number | yes | int | Yet another way SmartThings once requested that setpoints be displayed |
 | thermostatStatus | Resume Program succeeded | string | yes | int | Most recent text for the thermostat device's status display |
@@ -1208,6 +1209,8 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | weatherSymbol | 0 | number | yes | ES | Index of the icon for the current weather conditions |
 | weatherTemperature | 57.9 | number | yes | ES | Self-explanatory |
 | wifiOfflineAlert | false | string | yes | ES | True if Ecobee servers have lost connection to the thermostat device (usually means a wifi or internet outage at your location) |
+</code>
+
 
 In addition to the above, there are several internal-use-only attributes that should not be used in any manner by end-users or programmers. These include: `tstatDate`, `tstatTime`, `setAway`, `setSleep`, `setHome`, `resumeProgram`, `setModeOff`, `setModeAuto`, `setModeHeat`, `setFanOff`, and `setModeCool`.
 
