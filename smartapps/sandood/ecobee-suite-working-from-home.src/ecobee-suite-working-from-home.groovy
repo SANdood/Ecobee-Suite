@@ -12,10 +12,9 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- * <snip>
- * 	1.7.00 - Initial Release
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc3" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -149,11 +148,11 @@ def mainPage() {
     }
 }
 
-def installed() {
+void installed() {
     initialize()
 }
 
-def updated() {
+void updated() {
     unsubscribe()
     unschedule()
     LOG("Updated with settings ${settings}", 2, null, 'info')
@@ -276,14 +275,14 @@ private getStatModeOk() {
 }
 
 private getModeOk() {
-    def result = !modes || modes.contains(location.mode)
+    def result = (!modes || modes.contains(location.mode))
     LOG("modeOk: ${result}", 4, null, 'trace')
 	return result
 }
 
 private getDaysOk() {
     def result = true
-    if (days) {
+    if (settings.days) {
         def df = new java.text.SimpleDateFormat("EEEE")
         if (location.timeZone) {
             df.setTimeZone(location.timeZone)
@@ -292,7 +291,7 @@ private getDaysOk() {
             df.setTimeZone(TimeZone.getTimeZone("America/New_York"))
         }
         def day = df.format(new Date())
-        result = days.contains(day)
+        result = settings.days.contains(day)
     }
 	LOG("daysOk: ${result}", 4, null, 'trace')
     return result
@@ -397,7 +396,7 @@ private def updateMyLabel() {
 }
 
 private hideOptions() {
-    (days || modes)? false: true
+    return (settings.days || settings.modes) ? false : true
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
