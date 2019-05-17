@@ -33,9 +33,9 @@
  *	1.6.14 - Clean up digits display
  *  1.6.15 - Shortcut the 'TestingForInstall' installed()
  *	1.6.16 - Log uninstalls also
- *	1.7.00 - Universal code supports now both SmartThings and Hubitat
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc2" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -65,19 +65,19 @@ metadata {
 		attribute "windows", "string"
 		
 	// These commands are all really internal-use only
-		command "addSensorToAway"
-		command "addSensorToHome"
-		command "addSensorToSleep"
-		command "deleteSensorFromAway"
-		command "deleteSensorFromHome"
-		command "deleteSensorFromSleep"
-		command "disableSmartRoom"
-		command "doRefresh"
-		command "enableSmartRoom"
-		command "noOp"
-		command "removeSensorFromAway"
-		command "removeSensorFromHome"
-		command "removeSensorFromSleep"
+		command "addSensorToAway", []
+		command "addSensorToHome", []
+		command "addSensorToSleep", []
+		command "deleteSensorFromAway", []
+		command "deleteSensorFromHome", []
+		command "deleteSensorFromSleep", []
+		command "disableSmartRoom", []
+		command "doRefresh", []
+		command "enableSmartRoom", []
+		command "noOp", []
+		command "removeSensorFromAway", []
+		command "removeSensorFromHome", []
+		command "removeSensorFromSleep", []
 
 	}
 
