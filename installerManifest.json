@@ -5,7 +5,7 @@
 	"repoBranch": 	"master",
 	"name": 	"Ecobee Suite Manager",
 	"author": 	"Barry A. Burke (storageanarchy@gmail.com)",
-	"description": 	"Free Suite of SmartApps and Device Handlers to integrate your Ecobee Thermostats and Sensors with SmartThings (and now Hubitat too!).",
+	"description": 	"Free Suite of applications and device drivers to integrate your Ecobee Thermostats and Sensors with SmartThings (and now Hubitat too!).",
 	"category": 	"My Apps",
 	"bannerUrl": 	"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/Ecobee_Suite_banner.png", 
 	"forumUrl": 	"https://community.smartthings.com/t/release-free-ecobee-suite-version-1-6-1/132248",
