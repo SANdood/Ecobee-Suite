@@ -951,7 +951,7 @@ def getEcobeeThermostats() {
 	atomicState.thermostatsWithNames = stats
     atomicState.statLocation = statLocation
     LOG("getEcobeeThermostats() - thermostatsWithNames: ${stats}, locations: ${statLocation}", 4, null, 'trace')
-	return stats.sort(false) { it.value }
+	return stats.sort { it.value }
 }
 
 // Get the list of Ecobee Sensors for use in the settings pages (Only include the sensors that are tied to a thermostat that was selected)
