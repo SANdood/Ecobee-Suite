@@ -12,9 +12,9 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- * 1.7.00 - Initial release
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc2" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -82,23 +82,32 @@ def mainPage() {
     ]
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
-        	label title: "Name for this Thermal Comfort Helper", required: true, defaultValue: "Thermal Comfort"
-			if (isHE && !app.label) app.updateLabel("Thermal Comfort")
+        	String defaultLabel = "Thermal Comfort"
+        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+            if (!app.label) {
+				app.updateLabel(defaultLabel)
+				atomicState.appDisplayName = defaultLabel
+			}
 			if (isHE) {
-				if (!app.label) {
-					app.updateLabel("Thermal Comfort")
-					atomicState.appDisplayName = "Thermal Comfort"
-				} else if (app.label.contains('<span')) {
+				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
-						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
 						atomicState.appDisplayName = myLabel
-						app.updateLabel(atomicState.appDisplayName)
+						app.updateLabel(myLabel)
 					}
 				}
-			}
-        	if(settings.tempDisable == true) {
+			} else {
+            	if (app.label.contains(' (paused)')) {
+                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                    atomicState.appDisplayName = myLabel
+                    app.updateLabel(myLabel)
+                } else {
+                	atomicState.appDisplayName = app.label
+                }
+            }
+        	if (settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
         		input ("theThermostat", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", 
@@ -209,15 +218,16 @@ def mainPage() {
     }
 }
 
-def installed() {
+void installed() {
 	LOG("installed() entered", 3, "", 'trace')
     atomicState.humidity = null
 	initialize()
 }
 
-def uninstalled() {
+void uninstalled() {
 }
-def updated() {
+
+void updated() {
 	LOG("updated() with settings: ${settings}", 3, "", 'trace')
 	unsubscribe()
     unschedule()
@@ -226,13 +236,12 @@ def updated() {
 }
 
 def getProgramsList() {
-    if (theThermostat) {
-        def programs = theThermostat.currentValue('programsList')
-        if (programs) {
-            return new JsonSlurper().parseText(programs)
-        }
+	def programs = ["Away","Home","Sleep"]
+	if (theThermostat) {
+    	def pl = theThermostat.currentValue('programsList')
+        if (pl) programs = new JsonSlurper().parseText(pl)
     }
-    return ["Away","Home","Sleep"]
+    return programs.sort(false)
 }
 
 def getThermostatModesList() {
@@ -241,7 +250,7 @@ def getThermostatModesList() {
         def tempModes = theThermostat.currentValue('supportedThermostatModes')
         if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
     }
-    return statModes
+    return statModes.sort(false)
 }
 
 def initialize() {
@@ -306,12 +315,10 @@ def atomicHumidityUpdater() {
 }
 
 def humidityUpdate( humidity ) {
-	if (humidity?.toString().isNumber()) {
-    	humidityUpdate(humidity as Integer)
-    } else {
-    	return
-    }
+	if (humidity?.toString().isNumber()) humidityUpdate(humidity as Integer)
+    return
 }
+
 def humidityUpdate( Integer humidity ) {
     if (humidity == null) {
     	log("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
@@ -655,21 +662,21 @@ private def sendMessage(notificationMessage) {
 }
 
 private def updateMyLabel() {
-	if (isST) return	// ST doesn't support the colored label approach
-
+	String flag = isST ? ' (paused)' : '<span '
+	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
-		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains('<span')) {
+	if (myLabel.contains(flag)) {
 		// strip off any connection status tag
-		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
