@@ -44,11 +44,11 @@
  *	1.6.19 - Changes Reverted
  *	1.6.20 - Handle null list of Climates
  *	1.6.21 - Added option to change heat/cool setpoints instead of/in addition to changing the mode
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.6.21" }
-private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()}" }
-import groovy.json.JsonOutput
-import groovy.json.JsonSlurper
+def getVersionNum() { return "1.7.00" }
+private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+import groovy.json.*
 
 definition(
 	name: "ecobee Suite Smart Mode",
@@ -69,54 +69,85 @@ preferences {
 
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Mode & Setpoints Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Mode & Setpoints"
-        }
-        section(title: "${settings.tempDisable?'':'Select Thermostat(s)'}") {
-        	if(settings.tempDisable) { paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."}
-        	else {input ("thermostats", "device.ecobeeSuiteThermostat", title: "Pick Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)}            
+    	section(title: "") {
+			String defaultLabel = "Smart Mode & Setpoints"
+        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+            if (!app.label) {
+				app.updateLabel(defaultLabel)
+				atomicState.appDisplayName = defaultLabel
+			}
+			if (isHE) {
+				if (app.label.contains('<span ')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(myLabel)
+					}
+				}
+			} else {
+            	if (app.label.contains(' (paused)')) {
+                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                    atomicState.appDisplayName = myLabel
+                    app.updateLabel(myLabel)
+                } else {
+                	atomicState.appDisplayName = app.label
+                }
+            }
+        	if(settings.tempDisable) { 
+				paragraph "WARNING: Temporarily Paused - re-enable below."
+			} else {
+				input ("thermostats", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, 
+					   multiple: true, submitOnChange: true)
+			}
 		}
-        if (!settings.tempDisable) {
-			section(title: "Select Outdoor Weather Source") {
-				input(name: 'tempSource', title: 'Monitor this weather source', type: 'enum', required: true, multiple: false, description: 'Tap to choose...', 
-                	options:[
-                    	'ecobee':"Ecobee Thermostat's Weather", 
-                    	'location':"SmartThings/TWC Weather for ${location.name}", 
-                        'sensors':'SmartThings Sensors',
-                        'station':'SmartThings-based Weather Station DTH',
-                        'wunder':'Weather Underground Station (obsolete)'
-                    ], submitOnChange: true
+        if (!settings?.tempDisable && (settings?.thermostats?.size()>0)) {
+			section(title: "Outdoor Weather Source") {
+				input(name: 'tempSource', title: 'Monitor this weather source', type: 'enum', required: true, multiple: false,  
+					  options: (isST?[
+						  'ecobee':"Ecobee Thermostat's Weather", 
+						  'location':"SmartThings/TWC Weather for ${location.name}", 
+						  'sensors':'SmartThings Sensors',
+						  'station':'SmartThings-based Weather Station DTH',
+						  'wunder':'Weather Underground Station (obsolete)'
+                    	]:[
+						  'ecobee':"Ecobee Thermostat's Weather",  
+						  'sensors':'Hubitat Sensors',
+						  'station':'Hubitat-based Weather Station Device',
+						  ]), submitOnChange: true
                 )
-				if (tempSource) {
-					if (tempSource == 'location') {
+				if (settings.tempSource) {
+					if (settings.tempSource == 'location') {
                     	paragraph "Using The Weather Company weather for the current location (${location.name})."
                         if (!settings.latLon) input(name: "zipCode", type: 'text', title: 'Zipcode (Default is location Zip code)', defaultValue: getZIPcode(), required: true, submitOnChange: true )
-                        if (location.latitude && location.longitude) input(name: "latLon", type: 'bool', title: 'Use SmartThings hub\'s GPS coordinates instead (better precision)?', submitOnChange: true)
-						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', 
+                        if (location.latitude && location.longitude) input(name: "latLon", type: 'bool', title: "Use ${isST?'SmartThings':'Hubitat'} hub's GPS coordinates instead (better precision)?", submitOnChange: true)
+						input(name: 'locFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, 
                         	options:['1','5','10','15','30','60','180'])
-					} else if (tempSource == 'sensors') {
-                    	paragraph "Using SmartThings sensors. Note: Both Temperature & Humidity sensors are required for dew point-based actions."
-						input(name: 'thermometer', type: 'capability.temperatureMeasurement', title: "Which Temperature Sensor?", description: 'Tap to choose...', required: true, multiple: false)
-                        input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", description: 'Tap to choose...', 
+					} else if (settings.tempSource == 'sensors') {
+                    	paragraph "Using ${isST?'SmartThings':'Hubitat'} sensors. Note: Both Temperature & Humidity sensors are required for dew point-based actions."
+						input(name: 'thermometer', type: 'capability.temperatureMeasurement', title: "Which Temperature Sensor?", required: true, multiple: false)
+                        input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?",  
                         	required: (settings.dewBelowOverride), multiple: false) 
-					} else if (tempSource == "ecobee") {
+					} else if (settings.tempSource == "ecobee") {
                     	paragraph "Using weather data from the (notoriously inaccurate) Ecobee thermostat${(settings.thermostats.size()==1)?' '+settings.thermostats.displayName:':'}"
 						if (settings.thermostats.size() > 1) {
-							input(name: 'tstatTemp', type: 'enum', title: "Which Ecobee thermostat?", description: 'Tap to choose...', required: true, multiple: false, submitOnChange: true,
+							input(name: 'tstatTemp', type: 'enum', title: "Which Ecobee Thermostat?", required: true, multiple: false, submitOnChange: true,
                             		options:thermostats.displayName)
 						}
-					} else if (tempSource == 'station') {
-                    	paragraph "Using a SmartThings-based Weather Station - please select ONE from the list of available & supported Weather Station devices below..."
-                        input(name: "smartWeather", type: "device.smartWeatherStationTile", title: 'Which SmartWeather Station Tile?', description: "Tap to choose...", required: false, 
-                        		multiple: false, hideWhenEmpty: true)
-                        input(name: "smartWeather2", type: "device.smartWeatherStationTile2.0", title: 'Which SmartWeather Station Tile 2.0?', description: "Tap to choose...", required: false, 
-                        		multiple: false, hideWhenEmpty: true)
-                        input(name: "meteoWeather", type: "device.meteobridgeWeatherStation", title: 'Which Meteobridge Weather Station?', description: "Tap to choose...", required: false, 
+					} else if (settings.tempSource == 'station') {
+						paragraph "Using a ${isST?'SmartThings':'Hubitat'}-based Weather Station - please select ${isST?'ONE ':''}from the list of the supported Weather Station devices below..."
+						if (isST) {
+							input(name: "smartWeather", type: "device.smartWeatherStationTile", title: 'Which SmartWeather Station Tile?', required: false, 
+									multiple: false, hideWhenEmpty: true)
+							input(name: "smartWeather2", type: "device.smartWeatherStationTile2.0", title: 'Which SmartWeather Station Tile 2.0?', required: false, 
+									multiple: false, hideWhenEmpty: true)
+						}
+						input(name: "meteoWeather", type: "${isST?'device.meteobridgeWeatherStation':'device.MeteobridgeWeatherStation'}", title: 'Which Meteobridge Weather Station?', required: false, 
                         		multiple: false, hideWhenEmpty: true)      
-                    } else if (tempSource == "wunder") {
+                    } else if (settings.tempSource == "wunder") {
                     	paragraph "Using a specific Weather Underground Weather Station"
-						input(name: 'stationID', type: 'string', title: 'Enter WeatherUnderground Station identifier', description: "Tap to choose...", 
-                        		defaultValue: "${settings.nearestPWS?getPWSID():''}", required: true)
+						input(name: 'stationID', type: 'string', title: 'Enter WeatherUnderground Station identifier', defaultValue: "${settings.nearestPWS?getPWSID():''}", required: true)
                         input(name: 'nearestPWS', type: 'bool', title: 'Use nearest available station', options: ['true', 'false'], defaultValue: true, submitOnChange: true)
         				href(title: "Or, Search WeatherUnderground.com for your desired PWS",
         					description: 'After page loads, select "Change Station" for a list of weather stations.  ' +
@@ -124,8 +155,7 @@ def mainPage() {
              				required: false, style:'embedded',             
              				url: (location.latitude && location.longitude)? "http://www.wunderground.com/cgi-bin/findweather/hdfForecast?query=${location.latitude},${location.longitude}" :
              		 		"http://www.wunderground.com/q/${location.zipCode}")
-                        input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, description: 'Tap to choose...', 
-                        	options:['1','5','10','15','30','60','180'])
+                        input(name: 'pwsFreq', type: 'enum', title: 'Temperature check frequency (minutes)', required: true, multiple: false, options:['1','5','10','15','30','60','180'])
 					}
 				}
 			}
@@ -136,15 +166,14 @@ def mainPage() {
                 input(name: "dewAboveTemp", title: "Or, (optionally) when the outdoor dewpoint is at or above...", type: 'decimal', description: "Enter decimal dewpoint", 
                 		required: false, submitOnChange: true)
 				if (settings.aboveTemp || settings.dewAboveTemp) {
-					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: (!settings.aboveSetpoints), multiple: false, options:getThermostatModes(), 
-                    		submitOnChange: true)
+					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', required: (!settings.aboveSetpoints), multiple: false, options:getThermostatModes(), submitOnChange: true)
                     if (settings.aboveMode == 'off') {
                     	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
                     }
                     input(name: 'aboveSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.aboveMode), defaultValue: false, submitOnChange: true) 
                     if (settings.aboveSetpoints) {
                     	if (!settings.aboveProgram && (!settings.aboveHeatTemp || !settings.aboveCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
-                    	input(name: 'aboveProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                    	input(name: 'aboveProgram', title: 'Change Setpoints for Program', type: 'enum', required: true, submitOnChange: true, multiple: false, 
                         		options:getEcobeePrograms())
                     	input(name: 'aboveHeatTemp', title: "Desired heating setpoint (${getHeatRange()})", type: 'decimal', description: 'Default = no change...', required: (!settings.aboveCoolTemp), 
                         		range: getHeatRange(), submitOnChange: true)
@@ -157,7 +186,7 @@ def mainPage() {
             	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'decimal', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", 
                 		range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
 				if (settings.belowTemp) {
-					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', description: 'Tap to choose...', required: (!settings.belowSetpoints), multiple: false, 
+					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', required: (!settings.belowSetpoints), multiple: false, 
                     		options:getThermostatModes(), submitOnChange: true)
                     if (!(settings.aboveMode == 'off') && (settings.belowMode == 'off')) {
                     	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
@@ -165,7 +194,7 @@ def mainPage() {
                     input(name: 'belowSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.belowMode), defaultValue: false, submitOnChange: true) 
                     if (settings.belowSetpoints) {
                     	if (!settings.belowProgram && (!settings.belowHeatTemp || !settings.belowCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
-                    	input(name: 'belowProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                    	input(name: 'belowProgram', title: 'Change Setpoints for Program', type: 'enum', required: true, submitOnChange: true, multiple: false, 
                         		options:getEcobeePrograms())
                     	input(name: 'belowHeatTemp', title: "Desired heating setpoint (${getHeatRange()})", type: 'decimal', description: 'Default = no change...', required: (!settings.belowCoolTemp), 
                         		range: getHeatRange(), submitOnChange: true)
@@ -184,11 +213,11 @@ def mainPage() {
 			if ((settings.belowTemp && settings.aboveTemp) && (settings.belowTemp != settings.aboveTemp)) {
             	section(title: "Outdoor Temperature 'Between' Settings") {
 					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', 
-                    		description: 'Tap to choose...', required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
+                    		required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
             		input(name: 'betweenSetpoints', title: 'Change Program Setpoints', type: 'bool', required: false, defaultValue: false, submitOnChange: true) 
                     if (settings.betweenSetpoints) {
                     	if (!settings.betweenProgram && (!settings.betweenHeatTemp || !settings.betweenCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
-                    	input(name: 'betweenProgram', title: 'Change Setpoints for Program', type: 'enum', description: 'Tap to choose...', required: true, submitOnChange: true, multiple: false, 
+                    	input(name: 'betweenProgram', title: 'Change Setpoints for Program', type: 'enum', required: true, submitOnChange: true, multiple: false, 
                         		options:getEcobeePrograms())
                     	input(name: 'betweenHeatTemp', title: 'Desired heating setpoint', type: 'decimal', description: 'Default = no change...', required: (!settings.betweenCoolTemp), 
                         		range: getHeatRange(), submitOnChange: true)
@@ -211,32 +240,55 @@ def mainPage() {
                     		submitOnChange: true)
                 }
 			}
-			section(title: "Enable only for specific modes or programs? (optional)") {
-        		paragraph("Thermostat Modes will only be changed while ${location.name} is in these SmartThings Modes.")
-            	input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
+			section(title: "Options") {
+            	input(name: "theModes",type: "mode", title: "Change Thermostat Mode only when the Location Mode is", multiple: true, required: false)
+				input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
+				paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
         	}            
-      		section("Notifications (optional)") {
-        		input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
-                
-            	if (settings.notify) {
-       				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-       				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number", required: false, submitOnChange: true 
-                    if (!settings.phone) {
-                        input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
-                    }
-                    if (!settings.phone && !settings.sendPush) paragraph "Notifications configured, but nobody to send them to!"
-                }
-            	paragraph("A notification is always sent to the Hello Home log whenever Smart Mode changes a thermostat's Mode")
-        	}
+			if (settings.notify) {
+				if (isST) {
+					section("Notifications") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+					}
+				} else {		// isHE
+					section("Use Notification Device(s)") {
+						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+							  description: "Select notification devices", submitOnChange: true)
+						paragraph ""
+					}
+					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+						paragraph ""
+					}
+					section("Use Speech Device(s)") {
+						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						paragraph ""
+					}
+				}
+			}
         }
         section(title: "Temporary Disable") {
-        	input(name: "tempDisable", title: "Temporarily Disable this Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
+        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
 		}
     	section (getVersionLabel()) {}
     }
 }
 
-def installed() {
+void installed() {
 	LOG("installed() entered", 3, "", 'trace')
     atomicState.aboveChanged = false
     atomicState.betweenChanged = false
@@ -246,15 +298,15 @@ def installed() {
 	initialize()  
 }
 
-def uninstalled() {
+void uninstalled() {
 	clearReservations()
 }
-def clearReservations() {
+void clearReservations() {
 	thermostats?.each {
     	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff' )
     }
 }
-def updated() {
+void updated() {
 	LOG("updated() with settings: ${settings}", 3, "", 'trace')
 	unsubscribe()
     unschedule()
@@ -266,11 +318,13 @@ def updated() {
     initialize()
 }
 
-def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+boolean initialize() {
+	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
+	updateMyLabel()
+	
 	if(settings.tempDisable) {
     	clearReservations()
-    	LOG("Temporarily Disabled as per request.", 2, null, "warn")
+    	LOG("Temporarily Paused", 2, null, "warn")
     	return true
     }
     
@@ -284,7 +338,8 @@ def initialize() {
     def tempNow
     def gu = getTemperatureScale()
 	switch( settings.tempSource) {
-		case 'location':
+		case 'location':			
+			// SmartThings Only
         	def WUname = (settings.latLon) ? 'getGPSTemp' : 'getZipTemp'
 			if (settings.locFreq.toInteger() < 60) {
             	"runEvery${settings.locFreq}Minute${settings.locFreq!='1'?'s':''}"( "${WUname}" )
@@ -293,11 +348,11 @@ def initialize() {
                 "runEvery${locHours}Hour${locHours!=1?'s':''}"( "${WUname}" )
             }
             def t = "${WUname}"()					// calls temperatureUpdate() & stores dewpoint
-            if (t.isNumber()) tempNow = t
+            if (t != null) tempNow = t as BigDecimal
 			break;
 		
 		case 'sensors':
-            if (settings.dewBelowOverride || settings.dewAboveTemp?.isNumber()) {
+            if (settings.dewBelowOverride || (settings.dewAboveTemp != null)) {
             	if (settings.humidistat) { 
                 	subscribe( settings.humidistat, 'relativeHumidity', humidityChangeHandler)
             	} else {
@@ -309,11 +364,11 @@ def initialize() {
             def latest = settings.thermometer.currentState("temperature")
 			def unit = latest.unit
             def t 
-            if (latest.value.isNumber()) {
+            if (latest.numberValue != null) {
             	t = roundIt(latest.numberValue, (unit=='C'?2:1))
             	if (dewBelowOverride) {
                 	latest = settings.humidistat.currentState('humidity')
-            		if (latest.value.isNumber()) {
+            		if (latest.value != null) {
                     	def h = latest.numberValue
             			atomicState.humidity = h
                         LOG("Humidity is: ${h}%",3,null,'info')
@@ -331,14 +386,14 @@ def initialize() {
         	if (settings.smartWeather) {
             	subscribe(settings.smartWeather, 'temperature', tempChangeHandler)
                 def latest = settings.smartWeather.currentState('temperature')
-                def t = latest.value
+                def t = latest.numberValue
                 def unit = latest.unit
-                if (t.isNumber()) {
+                if (t != null) {
                 	t = latest.numberValue
                 	if (dewBelowOverride) {
                 		subscribe(settings.smartWeather, 'relativeHumidity', humidityChangeHandler)
                 		latest = settings.smartWeather.currentState('relativeHumidity')
-                		if (latest.value.isNumber()) {
+                		if (latest?.numberValue != null) {
                         	def h = roundIt(latest.numberValue, (unit=='C'?2:1))
                         	LOG("Humidity is: ${h}%",3,null,'info')
                 			def d = calculateDewpoint( t, h, unit )
@@ -354,7 +409,7 @@ def initialize() {
                 if (settings.dewBelowOverride) {
                 	subscribe(settings.smartWeather2, 'dewpoint', dewpointChangeHandler)
                 	latest = settings.smartWeather2.currentState('dewpoint')
-                    if (latest.value.isNumber()) {
+                    if (latest?.numberValue != null) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
                         LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
@@ -362,7 +417,7 @@ def initialize() {
                 }
             	subscribe(settings.smartWeather2, 'temperature', tempChangeHandler)
                 latest = settings.smartWeather2.currentState('temperature')
-            	if (latest.value.isNumber()) { 
+            	if (latest?.numberValue != null) { 
                 	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                     temperatureUpdate(tempNow) 
                 }
@@ -371,7 +426,7 @@ def initialize() {
                 if (settings.dewBelowOverride) {
                 	subscribe(settings.meteoWeather, 'dewpoint', dewpointChangeHandler)
                 	latest = settings.meteoWeather.currentState('dewpoint')
-                    if (latest.value.isNumber()) {
+                    if (latest?.numberValue != null) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
                         LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
@@ -379,7 +434,7 @@ def initialize() {
                 }
             	subscribe(settings.meteoWeather, 'temperature', tempChangeHandler)
                 latest = settings.meteoWeather.currentState('temperature')
-            	if (latest.value.isNumber()) { 
+            	if (latest?.numberValue != null) { 
                 	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                     temperatureUpdate(tempNow) 
                 }
@@ -388,7 +443,7 @@ def initialize() {
                 if (settings.dewBelowOverride) {
                 	subscribe(settings.meteoWeather, 'dewPoint', dewpointChangeHandler)
                 	latest = settings.meteoWeather.currentState('dewPoint')
-                    if (latest.value.isNumber()) {
+                    if (latest?.numberValue != null) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
                         LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
@@ -396,7 +451,7 @@ def initialize() {
                 }
             	subscribe(settings.meteoWeather, 'temperature', tempChangeHandler)
                 latest = settings.meteoWeather.currentState('temperature')
-            	if (latest.value.isNumber()) { 
+            	if (latest?.numberValue != null) { 
                 	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                     temperatureUpdate(tempNow) 
                 }
@@ -410,7 +465,7 @@ def initialize() {
             if (dewBelowOverride) {
             	subscribe(theStat, 'weatherDewpoint', dewpointChangeHandler)
             	latest = theStat.currentState('weatherDewpoint')
-            	if (latest.value.isNumber()) {
+            	if (latest?.numberValue != null) {
                 	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                 	atomicState.dewpoint = d
                     LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
@@ -418,7 +473,7 @@ def initialize() {
             }
             subscribe(theStat, 'weatherTemperature', tempChangeHandler)
             latest = theStat.currentState('weatherTemperature')
-            if (latest.value.isNumber()) {
+            if (latest?.numberValue != null) {
             	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                 temperatureUpdate(tempnow) 
             }
@@ -432,7 +487,7 @@ def initialize() {
                 "runEvery${pwsHours}Hour${pwsHours!=1?'s':''}"( 'getPwsTemp' )
             }
             def t = getPwsTemp()					// calls temperatureUpdate() and updates atomicState.dewpoint
-            if (t.isNumber()) tempNow = t
+            if (t != null) tempNow = t as BigDecimal
 			break;
 	}
     atomicState.locModeEnabled = theModes ? theModes.contains(location.mode) : true
@@ -447,12 +502,12 @@ def initialize() {
 }
 
 def insideChangeHandler(evt) {
-    def theTemp = evt.value
+    def theTemp = evt.numberValue
     def newMode = null
-    if (theTemp.isNumber()) {
+    if (theTemp != null) {
     	theTemp = evt.numberValue
     	def coolSP = evt.device.currentValue('coolingSetpoint')
-        if (coolSP.isNumber()) {
+        if (coolSP != null) {
         	coolSP = coolSP.toBigDecimal()
         	if (theTemp > coolSP) {
             	if (settings.aboveCool) {
@@ -464,7 +519,7 @@ def insideChangeHandler(evt) {
         }
         if (newMode == null) {
        		def heatSP = evt.device.currentValue('heatingSetpoint')
-            if (heatSP.isNumber()) {
+            if (heatSP != null) {
             	heatSP = heatSP.toBigDecimal()
 				if (theTemp < heatSP) {
                 	if (settings.belowHeat) {
@@ -527,7 +582,7 @@ def thermostatModeHandler(evt) {
 }
 
 def tempChangeHandler(evt) {
-    if (evt.value?.isNumber()) {
+    if (evt.numberValue != null) {
     	def t = roundIt(evt.numberValue, (evt.unit=='C'?2:1))
     	atomicState.temperature = t
         if (settings.dewBelowOverride || settings.dewAboveTemp) {
@@ -537,7 +592,7 @@ def tempChangeHandler(evt) {
                 // (Sources that provide dewpoint directly will not update atomicState.humidity)
             	if (settings.tempSource == 'sensors') {    
             		def latest = settings.humidistat.currentState('humidity')
-            		if (latest.value.isNumber()) {
+            		if (latest.numberValue != null) {
                     	def h = latest.numberValue
             			atomicState.humidity = h
                         LOG("Humidity is: ${h}%",3,null,'info')
@@ -549,7 +604,7 @@ def tempChangeHandler(evt) {
                    	}
                 } else if ((settings.tempSource == 'station') && settings.smartWeather) {
                 	def latest = settings.smartWeather.currentState('relativeHumidity')
-                    if (latest.value.isNumber()) {
+                    if (latest.numberValue != null) {
                     	h = latest.numberValue
                         LOG("Humidity is: ${h}%",3,null,'info')
                 		def d = calculateDewpoint( t, h, unit )
@@ -570,7 +625,7 @@ def tempChangeHandler(evt) {
 }   
 
 def dewpointChangeHandler(evt) {
-	if (evt.value.isNumber()) {
+	if (evt.numberValue != null) {
     	def d = roundIt(evt.numberValue, (evt.unit=='C'?2:1))
     	atomicState.dewpoint = d
         LOG("Dewpoint is: ${d}°${evt.unit}",3,null,'info')
@@ -579,7 +634,7 @@ def dewpointChangeHandler(evt) {
 }
 
 def humidityChangeHandler(evt) {
-	if (evt.value.isNumber()) {
+	if (evt.numberValue != null) {
     	t = atomicState.temperature
         u = getTemperatureScale()
         atomicState.humidity = evt.numberValue
@@ -596,11 +651,11 @@ def atomicTempUpdater() {
 }
 
 def temperatureUpdate( temp ) {
-	if (temp?.isNumber()) temperatureUpdate(temp as BigDecimal)
+	if (temp != null) temperatureUpdate(temp as BigDecimal)
 }
 def temperatureUpdate( BigDecimal temp ) {
 	def unit = getTemperatureScale()
-    if (!temp) {
+    if (temp == null) {
     	LOG("Ignoring invalid temperature: ${temp}°${unit}", 2, null, 'warn')
         return false
     }
@@ -766,6 +821,7 @@ private def getPwsTemp() {
 	return getWUTemp('pws')
 }
 
+// SmartThings-only
 private def getTwcTemp(type) {
 	def isMetric = (getTemperatureScale() == "C")
 	def source = (type == 'zip') ? settings.zipCode : ((type == 'gps')?"${location.latitude},${location.longitude}":null)
@@ -784,13 +840,13 @@ private def getTwcTemp(type) {
     	tempNow = twcConditions.temperature
         dewpointNow = twcConditions.temperatureDewPoint
 
-        if (tempNow?.isNumber()) {
+        if (tempNow != null) {
         	if (dewpointNow != -999.0) {
         		atomicState.dewpoint = dewpointNow
             } else {
             	def hum = twcConditions.relativeHumidity
-                if (hum && hum.contains('%')) hum = (hum-'%').toInteger()		// strip off the trailing '%' sign
-                if (hum.isNumber()) {
+                if ((hum != null) && hum.contains('%')) hum = (hum-'%') as Integer		// strip off the trailing '%' sign
+                if (hum.toString().isNumber()) {
                 	dewpointNow = calculateDewpoint( tempNow, hum, (isMetric?'C':'F'))
                 }
                 atomicState.dewpoint = dewpointNow
@@ -806,7 +862,7 @@ private def getTwcTemp(type) {
     LOG("Current conditions unavailable",1,null,'error')
     return null
 }
-
+// SmartThings only - deprecated
 private def getWUTemp(type) {
 	def isMetric = (getTemperatureScale() == "C")
     def tempNow
@@ -892,22 +948,16 @@ def getThermostatModes() {
 
 // get the combined set of Ecobee Programs applicable for these thermostats
 private def getEcobeePrograms() {
-	def programs
+	def programs = ['Away', 'Home', 'Sleep'] 
 
-    settings.thermostats?.each { stat ->
-        def DNI = stat.device.deviceNetworkId
-        //LOG("Getting list of programs for stat (${stat}) with DNI (${DNI})", 4)
-        if (!programs) {
-            //LOG("No programs yet, adding to the list", 4)
-            programs = parent.getAvailablePrograms(stat)
-        } else {
-            //LOG("Already have some programs, need to create the set of overlapping", 4)
-            programs = programs.intersect(parent.getAvailablePrograms(stat))
+	if (settings.thermostats?.size() > 0) {
+		settings.thermostats.each { stat ->
+			def pl = stat.currentValue('programsList')
+            if (pl) programs = programs.intersect(new JsonSlurper().parseText(pl))
         }
-    }
-
-    LOG("getEcobeePrograms: returning ${programs}", 4, null, 'info')
-    if (programs) { return programs.sort(false) } else { return ['Away', 'Home', 'Sleep'] }
+	} 
+    LOG("getEcobeePrograms: returning ${programs}", 4)
+    return programs.sort(false)
 }
 
 // return the external temperature range
@@ -959,8 +1009,7 @@ def getCoolRange() {
 }
 
 private String getZIPcode() {
-	if (location.zipCode) return location.zipCode
-    else return ""
+	return location.zipCode ?: ""
 }
 
 private String getPWSID() {
@@ -995,32 +1044,32 @@ private def getDeviceId(networkId) {
 }
 
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
-void makeReservation(tid, String type='modeOff' ) {
-	parent.makeReservation( tid, app.id, type )
+void makeReservation(String tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id as String, type )
 }
 // Cancel my reservation
-void cancelReservation(tid, String type='modeOff') {
+void cancelReservation(String tid, String type='modeOff') {
 	log.debug "cancel ${tid}, ${type}"
-	parent.cancelReservation( tid, app.id, type )
+	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
-Boolean haveReservation(tid, String type='modeOff') {
-	return parent.haveReservation( tid, app.id, type )
+Boolean haveReservation(String tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id as String, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations(tid, String type='modeOff') {
+Boolean anyReservations(String tid, String type='modeOff') {
 	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
-Integer countReservations(tid, String type='modeOff') {
+Integer countReservations(String tid, String type='modeOff') {
 	return parent.countReservations( tid, type )
 }
 // Get the list of app IDs that have reservations
-List getReservations(tid, String type='modeOff') {
+List getReservations(String tid, String type='modeOff') {
 	return parent.getReservations( tid, type )
 }
 // Get the list of app Names that have reservations
-List getGuestList(tid, String type='modeOff') {
+List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
 
@@ -1033,25 +1082,139 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 }
 
 private def sendMessage(notificationMessage) {
-	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 5, null, "trace")
-    
+	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
-        String msg = "${location.name} ${app.label}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (phone) { // check that the user did select a phone number
-            if ( phone.indexOf(";") > 0){
-                def phones = phone.split(";")
-                for ( def i = 0; i < phones.size(); i++) {
-                    LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                    sendSmsMessage(phones[i], msg)									// Only to SMS contact
-                }
-            } else {
-                LOG("Sending SMS to ${phone}",2,null,'info')
-                sendSmsMessage(phone, msg)											// Only to SMS contact
-            }
-        } else if (settings.pushNotify) {
-            LOG("Sending Push to everyone",2,null,'warn')
-            sendPushMessage(msg)													// Push to everyone
-        }
+        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+		if (isST) {
+			if (settings.phone) { // check that the user did select a phone number
+				if ( settings.phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+		} else {		// isHE
+			if (settings.notifiers != null) {
+				settings.notifiers.each {							// Use notification devices on Hubitat
+					it.deviceNotification(msg)
+				}
+			}
+			if (settings.phone != null) {
+				if ( settings.phone.indexOf(",") > 0){
+					def phones = phone.split(",")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			
+		}
     }
-    sendNotificationEvent( ${app.label}+ ': ' + notificationMessage )								// Always send to hello home
+	// Always send to Hello Home / Location Event log
+	if (isST) { 
+		sendNotificationEvent( notificationMessage )					
+	} else {
+		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
 }
+
+private def updateMyLabel() {
+	String flag = isST ? ' (paused)' : '<span '
+	
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains(flag)) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
+}
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	//log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************

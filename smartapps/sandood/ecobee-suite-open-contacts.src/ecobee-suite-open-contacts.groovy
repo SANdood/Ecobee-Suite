@@ -40,9 +40,10 @@
  *	1.6.15 - Fixed(?) adjust temperature to adjust only when HVACMode is !Off
  *	1.6.16 - Fixed initialization logic WRT HVAC on/off state
  *	1.6.17 - Minor text edits
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.6.17" }
-private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()}" }
+def getVersionNum() { return "1.7.00" }
+private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Open Contacts",
@@ -64,16 +65,35 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for this Contacts & Switches Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Contacts & Switches"
-        }
-        
-        section(title: "Select Thermostats") {
-        	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Disabled per request. Turn on below to activate handler." }
+    	section(title: "") {
+        	label title: "Name for this Contacts & Switches Helper", required: true, defaultValue: "Contacts & Switches"
+			if (isHE) {
+				if (!app.label) {
+					app.updateLabel("Contacts & Switches")
+					atomicState.appDisplayName = "Contacts & Switches"
+				} else if (app.label.contains('<span ')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						def myLabel = app.label.substring(0, app.label.indexOf('<span '))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(myLabel)
+					}
+				}
+			} else {
+            	if (app.label.contains(' (paused)')) {
+                	def myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                    atomicState.appDisplayName = myLabel
+                    app.updateLabel(myLabel)
+                } else {
+                	atomicState.appDisplayName = app.label
+                }
+            }
+        	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Paused - re-enable below." }
         	else { 
-            	input(name: "myThermostats", type: "device.ecobeeSuiteThermostat", title: "Select Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+				input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
                 input(name: 'defaultMode', type: 'enum',  title: "Default Mode for thermostat${((settings.myThermostats==null)||(settings.myThermostats.size()>1))?'s':''}", 
-                		multiple: false, required: true, metadata: [values: ['auto', 'cool', 'heat', 'off']], defaultValue: 'auto', submitOnChange: true)
+                		multiple: false, required: true, options: ['auto', 'cool', 'heat', 'off'], defaultValue: 'auto', submitOnChange: true)
             }          
 		}
     
@@ -103,7 +123,7 @@ def mainPage() {
             }
             
 			section(title: "Select Contact Sensors") {
-				input(name: "contactSensors", title: "Contact Sensors: ", type: "capability.contactSensor", required: false, multiple: true, description: "", submitOnChange: true)
+				input(name: "contactSensors", title: "Contact Sensors: ", type: "capability.contactSensor", required: false, multiple: true,  submitOnChange: true)
                 if (settings.contactSensors) {
                 	input(name: 'contactOpen', type: 'bool', title: "Run HVAC Off Actions when ${settings.contactSensors.size()>1?'any of the contacts are':'the contact is'} open?", required: true, defaultValue: true, submitOnChange: true)
                    	paragraph("HVAC Off Actions will be taken when a contact sensor is ${((settings.contactOpen==null)||settings.contactOpen)?'Open':'Closed'}.")
@@ -111,7 +131,7 @@ def mainPage() {
 			}
             
             section(title: "Select Switches") {
-            	input(name: "theSwitches", title: "Switches: ", type: "capability.switch", required: false, multiple: true, description: "", submitOnChange: true)
+            	input(name: "theSwitches", title: "Switches: ", type: "capability.switch", required: false, multiple: true,  submitOnChange: true)
                 if (settings.theSwitches) {
                 	input(name: 'switchOn', type: 'bool', title: "Run HVAC Off Actions when ${settings.theSwitches.size()>1?'any of the switches are':'the switch is'} turned on?", required: true, defaultValue: true, submitOnChange: true)
                     paragraph("HVAC Off Actions will be taken off when a switch is turned ${((settings.switchOn==null)||settings.switchOn)?'On':'Off'}")
@@ -121,30 +141,57 @@ def mainPage() {
             if ((settings.contactSensors != null) || (settings.theSwitches != null)) {
 				section(title: "Timers") {
 					input(name: "offDelay", title: "Delay time (in minutes) before turning off HVAC or Sending Notification [Default=5]", type: "enum", required: true, 
-                    	metadata: [values: [0, 1, 2, 3, 4, 5, 10, 15, 30]], defaultValue: 5)
+                    	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: 5)
 					input(name: "onDelay", title: "Delay time (in minutes) before turning HVAC back on  or Sending Notification [Default=0]", type: "enum", required: true, 
-                    	metadata: [values: [0, 1, 2, 3, 4, 5, 10, 15, 30]], defaultValue: "0")
+                    	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: "0")
 	        	}
             
             	section(title: "Action Preferences") {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
-                    	metadata: [values: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"]], defaultValue: "Notify Only", submitOnChange: true)
+                    	options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
+				}
                         
-					if (settings.whichAction != "HVAC Actions Only") {
-                    	paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-            			input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
-                        if (!settings.phone) {
-                        	input( name: 'sendPush', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, submitOnChange: true)
-                        }
-                        if (!settings.phone && !settings.sendPush) paragraph "WARNING: Notifications configured, but nobody to send them to!"
-                	}
-                    paragraph("All notifications are always sent to the Hello Home log")
+				if (settings.whichAction != "HVAC Actions Only") {
+					if (isST) {
+						section("Notifications") {
+							paragraph "A notification will also be sent to the Hello Home log\n"
+							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+							input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+						}
+					} else {		// isHE
+						section("Use Notification Device(s)") {
+							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+								  description: "Select notification devices", submitOnChange: true)
+							paragraph ""
+						}
+						section("Use SMS to Phone(s) (limit 10 messages per day)") {
+							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+							paragraph ""
+						}
+						section("Use Speech Device(s)") {
+							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+							paragraph "A 'HelloHome' notification will also be sent to the Location Event log\n"
+						}
+					}
             	}
             }          
 		} // End if (myThermostats?.size() > 0)
 
 		section(title: "Temporarily Disable?") {
-			input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
+			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
         section (getVersionLabel()) {}
@@ -172,15 +219,19 @@ def clearReservations() {
     	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff') 
 	}
 }
-
+//
+// TODO - if stat goes offline, then comes back online, then re-initialize states...
+//
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
+	updateMyLabel()
+	
 	if(tempDisable == true) {
     	clearReservations()
-		LOG("Teporarily Disabled as per request.", 2, null, "warn")
+		LOG("Temporarily Paused.", 2, null, "warn")
 		return true
 	}
-    subscribe(app, appTouch)
+    // subscribe(app, appTouch)
 
 	boolean contactOffState = false
 	if (contactSensors) {
@@ -272,13 +323,13 @@ def statModeChange(evt) {
 def heatSPHandler( evt ) {
 	// called when the heatingSetpoint value changes, but only if we are monitoring/making setpoint changes
 	// (ie., this won't get called if we are using Quiet Time or just HVAC Off)
-    if (evt.value.isNumber()) {
+    if (evt.numberValue != null) {
 		def tid = getDeviceId(evt.device.deviceNetworkId)
     
     	// save the new value
 		def tmpThermSavedState = atomicState.thermSavedState
-    	if (tmpThermSavedState[tid].heatAdj == evt.value) return 	// we generated this event (below)
-    	tmpThermSavedState[tid].heatSP = evt.value
+    	if (tmpThermSavedState[tid].heatAdj == evt.numberValue) return 	// we generated this event (below)
+    	tmpThermSavedState[tid].heatSP = evt.numberValue
     
     	if (!atomicState.HVACModeState.contains('off')) {			// Only adjust setpoints when the HVAC is not off
         	def h = evt.numberValue + settings.heatAdjust
@@ -293,13 +344,13 @@ def heatSPHandler( evt ) {
 }
 
 def coolSPHandler( evt ) {
-	if (evt.value.isNumber()) {
+	if (evt.numberValue != null) {
         def tid = getDeviceId(evt.device.deviceNetworkId)
 
         // save the new value
         def tmpThermSavedState = atomicState.thermSavedState
-        if (tmpThermSavedState[tid].coolAdj == evt.value) return
-        tmpThermSavedState[tid].coolSP = evt.value
+        if (tmpThermSavedState[tid].coolAdj == evt.numberValue) return
+        tmpThermSavedState[tid].coolSP = evt.numberValue
 
         if (!atomicState.HVACModeState.contains('off')) {
             // adjust and change the actual heating setpoints
@@ -323,7 +374,7 @@ def sensorOpened(evt=null) {
     	// HVAC is already off
         return
     }
-    int delay = (settings.onDelay?:0).toInteger()
+    int delay = (settings.onDelay?:0) as Integer
     if (HVACModeState == 'resume_pending') {
         atomicState.openedState = 'off'
         if (delay > 0) unschedule('turnOnHVAC')
@@ -610,54 +661,124 @@ private def getDeviceId(networkId) {
 }
 
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
-void makeReservation(tid, String type='modeOff' ) {
-	parent.makeReservation( tid, app.id, type )
+void makeReservation(String tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id as String, type )
 }
 // Cancel my reservation
-void cancelReservation(tid, String type='modeOff') {
+void cancelReservation(String tid, String type='modeOff') {
 	log.debug "cancel ${tid}, ${type}"
-	parent.cancelReservation( tid, app.id, type )
+	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
-Boolean haveReservation(tid, String type='modeOff') {
-	return parent.haveReservation( tid, app.id, type )
+Boolean haveReservation(String tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id as String, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations(tid, String type='modeOff') {
+Boolean anyReservations(String tid, String type='modeOff') {
 	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
-Integer countReservations(tid, String type='modeOff') {
+Integer countReservations(String tid, String type='modeOff') {
 	return parent.countReservations( tid, type )
 }
 // Get the list of app IDs that have reservations
-List getReservations(tid, String type='modeOff') {
+List getReservations(String tid, String type='modeOff') {
 	return parent.getReservations( tid, type )
 }
 // Get the list of app Names that have reservations
-List getGuestList(tid, String type='modeOff') {
+List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
 
 private def sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
     String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-    if (phone) { // check that the user did select a phone number
-        if ( phone.indexOf(";") > 0){
-            def phones = phone.split(";")
-            for ( def i = 0; i < phones.size(); i++) {
-                LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                sendSmsMessage(phones[i], msg)
-            }
-        } else {
-            LOG("Sending SMS to ${phone}",2,null,'info')
-            sendSmsMessage(phone, msg)
-        }
-    } else if (settings.sendPush) {
-        LOG("Sending Push to everyone",2,null,'warn')
-        sendPushMessage(msg)
-    }
-    sendNotificationEvent( notificationMessage )								// Always send to hello home
+	if (isST) {
+		if (phone) { // check that the user did select a phone number
+			if ( phone.indexOf(";") > 0){
+				def phones = settings.phone.split(";")
+				for ( def i = 0; i < phones.size(); i++) {
+					LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+					sendSmsMessage(phones[i], msg)				// Only to SMS contact
+				}
+			} else {
+				LOG("Sending SMS to ${phone}", 3, null, 'info')
+				sendSmsMessage(phone, msg)						// Only to SMS contact
+			}
+		} 
+		if (settings.pushNotify) {
+			LOG("Sending Push to everyone", 3, null, 'warn')
+			sendPushMessage(msg)								// Push to everyone
+		}
+		if (settings.speak) {
+			if (settings.speechDevices != null) {
+				settings.speechDevices.each {
+					it.speak( "From " + msg )
+				}
+			}
+			if (settings.musicDevices != null) {
+				settings.musicDevices.each {
+					it.setLevel( settings.volume )
+					it.playText( "From " + msg )
+				}
+			}
+		}
+		sendNotificationEvent( notificationMessage )			// Always send to hello home
+	} else {		// isHE
+		if (settings.notifiers != null) {
+			settings.notifiers.each {							// Use notification devices on Hubitat
+				it.deviceNotification(msg)
+			}
+		}
+		if (settings.phone != null) {
+			if ( phone.indexOf(",") > 0){
+				def phones = phone.split(",")
+				for ( def i = 0; i < phones.size(); i++) {
+					LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+					sendSmsMessage(phones[i], msg)				// Only to SMS contact
+				}
+			} else {
+				LOG("Sending SMS to ${phone}", 3, null, 'info')
+				sendSmsMessage(phone, msg)						// Only to SMS contact
+			}
+		}
+		if (settings.speak) {
+			if (settings.speechDevices != null) {
+				settings.speechDevices.each {
+					it.speak( "From " + msg )
+				}
+			}
+			if (settings.musicDevices != null) {
+				settings.musicDevices.each {
+					it.setLevel( settings.volume )
+					it.playText( "From " + msg )
+				}
+			}
+		}
+		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
+}
+
+private def updateMyLabel() {
+	String flag = isST ? ' (paused)' : '<span '
+	
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains(flag)) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
@@ -666,3 +787,43 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
     log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
+
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	//log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************

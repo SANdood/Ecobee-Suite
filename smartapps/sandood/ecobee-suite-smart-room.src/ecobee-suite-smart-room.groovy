@@ -24,10 +24,11 @@
  *	1.6.10 - Resync for parent-based reservations
  *	1.6.11 - Removed location.contactBook support - deprecated by SmartThings
  *	1.6.12 - Added support for "generic" vents (dimmers), as with Smart Vents
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.6.12" }
-private def getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()}" }
-import groovy.json.JsonSlurper
+def getVersionNum() { return "1.7.00" }
+private def getVersionLabel() { return "Ecobee Suite Smart Room Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+import groovy.json.*
 
 definition(
 	name: "ecobee Suite Smart Room",
@@ -49,15 +50,36 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
-    	section(title: "Name for Smart Room Helper") {
-        	label title: "Name this Helper", required: true, defaultValue: "Smart Room"      
-        }
-        
-        section(title: "Smart Room Ecobee Sensor(s)") {
+    	section(title: "") {
+        	String defaultLabel = "Smart Room"
+        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+            if (!app.label) {
+				app.updateLabel(defaultLabel)
+				atomicState.appDisplayName = defaultLabel
+			}
+			if (isHE) {
+				if (app.label.contains('<span ')) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+						atomicState.appDisplayName = myLabel
+						app.updateLabel(myLabel)
+					}
+				}
+			} else {
+            	if (app.label.contains(' (paused)')) {
+                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                    atomicState.appDisplayName = myLabel
+                    app.updateLabel(myLabel)
+                } else {
+                	atomicState.appDisplayName = app.label
+                }
+            }
         	if (settings.tempDisable) {
-            	paragraph "WARNING: Temporarily Disabled as requested. Turn back on to Enable handler."
+            	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
-            	paragraph("A Smart Room is defined by one or more Ecobee Sensors")
+            	paragraph("\nA Smart Room is defined by one or more Ecobee Sensors")
             	// IMPORTANT NOTE: theSensors is NOT a list of sensors, but instead is the list of selected [DNI:names] of the sensors that our parent is supporting
             	// Unfortunately, type: "devices.ecobeeSensor" returns a null list, even though the Device Name is indeed "Ecobee Sensor" as required by the documentation
         		input(name: "theSensors", type:"enum", title: "Use which Ecobee Sensor(s)", options: getEcobeeSensorsList(), required: true, multiple: true, submitOnChange: true)
@@ -66,7 +88,7 @@ def mainPage() {
             }
 		}
 		
-        if (!settings.tempDisable) {
+        if (!settings?.tempDisable && (settings?.theSensors?.size() > 0)) {
         	section(title: "Smart Room Doors") {
             	paragraph("Smart Room Activation is controlled by how long doors are left open or closed")
             	input(name: "theDoors", title: "Select Door contact sensor(s)", type: "capability.contactSensor", required: true, multiple: true, submitOnChange: true)
@@ -89,10 +111,10 @@ def mainPage() {
         	}
        
         	section(title: "Smart Room Vents (optional)") {
-        		paragraph("You can have specified Econet or Keen vents opened while a Smart Room is Active, and closed when Inactive")
-            	input(name: "theEconetVents", type: "device.econetVent", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, submitOnChange: true)
-            	input(name: "theKeenVents", type: "device.keenHomeSmartVent", title: "Control which Keen Home Smart Vent(s)?", required: false, multiple:true, submitOnChange: true)
-                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
+        		paragraph("You can have specified Econet, Keen or Generic(dimmer) vents opened while a Smart Room is Active, and closed when Inactive")
+				input(name: "theEconetVents", type: "${isST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, submitOnChange: true)
+				input(name: "theKeenVents", type: "${isST?'device.keenHomeSmartVent':'deviceKeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", required: false, multiple:true, submitOnChange: true)
+                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", required: false, multiple: true, submitOnChange: true)
             	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage")
             		input(name: "minimumVentLevel", type: "number", title: "Minimum vent level when closed?", required: true, defaultValue:0, description: '0', range: "0..100")
@@ -100,24 +122,52 @@ def mainPage() {
         	}
         
       		section("Smart Room Notifications (optional)") {
-        		input(name: "notify", type: "boolean", title: "Notify on Activations?", required: true, defaultValue: false, submitOnChange: true)
-            	if (settings.notify) {
-       				paragraph "You can enter multiple phone numbers seperated by a semi-colon (;)"
-       				input "phone", "string", title: "Send SMS notifications to", description: "Phone Number(s)", required: false, submitOnChange: true 
-                    if (!settings.phone) {
-                        input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", /* defaultValue: false, */ required: true, submitOnChange: true)
-                    }
-                    if (!settings.phone && !settings.pushNotify) paragraph "WARNING: Notifications configured, but nobody to send them to!"
-                }
-                paragraph("A notification is always sent to the Hello Home log whenever a Smart Room is activated or de-activated")
-        	}
+        		input(name: "notify", type: "bool", title: "Notify on Activations?", required: true, defaultValue: false, submitOnChange: true)
+				paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
+			}
+			
+            if (settings.notify) {
+				if (isST) {
+					section("Notifications") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+					}
+				} else {		// isHE
+					section("Use Notification Device(s)") {
+						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+							  description: "Select notification devices", submitOnChange: true)
+						paragraph ""
+					}
+					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+						paragraph ""
+					}
+					section("Use Speech Device(s)") {
+						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+						paragraph ""
+					}
+				}
+			}
         }
         	
 		section(title: "Temporarily Disable?") {
-        	input(name: "tempDisable", title: "Temporarily Disable this Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
+        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
-        section (getVersionLabel())
+		section (getVersionLabel()) {}
     }
 }
 
@@ -138,12 +188,13 @@ void uninstalled() {
 	generateSensorsEvents([doors:'default', windows:'default', vents:'default',SmartRoom:'default'])
 }
 
-def getProgramsList() { return theThermostat ? new JsonSlurper().parseText(theThermostat.currentValue('programsList')) : ["Away","Home","Sleep"] }
+def getProgramsList() { return /* theThermostat ? new JsonSlurper().parseText(theThermostat.currentValue('programsList')) : */ ["Away","Home","Sleep"] }
 
-def getEcobeeSensorsList() { return parent.getEcobeeSensors().sort { it.value } }    
+def getEcobeeSensorsList() { return parent.getEcobeeSensors().sort(false) { it.value } }    
 
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 3, "", 'info')
+	LOG("${getVersionLabel()}\nInitializing...", 3, "", 'info')
+	updateMyLabel()
     
     atomicState.isSmartRoomActive = false
     atomicState.isWaitingForWindows = false
@@ -152,7 +203,7 @@ def initialize() {
     // Now, just exit if we are disabled...
 	if(tempDisable == true) {
     	generateSensorsEvents([SmartRoom:'disabled',vents:'default',windows:'default',doors:'default'])
-    	LOG("temporarily disabled as per request.", 2, null, "warn")
+    	LOG("Temporarily Paused", 2, null, "warn")
     	return true
     }
     
@@ -511,26 +562,100 @@ private def generateSensorsEvents( Map dataMap ) {
 
 private def sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
-    
     if (settings.notify) {
-        String msg = "${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-        if (phone) { // check that the user did select a phone number
-            if ( phone.indexOf(";") > 0){
-                def phones = phone.split(";")
-                for ( def i = 0; i < phones.size(); i++) {
-                    LOG("Sending SMS ${i+1} to ${phones[i]}",2,null,'info')
-                    sendSmsMessage(phones[i], msg)									// Only to SMS contact
-                }
-            } else {
-                LOG("Sending SMS to ${phone}",2,null,'info')
-                sendSmsMessage(phone, msg)											// Only to SMS contact
-            }
-        } else if (settings.sendPush) {
-            LOG("Sending Push to everyone",2,null,'warn')
-            sendPushMessage(msg)													// Push to everyone
-        }
+        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+		if (isST) {
+			if (settings.phone) { // check that the user did select a phone number
+				if ( settings.phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+		} else {		// isHE
+			if (settings.notifiers != null) {
+				settings.notifiers.each {							// Use notification devices on Hubitat
+					it.deviceNotification(msg)
+				}
+			}
+			if (settings.phone != null) {
+				if ( settings.phone.indexOf(",") > 0){
+					def phones = phone.split(",")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+				}
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( "From " + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( "From " + msg )
+					}
+				}
+			}
+			
+		}
     }
-    sendNotificationEvent( notificationMessage )								// Always send to hello home
+	// Always send to Hello Home / Location Event log
+	if (isST) { 
+		sendNotificationEvent( notificationMessage )					
+	} else {
+		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+	}
+}
+
+private def updateMyLabel() {
+	String flag = isST ? ' (paused)' : '<span '
+	
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains(flag)) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
+		atomicState.appDisplayName = myLabel
+	}
+	if (settings.tempDisable) {
+		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
@@ -539,3 +664,43 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 	parent?.LOG(message, level, null, logType, event, displayEvent)
     log."${logType}" message
 }
+			
+// **************************************************************************************************************************
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
+//
+// The following 3 calls are safe to use anywhere within a Device Handler or Application
+//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
+//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
+//    Device Handler or Application
+//
+//	1.0.0	Initial Release
+//	1.0.1	Use atomicState so that it is universal
+//
+private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//
+// The following 3 calls are ONLY for use within the Device Handler or Application runtime
+//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
+//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
+//  - "if (state.isST)" is more efficient than "if (isSTHub)"
+//
+private String getHubPlatform() {
+	def pf = getPlatform()
+    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+											// or if (state.hubPlatform == 'SmartThings')...
+    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    return pf
+}
+private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+
+private def getParentSetting(String settingName) {
+	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
+	//log.debug "isST: ${isST}, isHE: ${isHE}"
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+}
+//
+// **************************************************************************************************************************
