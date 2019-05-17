@@ -24,9 +24,9 @@
  *	1.5.01 - Allow Ecobee Suite Thermostats only
  *	1.6.00 - Release number synchronization
  *	1.6.10 - Resync for parent-based reservations
- *	1.7.00 - Universal code supports both SmartThings and Hubitat
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc2" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -50,21 +50,31 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
-        	label title: "Name for this Smart Switch/Dimmer/Vent Helper", required: true, defaultValue: "Smart Switch/Dimmer/Vent"  
+        	String defaultLabel = "Smart Switch/Dimmer/Vent"
+        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+            if (!app.label) {
+				app.updateLabel(defaultLabel)
+				atomicState.appDisplayName = defaultLabel
+			}
 			if (isHE) {
-				if (!app.label) {
-					app.updateLabel("Smart Switch/Dimmer/Vent")
-					atomicState.appDisplayName = "Smart Switch/Dimmer/Vent"
-				} else if (app.label.contains('<span')) {
+				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
-						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
 						atomicState.appDisplayName = myLabel
-						app.updateLabel(atomicState.appDisplayName)
+						app.updateLabel(myLabel)
 					}
 				}
-			}
+			} else {
+            	if (app.label.contains(' (paused)')) {
+                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                    atomicState.appDisplayName = myLabel
+                    app.updateLabel(myLabel)
+                } else {
+                	atomicState.appDisplayName = app.label
+                }
+            }
             if (settings.tempDisable) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
@@ -223,21 +233,21 @@ private def dimmersOn( theDimmers ) {
 }
 
 private def updateMyLabel() {
-	if (isST) return	// ST doesn't support the colored label approach
-
+	String flag = isST ? ' (paused)' : '<span '
+	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
-		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains('<span')) {
+	if (myLabel.contains(flag)) {
 		// strip off any connection status tag
-		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
