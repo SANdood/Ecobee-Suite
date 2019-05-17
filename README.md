@@ -1,6 +1,6 @@
 Free Universal Ecobee Suite, version: 1.7.** 
 ======================================================
-***Latest Update: v1.7.00rc2 - posted 16 May 2019 at 9:20am EDT***
+***Latest Update: 1.7.00 - posted 1 May 2019 at 4:00am EDT***
 
 Hubitat users now can utilize the latest functionality of my Ecobee Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
@@ -504,7 +504,7 @@ Open the Hubitat Console in your browser of choice, and then:
 2. Click on the **+ New App** button at the top right of the page
 3. From the "New App" edit page, click on the **Import** button at the top of the page
 4. Copy the [Ecobee Suite Manager link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy) and paste it into the "Import Code from Website" overlay
-5. Click the **Import** button on the overlay, then click the **Close** button
+5. Click the **Import** button on the overlay
 6. Click the **Save** button in the editor page to complete the installation of the Ecobee Suite Manager app
 7. Repeat steps 1-6 again, using each of the following links to install the rest of the Suite's applications<br>
 	A. [`ecobee Suite Open Contacts`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy)<br>
@@ -528,7 +528,7 @@ Open the Hubitat Console in your browser of choice, and then:
 2. Click on the **+ New Driver** button at the top right of the page
 3. From the "New Driver" edit page, click on the **Import** button at the top of the page
 4. Copy the [Ecobee Suite Sensor link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy) and paste it into the "Import Code from Website" overlay
-5. Click the **Import** button on the overlay, then click the **Close** button
+5. Click the **Import** button on the overlay
 6. Click the **Save** button in the editor page to complete the installation of the Ecobee Suite Sensor driver
 7. Repeat steps 1-6 again, using the [Ecobee Suite Thermostat link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy), this time.
 
