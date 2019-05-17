@@ -30,7 +30,7 @@
  *	1.6.13 - Use 'fanAuto' if fanMinutes is explicitly set to 0
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -494,7 +494,7 @@ def changeSwitches() {
 }
 
 def changeProgramHandler(evt) {
-	LOG("changeProgramHander() entered with evt: ${evt.device.displayName} ${evt.name}: ${evt.value}", 5)
+	LOG("changeProgramHander() entered with evt: ${evt.name}: ${evt.value}", 5)
 	
 	if (!settings.startSwitches) {
 		// If we aren't using switches, validate that we got the intended event
