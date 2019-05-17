@@ -33,9 +33,9 @@
  *	1.6.12 - Minor optimizations
  *	1.6.13 - Added humidity restrictor
  *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
- *	1.7.00 - Universal version supports both SmartThings and Hubitat
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc2" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -60,21 +60,31 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
-        	label title: "Name for this Smart Circulation Helper", required: true, defaultValue: "Smart Circulation"  
+			String defaultLabel = "Smart Circulation"
+        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+            if (!app.label) {
+				app.updateLabel(defaultLabel)
+				atomicState.appDisplayName = defaultLabel
+			}
 			if (isHE) {
-				if (!app.label) {
-					app.updateLabel("Smart Circulation")
-					atomicState.appDisplayName = "Smart Circulation"
-				} else if (app.label.contains('<span')) {
+				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
-						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
 						atomicState.appDisplayName = myLabel
-						app.updateLabel(atomicState.appDisplayName)
+						app.updateLabel(myLabel)
 					}
 				}
-			}
+			} else {
+            	if (app.label.contains(' (paused)')) {
+                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                    atomicState.appDisplayName = myLabel
+                    app.updateLabel(myLabel)
+                } else {
+                	atomicState.appDisplayName = app.label
+                }
+            }
         	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Paused - re-enable below." }
             else {
         		input(name: "theThermostat", type:"${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", required: true, multiple: false, 
@@ -179,13 +189,12 @@ def updated() {
 }
 
 def getProgramsList() {
+	def programs = ["Away","Home","Sleep"]
 	if (theThermostat) {
-    	def programs = theThermostat.currentValue('programsList')
-        if (programs) { 
-        	return new JsonSlurper().parseText(programs)
-        }
+    	def pl = theThermostat.currentValue('programsList')
+        if (pl) programs = new JsonSlurper().parseText(pl)
     }
-    return ["Away","Home","Sleep"]
+    return programs.sort(false)
 }
 
 def getThermostatModesList() {
@@ -194,7 +203,7 @@ def getThermostatModesList() {
     	def tempModes = theThermostat.currentValue('supportedThermostatModes')
         if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
     }
-    return statModes
+    return statModes.sort(false)
 }
 
 def initialize() {
@@ -319,6 +328,7 @@ def initialize() {
     	LOG("thermostat ${theThermostat}${vaca}circulation time is now ${currentOnTime} min/hr",2,"",'info')
     }
     LOG("Initialization complete", 4, "", 'trace')
+    return true
 }
 
 def quietOnHandler(evt) {
@@ -621,21 +631,21 @@ def calcTemps() {
 }
 
 private def updateMyLabel() {
-	if (isST) return	// ST doesn't support the colored label approach
-
+	String flag = isST ? ' (paused)' : '<span '
+	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
-		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains('<span')) {
+	if (myLabel.contains(flag)) {
 		// strip off any connection status tag
-		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
