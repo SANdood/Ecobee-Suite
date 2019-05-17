@@ -43,9 +43,9 @@
  *	1.6.22- SmartThings started throwing errors on some Canadian zipcodes - we now catch these and use geographic coordinates instead...
  *	1.6.23-	Added setProgramSetpoint, fixed typo & null-checking that was breaking some error handling
  *	1.6.24- Added more null-handling in http error handlers
- *	1.7.00- Universal support for both SmartThings and Hubitat
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc2" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -774,7 +774,7 @@ private parseAuthResponse(resp) {
 	}
 }
 // OAuth Callback URL and helpers
-def callback() {
+void callback() {
 	LOG("callback()>> params: $params, params.code ${params.code}, params.state ${params.state}, atomicState.oauthInitState ${atomicState.oauthInitState}", 2, null, 'debug')
 	def code = params.code
 	def oauthState = params.state
@@ -951,7 +951,7 @@ def getEcobeeThermostats() {
 	atomicState.thermostatsWithNames = stats
     atomicState.statLocation = statLocation
     LOG("getEcobeeThermostats() - thermostatsWithNames: ${stats}, locations: ${statLocation}", 4, null, 'trace')
-	return stats.sort { it.value }
+	return stats.sort(false) { it.value }
 }
 
 // Get the list of Ecobee Sensors for use in the settings pages (Only include the sensors that are tied to a thermostat that was selected)
@@ -1040,12 +1040,12 @@ def getThermostatTypeName(stat) {
 	return stat.modelNumber == "siSmart" ? "Smart Si" : "Smart"
 }
 
-def installed() {
+void installed() {
 	LOG("Installed with settings: ${settings}",2,null,'warn')	
 	initialize()
 }
 
-def uninstalled() {
+void uninstalled() {
 	LOG("Uninstalling...",2,null,'warn')
     unschedule()
     // unsubscribe()
@@ -1053,7 +1053,7 @@ def uninstalled() {
     // Child apps are supposedly automatically deleted.
 }
 
-def updated() {	
+void updated() {	
     LOG("Updated with settings: ${settings}",2,null,'warn')	
     
     if (!atomicState.atomicMigrate) {
@@ -4095,9 +4095,10 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
     	if (atomicState.connected?.toString() != 'full') {
             LOG("API connection lost, queueing failed call to setVacationFanMinOnTime(${child}, ${deviceId}, ${howLong}", 2, child, 'warn')
             queueFailedCall('setVacationFanMinOnTime', child.device.deviceNetworkId, 2, deviceId, howLong)
-            return false
     	}
+        return false
     }
+    return false
 }
 
 private def createVacationTemplate(child, deviceId) {
@@ -4648,6 +4649,7 @@ def setEcobeeSetting(child, String deviceId, String name, String value) {
 		}
 		return false
 	}
+    return false
 }
 
 // API Helper Functions
@@ -4767,8 +4769,7 @@ private def sendJsonRetry() {
     if (atomicState.savedActionJsonBody == null) {
     	LOG("sendJsonRetry() - no saved JSON Body to send!", 2, child, "warn")
         return false
-    }    
-    
+    }      
     return sendJson(child, atomicState.savedActionJsonBody)
 }
 
@@ -4955,7 +4956,6 @@ private def sendActivityFeeds(notificationMessage) {
 // Helper Functions
 // Creating my own as it seems that the built-in version only works for a device, NOT a SmartApp
 def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
-
 	if (scaledSensorValue == null) {
     	LOG("Illegal sensorValue (null)", 2, null, "error")
         return null
@@ -4975,13 +4975,10 @@ def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
 	LOG("About to convert/scale temp: ${scaledSensorValue}", 5, null, "trace", false)
 	if (cmdScale == getTemperatureScale() ) {
     	// The platform scale is the same as the current value scale
-        //returnSensorValue = scaledSensorValue.round(precision)
         returnSensorValue = roundIt(scaledSensorValue, precision)
     } else if (cmdScale == "F") {		    	
-    	//returnSensorValue = fToC(scaledSensorValue).round(precision)
         returnSensorValue = roundIt(fToC(scaledSensorValue), precision)
     } else {
-    	//returnSensorValue = cToF(scaledSensorValue).round(precision)
         returnSensorValue = roundIt(cToF(scaledSensorValue), precision)
     }
     LOG("returnSensorValue == ${returnSensorValue}", 5, null, "trace", false)
@@ -5337,15 +5334,14 @@ List getReservations(String statId, String type='modeOff') {
 }
 // Get the list of app Names that have reservations
 List getGuestList(String statId, String type='modeOff') {
+	def guestList = []
 	def reservations = atomicState.reservations
     if (reservations?."${statId}"?.containsKey(type)) {
-    	def guestList = []
         reservations."${statId}"."${type}".each {
         	guestList << getChildAppName( it )
         }
-        return guestList
     }
-    return []
+    return guestList
 }
 
 def runEvery2Minutes(handler) {
@@ -5354,6 +5350,7 @@ def runEvery2Minutes(handler) {
     int randomSeconds = rand.nextInt(59)
 	schedule("${randomSeconds} 0/2 * * * ?", handler)
 }
+
 def runEvery3Minutes(handler) {
 	Random rand = new Random()
     //log.debug "Random3: ${rand}"
@@ -5400,11 +5397,14 @@ def runEvery3Minutes(handler) {
 										]
 // Settings that must be changed only by specific commands
 @Field final List EcobeeDirectSettings= [
-											[name: 'fanMinOnTime',		command: 'setFanMinOnTime'],
-											[name: 'dehumidifierMode',	command: 'setDehumidifierMode'],
-											[name: 'dehumidifierLevel', command: 'setDehumiditySetpoint'],
-											[name: 'humidity',			command: 'setHumiditySetpoint'],
-											[name: 'humidifierMode',	command: 'setHumidifierMode']
+											[name: 'fanMinOnTime',			command: 'setFanMinOnTime'],
+											[name: 'dehumidifierMode',		command: 'setDehumidifierMode'],
+											[name: 'dehumidifierLevel', 	command: 'setDehumiditySetpoint'],
+											[name: 'dehumiditySetpoint',	command: 'setDehumiditySetpoint'],
+											[name: 'humidity',				command: 'setHumiditySetpoint'],
+											[name: 'humidifierMode',		command: 'setHumidifierMode'],
+											[name: 'humiditySetpoint',		command: 'setHumiditySetpoint'],
+//											[name: 'schedule',				command: 'setSchedule']
 										]
 @Field final List EcobeeDeviceInfo =    [ 'brand','features','identifier','isRegistered','lastModified','modelNumber','name','thermostatRev']
 
