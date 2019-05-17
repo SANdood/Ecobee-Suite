@@ -51,9 +51,9 @@
  *	1.6.22 - Expanded to include ALL settings as attributes
  *	1.6.23 - Changed equipment operating state to 'de/humidifying'
  *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
- *	1.7.00 - Universal support for both SmartThings and Hubitat
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc2" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -70,60 +70,58 @@ metadata {
 		capability "Refresh"
 
 		// Extended Set of Thermostat Capabilities
-		capability "Thermostat Cooling Setpoint"
-		capability "Thermostat Fan Mode"
-		capability "Thermostat Heating Setpoint"
-		capability "Thermostat Mode"
+		// capability "Thermostat Cooling Setpoint"
+		// capability "Thermostat Fan Mode"
+		// capability "Thermostat Heating Setpoint"
+		// capability "Thermostat Mode"
 		capability "Thermostat Operating State"
 		capability "Thermostat Setpoint"
 		capability "Health Check"
 
-		command "asleep"			// We cannot overload the internal Java/Groovy definition of 'sleep()'
-		command "auto"
-		command "auxHeatOnly"
-		command "auxHeatOnly"
-		command "awake"
-		command "away"
-		command "cancelReservation"
-		command "cancelVacation"
-		command "cool"
-		command "deleteVacation"
-		command "doRefresh"			// internal use by the refresh button
-		command "emergency"
-		command "emergencyHeat"
-		command "fanAuto"
-		command "fanCirculate"
-		command "fanOff"			// Missing from the Thermostat standard capability set
-		command "fanOn"
-		command "forceRefresh"
+		command "asleep", 					[]						// We cannot overload the internal Java/Groovy definition of 'sleep()'
+		// command "auto", 					[]
+		command "auxHeatOnly", 				[]
+		command "awake", 					[]
+		command "away", 					[]
+		command "cancelReservation", 		['string', 'string']
+		command "cancelVacation", 			[]
+		// command "cool", 					[]
+		command "deleteVacation", 			['string']
+		command "doRefresh", 				[]						// internal use by the refresh button
+		command "emergency", 				[]	
+		// command "emergencyHeat", 		[]
+		// command "fanAuto", 				[]
+		// command "fanCirculate", 			[]
+		command "fanOff", 					[]						// Missing from the Thermostat standard capability set
+		// command "fanOn", 				[]
+		command "forceRefresh", 			[]	
 		command "generateEvent"
-		command "heat"
-		command "home"
-		command "lowerSetpoint"
-		command "makeReservation"
-		command "night"				// this is probably the appropriate SmartThings device command to call, matches ST mode
-		command "noOp"				// Workaround for formatting issues
-		command "off"				// redundant - should be predefined by the Thermostat capability
-		command "present"
-		command "raiseSetpoint"
-		command "resumeProgram"
-		command "setCoolingSetpointDelay"
-		command "setDehumidifierMode"
-		command "setDehumiditySetpoint"
-		command "setEcobeeSetting"	// Allows changes to (most) Ecobee Settings
-		command "setFanMinOnTime"
-		command "setFanMinOnTimeDelay"
-		command "setHeatingSetpointDelay"
-		command	"setHumidifierMode"
-		command "setHumiditySetpoint"
-		command "setProgramSetpoints"
-		command "setSchedule"
-		command "setThermostatFanMode"
-		command "setThermostatMode"
-		command "setThermostatProgram"
-		command "setVacationFanMinOnTime"
-		command "switchMode"
-		command "wakeup"
+		// command "heat", 					[]
+		command "home", 					[]	
+		command "lowerSetpoint", 			[]	
+		command "makeReservation", 			[]	
+		command "night", 					[]						// this is probably the appropriate SmartThings device command to call, matches ST mode
+		command "noOp", 					[]						// Workaround for formatting issues
+		// command "off", 					[]						// redundant - should be predefined by the Thermostat capability
+		command "present", 					[]	
+		command "raiseSetpoint", 			[]	
+		command "resumeProgram", 			['string']
+		command "setCoolingSetpointDelay",	['number']
+		command "setDehumidifierMode", 		['string']
+		command "setDehumiditySetpoint", 	['number']
+		command "setEcobeeSetting", 		['string', 'string']	// Allows changes to (most) Ecobee Settings
+		command "setFanMinOnTime", 			['number']
+		command "setFanMinOnTimeDelay", 	['number']
+		command "setHeatingSetpointDelay",	['number']
+		command	"setHumidifierMode", 		['string']
+		command "setHumiditySetpoint", 		['number']
+		command "setProgramSetpoints", 		['string', 'number', 'number']
+		// command "setSchedule"			['JSON_OBJECT']
+		// command "setThermostatFanMode"	['string']
+		// command "setThermostatMode"		['string']
+		command "setThermostatProgram", 	['string', 'string', 'number']
+		command "setVacationFanMinOnTime",	['number']
+		command "wakeup", 					[]
 
 		attribute 'apiConnected','string'
 		attribute 'autoAway', 'string'
@@ -785,13 +783,11 @@ metadata {
 	}
 
 	preferences {
-		//section ("Title") {
-			input "myHoldType", "enum", title: "${getVersionLabel()}\n\nHold Type", description: "When changing temperature or program, use Permanent, Temporary, Hourly, Parent setting or Thermostat setting hold type?\n\nDefault: Ecobee (Connect) setting",
-				required: false, options:["Permanent", "Temporary", "Hourly", "Parent", "Thermostat"]
-			input "myHoldHours", "enum", title: "Hourly Hold Time", description: "If Hourly hold, how many hours do you want to hold?\n\nDefault: Ecobee (Connect) setting", required: false, options:[2,4,6,8,12,16,24]
-			input "smartAuto", "bool", title: "Smart Auto Temp Adjust", description: "This flag allows the temperature to be adjusted manually when the thermostat " +
-					"is in Auto mode. An attempt to determine if the heat or cool setting should be changed is made automatically.", required: false
-	   //}
+        input "myHoldType", "enum", title: "${getVersionLabel()}\n\nHold Type", description: "When changing temperature or program, use Permanent, Temporary, Hourly, Parent setting or Thermostat setting hold type?\n\nDefault: Ecobee (Connect) setting",
+            required: false, options:["Permanent", "Temporary", "Hourly", "Parent", "Thermostat"]
+        input "myHoldHours", "enum", title: "Hourly Hold Time", description: "If Hourly hold, how many hours do you want to hold?\n\nDefault: Ecobee (Connect) setting", required: false, options:[2,4,6,8,12,16,24]
+        input "smartAuto", "bool", title: "Smart Auto Temp Adjust", description: "This flag allows the temperature to be adjusted manually when the thermostat " +
+                "is in Auto mode. An attempt to determine if the heat or cool setting should be changed is made automatically.", required: false
 	}
 }
 
@@ -799,6 +795,7 @@ metadata {
 def parse(String description) {
 	LOG( "parse() --> Parsing '${description}'" )
 	// Not needed for cloud connected devices
+	return
 }
 
 void refresh(force=false) {
@@ -818,23 +815,26 @@ void doRefresh() {
 }
 def resetRefreshButton() {
 	sendEvent(name: 'doRefresh', value: 'refresh', isStateChange: true, displayed: false)
+	return
 }
 def forceRefresh() {
 	refresh(true)
 	return
 }
 
-def installed() {
+void installed() {
 	LOG("${device.label} being installed",2,null,'info')
 	if (device.label?.contains('TestingForInstall')) return	// we're just going to be deleted in a second...
 	updated()
+	return
 }
 
-def uninstalled() {
+void uninstalled() {
 	LOG("${device.label} being uninstalled",2,null,'info')
+	return
 }
 
-def updated() {
+void updated() {
 	getHubPlatform()
 	LOG("${getVersionLabel()} updated",1,null,'trace')
 	sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
@@ -843,6 +843,7 @@ def updated() {
 	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
 	state.version = getVersionLabel()
 	runIn(2, 'forceRefresh', [overwrite: true])
+	return
 }
 
 void poll() {
@@ -892,9 +893,9 @@ def generateEvent(Map results) {
 		if (device.currentValue('auxHeatMode') == 'true') supportedThermostatModes += ['auxHeatOnly', 'emergency heat']
 		sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
 		sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
-		state.supportedThermostatModes = supportedThermostatModes
+		state.supportedThermostatModes = supportedThermostatModes.sort(false)
 	} else {
-		supportedThermostatModes = state.supportedThermostatModes
+		supportedThermostatModes = state.supportedThermostatModes.sort(false)
 	}
 	if (device.currentValue('autoHeatCoolFeatureEnabled') == null) sendEvent(name: 'autoHeatCoolFeatureEnabled', value: device.currentValue('autoMode'), isStateChange: true, displayed: false)
 	def vType = device.currentValue('ventilatorType')
@@ -1649,9 +1650,12 @@ def generateEvent(Map results) {
 	def elapsed = now() - startMS
 	LOG("Updated ${objectsUpdated} object${objectsUpdated!=1?'s':''} (${elapsed}ms)",2,this,'info')
 	// if (elapsed > 2500) log.debug results
+	return
 }
 
 private def disableVacationButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	// Can't change these things during Vacation hold, turn their buttons grey
 	LOG("Vacation active, disabling buttons",2,null,'info')
 	sendEvent(name: 'setModeOff', value: 'off dis', displayed: false)
@@ -1665,8 +1669,11 @@ private def disableVacationButtons() {
 	sendEvent(name: 'setHome', value: 'home dis', displayed: false)
 	sendEvent(name: 'setAway', value: 'away dis', displayed: false)
 	sendEvent(name: 'setSleep', value: 'sleep dis', displayed: false)
+	return
 }
 private def enableVacationButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	// Re-enable the buttons
 	LOG("Vacation finished, enabling buttons",2,null,'info')
 	sendEvent(name: 'thermostatFanModeDisplay', value: device.currentValue('thermostatFanMode'), displayed: false)
@@ -1675,38 +1682,56 @@ private def enableVacationButtons() {
 	sendEvent(name: 'setFanOff', value: 'off', displayed: false)
 	updateProgramButtons()
 	updateModeButtons()
+	return
 }
 private def disableModeOffButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setModeOff', value: 'off dis', displayed: false)
 	sendEvent(name: 'setModeAuto', value: 'auto', displayed: false)
 	sendEvent(name: 'setModeHeat', value: 'heat', displayed: false)
 	sendEvent(name: 'setModeCool', value: 'cool', displayed: false)
+	return
 }
 private def disableModeAutoButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setModeOff', value: 'off'+(modes().contains('off')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeAuto', value: 'auto dis', displayed: false)
 	sendEvent(name: 'setModeHeat', value: 'heat'+(modes().contains('heat')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeCool', value: 'cool'+(modes().contains('cool')?'':' dis'), displayed: false)
+	return
 }
 private def disableModeHeatButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setModeOff', value: 'off'+(modes().contains('off')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeAuto', value: 'auto'+(modes().contains('auto')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeHeat', value: 'heat dis', displayed: false)
 	sendEvent(name: 'setModeCool', value: 'cool'+(modes().contains('cool')?'':' dis'), displayed: false)
+	return
 }
 private def disableModeCoolButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setModeOff', value: 'off'+(modes().contains('off')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeAuto', value: 'auto'+(modes().contains('auto')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeHeat', value: 'heat'+(modes().contains('heat')?'':' dis'), displayed: false)
+	return
 	sendEvent(name: 'setModeCool', value: 'cool dis', displayed: false)
 }
 private def enableAllModeButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setModeOff', value: 'off'+(modes().contains('off')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeAuto', value: 'auto'+(modes().contains('auto')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeHeat', value: 'heat'+(modes().contains('heat')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeCool', value: 'cool'+(modes().contains('cool')?'':' dis'), displayed: false)
+	return
 }
 private def disableAllButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setModeOff', value: 'off dis', displayed: false)
 	sendEvent(name: 'setModeAuto', value: 'auto dis', displayed: false)
 	sendEvent(name: 'setModeHeat', value: 'heat dis', displayed: false)
@@ -1718,60 +1743,91 @@ private def disableAllButtons() {
 	sendEvent(name: 'setHome', value: 'home dis', displayed: false)
 	sendEvent(name: 'setAway', value: 'away dis', displayed: false)
 	sendEvent(name: 'setSleep', value: 'sleep dis', displayed: false)
+	return
 }
 private def enableAllButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'thermostatFanModeDisplay', value: device.currentValue('thermostatFanMode'), displayed: false)
 	sendEvent(name: 'heatLogo', value: 'enabled', displayed: false)
 	sendEvent(name: 'coolLogo', value: 'enabled', displayed: false)
 	sendEvent(name: 'setFanOff', value: 'off', displayed: false)
 	updateModeButtons()
 	updateProgramButtons()
+	return
 }
 private def disableFanOffButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setFanOff', value: 'off dis', displayed: false)
+	return
 }
 private def enableFanOffButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setFanOff', value: 'off', displayed: false)
+	return
 }
 private def disableHomeButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setHome', value: 'home dis', displayed: false)
 	sendEvent(name: 'setAway', value: 'away', displayed: false)
 	sendEvent(name: 'setSleep', value: 'sleep', displayed: false)
+	return
 }
 private def disableAwayButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setHome', value: 'home', displayed: false)
 	sendEvent(name: 'setAway', value: 'away dis', displayed: false)
 	sendEvent(name: 'setSleep', value: 'sleep', displayed: false)
+	return
 }
 private def disableSleepButton() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setHome', value: 'home', displayed: false)
 	sendEvent(name: 'setAway', value: 'away', displayed: false)
 	sendEvent(name: 'setSleep', value: 'sleep dis', displayed: false)
+	return
 }
 private def enableAllProgramButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setHome', value: 'home', displayed: false)
 	sendEvent(name: 'setAway', value: 'away', displayed: false)
 	sendEvent(name: 'setSleep', value: 'sleep', displayed: false)
+	return
 }
 private def disableAllProgramButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	sendEvent(name: 'setHome', value: 'home dis', displayed: false)
 	sendEvent(name: 'setAway', value: 'away dis', displayed: false)
 	sendEvent(name: 'setSleep', value: 'sleep dis', displayed: false)
+	return
 }
 private def updateProgramButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	def currentProgram = device.currentValue('currentProgram')
 	// if (currentProgram=='Home') {sendEvent(name:'setHome', value:'home dis', displayed:false)} else {sendEvent(name:'setHome', value:'home', displayed:false)}
 	sendEvent(name:'setHome',value:'home'+(currentProgram=='Home'?' dis':''), displayed:false)
 	sendEvent(name:'setAway',value:'away'+(currentProgram=='Away'?' dis':''), displayed:false)
 	sendEvent(name:'setSleep',value:'sleep'+(currentProgram=='Sleep'?' dis':''), displayed:false)
+	return
 }
 private def updateModeButtons() {
+	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
+    
 	def currentMode = device.currentValue('thermmoostatMode')
 	// if (currentMode=='off') {sendEvent(name:'setModeOff', value:'off dis', displayed:false)} else {sendEvent(name:'setModeOff', value:'off', displayed:false)}
 	sendEvent(name:'setModeOff', value:('off'+((currentMode=='off') || !modes().contains('off'))?' dis':''), displayed:false)
 	sendEvent(name:'setModeAuto', value:('auto'+((currentMode=='auto') || !modes().contains('auto'))?' dis':''), displayed:false)
 	sendEvent(name:'setModeHeat', value:('heat'+((currentMode=='heat') || !modes().contains('heat'))?' dis':''), displayed:false)
 	sendEvent(name:'setModeCool', value:('cool'+((currentMode=='cool') || !modes().contains('cool'))?' dis':''), displayed:false)
+	return
 }
 
 //return descriptionText to be shown on mobile activity feed
@@ -1795,6 +1851,7 @@ private getTemperatureDescriptionText(name, value, linkText) {
 		case 'weatherDewpoint':
 			return "Outdoor dew point is ${value}°${getTemperatureScale()}"
 	}
+	return ""
 }
 
 // ***************************************************************************
@@ -1805,10 +1862,12 @@ void setHeatingSetpointDelay(setpoint) {
 	LOG("Slider requested heat setpoint: ${setpoint}",4,null,'trace')
 	def runWhen = (getParentSetting('arrowPause')?: 4) as Integer
 	runIn( runWhen, 'sHS', [data: [setpoint:setpoint.toBigDecimal()]] )
+	return
 }
 void sHS(data) {
 	LOG("Setting heating setpoint to: ${data.setpoint}",4,null,'trace')
 	setHeatingSetpoint(data.setpoint.toBigDecimal())
+	return
 }
 void setHeatingSetpoint(setpoint, String sendHold=null) {
 	if (device.currentValue('thermostatHold') == 'vacation') {
@@ -1840,6 +1899,7 @@ void setHeatingSetpoint(setpoint, String sendHold=null) {
 	state.newHeatingSetpoint = heatingSetpoint
 	state.useThisHold = sendHold
 	runIn(2, "updateThermostatSetpoints", [overwrite: true])
+	return
 }
 
 //void setCoolingSetpoint(setpoint) {
@@ -1850,10 +1910,12 @@ void setCoolingSetpointDelay(setpoint) {
 	LOG("Slider requested cool setpoint: ${setpoint}",4,null,'trace')
 	def runWhen = (getParentSetting('arrowPause') ?: 4 ) as Integer
 	runIn( runWhen, 'sCS', [data: [setpoint:setpoint.toBigDecimal()]] )
+	return
 }
 void sCS(data) {
 	LOG("Setting cooling setpoint to: ${data.setpoint}",4,null,'trace')
 	setCoolingSetpoint(data.setpoint.toBigDecimal())
+	return
 }
 void setCoolingSetpoint(setpoint, String sendHold=null) {
 	if (device.currentValue('thermostatHold') == 'vacation') {
@@ -1884,6 +1946,7 @@ void setCoolingSetpoint(setpoint, String sendHold=null) {
 	state.newCoolingSetpoint = coolingSetpoint.toBigDecimal()
 	state.useThisHold = sendHold
 	runIn(2, "updateThermostatSetpoints", [overwrite: true])
+	return
 }
 
 def updateThermostatSetpoints() {
@@ -1963,6 +2026,7 @@ def updateThermostatSetpoints() {
 	state.newHeatingSetpoint = null
 	state.newCoolingSetpoint = null
 	runIn(5, 'refresh', [overwrite: true])
+	return
 }
 
 // raiseSetpoint: called by tile when user hit raise temperature button on UI
@@ -2013,7 +2077,6 @@ void raiseSetpoint() {
 		def updates = ['thermostatSetpoint': targetValue]
 		generateEvent(updates)
 		runIn( runWhen, 'changeHeatSetpoint', [data: [value:targetValue]] )
-		return
 	} else if (changingCool || (mode == 'cool') || ((mode == 'auto') && !smartAudio && (operatingState.contains('oo') || device.currentValue('lastOpState')?.contains('oo')))) {
 		targetValue = roundIt((coolingSetpoint + (isMetric ? 0.5 : 1.0)), 1)
 		LOG("raiseSetpoint() Cooling to ${targetValue}", 4)
@@ -2021,9 +2084,8 @@ void raiseSetpoint() {
 		def updates = ['thermostatSetpoint': targetValue]
 		generateEvent(updates)
 		runIn( runWhen, 'changeCoolSetpoint', [data: [value:targetValue]] )
-		return
 	}
-	// oops! shouldn't be here!
+	return
 }
 
 // lowerSetpoint: called by tile when user hit lower temperature button on UI
@@ -2075,7 +2137,6 @@ void lowerSetpoint() {
 		def updates = ['thermostatSetpoint': targetValue]
 		generateEvent(updates)
 		runIn( runWhen, 'changeHeatSetpoint', [data: [value:targetValue]] )
-		return
 	}
 	if (changingCool || (mode == 'cool') || ((mode == 'auto') && !smartAuto && (operatingState.contains('oo') || device.currentValue('lastOpState')?.contains('oo')))) {
 		targetValue = roundIt((coolingSetpoint - (isMetric ? 0.5 : 1.0)), 1)
@@ -2084,8 +2145,8 @@ void lowerSetpoint() {
 		def updates = ['thermostatSetpoint': targetValue]
 		generateEvent(updates)
 		runIn( runWhen, 'changeCoolSetpoint', [data: [value:targetValue]] )
-		return
 	}
+	return
 }
 
 // changeHeatSetpoint: effect setHeatingSetpoint for UI
@@ -2095,6 +2156,7 @@ void changeHeatSetpoint(newSetpoint) {
 	LOG("changeHeatSetpoint(${newSetpoint.value}°)",2,null,'trace')
 	setHeatingSetpoint( newSetpoint.value.toBigDecimal() )
 	state.newHeatSetpoint = null	// sendEvent(name: 'newHeatSetpoint', value: 0.0, displayed: false, isStateChange: true)
+	return
 }
 
 // changeCoolSetpoint: effect setCoolingSetpoint for UI
@@ -2104,6 +2166,7 @@ void changeCoolSetpoint(newSetpoint) {
 	LOG("changeCoolSetpoint(${newSetpoint.value}°)",2,null,'trace')
 	setCoolingSetpoint( newSetpoint.value.toBigDecimal() )
 	state.newCoolSetpoint = null	// sendEvent(name: 'newCoolSetpoint', value: 0.0, displayed: false, isStateChange: true)
+	return
 }
 
 // raiseSmartSetpoint: figure out which setpoint to raise
@@ -2123,7 +2186,6 @@ void raiseSmartSetpoint(heatingSetpoint, coolingSetpoint) {
 		def updates = ['thermostatSetpoint': newHeat]
 		generateEvent(updates)
 		runIn( runWhen, 'changeHeatSetpoint', [data: [value:newHeat], overwrite: true] )
-		return
 	} else {
 		// turn the cool up
 		LOG("raiseSmartSetpoint() Cooling to ${newCool}", 4)
@@ -2131,8 +2193,8 @@ void raiseSmartSetpoint(heatingSetpoint, coolingSetpoint) {
 		def updates = ['thermostatSetpoint': newCool]
 		generateEvent(updates)
 		runIn( runWhen, 'changeCoolSetpoint', [data: [value:newCool], overwrite: true] )
-		return
 	}
+	return
 }
 
 // lowerSmartSetpoint: figure out which setpoint to lower
@@ -2152,7 +2214,6 @@ void lowerSmartSetpoint(heatingSetpoint, coolingSetpoint) {
 		def updates = ['thermostatSetpoint': newCool]
 		generateEvent(updates)
 		runIn( runWhen, 'changeCoolSetpoint', [data: [value:newCool], overwrite: true] )
-		return
 	} else {
 		// turn the heat down
 		LOG("lowerSmartSetpoint() Heating to ${newHeat}", 4)
@@ -2160,8 +2221,8 @@ void lowerSmartSetpoint(heatingSetpoint, coolingSetpoint) {
 		def updates = ['thermostatSetpoint': newHeat]
 		generateEvent(updates)
 		runIn( runWhen, 'changeHeatSetpoint', [data: [value:newHeat], overwrite: true] )
-		return
 	}
+	return
 }
 
 void resetUISetpoints() {
@@ -2169,6 +2230,7 @@ void resetUISetpoints() {
 	// sendEvent(name: 'newCoolSetpoint', value: 0.0, displayed: false)
 	state.newHeatSetpoint = null		// NOTE: different names than used by setHeatingSetpoint/setCoolingSetpoint is INTENTIONAL
 	state.newCoolSetpoint = null		// in case some API calls to change temps while user is manually changing them also
+	return
 }
 
 // alterSetpoint: change setpoint (obsolete: no longer used as of v1.2.21)
@@ -2184,6 +2246,7 @@ void noOpCurrentProgramName() { sendEvent(name:'currentProgramName',value:device
 def generateQuickEvent(String name, String value, Integer pollIn=0) {
 	sendEvent(name: name, value: value, displayed: false)
 	if (pollIn > 0) { runIn(pollIn, refresh, [overwrite: true]) }
+	return
 }
 
 // ***************************************************************************
@@ -2227,6 +2290,7 @@ void setThermostatMode(String value) {
 		}
 	}
 	if (changed) LOG("Thermostat Mode changed to ${value}",2,null,'info')
+	return
 }
 def modes() {
 	return state.supportedThermostatModes
@@ -2234,38 +2298,45 @@ def modes() {
 void off() {
 	LOG('off()', 4, null, 'trace')
 	setThermostatMode('off')
+	return
 }
 void heat() {
 	LOG('heat()', 4, null, 'trace')
 	setThermostatMode('heat')
+	return
 }
 void auxHeatOnly() {
 	LOG("auxHeatOnly()", 4, null, 'trace')
 	setThermostatMode("auxHeatOnly")
+	return
 }
 void emergency() {
 	LOG("emergency()", 4, null, 'trace')
 	setThermostatMode("auxHeatOnly")
+	return
 }
 // This is the proper definition for the capability
 void emergencyHeat() {
 	LOG("emergencyHeat()", 4, null, 'trace')
 	setThermostatMode("auxHeatOnly")
+	return
 }
 void cool() {
 	LOG('cool()', 4, null, 'trace')
 	setThermostatMode('cool')
+	return
 }
 void auto() {
 	LOG('auto()', 4, null, 'trace')
 	setThermostatMode('auto')
+	return
 }
 
 // ***************************************************************************
 // Thermostat Program (aka Climates) Commands
 // Program/Climates CANNOT be changed while in Vacation mode
 // ***************************************************************************
-void setThermostatProgram(String program, holdType=null, holdHours=2) {
+void setThermostatProgram(String program, String holdType=null, Integer holdHours=2) {
 	// N.B. if holdType is provided, it must be one of the valid parameters for the Ecobee setHold call (indefinite, nextTransition, holdHours). dateTime not currently supported
 	def currentThermostatHold = device.currentValue('thermostatHold')
 	if (currentThermostatHold == 'vacation') {
@@ -2282,7 +2353,7 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
 		programsList = new JsonSlurper().parseText(programs) + ['Resume']
 	}
 
-	if ((program == null) || (!programsList.contains(program))) {
+	if ((program == null) || (program == "") || (!programsList.contains(program))) {
 		LOG("setThermostatProgram( ${program} ): Missing or Invalid argument - must be one of (${programsList.toString()[1..-2]})", 2, this, 'warn')
 		return
 	}
@@ -2368,6 +2439,7 @@ void setThermostatProgram(String program, holdType=null, holdHours=2) {
 		// def priorProgram = device.currentState("currentProgramId")?.value
 		// generateProgramEvent(priorProgram, program) // reset the tile back
 	}
+	return
 }
 void setSchedule(scheduleJson) {
 	LOG("setSchedule( ${scheduleJson} )", 4, this, 'trace')
@@ -2431,23 +2503,27 @@ void setSchedule(scheduleJson) {
 		}
 		LOG("setSchedule( null ): Missing or Invalid argument - must be one of (${programsList.toString()[1..-2]})", 1, this, 'warn')
 	}
+	return
 }
 void present(){
 	// Change the Comfort Setting to Home (Nest compatibility)
 	LOG('present()', 5, null, 'trace')
 	setThermostatProgram('Home')
+	return
 }
 void homeDisabled() {}
 void home() {
 	// Change the Comfort Setting to Home
 	LOG('home()', 5, null, 'trace')
 	setThermostatProgram('Home')
+	return
 }
 void awayDisabled() {}
 void away() {
 	// Change the Comfort Setting to Away
 	LOG('away()', 5, null, 'trace')
 	setThermostatProgram('Away')
+	return
 }
 // Unfortunately, we can't overload the internal Java/Groovy/system definition of 'sleep()'
 /*
@@ -2455,21 +2531,24 @@ void sleep() {
 	// Change the Comfort Setting to Sleep
 	LOG("sleep()", 5)
 	setThermostatProgram("Sleep")
+	return
 }
 */
 void asleep() {
 	// Change the Comfort Setting to Sleep
 	LOG('asleep()', 5, null, 'trace')
 	setThermostatProgram('Sleep')
+	return
 }
 void nightDisabled() {}
 void night() {
 	// Change the Comfort Setting to Sleep
 	LOG('night()', 5, null, 'trace')
 	setThermostatProgram('Sleep')
+	return
 }
-void wakeup() { setThermostatProgram('Wakeup') }	// Not all thermostats have these two - setTP will validate
-void awake() { setThermostatProgram('Awake') }
+void wakeup() { setThermostatProgram('Wakeup'); return; }	// Not all thermostats have these two - setTP will validate
+void awake() { setThermostatProgram('Awake'); return; }
 void resumeProgram(resumeAll=true) {
 	String currentProgramName = device.currentValue('currentProgramName')
 	resumeProgramInternal(resumeAll)
@@ -2479,6 +2558,7 @@ void resumeProgram(resumeAll=true) {
 		//generateEvent(updates)
 		runIn(5, refresh, [overwrite:false])
 	}
+	return
 }
 private def resumeProgramInternal(resumeAll=true) {
 	def result = true
@@ -2526,6 +2606,7 @@ def generateProgramEvent(String program, String failedProgram='') {
 	def updates = ['currentProgramName':progHold,/*'currentProgramId':program.toLowerCase(),*/'currentProgram':prog]
 	generateEvent(updates)
 	updateProgramButtons()
+	return
 }
 
 // ***************************************************************************
@@ -2654,25 +2735,29 @@ def setThermostatFanMode(String value, holdType=null, holdHours=2) {
 			}
 			break;
 	}
+    return
 }
 
 def ventModes() {
-	return ["auto", "minontime", "on", "off"]
+	return ["auto", "minontime", "off", "on"]
 }
 def fanModes() {
-	["on", "auto", "circulate", "off"]
+	return ["auto", "circulate", "off", "on"]
 }
 void fanOn() {
 	LOG('fanOn()', 5, null, 'trace')
 	setThermostatFanMode('on')
+	return
 }
 void fanAuto() {
 	LOG('fanAuto()', 5, null, 'trace')
 	setThermostatFanMode('auto')
+	return
 }
 void fanCirculate() {
 	LOG('fanCirculate()', 5, null, 'trace')
 	setThermostatFanMode('circulate')
+	return
 }
 void fanOffDisabled() {}
 void fanOff() {
@@ -2685,16 +2770,19 @@ void fanOff() {
 		LOG("Thermostat Fan Mode is 'off' (already)",2,null,'info')
 		generateQuickEvent('setFanOff', 'off')		// reset the button icon state
 	}
+	return
 }
 
 void setFanMinOnTimeDelay(minutes) {
 	LOG("Slider requested Minutes: ${minutes}",4,null,'trace')
 	def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
 	runIn( runWhen, 'sFMOT', [data: [mins:minutes]] )
+	return
 }
 void sFMOT(data) {
 	LOG("Setting fan minutes to: ${data.mins}",4,null,'trace')
 	setFanMinOnTime(data.mins)
+	return
 }
 void setFanMinOnTime(minutes=20) {
 	if (device.currentValue('thermostatHold') == 'vacation') {
@@ -2723,6 +2811,7 @@ void setFanMinOnTime(minutes=20) {
 	} else {
 		LOG("setFanMinOnTime(${minutes}) - invalid argument",1,null, 'error')
 	}
+	return
 }
 
 // Humidifier/Dehumidifier Commands
@@ -2751,6 +2840,7 @@ void setHumidifierMode(String value) {
 	} else {
 		LOG("Changing ${device.displayName}'s humidifier to ${value} failed, humidifier is still ${device.currentValue('humidifierMode')}", 1, null, 'warn')
 	}
+	return
 }
 
 void setHumiditySetpoint(setpoint) {
@@ -2759,10 +2849,12 @@ void setHumiditySetpoint(setpoint) {
 	if ((dehumSP != null) && dehumSP.toString().isNumber() && (dehumSP < setpoint)) LOG('Request to set Humidify Setpoint higher than Dehumidify Setpoint',1,null,'warn')
 	def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
 	runIn( runWhen, 'sHumSP', [data: [setpoint:setpoint]] )
+	return
 }
 void sHumSP(data) {
 	LOG("Setting humidity setpoint to: ${data.setpoint}",4,null,'trace')
 	setHumiditySetpointDelay(data.setpoint)
+	return
 }
 void setHumiditySetpointDelay(setpoint) {
 	LOG("setHumiditySetpointDelay ${setpoint}",4,null,'trace')
@@ -2794,6 +2886,7 @@ void setHumiditySetpointDelay(setpoint) {
 		generateEvent(updates)
 		LOG("Changing ${device.displayName}'s humidifier setpoint to ${setpoint} failed, setpoint is still ${currentSetpoint}", 1, null, 'warn')
 	}
+	return
 }
 
 void setDehumidifierMode(String value) {
@@ -2820,6 +2913,7 @@ void setDehumidifierMode(String value) {
 	} else {
 		LOG("Changing ${device.displayName}'s dehumidifier to ${value} failed, dehumidifier is still ${device.currentValue('humidifierMode')}", 1, null, 'warn')
 	}
+	return
 }
 void setDehumiditySetpoint(setpoint) {
 	LOG("Dehumidity setpoint change to ${setpoint} requested", 2, null, 'trace')
@@ -2827,10 +2921,12 @@ void setDehumiditySetpoint(setpoint) {
 	if ((humSP != null) && humSP.toString().isNumber() && (humSP > setpoint)) LOG('Request to set Dehumidify Setpoint lower than Humidify Setpoint',1,null,'warn')
 	def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
 	runIn( runWhen, 'sDehumSP', [data: [setpoint:setpoint]] )
+	return
 }
 void sDehumSP(data) {
 	LOG("Setting dehumidity setpoint to: ${data.setpoint}",4,null,'trace')
 	setDehumiditySetpointDelay(data.setpoint)
+	return
 }
 void setDehumiditySetpointDelay(setpoint) {
 	LOG("setDehumiditySetpointDelay ${setpoint}",4,null,'trace')
@@ -2854,6 +2950,7 @@ void setDehumiditySetpointDelay(setpoint) {
 	} else {
 		LOG("Changing ${device.displayName}'s dehumidifier setpoint to ${setpoint} failed, setpoint is still ${currentValue}", 1, null, 'warn')
 	}
+	return
 }
 
 // Vacation commands
@@ -2878,6 +2975,7 @@ void setVacationFanMinOnTime(Integer minutes=0) {
 	} else {
 		LOG("setVacationFanMinOnTime(${minutes}) - invalid argument",1,null, "error")
 	}
+	return
 }
 
 // deleteVacation can delete any named vacation, or the currently running one (vacationName==null)
@@ -2889,6 +2987,7 @@ void deleteVacation(vacationName = null) {
 	}
 	def deviceId = getDeviceId()
 	parent.deleteVacation(this, deviceId, vacationName)
+	return
 }
 
 // cancelVacation will only cancel the currently running vacation
@@ -2906,6 +3005,7 @@ void cancelVacation() {
 		generateQuickEvent('currentProgramName', device.currentValue('scheduledProgramName'))
 		updateModeButtons()
 	}
+	return
 }
 
 // Climate change commands
@@ -2922,6 +3022,7 @@ def setProgramSetpoints(programName, heatingSetpoint, coolingSetpoint) {
 		}
 		LOG("setProgramSetpoints() - completed",3,null,'trace')
 	} else LOG("setProgramSetpoints() - failed",1,null,'warn')
+	return
 }
 
 def setEcobeeSetting( String name, value ) {
@@ -2939,6 +3040,7 @@ def setEcobeeSetting( String name, value ) {
 	} else {
 		LOG("setEcobeeSetting( ${name}, ${value} ) FAILED.", 1, null, 'warn')
 	}
+	return
 }
 
 // No longer used as of v1.2.21
@@ -3103,38 +3205,11 @@ def whatHoldType() {
 void makeReservation(String childId, String type='modeOff') {
 	LOG("The thermostat-based Reservation System has been deprecated - please recode for Ecobee Suite Manager-based implementation.",1,null,'error')
 	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
-/*
-	String childName = parent.getChildAppName( childId )
-	if (!childName) {
-		LOG("Illegal reservation attempt using childId: ${childId} - caller is not a childApp of my parent",1,null,'warn')
-	}
-	def reserved = device.currentValue('reservations')
-	def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-	if (!reservations?.containsKey(type)) {				// allow for ANY type of reservations
-		reservations."${type}" = []
-	}
-	if (!reservations."${type}"?.contains(childId)) {
-		reservations."${type}" << childId
-		sendEvent(name: "reservations", value: JsonOutput.toJson(reservations), displayed: false, isStateChange: true)
-		LOG("'${type}' reservation created for ${childName}",2,null,'info')
-	}
-	*/
 }
 
 void cancelReservation( String childId, String type='modeOff') {
 	LOG("The thermostat-based Reservation System has been deprecated - please recode for Ecobee Suite Manager-based implementation.",1,null,'error')
 	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
-/*	String childName = parent.getChildAppName( childId )
-	if (childName) {									// silently ignore bad childId
-		def reserved = device.currentValue('reservations')
-		def reservations = (reserved != null) ? new JsonSlurper().parseText(reserved) : [:]
-		if (reservations?."${type}"?.contains(childId)) {
-			reservations."${type}" = reservations."${type}" - [childId]
-			sendEvent(name: "reservations", value: JsonOutput.toJson(reservations), displayed: false, isStateChange: true)
-			LOG("'${type}' reservation cancelled for ${childName}",2,null,'info')
-		}
-	}
-*/
 }
 
 private Integer howManyHours() {
@@ -3241,14 +3316,18 @@ def getStockTempColors() {
 		[value: 95, color: "#d04e00"],
 		[value: 96, color: "#bc2323"]
 	]
+    return colorMap
 }
 // Ecobee Settings that must be changed only by specific commands
 @Field final List EcobeeDirectSettings= [
-											[name: 'fanMinOnTime',		command: 'setFanMinOnTime'],
-											[name: 'dehumidifierMode',	command: 'setDehumidifierMode'],
-											[name: 'dehumidifierLevel', command: 'setDehumiditySetpoint'],
-											[name: 'humidity',			command: 'setHumiditySetpoint'],
-											[name: 'humidifierMode',	command: 'setHumidifierMode']
+											[name: 'fanMinOnTime',			command: 'setFanMinOnTime'],
+											[name: 'dehumidifierMode',		command: 'setDehumidifierMode'],
+											[name: 'dehumidifierLevel', 	command: 'setDehumiditySetpoint'],
+											[name: 'dehumiditySetpoint',	command: 'setDehumiditySetpoint'],
+											[name: 'humidity',				command: 'setHumiditySetpoint'],
+											[name: 'humidifierMode',		command: 'setHumidifierMode'],
+											[name: 'humiditySetpoint',		command: 'setHumiditySetpoint'],
+											[name: 'schedule',				command: 'setSchedule']
 										]
 
 // **************************************************************************************************************************
