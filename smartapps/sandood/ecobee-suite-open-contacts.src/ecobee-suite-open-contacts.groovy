@@ -40,9 +40,9 @@
  *	1.6.15 - Fixed(?) adjust temperature to adjust only when HVACMode is !Off
  *	1.6.16 - Fixed initialization logic WRT HVAC on/off state
  *	1.6.17 - Minor text edits
- *	1.7.00 - Universal release supporting both SmartThings and Hubitat
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc2" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -71,16 +71,24 @@ def mainPage() {
 				if (!app.label) {
 					app.updateLabel("Contacts & Switches")
 					atomicState.appDisplayName = "Contacts & Switches"
-				} else if (app.label.contains('<span')) {
+				} else if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
-						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						def myLabel = app.label.substring(0, app.label.indexOf('<span '))
 						atomicState.appDisplayName = myLabel
-						app.updateLabel(atomicState.appDisplayName)
+						app.updateLabel(myLabel)
 					}
 				}
-			}
+			} else {
+            	if (app.label.contains(' (paused)')) {
+                	def myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                    atomicState.appDisplayName = myLabel
+                    app.updateLabel(myLabel)
+                } else {
+                	atomicState.appDisplayName = app.label
+                }
+            }
         	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Paused - re-enable below." }
         	else { 
 				input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
@@ -752,21 +760,21 @@ private def sendMessage(notificationMessage) {
 }
 
 private def updateMyLabel() {
-	if (isST) return	// ST doesn't support the colored label approach
+	String flag = isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
-		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains('<span')) {
+	if (myLabel.contains(flag)) {
 		// strip off any connection status tag
-		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
