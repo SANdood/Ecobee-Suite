@@ -44,9 +44,9 @@
  *	1.6.19 - Changes Reverted
  *	1.6.20 - Handle null list of Climates
  *	1.6.21 - Added option to change heat/cool setpoints instead of/in addition to changing the mode
- *	1.7.00 - Universal support for both SmartThings and Hubitat
+ *	1.7.00 - Initial Release of Universal Ecobee Suite
  */
-def getVersionNum() { return "1.7.00rc2" }
+def getVersionNum() { return "1.7.00" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -70,21 +70,31 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
-        	label title: "Name for this Smart Mode & Setpoints Helper", required: true, defaultValue: "Smart Mode & Setpoints"
+			String defaultLabel = "Smart Mode & Setpoints"
+        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+            if (!app.label) {
+				app.updateLabel(defaultLabel)
+				atomicState.appDisplayName = defaultLabel
+			}
 			if (isHE) {
-				if (!app.label) {
-					app.updateLabel("Smart Mode & Setpoints")
-					atomicState.appDisplayName = "Smart Mode & Setpoints"
-				} else if (app.label.contains('<span')) {
+				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
-						def myLabel = app.label.substring(0, app.label.indexOf('<span'))
+						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
 						atomicState.appDisplayName = myLabel
-						app.updateLabel(atomicState.appDisplayName)
+						app.updateLabel(myLabel)
 					}
 				}
-			}
+			} else {
+            	if (app.label.contains(' (paused)')) {
+                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                    atomicState.appDisplayName = myLabel
+                    app.updateLabel(myLabel)
+                } else {
+                	atomicState.appDisplayName = app.label
+                }
+            }
         	if(settings.tempDisable) { 
 				paragraph "WARNING: Temporarily Paused - re-enable below."
 			} else {
@@ -278,7 +288,7 @@ def mainPage() {
     }
 }
 
-def installed() {
+void installed() {
 	LOG("installed() entered", 3, "", 'trace')
     atomicState.aboveChanged = false
     atomicState.betweenChanged = false
@@ -288,15 +298,15 @@ def installed() {
 	initialize()  
 }
 
-def uninstalled() {
+void uninstalled() {
 	clearReservations()
 }
-def clearReservations() {
+void clearReservations() {
 	thermostats?.each {
     	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff' )
     }
 }
-def updated() {
+void updated() {
 	LOG("updated() with settings: ${settings}", 3, "", 'trace')
 	unsubscribe()
     unschedule()
@@ -308,7 +318,7 @@ def updated() {
     initialize()
 }
 
-def initialize() {
+boolean initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
 	updateMyLabel()
 	
@@ -938,22 +948,16 @@ def getThermostatModes() {
 
 // get the combined set of Ecobee Programs applicable for these thermostats
 private def getEcobeePrograms() {
-	def programs
+	def programs = ['Away', 'Home', 'Sleep'] 
 
-    settings.thermostats?.each { stat ->
-        def DNI = stat.device.deviceNetworkId
-        //LOG("Getting list of programs for stat (${stat}) with DNI (${DNI})", 4)
-        if (!programs) {
-            //LOG("No programs yet, adding to the list", 4)
-            programs = parent.getAvailablePrograms(stat)
-        } else {
-            //LOG("Already have some programs, need to create the set of overlapping", 4)
-            programs = programs.intersect(parent.getAvailablePrograms(stat))
+	if (settings.thermostats?.size() > 0) {
+		settings.thermostats.each { stat ->
+			def pl = stat.currentValue('programsList')
+            if (pl) programs = programs.intersect(new JsonSlurper().parseText(pl))
         }
-    }
-
-    LOG("getEcobeePrograms: returning ${programs}", 4, null, 'info')
-    if (programs) { return programs.sort(false) } else { return ['Away', 'Home', 'Sleep'] }
+	} 
+    LOG("getEcobeePrograms: returning ${programs}", 4)
+    return programs.sort(false)
 }
 
 // return the external temperature range
@@ -1005,8 +1009,7 @@ def getCoolRange() {
 }
 
 private String getZIPcode() {
-	if (location.zipCode) return location.zipCode
-    else return ""
+	return location.zipCode ?: ""
 }
 
 private String getPWSID() {
@@ -1155,21 +1158,21 @@ private def sendMessage(notificationMessage) {
 }
 
 private def updateMyLabel() {
-	if (isST) return	// ST doesn't support the colored label approach
-
+	String flag = isST ? ' (paused)' : '<span '
+	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
-		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains('<span')) {
+	if (myLabel.contains(flag)) {
 		// strip off any connection status tag
-		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + "<span style=\"color:orange\"> Paused</span>"
+		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
