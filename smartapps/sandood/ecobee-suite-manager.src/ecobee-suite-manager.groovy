@@ -44,8 +44,9 @@
  *	1.6.23-	Added setProgramSetpoint, fixed typo & null-checking that was breaking some error handling
  *	1.6.24- Added more null-handling in http error handlers
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *  1.7.01 - changed setProgram() Hold: warning to info, fixed another resp.data==null error
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -1910,7 +1911,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 					runIn(2, 'refreshAuthToken', [overwrite: true])
 				} else {
                 	// if we get here, we had http status== 200, but API status != 0
-					LOG("checkThermostatSummary() - Ecobee API status ${statusCode}, message: ${resp.data?.status?.message}", 1, null, 'warn')
+					if (statusCode != 999) LOG("checkThermostatSummary() - Ecobee API status ${statusCode}, message: ${resp.data?.status?.message}", 1, null, 'warn')
 					runIn(2, 'refreshAuthToken', [overwrite: true])
                 }
 			} else {
@@ -4329,7 +4330,7 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
     	LOG("setProgram() for thermostat ${statName}: Can't change Program while in a vacation hold",2,null,'warn')
         return false
     } else if (currentThermostatHold != '') {									// shouldn't need this either, child device should have done this before calling us
-    	LOG("setProgram() for thermostat ${statName}: Resuming from current hold first",2,null,'warn')
+		LOG("setProgram( ${program} ) for thermostat ${statName}: Resuming from current hold first",2,null,'info')
         resumeProgram(child, deviceId, true)
     }
    	
