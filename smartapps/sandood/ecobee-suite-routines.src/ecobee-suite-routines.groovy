@@ -29,8 +29,11 @@
  *	1.6.12 - Fixed location Mode changing action
  *	1.6.13 - Use 'fanAuto' if fanMinutes is explicitly set to 0
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.02 - Fixing Mode change event handling
+ *  1.7.03 - Fix programList bug
+ *	1.7.04 - noncached currentValue() on HE
  */
-def getVersionNum() { return "1.7.01" }
+def getVersionNum() { return "1.7.04" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -304,8 +307,7 @@ def initialize() {
 }
 
 private def normalizeSettings() {
-	if (["Switch(es)","Ecobee Program"].contains(settings.modeOrRoutine)) return		// no normalization required
-    
+	
 	// whichProgram
 	atomicState.programParam = null
     atomicState.doResumeProgram = false
@@ -370,14 +372,14 @@ private def normalizeSettings() {
     
 	if (settings.modeOrRoutine == "Routine") {
     	atomicState.expectedEvent = settings.action
-    } else {
+	} else if (settings.modeOrRoutine == 'Mode') {
     	atomicState.expectedEvent = settings.modes
     }
 	LOG("atomicState.expectedEvent set to ${atomicState.expectedEvent}", 4)
 }
 
 def changeSwitchHandler(evt) {
-	LOG("changeSwitchHandler() entered with evt: ${evt.device.displayName} ${evt.name}: ${evt.value}", 5)
+	LOG("changeSwitchHandler() entered with evt: ${evt.device.displayName} ${evt.name} turned ${evt.value}", 5)
 	atomicState.theSwitch = evt.device.displayName
 	
 	if (settings.modeOrRoutine && (settings.modeOrRoutine != 'Ecobee Program')) {
@@ -404,8 +406,15 @@ def changeSwitchHandler(evt) {
 
 def turnOffStartSwitches() {
 	if (settings.startOff) {
-		settings.startSwitches.each {
-			it."${settings.startOn=='on'?'off()':'on()'}"
+		settings.startSwitches.each { aSwitch ->
+			if (aSwitch.displayName == atomicState.theSwitch) {
+				if (settings.startOn == 'on') {
+					aSwitch.off()
+				} else {
+					aSwitch.on()
+				}
+			}
+			// it."${settings.startOn=='on'?'off()':'on()'}"
 		}
 		LOG("And I turned ${settings.startOn=='on'?'off':'on'} ${atomicState.theSwitch}", 2, null, 'info')
 	}
@@ -496,19 +505,20 @@ def changeSwitches() {
 def changeProgramHandler(evt) {
 	LOG("changeProgramHander() entered with evt: ${evt.name}: ${evt.value}", 5)
 	
-	if (!settings.startSwitches) {
+	if (settings.modeOrRoutine != "Switch(es)") {
 		// If we aren't using switches, validate that we got the intended event
-		def gotEvent = (settings.modeOrRoutine == "Routine") ? evt.displayName?.toLowerCase() : evt.value?.toLowerCase()
-		LOG("Event name received (in lowercase): ${gotEvent} and current expected: ${atomicState.expectedEvent}", 5)
+		def gotEvent = isHE ? evt.value : ((settings.modeOrRoutine == "Routine") ? evt.displayName : evt.value)
+		LOG("Event name received: ${gotEvent} and current expected: ${atomicState.expectedEvent}", 5)
 
-		if ( !atomicState.expectedEvent?.toLowerCase().contains(gotEvent) ) {
-			LOG("Received an mode/routine that we aren't watching. Nothing to do.", 4)
+		if ( !(atomicState.expectedEvent?.contains(gotEvent)) ) {
+			LOG("Received an mode/routine (${gotEvent}) that we aren't watching. Nothing to do.", 4)
 			return true
 		}
 	}
     settings.myThermostats.each { stat ->
     	LOG("In each loop: Working on stat: ${stat}", 4, null, 'trace')
-        def thermostatHold = stat.currentValue('thermostatHold')
+        String thermostatHold = isST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true)
+		log.debug "thermostatHold: ${thermostatHold}"
         boolean vacationHold = (thermostatHold == 'vacation')
         // Can't change the program while in Vacation mode
         if (vacationHold) {
@@ -532,7 +542,7 @@ def changeProgramHandler(evt) {
         	if (atomicState.doResumeProgram) {
         		LOG("Resuming Program for ${stat}", 4, null, 'trace')
             	if (thermostatHold == 'hold') {
-            		def scheduledProgram = stat.currentValue("scheduledProgram")
+            		String scheduledProgram = isST ? stat.currentValue("scheduledProgram") : stat.currentValue("scheduledProgram", true)
         			stat.resumeProgram(true) 												// resumeAll to get back to the scheduled program
                 	if (atomicState.fanMinutes != null) stat.setFanMinOnTime(atomicState.fanMinutes)		// and reset the fanMinOnTime as requested
 					sendMessage("And I resumed the scheduled ${scheduledProgram} program on ${stat}.")
@@ -543,10 +553,10 @@ def changeProgramHandler(evt) {
         	} else {
             	// set the requested program
         		if (atomicState.programParam != null) {
-        			LOG("Setting Thermostat Program to programParam: ${atomicState.programParam} and holdType: ${atomicState.holdTypeParam}", 4, null, 'trace')      
+        			LOG("Setting Thermostat Program to programParam: ${atomicState.programParam} and holdType: ${settings.holdType}", 4, null, 'trace')      
         			boolean done = false
         			// def currentProgram = stat.currentValue('currentProgram')
-        			def currentProgramName = stat.currentValue('currentProgramName')	// cancelProgram() will reset the currentProgramName to the scheduledProgramName
+        			String currentProgramName = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)	// cancelProgram() will reset the currentProgramName to the scheduledProgramName
         			if ((thermostatHold == '') && (currentProgramName == atomicState.programParam)) {
                     	// not in a hold, currentProgram is the desiredProgram
                 		def fanSet = false
@@ -568,7 +578,8 @@ def changeProgramHandler(evt) {
                 		done = true
                     } else if ((thermostatHold == 'hold') || currentProgramName.startsWith('Hold')) { // (In case the Vacation hasn't cleared yet)
                     	// In a hold
-            			if (stat.currentValue('scheduledProgram') == atomicState.programParam) {
+						String ncSp = isST ? stat.currentValue('scheduledProgram') : stat.currentValue('scheduledProgram', true)
+            			if ( ncSp == atomicState.programParam) {
                         	// the scheduledProgram is the desiredProgram
                 			stat.resumeProgram(true)	// resumeAll to get back to the originally scheduled program
                 			def fanSet = false
@@ -590,16 +601,19 @@ def changeProgramHandler(evt) {
                                 }
                 				done = true
                             }
-            			} else if (stat.currentValue('currentProgram') == atomicState.programParam) {
-                        	// we are in a hold already, and the program is the one we want...
-                        	// Assume (for now) that the fan settings are also what we want (because another instance set them when they set the Hold)
-                            sendMessage("${stat.displayName} is already in the specified Hold: ${atomicState.programParam}.")
-                            done = true
-                        } else { 
-                        	// the scheduledProgram is NOT the desiredProgram, so we need to resumeAll, then set the desired program as a Hold: Program
-                			stat.resumeProgram(true)
-                    		done = false
-                		}
+						} else {
+							ncCp = isST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+							if (ncCp == atomicState.programParam) {
+								// we are in a hold already, and the program is the one we want...
+								// Assume (for now) that the fan settings are also what we want (because another instance set them when they set the Hold)
+								sendMessage("${stat.displayName} is already in the specified Hold: ${atomicState.programParam}.")
+								done = true
+							} else { 
+								// the scheduledProgram is NOT the desiredProgram, so we need to resumeAll, then set the desired program as a Hold: Program
+								stat.resumeProgram(true)
+								done = false
+							}
+						}
             		}
             		if (!done) {
            				// Looks like we are setting a Hold: 
@@ -656,7 +670,7 @@ def whatHoldType(statDevice) {
     def sendHoldType = null
     def parentHoldType = getParentSetting('holdType')
     if ((settings.holdType == null) || (settings.holdType == "Ecobee Manager Setting") || (settings.holdType == 'Parent Ecobee (Connect) Setting')) {
-        if (parentHoldType == null) {	// default for Ecobee (Connect) is permanent hold (legacy)
+        if ((parentHoldType == null) || (parentHoldType == '')) {	// default for Ecobee (Connect) is permanent hold (legacy)
         	LOG('Using holdType indefinite',2,null,'info')
         	return 'indefinite'
         } else if (parentHoldType != 'Thermostat Setting') {
@@ -691,7 +705,7 @@ def whatHoldType(statDevice) {
             }
             break;
         case 'Thermostat Setting':
-       		def statHoldType = statDevice.currentValue('statHoldAction')
+       		def statHoldType = isSP ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
             switch(statHoldType) {
             	case 'useEndTime4hour':
                 	sendHoldType = 4
@@ -723,16 +737,19 @@ def whatHoldType(statDevice) {
 // Helper Functions
 // get the combined set of Ecobee Programs applicable for these thermostats
 private def getEcobeePrograms() {
-	def programs = ['Away', 'Home', 'Sleep'] 
-
+	def programs
 	if (myThermostats?.size() > 0) {
 		myThermostats.each { stat ->
 			def pl = stat.currentValue('programsList')
-            if (pl) programs = programs.intersect(new JsonSlurper().parseText(pl))
+			if (!programs) {
+				if (pl) programs = new JsonSlurper().parseText(pl)
+			} else {
+				if (pl) programs = programs.intersect(new JsonSlurper().parseText(pl))
+			}
         }
 	} 
     LOG("getEcobeePrograms: returning ${programs}", 4)
-    return programs.sort(false)
+    return programs ? programs.sort(false) : ['Away', 'Home', 'Sleep']
 }
 
 // return all the modes that ALL thermostats support
