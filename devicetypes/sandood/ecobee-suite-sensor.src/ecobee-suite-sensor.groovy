@@ -34,8 +34,9 @@
  *  1.6.15 - Shortcut the 'TestingForInstall' installed()
  *	1.6.16 - Log uninstalls also
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - nonCached currentValue() on HE
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -263,7 +264,8 @@ def generateEvent(Map results) {
 	String tempScale = getTemperatureScale()
     def precision = device.currentValue('decimalPrecision')
     if (!precision) precision = (tempScale == 'C') ? 1 : 0
-    def isConnected = (device.currentValue('currentProgramName') != 'Offline')
+    String currentProgramName = isST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
+    def isConnected = (currentProgramName != 'Offline')
 
 	if(results) {
 		String tempDisplay = ''
