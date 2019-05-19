@@ -28,8 +28,9 @@
  *	1.6.10 - Resync for parent-based reservations
  *	1.6.11 - Removed use of *SetpointDisplay
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - nonCached currentValue() on HE
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Zones Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -129,12 +130,13 @@ def initialize() {
 	
 	// Get slaves into a known state
 	slaveThermostats.each { stat ->
-    	if (stat.currentValue('thermostatHold') == 'hold') {
+		String ncTh= isST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true) 
+    	if (ncTh == 'hold') {
         	if (state."${stat.displayName}-currProg" == null) {
-           		state."${stat.displayName}-currProg" = stat.currentValue('currentProgram')
+				state."${stat.displayName}-currProg" = isST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
             }
             if (state."${stat.displayName}-holdType" == null) {
-        		state."${stat.displayName}-holdType" = stat.currentValue('lastHoldType')
+        		state."${stat.displayName}-holdType" = isST ? stat.currentValue('lastHoldType') : stat.currentValue('lastHoldType', true)
             }
         } else {
       		state."${stat.displayName}-currProg" = null
@@ -173,7 +175,7 @@ def masterFanStateHandler(evt=null) {
 }
 
 def theAdjuster() {
-	def masterOpState = masterThermostat.currentValue('thermostatOperatingState')
+	def masterOpState = isST ? masterThermostat.currentValue('thermostatOperatingState') : masterThermostat.currentValue('thermostatOperatingState', true)
 	LOG("theAdjuster() - master thermostatOperatingState = ${masterOpState}", 3, null, 'info')
 	
 	switch (masterOpState) {
@@ -181,7 +183,7 @@ def theAdjuster() {
 			// master is fan-only, turn on fan for any slaves not already running their fan
             if ((settings.shareFan == null) || settings.shareFan) {
 				slaveThermostats.each { stat ->
-                	def statOpState = stat.currentValue('thermostatOperatingState')
+                	def statOpState = isST ? stat.currentValue('thermostatOperatingState') : stat.currentValue('thermostatOperatingState', true)
 					if (statOpState == 'idle') {
 						setFanOn(stat) 	// stat.setThermostatFanMode('on', 'nextTransition')
 					}
@@ -195,7 +197,8 @@ def theAdjuster() {
             
 		case 'idle':
         	slaveThermostats.each { stat ->
-            	if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {
+				ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+            	if (ncCpn == 'Hold: Fan On') {
                     setFanAuto(stat)
                 }
             }
@@ -204,17 +207,18 @@ def theAdjuster() {
 		case 'heating':
         	if (settings.shareHeat) {
             	slaveThermostats.each { stat ->
-                	def statOpState = stat.currentValue('thermostatOperatingState')
+                	def statOpState = isST ? stat.currentValue('thermostatOperatingState') : stat.currentValue('thermostatOperatingState', true)
                 	if (statOpState == 'heating') {
                     	setFanAuto(stat) // stat.resumeProgram(true)		// should get us back to desired fan mode
                     } else if (statOpState == 'fanOnly') {
                     	// See if we are holding the fan but don't need the heat any more
-                        if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {
-                      		def heatTo = stat.currentValue('heatingSetpoint')
+						String ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+                        if (ncCpn == 'Hold: Fan On') {
+                      		def heatTo = isST ? stat.currentValue('heatingSetpoint') : stat.currentValue('heatingSetpoint', true)
                         	if (heatTo != null) {
-                        		def temp = stat.currentValue('temperature')
+                        		def temp = isST ? stat.currentValue('temperature') : stat.currentValue('temperature', true)
                             	if (temp != null) {
-                            		def heatAt = stat.currentValue('heatAtSetpoint')
+                            		def heatAt = isST ? stat.currentValue('heatAtSetpoint') : stat.currentValue('heatAtSetpoint', true)
                                 	if (heatAt != null) {
                             			if ((temp >= heatTo) || (temp < heatAt)) { 
                                         	// This Zone has reached its target, stop stealing heat
@@ -225,11 +229,11 @@ def theAdjuster() {
                             }
                         }
                     } else if (statOpState == 'idle') {
-                    	def heatTo = stat.currentValue('heatingSetpoint')
+                    	def heatTo = isST ? stat.currentValue('heatingSetpoint') : stat.currentValue('heatingSetpoint', true)
                         if (heatTo != null) {
-                        	def temp = stat.currentValue('temperature')
+                        	def temp = isST ? stat.currentValue('temperature') : stat.currentValue('temperature', true)
                             if (temp != null) {
-                            	def heatAt = stat.currentValue('heatAtSetpoint')
+                            	def heatAt = isST ? stat.currentValue('heatAtSetpoint') : stat.currentValue('heatAtSetpoint', true)
                                 if (heatAt != null) {
                             		if ((temp < heatTo) && (temp > heatAt)) { 
                                 		setFanOn(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat		
@@ -238,7 +242,8 @@ def theAdjuster() {
                             }
                         }
                     } else { // Must be 'cooling'
-                        if (stat.currentValue('currentProgramName') == 'Hold: Fan On') setFanAuto(stat)	// Just make sure fan is in Auto mode
+						String ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+                        if (ncCpn == 'Hold: Fan On') setFanAuto(stat)	// Just make sure fan is in Auto mode
                     }
                 }
             } else {
@@ -246,7 +251,8 @@ def theAdjuster() {
                 if ((settings.shareFan == null) || settings.shareFan) {
                 	// but we are sharing fan - turn off fan to avoid overheating this zone
                 	slaveThermostats.each { stat ->
-                		if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {
+						String ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+                		if (ncCpn == 'Hold: Fan On') {
                         	setFanAuto(stat)
                         }
                     }
@@ -257,18 +263,19 @@ def theAdjuster() {
 		case 'cooling':
 			if (settings.shareCool) {
 				slaveThermostats.each { stat->
-                    def statOpState = stat.currentValue('thermostatOperatingState')
+                    def statOpState = isST ? stat.currentValue('thermostatOperatingState') : stat.currentValue('thermostatOperatingState', true)
 					if (statOpState == 'cooling') {
                     	// We are cooling too - double-check that fan is in Auto mode
                         setFanAuto(stat)				
                     } else if (statOpState == 'fanOnly') {
                     	// Check if we are holding the fan but don't need the cool any more
-                        if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {
-                      		def coolTo = stat.currentValue('coolingSetpoint')
+						String ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+                        if (ncCpn == 'Hold: Fan On') {
+                      		def coolTo = isST ? stat.currentValue('coolingSetpoint') : stat.currentValue('coolingSetpoint', true)
                         	if (coolTo != null) {
-                        		def temp = stat.currentValue('temperature')
+                        		def temp = isST ? stat.currentValue('temperature') : stat.currentValue('temperature', true)
                             	if (temp != null) {
-                            		def coolAt = stat.currentValue('coolAtSetpoint')
+                            		def coolAt = isST ? stat.currentValue('coolAtSetpoint') : stat.currentValue('coolAtSetpoint', true)
                                 	if (coolAt != null) {
                             			if ((temp <= coolTo) || (temp > coolAt)) { 
                                         	// This Zone has reached its target, stop stealing cool
@@ -280,11 +287,11 @@ def theAdjuster() {
                         }
                     } else if (statOpState == 'idle') {
                     	// Check if we need the cool
-                    	def coolTo = stat.currentValue('coolingSetpoint')
+                    	def coolTo = isST ? stat.currentValue('coolingSetpoint') : stat.currentValue('coolingSetpoint', true)
                         if (coolTo != null) {
-                        	def temp = stat.currentValue('temperature')
+                        	def temp = isST ? stat.currentValue('temperature') : stat.currentValue('temperature', true)
                             if (temp != null) {
-                            	def coolAt = stat.currentValue('coolAtSetpoint')
+                            	def coolAt = isST ? stat.currentValue('coolAtSetpoint') : stat.currentValue('coolAtSetpoint', true)
                                 if (coolAt != null) {
                             		if ((temp > coolSp) && (temp < coolAt)) {
                                 	   	setFanOn(stat)
@@ -293,7 +300,8 @@ def theAdjuster() {
                     		}
                         }
                     } else { // Must be 'heating'
-                        if (stat.currentValue('currentProgramName') == 'Hold: Fan On') setFanAuto(stat)	// Just make sure fan is in Auto mode
+						String ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+                        if (ncCpn == 'Hold: Fan On') setFanAuto(stat)	// Just make sure fan is in Auto mode
                     }
                 }
             } else {
@@ -301,7 +309,8 @@ def theAdjuster() {
                 if ((settings.shareFan == null) || settings.shareFan) {
                 	// but we are sharing fan - turn off fan to avoid overcooling this zone
                 	slaveThermostats.each { stat ->
-                		if (stat.currentValue('currentProgramName') == 'Hold: Fan On') {	// set auto for now, so we don't break fanMinOnTime/Circulation
+						String ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+                		if (ncCpn == 'Hold: Fan On') {	// set auto for now, so we don't break fanMinOnTime/Circulation
                         	setFanAuto(stat)
                         }
                     }
@@ -312,7 +321,8 @@ def theAdjuster() {
 		default:
         	// we ignore the other possible OperatingStates (e.g., 'pendhing heat', etc.)
             slaveThermostats.each { stat ->
-            	if (stat.currentValue('currentProgramName') == 'Hold: Fan On') setFanAuto(stat)
+				String ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+            	if (ncCpn == 'Hold: Fan On') setFanAuto(stat)
             }
 			break;
 	}
@@ -321,18 +331,21 @@ def theAdjuster() {
 def setFanAuto(stat) {
 	def oldProg = state."${stat.displayName}-currProg"
     if (oldProg) {
-    	if (stat.currentValue('currentProgram') != oldProg) stat.setThermostatProgram(oldProg, state."${stat.displayName}-holdType")
+		String ncCp = isST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+    	if (ncCp != oldProg) stat.setThermostatProgram(oldProg, state."${stat.displayName}-holdType")
         state."${stat.displayName}-currProg" = null
         state."${stat.displayName}-holdType" = null
     }
-	def fanMOT = stat.currentValue('fanMinOnTime')
+	def fanMOT = isST ? stat.currentValue('fanMinOnTime') : stat.currentValue('fanMinOnTime', true)
     if ((fanMOT != null) && (fanMOT != 0)) {
-    	if (stat.currentValue('thermostatFanModeDisplay') != 'circulate') {
+		String ncTfmd = isST ? stat.currentValue('thermostatFanModeDisplay') : stat.currentValue('thermostatFanModeDisplay', true)
+    	if (ncTfmd != 'circulate') {
         	stat.setThermostatFanMode('circulate')
             LOG("${stat.displayName} fanMode = circulate", 3)
         }
     } else {
-    	if (stat.currentValue('thermostatFanMode') != 'auto') {
+		String ncTfm = isST ? stat.currentValue('thermostatFanMode') : stat.currentValue('thermostatFanMode', true)
+    	if (ncTfm != 'auto') {
         	stat.setThermostatFanMode('auto')
             LOG("${stat.displayName} fanMode = auto", 3)
         }
@@ -340,10 +353,13 @@ def setFanAuto(stat) {
 }
 
 def setFanOn(stat) {
-	if ((stat.currentValue('currentProgramName') != 'Hold: Fan On') || (stat.currentValue('thermostatFanMode') != 'on')) {
-    	if (stat.currentValue('thermostatHold') == 'hold') {
-        	state."${stat.displayName}-holdType" = stat.currentValue('lastHoldType')
-        	state."${stat.displayName}-currProg" = stat.currentValue('currentProgram')
+	String ncCpn = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+	String ncTfm = isST ? stat.currentValue('thermostatFanMode') : stat.currentValue('thermostatFanMode', true)
+	if ((ncCpn != 'Hold: Fan On') || (ncTfm != 'on')) {
+		String ncTh = isST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true)
+    	if (ncTh == 'hold') {
+        	state."${stat.displayName}-holdType" = isST ? stat.currentValue('lastHoldType') : stat.currentValue('lastHoldType', true)
+        	state."${stat.displayName}-currProg" = isST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
         }
     	stat.setThermostatFanMode('on', 'nextTransition')
         LOG("${stat.displayName} fanMode = on", 3)
