@@ -13,8 +13,9 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - nonCached currentValue() for HE
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -191,7 +192,8 @@ def checkPresence() {
         }
         if (settings.setHome) {
         	myThermostats.each { tstat ->
-        		if (tstat.currentValue('currentProgram') != "Home") tstat.home()
+				def ncCp = isST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
+        		if (ncCp != "Home") tstat.home()
         	}
             def tc = myThermostats.size()
             def also = multiple ? 'also ' : ''
@@ -227,7 +229,8 @@ def checkHome() {
 	def allSet = true
 	if (settings.setHome) {
     	myThermostats.each { tstat ->
-        	if (tstat.currentValue('currentProgram') != "Home") { 	// Need to check if in Vacation Mode also...
+			def ncCp = isST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
+        	if (ncCp != "Home") { 	// Need to check if in Vacation Mode also...
             	allSet = false
             	tstat.home()
                 LOG("${app.label} at ${location.name} failed twice to set 'Home' program on ${tstat.displayName}",2,null,'warn')
@@ -264,8 +267,9 @@ private getStatModeOk() {
 	if (settings.statMode == null) return true
 	def result = false
 	settings.myThermostats?.each { stat ->
-		log.debug "statMode: ${stat.currentValue('thermostatMode')}"
-		if (settings.statMode.contains(stat.currentValue('thermostatMode'))) {
+		def ncTm = isST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
+		log.debug "statMode: ${ncTm}"
+		if (settings.statMode.contains(ncTm)) {
 			log.debug "statModeOk"
 			result = true
 		}
