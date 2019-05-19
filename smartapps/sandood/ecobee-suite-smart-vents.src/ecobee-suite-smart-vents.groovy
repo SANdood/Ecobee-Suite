@@ -36,8 +36,9 @@
  *	1.6.11 - Fix offline sensor temperature values (null instead of Unknown)
  *	1.6.12 - Added "Generic" (dimmer/switchLevel) Vents
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - nonCached currentValue() for HE
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -120,7 +121,8 @@ def mainPage() {
 		
 			section(title: "Smart Vents: Target Temperature") {
             	if (settings.useThermostat && settings.theThermostat) {
-                	paragraph("Current setpoint of ${settings.theThermostat} is ${settings.theThermostat.currentValue('thermostatSetpoint')}°.")
+					def ncTsp = isST ? settings.theThermostat.currentValue('thermostatSetpoint') : settings.theThermostat.currentValue('thermostatSetpoint', true)
+                	paragraph("Current setpoint of ${settings.theThermostat} is ${ncTsp}°.")
                 }
 				input(name: "useThermostat", type: "bool", title: "Follow setpoints on thermostat${settings.theThermostat?' '+settings.theThermostat.displayName:''}?", required: true, defaultValue: true, submitOnChange: true)
 				if (!settings.useThermostat) {
@@ -205,9 +207,9 @@ private String checkTemperature() {
 	// Be smarter if we are in Smart Recovery mode: follow the thermostat's temperature instead of watching the current setpoint. Otherwise the room won't get the benefits of heat/cool
     // Smart Recovery. Also, we add the heat/cool differential to try and get ahead of the Smart Recovery curve (otherwise we close too early or too often)
     // 
-   	def smarter = theThermostat.currentValue('thermostatOperatingStateDisplay')?.contains('smart')
+   	def smarter = (isST ? settings.theThermostat.currentValue('thermostatOperatingStateDisplay') : settings.theThermostat.currentValue('thermostatOperatingStateDisplay', true))?.contains('smart')
     
-	def cOpState = theThermostat.currentValue('thermostatOperatingState')
+	def cOpState = isST ? theThermostat.currentValue('thermostatOperatingState') : theThermostat.currentValue('thermostatOperatingState', true)
     LOG("Current Operating State ${cOpState}",3,null,'info')
 	def cTemp = getCurrentTemperature()
     def offset 
