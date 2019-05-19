@@ -25,8 +25,9 @@
  *	1.6.11 - Removed location.contactBook support - deprecated by SmartThings
  *	1.6.12 - Added support for "generic" vents (dimmers), as with Smart Vents
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - Fix sort issue & noCache currentValue() for HE
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Room Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -190,7 +191,7 @@ void uninstalled() {
 
 def getProgramsList() { return /* theThermostat ? new JsonSlurper().parseText(theThermostat.currentValue('programsList')) : */ ["Away","Home","Sleep"] }
 
-def getEcobeeSensorsList() { return parent.getEcobeeSensors().sort(false) { it.value } }    
+def getEcobeeSensorsList() { return parent.getEcobeeSensors().sort { it.value } }    
 
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 3, "", 'info')
@@ -433,7 +434,7 @@ def activateRoom() {
     def anyInactive = false
     theSensors.each {
     	def device = parent.getChildDevice(it)
-        def smartRoomStatus = device.currentValue('SmartRoom')
+        def smartRoomStatus = isST ? device.currentValue('SmartRoom') : device.currentValue('SmartRoom', true)
         if (smartRoomStatus == 'inactive') anyInactive = true
         if (smartRoomStatus == 'enable') anyInactive = true		// we are turning on
     	if (activeProgs?.contains("Home")) {
@@ -481,7 +482,7 @@ def deactivateRoom() {
     def anyActive = false
     theSensors.each {
     	def device = parent.getChildDevice(it)
-        def smartRoomStatus = device.currentValue('SmartRoom')
+        def smartRoomStatus = isST ? device.currentValue('SmartRoom') : device.currentValue('SmartRoom', true) 
         if (smartRoomStatus == 'active') anyActive = true 
         if (smartRoomStatus == 'disable') anyActive = true
     	if (inactiveProgs?.contains("Home")) {
