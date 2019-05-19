@@ -25,8 +25,9 @@
  *	1.6.00 - Release number synchronization
  *	1.6.10 - Resync for parent-based reservations
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - nonCached currentValue() for HE
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -153,7 +154,9 @@ def opStateHandler(evt) {
     	if (reverseOnIdle) {
         	def isReallyIdle = true
         	if (theThermostats.size() > 1) {
-            	theThermostats.each { if (it.currentValue('thermostatOperatingState') != 'idle') isReallyIdle = false }
+            	theThermostats.each { 
+					String ncTos = isST ? it.currentValue('thermostatOperatingState') : it.currentValue('thermostatOperatingState', true)
+					if (ncTos != 'idle') isReallyIdle = false }
             }
             if (isReallyIdle) {	
             	if (theOnSwitches) {
