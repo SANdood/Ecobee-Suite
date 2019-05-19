@@ -34,8 +34,9 @@
  *	1.6.13 - Added humidity restrictor
  *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *  1.7.01 - nonCached currentValue() for HE
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -258,9 +259,11 @@ def initialize() {
     // Also allow if none are configured
     boolean isOK = true
     if (theModes || thePrograms  || statModes) {
+		String ncCp = isST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
+		String ncTm = isST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
     	isOK = (theModes && theModes.contains(location.mode)) ? true : 
-        			((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : 
-                    	((statModes && statModes.contains(theThermostat.currentValue('thermostatMode'))) ? true : false))
+        			((thePrograms && thePrograms.contains(ncCp)) ? true : 
+                    	((statModes && statModes.contains(ncTm)) ? true : false))
         if (!isOK) LOG("Not in specified Mode or Program, not adjusting", 3, null, "info")
     }
     
@@ -412,7 +415,7 @@ def deltaHandler(evt=null) {
     // Make sure it is OK for us to e changing circulation times
 	if (!atomicState.isOK) return
     
-    String currentProgram = theThermostat.currentValue('currentProgram')
+    String currentProgram = isST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
     boolean vacationHold = (currentProgram && (currentProgram == 'Vacation'))
 	if (vacationHold && !settings.vacationOverride) {
     	LOG("${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
