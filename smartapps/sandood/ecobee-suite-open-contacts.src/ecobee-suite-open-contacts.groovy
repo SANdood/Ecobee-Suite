@@ -41,8 +41,9 @@
  *	1.6.16 - Fixed initialization logic WRT HVAC on/off state
  *	1.6.17 - Minor text edits
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - nonCached currentValue() for HE
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -252,7 +253,7 @@ def initialize() {
     	if (switchOn) {
         	subscribe(theSwitches, "switch.on", sensorOpened)
             subscribe(theSwitches, "switch.off", sensorClosed)
-            switchOffState = theSwitches.currentValue('switch').contains('on')
+            switchOffState = (isST ? theSwitches.currentValue('switch') : theSwitches.currentValue('switch', true)).contains('on')
         } else {
         	subscribe(theSwitches, "switch.off", sensorOpened)
             subscribe(theSwitches, "switch.on", sensorClosed)
@@ -547,7 +548,7 @@ def turnOnHVAC() {
                     LOG("${therm.displayName} Quiet Time disabled (${qtSwitch.displayName} turned ${onOff})",2,null,'info')
             	} else if ((settings.hvacOff == null) || settings.hvacOff) {
             		// turn on the HVAC
-                    def oldMode = therm.currentValue('thermostatMode')
+                    def oldMode = isST ? therm.currentValue('thermostatMode') :  therm.currentValue('thermostatMode', true) 
                     def newMode = (tmpThermSavedState[tid].mode == '') ? 'auto' : tmpThermSavedState[tid].mode
                     if (newMode != oldMode) {
                     	def i = countReservations( tid, 'modeOff' ) - (haveReservation(tid, 'modeOff') ? 1 : 0)
