@@ -1610,10 +1610,10 @@ def generateEvent(Map results) {
 				case 'userAccessCode':
                 case 'thermostatStatus':
                 case 'ventilatorOffDateTime': 
-                	if (isChange) {
+                	// if (isChange) {
                     	def sendText = (sendValue != 'null') ? sendValue : ''
                         if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, isStateChange: true, displayed: (sendText != '')]
-                    }
+                    //}
                     break;
                 
 				// The following are all temperature values, send with the appropriate temperature unit (tu)
