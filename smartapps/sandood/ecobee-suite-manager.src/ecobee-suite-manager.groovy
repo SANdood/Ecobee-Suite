@@ -49,8 +49,9 @@
  *	1.7.03 - More thermostatHold optimizations
  *	1.7.04 - String fixes
  *  1.7.05 - nonCached currentValue() for HE
+ *  1.7.06 - Fixed deleteSensorFromProgram() error
  */
-def getVersionNum() { return "1.7.05" }
+def getVersionNum() { return "1.7.06" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -4600,7 +4601,7 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
                     program.climates[c].sensors = program.climates[c].sensors - program.climates[c].sensors[s]   
 					climateChange[deviceId] = program
 					atomicState.climateChange = climateChange		// save for later 
-                    runIn(2, 'updateClimates', [data: [deviceId: deviceId, child: child]])
+                   	runIn(2, 'updateClimates', [data: [deviceId: deviceId]])
                     LOG("deleteSensorFromProgram() - ${sensName} deletion from ${programId.capitalize()} program on thermostat ${statName} queued successfully", 4, child, 'info')
            			return true
             	}
