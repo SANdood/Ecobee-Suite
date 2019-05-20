@@ -56,8 +56,9 @@
  *  1.7.03 - More thermostatHold optimizations
  *	1.7.04 - Big String fix
  *  1.7.05 - noCache most currentValue() for HE
+ *	1.7.06 - More sendValue cleanup
  */
-def getVersionNum() { return "1.7.05" }
+def getVersionNum() { return "1.7.06" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -928,7 +929,7 @@ def generateEvent(Map results) {
 
 			switch (name) {
 				case 'forced':
-					forceChange = value as boolean
+					forceChange = (sendValue == 'true')
 					break;
 
 				case 'heatingSetpoint':
@@ -1003,7 +1004,7 @@ def generateEvent(Map results) {
 					if (isChange || forceChange) {
 						LOG("thermostatSetpoint: ${sendValue}",2,null,'info')
 						def displayValue = isMetric ? sendValue : roundIt(value, 0) // Truncate the decimal point
-						if (isChange) event = eventFront + [value: displayValue, unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°${tu}", isStateChange: true, displayed: true]
+						if (isChange) event = eventFront + [value: displayValue.toString(), unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°${tu}", isStateChange: true, displayed: true]
 					}
 					break;
 
@@ -1138,13 +1139,13 @@ def generateEvent(Map results) {
 
 				case 'equipmentStatus':
 					if (isChange) {
-						String descText = (value == 'idle') ? 'Equipment is idle' : ((value == 'offline') ? 'Equipment is offline' : "Equipment is running ${value}")
-						event = eventFront +  [value: "${value}", descriptionText: descText, isStateChange: true, displayed: false]
+						String descText = (sendValue == 'idle') ? 'Equipment is idle' : ((sendValue == 'offline') ? 'Equipment is offline' : "Equipment is running " + sendValue)
+						event = eventFront +  [value: sendValue, descriptionText: descText, isStateChange: true, displayed: false]
 					}
 					break;
 
 				case 'lastPoll':
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Poll: ${value}", isStateChange: true, displayed: debugLevel(4)]
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: "Poll: " + sendValue, isStateChange: true, displayed: debugLevel(4)]
 					break;
 
 				case 'humidity':
@@ -1177,7 +1178,7 @@ def generateEvent(Map results) {
 						event = eventFront + [value: dispValue, unit: '%', descriptionText: "Humidity setpoint display is ${sendValue}%", isStateChange: true, displayed: true]
 						def hum = isST ?  device.currentValue('humidity') : device.currentValue('humidity', true) 
 						if (hum == null) hum = 0
-						sendEvent( name: 'humidity', value: hum, unit: '%', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${hum}% (setpoint: ${sendValue}%)", displayed: true )
+						sendEvent( name: 'humidity', value: hum.toString(), unit: '%', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${hum}% (setpoint: ${sendValue}%)", displayed: true )
 						objectsUpdated++
 					}
 					break;
@@ -1196,7 +1197,7 @@ def generateEvent(Map results) {
 						if (ncCpn != 'Offline') disableAllButtons() // just went offline
 					} else {
 						progText = 'Climate is '+sendValue.trim().replaceAll(":","")
-						def buttonValue = (sendValue.startsWith('Hold') || sendValue.startsWith('Auto ')) ? 'resume' : 'resume dis'
+						String buttonValue = (sendValue.startsWith('Hold') || sendValue.startsWith('Auto ')) ? 'resume' : 'resume dis'
 						sendEvent(name: 'resumeProgram', value: buttonValue, displayed: false, isStateChange: true)	// change the button to Resume Program
 						def previousProgramName = ncCpn
 						if (previousProgramName) {
@@ -1270,19 +1271,22 @@ def generateEvent(Map results) {
 					if (isChange) {
 						if (sendValue == 'vacation') {
 							disableVacationButtons()
-						} else if (((sendValue == '') || (sendValue == null)) && (device.currentValue('thermostatHold') == 'vacation')) {
+						} else if (((sendValue == 'null') || (sendValue == '')) && (device.currentValue('thermostatHold') == 'vacation')) {
 							enableVacationButtons()
 						}
 						String ncCp = isST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
 						String ncSp = isST ? device.currentValue('scheduledProgram') : device.currentValue('scheduledProgram', true)
-						String descText = ((sendValue == '') || (sendValue == null)) ? 'Hold finished' : (sendValue == 'hold') ? "Hold ${ncCp} (${ncSp})" : "Hold for ${sendValue}"
+						String descText = ((sendValue == 'null') || (sendValue == '')) ? 'Hold finished' : (sendValue == 'hold') ? "Hold ${ncCp} (${ncSp})" : "Hold for ${sendValue}"
 						event = eventFront + [value: sendValue, descriptionText: descText, isStateChange: true, displayed: true]
 						// log.debug "thermostatHold event: ${event}"
 					}
 					break;
 
 				case 'holdStatus':
-					if (isChange || forceChange) event = eventFront + [value: sendValue, descriptionText: sendValue, isStateChange: true, displayed: (value != '')]
+					if (isChange || forceChange) {
+                    	String sendText = sendValue != 'null' ? sendValue : ''
+                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, isStateChange: true, displayed: (sendText != '')]
+                    }
 					break;
 
 				case 'motion':
@@ -1290,16 +1294,16 @@ def generateEvent(Map results) {
 						def cMotion = isST ? device.currentValue('motion') : device.currentValue('motion', true)
 						// Once "in/active", prevent inadvertent "not supported" -
 						if ((cMotion == null) || !sendValue.startsWith('not') || !cMotion.contains('act')) {
-							event = eventFront + [value: sendValue, descriptionText: "Motion is ${sendValue}", isStateChange: true, displayed: true]
+							event = eventFront + [value: sendValue, descriptionText: "Motion is "+sendValue, isStateChange: true, displayed: true]
 						}
 					}
 					break;
 
 				case 'fanMinOnTime':
 					if (isChange || forceChange) {
-						def circulateText = (value == 0) ? 'Fan Circulation is disabled' : "Fan Circulation is ${sendValue} minutes per hour"
+						String circulateText = (value == 0) ? 'Fan Circulation is disabled' : "Fan Circulation is ${sendValue} minutes per hour"
 						event = eventFront + [value: sendValue, descriptionText: circulateText, /* isStateChange: isChange, */ displayed: true]
-						def fanMode = isST ? device.currentValue('thermostatFanMode') : device.currentValue('thermostatFanMode', true)
+						String fanMode = isST ? device.currentValue('thermostatFanMode') : device.currentValue('thermostatFanMode', true)
 						if (fanMode != 'on') {
 							String ncTm = isST ? device.currentValue('thermostatMode') : device.currentValue('thermostatMode', true)
 							if (ncTm == 'off') {
@@ -1351,23 +1355,23 @@ def generateEvent(Map results) {
 							} else {
 								roundIt(((device.currentValue('heatingSetpoint', true)?.toBigDecimal() + device.currentValue('coolingSetpoint', true)?.toBigDecimal()) / 2.0), precision.toInteger()).toString()
 							}
-							/* if (isStateChange(device, 'thermostatSetpoint', avg)) */ sendEvent(name: 'thermostatSetpoint', value: avg, unit: tu, descriptionText: "Thermostat setpoint is ${avg}°${tu}", displayed: true, /* isStateChange: true */)
+							sendEvent(name: 'thermostatSetpoint', value: avg, unit: tu, descriptionText: "Thermostat setpoint is ${avg}°${tu}", displayed: true, /* isStateChange: true */)
 							disableModeAutoButton()
 							disableFanOffButton()
 							objectsUpdated++
 							break;
 
 						case 'heat':
-							def statSetpoint = isST ? device.currentValue('heatingSetpoint').toString() : device.currentValue('heatingSetpoint', true).toString()
-							/* if (isStateChange(device, 'thermostatSetpoint', statSetpoint)) */ sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true, /* isStateChange: true */)
+							String statSetpoint = isST ? device.currentValue('heatingSetpoint').toString() : device.currentValue('heatingSetpoint', true).toString()
+							sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true, /* isStateChange: true */)
 							disableModeHeatButton()
 							disableFanOffButton()
 							objectsUpdated++
 							break;
 
 						case 'cool':
-							def statSetpoint = isST ? device.currentValue('coolingSetpoint').toString() : device.currentValue('coolingSetpoint', true).toString()
-							/* if (isStateChange(device, 'thermostatSetpoint', statSetpoint)) */ sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true, /* isStateChange: true */)
+							String statSetpoint = isST ? device.currentValue('coolingSetpoint').toString() : device.currentValue('coolingSetpoint', true).toString()
+							sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true, /* isStateChange: true */)
 							disableModeCoolButton()
 							disableFanOffButton()
 							objectsUpdated++
@@ -1421,7 +1425,7 @@ def generateEvent(Map results) {
 								break;
 						}
 					} else {
-						sendEvent(name: 'thermostatFanModeDisplay', value: "${sendValue} dis", isStateChange: true, displayed: false)	// have to force it to update for some reason
+						sendEvent(name: 'thermostatFanModeDisplay', value: sendValue+" dis", isStateChange: true, displayed: false)	// have to force it to update for some reason
 						disableFanOffButton()
 					}
 					break;
@@ -1550,38 +1554,36 @@ def generateEvent(Map results) {
 
 				case 'ecobeeConnected':
 					if (isChange) {
-						if (value == false) { disableAllProgramButtons() } else { updateProgramButtons() }
+						if (sendValue == 'false') { disableAllProgramButtons() } else { updateProgramButtons() }
 						event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
 					}
 					break;
 
 				case 'holdEndsAt':
-					def schedText = ''
-					def cpn = ''
+					String schedText = ''
 					// log.debug "holdEndsAt: ${sendValue}"
-					if (sendValue.startsWith('a l' /*ong time from now*/)) {
-						// Record the lastHoldType for permanent holds effected through the Thermostat itself, the WebApp, or the Ecobee Mobile app
-						sendEvent(name: 'lastHoldType', value: 'indefinite', displayed: false)
-						schedText = ' forever'
-						objectsUpdated++
-					}
-					String ncCpn = isST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
-					if (ncCpn != 'Offline') {
-						if ((schedText == '') && (sendValue != '')) {
-							def when = sendValue - 'today at '
-							schedText = ' until ' + when
-						}
-					}
-					sendEvent(name: 'schedText', value: schedText, displayed: false)
-					if (ncCpn != '') {
-						sendEvent(name: 'schedule', value: cpn + schedText, displayed: false)
-						objectsUpdated++
-					}
-				
-				
-					if (isChange) {
-						event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
-					}
+                    if ((sendValue != 'null') && (sendValue.startsWith('a l' /*ong time from now*/))) {
+                        // Record the lastHoldType for permanent holds effected through the Thermostat itself, the WebApp, or the Ecobee Mobile app
+                        sendEvent(name: 'lastHoldType', value: 'indefinite', displayed: false)
+                        schedText = ' forever'
+                        objectsUpdated++
+                    }
+                    String ncCpn = isST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
+                    if (ncCpn != 'Offline') {
+                        if ((schedText == '') && (sendValue != 'null')) {
+                            def when = sendValue - 'today at '
+                            schedText = ' until ' + when
+                        }
+                    }
+                    sendEvent(name: 'schedText', value: schedText, displayed: false)
+                    if (ncCpn != '') {
+                        sendEvent(name: 'schedule', value: ncCpn + schedText, displayed: false)
+                        objectsUpdated++
+                    }
+                    if (isChange || forceChange) {
+                    	String sendText = sendValue != 'null' ? sendValue : ''
+                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, isStateChange: true, displayed: false]
+                    }
 					break;
 
 				case 'hasDehumidifier':
@@ -1597,7 +1599,24 @@ def generateEvent(Map results) {
 					}
 					if (isChange) event = eventFront + [value: sendValue, isStateChange: true, displayed: false]
 					break;
-
+                
+                // The following are all string values that can be 'null' - send "" instead
+                case 'eiLocation':
+                case 'features':
+                case 'groupName':
+				case 'groupRef':
+                case 'groupSetting':
+                case 'name':
+				case 'userAccessCode':
+                case 'thermostatStatus':
+                case 'ventilatorOffDateTime': 
+                	if (isChange) {
+                    	def sendText = (sendValue != 'null') ? sendValue : ''
+                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, isStateChange: true, displayed: (sendText != '')]
+                    }
+                    break;
+                
+				// The following are all temperature values, send with the appropriate temperature unit (tu)
 				case 'heatDifferential':
 				case 'coolDifferential':
 				case 'heatCoolMinDelta':
@@ -1628,7 +1647,6 @@ def generateEvent(Map results) {
 
 				// These are ones we don't need to display or provide descriptionText for (mostly internal or debug use)
 				//
-				// New attribute: supportedThermostatModes
 				case 'autoMode':
 					// we piggyback the long name on the short name 'autoMode'
 					if (isChange) sendEvent(name: 'autoHeatCoolFeatureEnabled', value: sendValue, isStateChange: true, displayed: false)
@@ -1654,12 +1672,15 @@ def generateEvent(Map results) {
 				case 'checkInterval':
 				case 'statHoldAction':
 				case 'lastHoldType':
-					if (isChange) event = eventFront +	[value: sendValue, isStateChange: true, displayed: false]
+					if (isChange) {
+                    	def sendText = (sendValue != 'null') ? sendValue : ''
+                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, isStateChange: true, displayed: false]
+                    }
 					break;
 
-				// everything else just gets displayed with generic text
+				// everything else gets displayed once with generic text
 				default:
-					if (isChange) event = eventFront + [value: sendValue, descriptionText: "${name} is ${sendValue}", isStateChange: true, displayed: false]
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: "${name} is ${sendValue}", isStateChange: true, displayed: true]
 					break;
 			}
 			if (event != [:]) {
@@ -2306,7 +2327,7 @@ void setThermostatMode(String value) {
 		if (parent.setMode(this, value, getDeviceId())) {
 			// generateQuickEvent('thermostatMode', value, 5)
 			def updates = [thermostatMode:value]
-			if (value=='off') {
+			if (value == 'off') {
 				updates += [equipmentOperatingState:'off']
 				if (device.currentValue('thermostatFanMode') == 'auto') {
 					if (device.currentValue('fanMinOnTime') == 0) {
@@ -2479,7 +2500,7 @@ void setThermostatProgram(String program, String holdType=null, Integer holdHour
 
 		LOG("Thermostat Program is Hold: ${program}",2,this,'info')
 		generateProgramEvent(program, program)				// ('Hold: '+program)
-		def updates = [ 'lastHoldType': sendHoldType, 'thermostatHold' : 'hold' ]
+		def updates = [ 'lastHoldType': sendHoldType ]
 		generateEvent(updates)
 	} else {
 		LOG("Error setting Program to ${program}", 2, this, "warn")
@@ -2488,9 +2509,13 @@ void setThermostatProgram(String program, String holdType=null, Integer holdHour
 	}
 	return
 }
+
+// SmartThings somewhere decided that "schedule" would be used to define "programs" ("climates" on Ecobee). But they punted on the argument for the call,
+// using the ill-defined "scheduleJson" as a JSON_OBJECT. For this implementation, we'll allow quite a bit of latitude for what this is, including just a
+// simple string.
 void setSchedule(scheduleJson) {
 	LOG("setSchedule( ${scheduleJson} )", 4, this, 'trace')
-	if ((scheduleJson != null) && (scheduleJson != '[null]') && (scheduleJson != 'null')) {
+	if ((scheduleJson != null) && (scheduleJson != '[null]') && (scheduleJson != 'null') && (scheduleJson != '')) {
 		if (scheduleJson instanceof CharSequence) {
 			// Handle Strings made to look like JSON (e.g. commands from Hubitat Hubconnect device driver)
 			while (scheduleJson.startsWith('[') || scheduleJson.startsWith('{')) { scheduleJson = scheduleJson[1..-2] }	// Recursively trim brackets/braces
@@ -2641,8 +2666,14 @@ def generateProgramEvent(String program, String failedProgram='') {
 
 	String prog = program.capitalize()
 	String progHold = (failedProgram == '') ? prog : "Hold: "+prog
-	// actually have to look up the programId...or wait until Ecobee (Connect) sends us the correct one
-	def updates = ['currentProgramName':progHold,/*'currentProgramId':program.toLowerCase(),*/'currentProgram':prog]
+    // Quickly update the key hold status variables, even before we hear back from the thermostat/cloud
+	// We have to wait for wait until Ecobee sends us the correct currentProgramId
+	def updates = ['currentProgramName':progHold, 'currentProgram':prog]
+    if (failedProgram == '') {
+    	updates += ['thermostatHold':'null', 'holdEndsAt':'null', 'holdStatus':'null']
+    } else {
+    	updates += ['thermostatHold':'hold']
+    }
 	generateEvent(updates)
 	updateProgramButtons()
 	return
