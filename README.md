@@ -1,6 +1,6 @@
 Free Universal Ecobee Suite, version: 1.7.** 
 ======================================================
-***Latest Update: 1.7.01-5 - multiple files updated 19 May 2019 at 3:45pm EDT***
+***Latest Update: 1.7.01-6 - Ecobee Suite Manager, Open Contacts & Thermostat updated 20 May 2019 at 2:45pm EDT***
 
 Hubitat users now can utilize the latest functionality of my Ecobee Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
