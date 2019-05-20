@@ -42,8 +42,9 @@
  *	1.6.17 - Minor text edits
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
+ *	1.7.02 - Fixed initialization error
  */
-def getVersionNum() { return "1.7.01" }
+def getVersionNum() { return "1.7.02" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -67,34 +68,35 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
     	section(title: "") {
-        	label title: "Name for this Contacts & Switches Helper", required: true, defaultValue: "Contacts & Switches"
+        	String defaultLabel = "Contact & Switches"
+        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+            if (!app.label) {
+				app.updateLabel(defaultLabel)
+				atomicState.appDisplayName = defaultLabel
+			}
 			if (isHE) {
-				if (!app.label) {
-					app.updateLabel("Contacts & Switches")
-					atomicState.appDisplayName = "Contacts & Switches"
-				} else if (app.label.contains('<span ')) {
+				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
-						def myLabel = app.label.substring(0, app.label.indexOf('<span '))
+						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
 						atomicState.appDisplayName = myLabel
 						app.updateLabel(myLabel)
 					}
 				}
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	def myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
                     atomicState.appDisplayName = myLabel
                     app.updateLabel(myLabel)
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
-        	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Paused - re-enable below." }
-        	else { 
-				input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
-                input(name: 'defaultMode', type: 'enum',  title: "Default Mode for thermostat${((settings.myThermostats==null)||(settings.myThermostats.size()>1))?'s':''}", 
-                		multiple: false, required: true, options: ['auto', 'cool', 'heat', 'off'], defaultValue: 'auto', submitOnChange: true)
+        	if(settings.tempDisable) { 
+				paragraph "WARNING: Temporarily Paused - re-enable below." 
+			} else { 
+            	input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
             }          
 		}
     
