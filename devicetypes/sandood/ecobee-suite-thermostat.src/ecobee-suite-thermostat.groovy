@@ -57,8 +57,9 @@
  *	1.7.04 - Big String fix
  *  1.7.05 - noCache most currentValue() for HE
  *	1.7.06 - More sendValue cleanup
+ *	1.7.07 - Added dehumidifierLevel/setpoint, fix setFanMinOnTime()
  */
-def getVersionNum() { return "1.7.06" }
+def getVersionNum() { return "1.7.07" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -178,6 +179,7 @@ metadata {
 		attribute 'dehumidifyOvercoolOffset', 'number'
 		attribute 'dehumidifyWhenHeating', 'string'
 		attribute 'dehumidifyWithAC', 'string'
+        attribute 'dehumidityLevel', 'number'
 		attribute 'dehumiditySetpoint', 'number'
 		attribute 'disableAlertsOnIdt', 'string'
 		attribute 'disableHeatPumpAlerts', 'string'
@@ -891,10 +893,17 @@ def generateEvent(Map results) {
 	if (state.supportedThermostatModes == null) {
 		// Initialize for those that are updating the DTH with this version
 		supportedThermostatModes = ['off']
-		if (device.currentValue('heatMode') == 'true') supportedThermostatModes << 'heat'
-		if (device.currentValue('coolMode') == 'true') supportedThermostatModes << 'cool'
-		if (device.currentValue('autoMode') == 'true') supportedThermostatModes << 'auto'
-		if (device.currentValue('auxHeatMode') == 'true') supportedThermostatModes += ['auxHeatOnly', 'emergency heat']
+		if (isST) {
+			if (device.currentValue('heatMode') == 'true') supportedThermostatModes << 'heat'
+			if (device.currentValue('coolMode') == 'true') supportedThermostatModes << 'cool'
+			if (device.currentValue('autoMode') == 'true') supportedThermostatModes << 'auto'
+			if (device.currentValue('auxHeatMode') == 'true') supportedThermostatModes += ['auxHeatOnly', 'emergency heat']
+		} else {
+			if (device.currentValue('heatMode', true) == 'true') supportedThermostatModes << 'heat'
+			if (device.currentValue('coolMode', true) == 'true') supportedThermostatModes << 'cool'
+			if (device.currentValue('autoMode', true) == 'true') supportedThermostatModes << 'auto'
+			if (device.currentValue('auxHeatMode', true) == 'true') supportedThermostatModes += ['auxHeatOnly', 'emergency heat']
+		}
 		sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
 		sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
 		state.supportedThermostatModes = supportedThermostatModes.sort(false)
@@ -1293,7 +1302,7 @@ def generateEvent(Map results) {
 					if (isChange) {
 						def cMotion = isST ? device.currentValue('motion') : device.currentValue('motion', true)
 						// Once "in/active", prevent inadvertent "not supported" -
-						if ((cMotion == null) || !sendValue.startsWith('not') || !cMotion.contains('act')) {
+						if ((cMotion == 'null') || (cMotion == null) || !sendValue.startsWith('not') || !cMotion.contains('act')) {
 							event = eventFront + [value: sendValue, descriptionText: "Motion is "+sendValue, isStateChange: true, displayed: true]
 						}
 					}
@@ -1750,37 +1759,37 @@ private def disableModeOffButton() {
 private def disableModeAutoButton() {
 	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
     
-	sendEvent(name: 'setModeOff', value: 'off'+(modes().contains('off')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeOff', value: 'off'+(statModes().contains('off')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeAuto', value: 'auto dis', displayed: false)
-	sendEvent(name: 'setModeHeat', value: 'heat'+(modes().contains('heat')?'':' dis'), displayed: false)
-	sendEvent(name: 'setModeCool', value: 'cool'+(modes().contains('cool')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeHeat', value: 'heat'+(statModes().contains('heat')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeCool', value: 'cool'+(statModes().contains('cool')?'':' dis'), displayed: false)
 	return
 }
 private def disableModeHeatButton() {
 	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
     
-	sendEvent(name: 'setModeOff', value: 'off'+(modes().contains('off')?'':' dis'), displayed: false)
-	sendEvent(name: 'setModeAuto', value: 'auto'+(modes().contains('auto')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeOff', value: 'off'+(statModes().contains('off')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeAuto', value: 'auto'+(statModes().contains('auto')?'':' dis'), displayed: false)
 	sendEvent(name: 'setModeHeat', value: 'heat dis', displayed: false)
-	sendEvent(name: 'setModeCool', value: 'cool'+(modes().contains('cool')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeCool', value: 'cool'+(statModes().contains('cool')?'':' dis'), displayed: false)
 	return
 }
 private def disableModeCoolButton() {
 	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
     
-	sendEvent(name: 'setModeOff', value: 'off'+(modes().contains('off')?'':' dis'), displayed: false)
-	sendEvent(name: 'setModeAuto', value: 'auto'+(modes().contains('auto')?'':' dis'), displayed: false)
-	sendEvent(name: 'setModeHeat', value: 'heat'+(modes().contains('heat')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeOff', value: 'off'+(statModes().contains('off')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeAuto', value: 'auto'+(statModes().contains('auto')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeHeat', value: 'heat'+(statModes().contains('heat')?'':' dis'), displayed: false)
 	return
 	sendEvent(name: 'setModeCool', value: 'cool dis', displayed: false)
 }
 private def enableAllModeButtons() {
 	if (isHE) return	// No need on Hubitat, at least not until we get a mobile UI
     
-	sendEvent(name: 'setModeOff', value: 'off'+(modes().contains('off')?'':' dis'), displayed: false)
-	sendEvent(name: 'setModeAuto', value: 'auto'+(modes().contains('auto')?'':' dis'), displayed: false)
-	sendEvent(name: 'setModeHeat', value: 'heat'+(modes().contains('heat')?'':' dis'), displayed: false)
-	sendEvent(name: 'setModeCool', value: 'cool'+(modes().contains('cool')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeOff', value: 'off'+(statModes().contains('off')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeAuto', value: 'auto'+(statModes().contains('auto')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeHeat', value: 'heat'+(statModes().contains('heat')?'':' dis'), displayed: false)
+	sendEvent(name: 'setModeCool', value: 'cool'+(statModes().contains('cool')?'':' dis'), displayed: false)
 	return
 }
 private def disableAllButtons() {
@@ -1877,10 +1886,10 @@ private def updateModeButtons() {
     
 	def currentMode = device.currentValue('thermmoostatMode')
 	// if (currentMode=='off') {sendEvent(name:'setModeOff', value:'off dis', displayed:false)} else {sendEvent(name:'setModeOff', value:'off', displayed:false)}
-	sendEvent(name:'setModeOff', value:('off'+((currentMode=='off') || !modes().contains('off'))?' dis':''), displayed:false)
-	sendEvent(name:'setModeAuto', value:('auto'+((currentMode=='auto') || !modes().contains('auto'))?' dis':''), displayed:false)
-	sendEvent(name:'setModeHeat', value:('heat'+((currentMode=='heat') || !modes().contains('heat'))?' dis':''), displayed:false)
-	sendEvent(name:'setModeCool', value:('cool'+((currentMode=='cool') || !modes().contains('cool'))?' dis':''), displayed:false)
+	sendEvent(name:'setModeOff', value:('off'+((currentMode=='off') || !statModes().contains('off'))?' dis':''), displayed:false)
+	sendEvent(name:'setModeAuto', value:('auto'+((currentMode=='auto') || !statModes().contains('auto'))?' dis':''), displayed:false)
+	sendEvent(name:'setModeHeat', value:('heat'+((currentMode=='heat') || !statModes().contains('heat'))?' dis':''), displayed:false)
+	sendEvent(name:'setModeCool', value:('cool'+((currentMode=='cool') || !statModes().contains('cool'))?' dis':''), displayed:false)
 	return
 }
 
@@ -2316,7 +2325,7 @@ void setThermostatMode(String value) {
 	if (value.startsWith('emergency')) { value = 'auxHeatOnly' }
 	LOG("setThermostatMode(${value})", 5)
 
-	def validModes = modes()		// device.currentValue('supportedThermostatModes')
+	def validModes = statModes()		// device.currentValue('supportedThermostatModes')
 	if (!validModes.contains(value)) {
 		LOG("Requested Thermostat Mode (${value}) is not supported by ${device.displayName}", 2, null, 'warn')
 		return
@@ -2349,7 +2358,7 @@ void setThermostatMode(String value) {
 	if (changed) LOG("Thermostat Mode changed to ${value}",2,null,'info')
 	return
 }
-def modes() {
+def statModes() {
 	return state.supportedThermostatModes
 }
 void off() {
@@ -2874,7 +2883,7 @@ void setFanMinOnTime(minutes=20) {
 	LOG("setFanMinOnTime(${minutes})", 4, null, "trace")
 	Integer howLong = 20	// default to 10 minutes, if no value supplied
 	if (minutes.toString().isNumber()) howLong = minutes as Integer
-	def fanMinOnTime = isST ? device.currentValue('fanMinOnTime') : device.currentValue('thermostatHold', true)
+	def fanMinOnTime = isST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
 	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested ${minutes}/${howLong}",3,null,'info')
 	if (fanMinOnTime && (fanMinOnTime.toInteger() == howLong)) return // allready there - all done!
 
@@ -3407,9 +3416,9 @@ def getStockTempColors() {
 @Field final List EcobeeDirectSettings= [
 											[name: 'fanMinOnTime',			command: 'setFanMinOnTime'],
 											[name: 'dehumidifierMode',		command: 'setDehumidifierMode'],
-											[name: 'dehumidifierLevel', 	command: 'setDehumiditySetpoint'],
+                                            [name: 'dehumidiferLevel',		command: 'setDehumiditySetpoint'],
+											[name: 'dehumidityLevel', 		command: 'setDehumiditySetpoint'],
 											[name: 'dehumiditySetpoint',	command: 'setDehumiditySetpoint'],
-											[name: 'humidity',				command: 'setHumiditySetpoint'],
 											[name: 'humidifierMode',		command: 'setHumidifierMode'],
 											[name: 'humiditySetpoint',		command: 'setHumiditySetpoint'],
 											[name: 'schedule',				command: 'setSchedule']
