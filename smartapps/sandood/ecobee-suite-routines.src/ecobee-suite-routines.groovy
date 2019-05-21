@@ -32,8 +32,9 @@
  *	1.7.02 - Fixing Mode change event handling
  *  1.7.03 - Fix programList bug
  *	1.7.04 - noncached currentValue() on HE
+ *	1.7.05 - Belt & suspenders for thermostatHold compares
  */
-def getVersionNum() { return "1.7.04" }
+def getVersionNum() { return "1.7.05" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -538,7 +539,7 @@ def changeProgramHandler(evt) {
         }
         
         if (!vacationHold) {
-        	// If we get here, we aren't in a Vacation Hold
+        	// If we get here, we aren't in a Vacation Hold (any more)
         	if (atomicState.doResumeProgram) {
         		LOG("Resuming Program for ${stat}", 4, null, 'trace')
             	if (thermostatHold == 'hold') {
@@ -557,7 +558,7 @@ def changeProgramHandler(evt) {
         			boolean done = false
         			// def currentProgram = stat.currentValue('currentProgram')
         			String currentProgramName = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)	// cancelProgram() will reset the currentProgramName to the scheduledProgramName
-        			if ((thermostatHold == '') && (currentProgramName == atomicState.programParam)) {
+        			if (((thermostatHold == null) || (thermostatHold == '') || (thermostatHold == 'null')) && (currentProgramName == atomicState.programParam)) {
                     	// not in a hold, currentProgram is the desiredProgram
                 		def fanSet = false
                 		if (atomicState.fanMinutes != null) {
