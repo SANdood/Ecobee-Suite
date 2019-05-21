@@ -50,8 +50,9 @@
  *	1.7.04 - String fixes
  *  1.7.05 - nonCached currentValue() for HE
  *  1.7.06 - Fixed deleteSensorFromProgram() error
+ *	1.7.07 - More generateEvent() & setEcobeeSetting() optimizations; wifi alert
  */
-def getVersionNum() { return "1.7.06" }
+def getVersionNum() { return "1.7.07" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -1100,8 +1101,9 @@ private def updateMyLabel() {
 		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
 		atomicState.appDisplayName = myLabel
 	}
-	def newLabel
-	switch (atomicState.connected?.toString()) {
+	String newLabel
+	String key = atomicState.wifiAlert ? 'wifi' : atomicState.connected?.toString()
+	switch (key) {
 		case 'full':
 			newLabel = myLabel + "<span style=\"color:green\"> Online</span>"
 			break;
@@ -1110,6 +1112,9 @@ private def updateMyLabel() {
 			break;
 		case 'lost':
 			newLabel = myLabel + "<span style=\"color:red\"> Offline</span>"
+			break;
+		case 'wifi':
+			newLabel = myLabel +  "<span style=\"color:orange\"> Check Wifi</span>"
 			break;
 		default:
 			newLabel = myLabel
@@ -1126,6 +1131,7 @@ def initialize() {
 	atomicState.timers = false
 	
     atomicState.connected = "full"
+    atomicState.wifiAlert = false
 	updateMyLabel()
     atomicState.reAttempt = 0
     atomicState.reAttemptPoll = 0
@@ -1229,11 +1235,15 @@ def initialize() {
     deleteUnusedChildren()
    
    	// Clear out all atomicState object collections (in case a thermostat was deleted or replaced, so we don't slog around useless old data)
+    // also has the effect of forcing ALL the data bits to be sent down to the thermostats/sensors again
     atomicState.alerts = [:]
     atomicState.askAlexaAlerts = [:]
     atomicState.askAlexaAppAlerts = [:]
+    atomicState.changeAlerts = [:]
+    atomicState.changeAttrs = [:]
     atomicState.changeCloud = [:]
     atomicState.changeConfig = [:]
+    atomicState.changeDevice = [:]
     atomicState.changeEquip = [:]
     atomicState.changeNever = [:]
     atomicState.changeOften = [:]
@@ -3061,10 +3071,10 @@ def updateThermostatData() {
 		// EVENTS
 		// Determine if an Event is running, find the first running event (only changes when thermostat object is updated)
     	def runningEvent = [:]
-        String currentClimateName = ''
-		String currentClimateId = ''
-        String currentClimate = ''
-        def currentFanMode = ''
+        String currentClimateName = 'null'
+		String currentClimateId = 'null'
+        String currentClimate = 'null'
+        String currentFanMode = 'null'
         def currentVentMode = statSettings.vent
         def ventMinOnTime = statSettings.ventilatorMinOnTime
         def climatesList = []
@@ -3211,7 +3221,7 @@ def updateThermostatData() {
                     currentClimate = 'Home'
                     break;
             	default:                
-               		currentClimateName = runningEvent.type
+               		currentClimateName = (runningEvent.type != null) ? runningEvent.type : 'null'
                     break;
             }
 			currentClimateId = tempClimateRef
@@ -3222,9 +3232,9 @@ def updateThermostatData() {
 				currentClimate = scheduledClimateName
 			} else {
         		LOG(preText+'Program or running Event missing', 1, null, 'warn')
-            	currentClimateName = ''
-        		currentClimateId = '' 
-                currentClimate = ''
+            	currentClimateName = 'null'
+        		currentClimateId = 'null' 
+                currentClimate = 'null'
         	}
 		}
         if (debugLevelFour) LOG("updateThermostatData(${tstatName} ${tid}) - currentClimate: ${currentClimate}, currentClimateName: ${currentClimateName}, currentClimateId: ${currentClimateId}", 4, null, 'trace')
@@ -3389,28 +3399,31 @@ def updateThermostatData() {
         // Equipment operating status - need to send first so that temperatureDisplay is properly updated after API connection loss/recovery
         if (forcePoll || (lastEquipStatus != equipStatus) || (atomicState.wasConnected != isConnected)) { 
         	atomicState.wasConnected = isConnected
-            data += [
-        		equipmentStatus: 		  equipStatus,
-            	thermostatOperatingState: thermOpStat,
-            	equipmentOperatingState:  equipOpStat,
-        	]
-            changeEquip[tid] = equipStatus
-            atomicState.changeEquip = changeEquip
+            boolean eqpChanged = false
+            if ((changeEquip == [:]) || !changeEquip.containsKey(tid) || (changeEquip[tid] == null)) changeEquip[tid] = ['null','null','null']
+        	if (changeEquip[tid][0] != equipStatus) 	{ data += [equipmentStatus: equipStatus]; 			changeEquip[tid][0] = equipStatus; eqpChanged = true; }
+        	if (changeEquip[tid][1] != thermOpState)	{ data += [thermostatOperatingState: thermOpStat]; 	changeEquip[tid][1] = thermOpStat; eqpChanged = true; }
+        	if (changeEquip[tid][2] != equipOpStat)		{ data += [equipmentOperatingState: equipOpStat];	changeEquip[tid][2] = equipOpStat; eqpChanged = true; }
+			if (eqpChanged) {
+            	atomicState.changeEquip = changeEquip
+            }
         }       
 
         // API link to Ecobee's Cloud status - doesn't change unless things get broken
+        boolean cldChanged = false
         Integer pollingInterval = getPollingInterval() // if this changes, we recalculate checkInterval for Health Check
-        def cloudList = [lastPoll,apiConnection,pollingInterval,isConnected]
-        if (forcePoll || (changeCloud == [:]) || !changeCloud.containsKey(tid) || (changeCloud[tid] != cloudList)) { 
-        	def checkInterval = (pollingInterval <= 5) ? (16*60) : (((pollingInterval+1)*2)*60) 
-            if (checkInterval > 3600) checkInterval = 3900 	// 5 minutes longer than an hour
-            data += [
-        		lastPoll: lastPoll,
-            	apiConnected: apiConnection,		// link from ST to Ecobee
-                ecobeeConnected: isConnected,		// link from Ecobee to Thermostat
-                checkInterval: checkInterval,
-        	]
-            changeCloud[tid] = cloudList
+        def checkInterval = 3900
+        if (pollingInterval != atomicState.lastPI) {
+        	atomicState.lastPI = pollingInterval
+        	checkInterval = (pollingInterval <= 5) ? (16*60) : (((pollingInterval+1)*2)*60)
+        	if (checkInterval > 3600) checkInterval = 3900 	// 5 minutes longer than an hour
+        }
+        if ((changeCloud == [:]) || !changeCloud.containsKey(tid) || (changeCloud[tid] == null)) changeCloud[tid] = ['null','null','null','null']
+        if (changeCloud[tid][0] != lastPoll) 		{ data += [lastPoll: lastPoll]; 			changeCloud[tid][0] = lastPoll; cldChanged = true; }
+        if (changeCloud[tid][1] != apiConnection)	{ data += [apiConnected: apiConnection]; 	changeCloud[tid][1] = apiConnection; cldChanged = true; }
+        if (changeCloud[tid][2] != isConnected)		{ data += [ecobeeConnected: isConnected];	changeCloud[tid][2] = isConnected; cldChanged = true; }
+        if (changeCloud[tid][3] != checkInterval)	{ data += [checkInterval: checkInterval];	changeCloud[tid][3] = checkInterval; cldChanged = true; }
+        if (cldChanged) {
             atomicState.changeCloud = changeCloud
         }
         
@@ -3418,129 +3431,155 @@ def updateThermostatData() {
         if (alertsUpdated || forcePoll) {
             if (!changeAlerts?.containsKey(tid)) changeAlerts[tid] = [:]
             def alertValues = []
+            boolean alrtChanged = false
             int i = 0
             alertNamesList.each { alert ->
             	def alertVal = statSettings."${alert}"
+                if (alertVal == '') alertVal = 'null'
                 alertValues <<  alertVal 
-                if (forcePoll || (changeAlerts[tid]?.getAt(i) != alertVal)) {
+                if (changeAlerts[tid]?.getAt(i) != alertVal) {
                     data += [ "${alert}": alertVal, ]
+                    alrtChanged = true
+                    if (isHE && (alert == 'wifiOfflineAlert')) {
+						atomicState.wifiAlert = ((alertVal == true) || (alertValue == 'true'))
+						updateMyLabel()
+					}
                 }
                 i++
             }
-            changeAlerts[tid] = alertValues
-            atomicState.changeAlerts = changeAlerts
+            if (alrtChanged) {
+            	changeAlerts[tid] = alertValues
+            	atomicState.changeAlerts = changeAlerts
+            }
         }
         
         // Configuration Settings
-        if (forcePoll || (thermostatUpdated && atomicState.settingsUpdated)) {
+        if (forcePoll || atomicState.settingsUpdated) {
             if (!changeAttrs?.containsKey(tid)) changeAttrs[tid] = [:]
             def attrValues = []
+            boolean attrsChanged = false
             int i = 0
             settingsNamesList.each { attr ->
             	def attrVal = statSettings."${attr}"
 				if (attrVal == '') attrVal = 'null'
                 attrValues <<  attrVal 
-                if (forcePoll || (changeAttrs[tid]?.getAt(i) != attrVal)) {
+                if (changeAttrs[tid]?.getAt(i) != attrVal) {
                     data += [ "${attr}": attrVal, ]
+                    attrsChanged = true
                 }
                 i++
             }
-            changeAttrs[tid] = attrValues
-            atomicState.changeAttrs = changeAttrs
+            if (attrsChanged) {
+            	changeAttrs[tid] = attrValues
+            	atomicState.changeAttrs = changeAttrs
+            }
         }
 		
 		// Thermostat Device Data
 		if (thermostatUpdated || forcePoll) {
 			if (!changeDevice?.containsKey(tid)) changeDevice[tid] = [:]
             def deviceValues = []
+            boolean devsChanged = false
             int i = 0
             EcobeeDeviceInfo.each { attr ->
             	def deviceVal = stat."${attr}"
 				if (deviceVal == '') deviceVal = 'null'
                 deviceValues <<  deviceVal 
-                if (forcePoll || (changeDevice[tid]?.getAt(i) != deviceVal)) {
+                if (changeDevice[tid]?.getAt(i) != deviceVal) {
                     data += [ "${attr}": deviceVal, ]
+                    devsChanged = true
                 }
                 i++
             }
-            changeDevice[tid] = deviceValues
-            atomicState.changeDevice = changeDevice
+            if (devsChanged) {
+            	changeDevice[tid] = deviceValues
+            	atomicState.changeDevice = changeDevice
+            }
 		}
         
         // Temperatures - need to convert from internal F*10 to standard Thermostat units
         if (thermostatUpdated || forcePoll) {
     		if (!changeTemps?.containsKey(tid)) changeTemps[tid] = [:]
             def tempValues = []
+            boolean tempsChanged = false
             int i = 0
             tempSettingsList.each { temp ->
             	def tempVal = String.format("%.${apiPrecision}f", roundIt((usingMetric ? roundIt((statSettings."${temp}" / 1.8), 0) / 10.0 : statSettings."${temp}" / 10.0),apiPrecision))
                 tempValues <<  tempVal 
-                if (forcePoll || (changeTemps[tid]?.getAt(i) != tempVal)) {
+                if (changeTemps[tid]?.getAt(i) != tempVal) {
                     data += [ "${temp}": tempVal, ]
+                    tempsChanged = true
                 }
                 i++
             }
-            changeTemps[tid] = tempValues
-            atomicState.changeTemps = changeTemps
+            if (tempsChanged) {
+            	changeTemps[tid] = tempValues
+            	atomicState.changeTemps = changeTemps
+            }
     	}
         
         // SmartApp configuration settings that almost never change (Listed in order of frequency that they should change normally)
         Integer dbgLevel = getDebugLevel()
         String tmpScale = getTemperatureScale()
+        boolean cfgsChanged = false
         def timeOfDay = atomicState.timeZone ? getTimeOfDay() : getTimeOfDay(tid)
         // log.debug "timeOfDay: ${timeOfDay}"
-		def configList = [timeOfDay,userPrecision,dbgLevel,tmpScale,settings.mobile] 
-        if (forcePoll || (changeConfig == [:]) || !changeConfig.containsKey(tid) || (changeConfig[tid] != configList)) { 
-            data += [
-        		timeOfDay: timeOfDay,
-           		decimalPrecision: userPrecision,
-				temperatureScale: tmpScale,			
-				debugLevel: dbgLevel,
-				mobile: settings.mobile,
-        	]
-            changeConfig[tid] = configList
-            atomicState.changeConfig = changeConfig
-        }
+		//def configList = [timeOfDay,userPrecision,dbgLevel,tmpScale,settings.mobile] 
+        
+        if ((changeConfig == [:]) || !changeConfig.containsKey(tid) || (changeConfig[tid] == null)) changeConfig[tid] = ['null','null','null','null','null']
+        
+        if (changeConfig[tid][0] != timeOfDay) 		{ data += [timeOfDay: timeOfDay]; 				changeConfig[tid][0] = timeOfDay; cfgsChanged = true; }
+        if (changeConfig[tid][1] != userPrecision)	{ data += [decimalPrecision: userPrecision]; 	changeConfig[tid][1] = userPrecision; cfgsChanged = true; }
+        if (changeConfig[tid][2] != dbgLevel)		{ data += [debugLevel: dbgLevel];				changeConfig[tid][2] = dbgLevel; cfgsChanged = true; }
+        if (changeConfig[tid][3] != tmpScale)		{ data += [temperatureScale: tmpScale];			changeConfig[tid][3] = tmpScale; cfgsChanged = true; }
+        if (changeConfig[tid][4] != settings.mobile)	{ data += [mobile: settings.mobile];			changeConfig[tid][4] = settings.mobile; cfgsChanged = true; }
+        if (cfgsChanged) atomicState.changeConfig = changeConfig
         
 		// Thermostat configuration settinngs
         if ((isConnected && (forcePoll || thermostatUpdated)) || !isConnected) {	// new settings, programs or events
         	def autoMode = statSettings?.autoHeatCoolFeatureEnabled
             def statHoldAction = statSettings?.holdAction			// thermsotat's preference setting for holdAction:
             														// useEndTime4hour, useEndTime2hour, nextPeriod, indefinite, askMe
+            boolean nvrChanged = false
         	
             // Thermostat configuration stuff that almost never changes - if any one changes, send them all
-        	def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,heatRange,coolRange,climatesList,
-        						auxHeatMode,hasHumidifier,hasDehumidifier,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
- 			if (forcePoll || (changeNever == [:]) || !changeNever.containsKey(tid) || (changeNever[tid] != neverList)) {  
-            	data += [
-					coolMode: (coolStages > 0),
-            		coolStages: coolStages,
-					heatMode: (heatStages > 0),
-            		heatStages: heatStages,
-					autoMode: autoMode,
-                	thermostatMode: statMode,
-                    statHoldAction: statHoldAction,
-            		heatRangeHigh: heatHigh,
-            		heatRangeLow: heatLow,
-            		coolRangeHigh: coolHigh,
-            		coolRangeLow: coolLow,
-					heatRange: heatRange,
-					coolRange: coolRange,
-                    hasHumidifier: hasHumidifier, 
-                    hasDehumidifier: hasDehumidifier,
-                	programsList: climatesList,                
-                	heatDifferential: String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision)),
-                	coolDifferential: String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision)),
-                    heatCoolMinDelta: String.format("%.${apiPrecision}f", roundIt(tempHeatCoolMinDelta, apiPrecision)),
-            	]
-            	changeNever[tid] = neverList
-            	atomicState.changeNever = changeNever
+        	//def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,heatRange,coolRange,climatesList,
+        	//					auxHeatMode,hasHumidifier,hasDehumidifier,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
+ 			if (forcePoll || (changeNever == [:]) || !changeNever.containsKey(tid)) {														 // || (changeNever[tid] != neverList)) {
+            	if (changeNever[tid] == null) changeNever[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+            	if (changeNever[tid][0] != statMode) 		{ data += [thermostatMode: statMode]; 			changeNever[tid][0] = statMode; nvrChanged = true; }
+                if (changeNever[tid][1] != autoMode) 		{ data += [autoMode: autoMode]; 				changeNever[tid][1] = autoMode; nvrChanged = true; }
+                if (changeNever[tid][2] != statHoldAction)	{ data += [statHoldAction: statHoldAction]; 	changeNever[tid][2] = statHoldAction; nvrChanged = true; }
+                if (changeNever[tid][3] != coolStages) 		{ data += [coolStages: coolStages, 
+                														coolMode: (coolStages > 0)]; 		changeNever[tid][3] = coolStages; nvrChanged = true; }
+                if (changeNever[tid][4] != heatStages) 		{ data += [heatStages: heatStages,
+                														heatMode: (heatStages > 0)]; 		changeNever[tid][4] = heatStages; nvrChanged = true; }
+                if (changeNever[tid][5] != heatRange) 		{ data += [heatRange: heatRange,
+                														heatRangeHigh: heatHigh,
+                                                                        heatRangeLow: heatLow]; 			changeNever[tid][5] = heatRange; nvrChanged = true; }
+                if (changeNever[tid][6] != coolRange) 		{ data += [coolRange: coolRange,
+                														coolRangeHigh: coolHigh,
+                                                                        coolRangeLow: coolLow]; 			changeNever[tid][6] = coolRange; nvrChanged = true; }
+                if (changeNever[tid][7] != climatesList)	{ data += [programsList: climatesList];			changeNever[tid][7] = climatesList; nvrChanged = true; }
+                if (changeNever[tid][8] != auxHeatMode) 	{ data += [auxHeatMode: auxHeatMode]; 			changeNever[tid][8] = statMode; nvrChanged = true; }
+                if (changeNever[tid][9] != hasHumidifier) 	{ data += [hasHumidifier: hasHumidifier]; 		changeNever[tid][9] = hasHumidifier; nvrChanged = true; }
+                if (changeNever[tid][10] != hasDehumidifier){ data += [hasDehumidifier: hasDehumidifier]; 	changeNever[tid][10] = hasDehumidifier; nvrChanged = true;}
+                if (changeNever[tid][11] != tempHeatDiff) 	{ data += [heatDifferential: 
+                														String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision))]; 	
+                                                                        									changeNever[tid][11] = tempHeatDiff; nvrChanged = true; }
+                if (changeNever[tid][12] != tempCoolDiff) 	{ data += [coolDifferential: 
+                														String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision)),]; 
+                                                                        									changeNever[tid][12] = tempCoolDiff; nvrChanged = true; }
+                if (changeNever[tid][13] != tempHeatCoolMinDelta){ data += [heatCoolMinDelta: 
+                														String.format("%.${apiPrecision}f", roundIt(tempHeatCoolMinDelta, apiPrecision))]; 
+                                                                        									changeNever[tid][13] = tempheatCoolMinDelta; nvrChanged = true; }
+            	if (nvrChanged) atomicState.changeNever = changeNever
         	}
             
             // Thermostat operational things that rarely change, (a few times a day at most)
             //
             // First, we need to clean up Fan Holds
-            if ((thermostatHold != null) && (thermostatHold != '') && (currentClimateName == 'Hold: Fan')) {
+            if ((thermostatHold != 'null') && (thermostatHold != '') && (currentClimateName == 'Hold: Fan')) {
             	if (currentFanMode == 'on') { currentClimateName = 'Hold: Fan On' }
                 else if (currentFanMode == 'auto') {
                 	if (statMode == 'off') {
@@ -3550,41 +3589,30 @@ def updateThermostatData() {
                     }
                 }
             }
-			// log.error "thermostatHold: ${thermostatHold}"
-			// data += [ thermostatHold: thermostatHold, ]
-         	def rarelyList = [fanMinOnTime,thermostatHold,holdEndsAt,statusMsg,humiditySetpoint,humidifierMode,dehumiditySetpoint,
-            					currentClimate,currentClimateName,currentClimateId,scheduledClimateName,scheduledClimateId,currentFanMode,currentVentMode,auxHeatMode]
-		    if (forcePoll || (changeRarely == [:]) || !changeRarely.containsKey(tid) || (changeRarely[tid] != rarelyList)) { 
-				// log.error "sending ChangeRarely"
-            	data += [
-          			thermostatHold: thermostatHold,
-                	holdEndsAt: holdEndsAt,
-               		holdStatus: statusMsg,
-                ]
-				// log.debug "data: ${data}"
-                // currentProgramName: currentClimateName,
-                // don't send null values
-                if (currentClimateName != '') 	data += [ currentProgramName: currentClimateName, ]
-                if (currentClimateId != '') 	data += [ currentProgramId: currentClimateId, ]
-				if (currentClimate != '') 		data += [ currentProgram: currentClimate, ]
+            def rareChanged = false
+		    if (forcePoll || (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) { 
+				if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+				if (changeRarely[tid][0] != fanMinOnTime) 			{ data += [fanMinOnTime: fanMinOnTime]; 				changeRarely[tid][0] = fanMinOnTime; rareChanged = true; }
+                if (changeRarely[tid][1] != thermostatHold)			{ data += [thermostatHold: thermostatHold];				changeRarely[tid][1] = thermostatHold; rareChanged = true; }
+                if (changeRarely[tid][2] != holdEndsAt) 			{ data += [holdEndsAt: holdEndsAt]; 					changeRarely[tid][2] = holdEndsAt; rareChanged = true; }
+                if (changeRarely[tid][3] != statusMsg) 				{ data += [holdStatus: statusMsg]; 						changeRarely[tid][3] = statusMsg; rareChanged = true; }
+                if (changeRarely[tid][4] != humiditySetpoint) 		{ data += [humiditySetpoint: humiditySetpoint]; 		changeRarely[tid][4] = humiditySetpoint; rareChanged = true; }
+                if (changeRarely[tid][5] != humidifierMode)			{ data += [humidifierMode: humidifierMode]; 			changeRarely[tid][5] = humidifierMode; rareChanged = true; }
+                if (changeRarely[tid][6] != dehumiditySetpoint) 	{ data += [dehumiditySetpoint: dehumiditySetpoint,
+                																dehumidityLevel: dehumiditySetpoint,
+                                                                                dehumidifierLevel: dehumiditySetpoint];		changeRarely[tid][6] = dehumiditySetpoint; rareChanged = true; }
+                if (changeRarely[tid][7] != dehumidifierMode) 		{ data += [dehumidifierMode: dehumidifierMode]; 		changeRarely[tid][7] = dehumidifierMode; rareChanged = true; }
+                if (changeRarely[tid][8] != currentClimate) 		{ data += [currentProgram: currentClimate]; 			changeRarely[tid][8] = currentClimate; rareChanged = true; }
+                if (changeRarely[tid][9] != currentClimateName) 	{ data += [currentProgramName: currentClimateName]; 	changeRarely[tid][9] = currentClimateName; rareChanged = true; }
+                if (changeRarely[tid][10] != currentClimateId) 		{ data += [currentProgramId: currentClimateId]; 		changeRarely[tid][10] = currentClimateId; rareChanged = true; }
+                if (changeRarely[tid][11] != scheduledClimateName)	{ data += [scheduledProgramName: scheduledClimateName,
+                																scheduledProgram: scheduledClimateName]; 	changeRarely[tid][11] = scheduledClimateName; rareChanged = true; }
+                if (changeRarely[tid][12] != scheduledClimateId) 	{ data += [scheduledProgramId: scheduledClimateId];		changeRarely[tid][12] = scheduledClimateId; rareChanged = true; }
+                if (changeRarely[tid][13] != currentFanMode) 		{ data += [thermostatFanMode: currentFanMode]; 			changeRarely[tid][13] = currentFanMode; rareChanged = true; }
+                if (changeRarely[tid][14] != currentVentMode) 		{ data += [vent: currentVentMode]; 						changeRarely[tid][14] = currentVentMode; rareChanged = true; }
+                if (changeRarely[tid][15] != ventMinOnTime) 		{ data += [ventilatorMinOnTime: ventMinOnTime]; 		changeRarely[tid][15] = ventMinOnTime; rareChanged = true; }
                 
-                data += [
-					scheduledProgramName: scheduledClimateName,
-					scheduledProgramId: scheduledClimateId,
-					scheduledProgram: scheduledClimateName,
-                    thermostatFanMode: currentFanMode,
-                    vent: currentVentMode,
-                    ventilatorMinOnTime: ventMinOnTime,
-                	fanMinOnTime: fanMinOnTime,                                        
-					auxHeatMode: auxHeatMode,				// Moved these down here, since they really didn't belong on the neverList
-                    humiditySetpoint: humiditySetpoint,		// ditto
-                    humidifierMode: humidifierMode,			// ditto
-                    dehumidifierMode: dehumidifierMode,		// ditto
-                    dehumiditySetpoint: dehumiditySetpoint,	// ditto
-                    dehumidifierLevel: dehumiditySetpoint,	// department of redundancy dept.
-          		]
-            	changeRarely[tid] = rarelyList
-            	atomicState.changeRarely = changeRarely
+            	if (rareChanged) atomicState.changeRarely = changeRarely
                 
                 // Save the Program when it changes so that we can get to it easily for the child sensors
         		def tempProgram = [:]
@@ -3618,8 +3646,11 @@ def updateThermostatData() {
            	if (tempWeatherHumidity && (lastOList[7] != tempWeatherHumidity)) data += [weatherHumidity: tempWeatherHumidity,]
             if (tempWeatherDewpoint && ((lastOList[8] != tempWeatherDewpoint) || (lastOList[11] != userPrecision))) data += [weatherDewpoint: String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision)),]
             if (tempWeatherPressure && (lastOList[9] != tempWeatherPressure)) data += [weatherPressure: tempWeatherPressure,]
-            changeOften[tid] = oftenList
-            atomicState.changeOften = changeOften
+            
+            if (changeOften[tid] != oftenList) {
+            	changeOften[tid] = oftenList
+            	atomicState.changeOften = changeOften
+            }
             // If the setpoints change, then double-check to see if the currently running Program has changed.
             // We do this by ensuring that the rest of the thermostat datasets (settings, program, events) are 
             // collected on the next poll, if they weren't collected in this poll.
@@ -3934,7 +3965,8 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
 	def result = true
     boolean debugLevelFour = debugLevel(4)
     boolean debugLevelThree = debugLevel(3)
-    if (debugLevelThree) LOG("Entered resumeProgram for deviceId: ${deviceId} with child: ${child.device?.displayName}", 3, child, 'trace')
+    String statName = getThermostatName(deviceId)
+    if (debugLevelThree) LOG("Entered resumeProgram for thermostat ${statName} (${deviceId}) with child: ${child.device?.displayName}", 3, child, 'trace')
     
 	String allStr = resumeAll ? 'true' : 'false'
     def jsonRequestBody = '{"functions":[{"type":"resumeProgram","params":{"resumeAll":"' + allStr + '"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
@@ -3961,7 +3993,7 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
                             'currentProgramName': climateName,
                             'currentProgram': climateName,
                        		'currentProgramId':climateId ]
-        	LOG("resumeProgram() ${updates}",2,null,'info')
+        	LOG("resumeProgram(${statName}) ${updates}",2,null,'info')
         	child.generateEvent(updates)			// force-update the calling device attributes that it can't see
         }
         // atomicState.forcePoll = true 		// force next poll to get updated data
@@ -4467,11 +4499,11 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
 	// NOTE: Will use only the first program if there are two with the same exact name
 	LOG("setProgram(${program}) for for thermostat ${statName} - holdType: ${sendHoldType}, holdHours: ${sendHoldHours}", 2, child, 'info')     
     
-    def currentThermostatHold = isST ? child.device.currentValue('thermostatHold') : child.device.currentValue('thermostatHold', true)
+    String currentThermostatHold = isST ? child.device.currentValue('thermostatHold') : child.device.currentValue('thermostatHold', true)
     if (currentThermostatHold == 'vacation') {									// shouldn't happen, child device should have already verified this
     	LOG("setProgram() for thermostat ${statName}: Can't change Program while in a vacation hold",2,null,'warn')
         return false
-    } else if ((currentThermostatHold != null) && (currentThermostatHold != '')) {									// shouldn't need this either, child device should have done this before calling us
+    } else if ((currentThermostatHold != null) && (currentThermostatHold != 'null') && (currentThermostatHold != '')) {									// shouldn't need this either, child device should have done this before calling us
 		LOG("setProgram( ${program} ) for thermostat ${statName}: Resuming from current hold first",2,null,'info')
         resumeProgram(child, deviceId, true)
     }
@@ -4509,7 +4541,7 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
         			   'coolingSetpoint':String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),
                        'currentProgram': program,
                        'currentProgramId':climateRef]
-        LOG("setProgram() for thermostat ${statName} ${updates}",3,null,'info')
+        LOG("setProgram() for thermostat ${statName}: ${updates}",3,null,'info')
         child.generateEvent(updates)			// force-update the calling device attributes that it can't see
         // atomicState.forcePoll = true 		// force next poll to get updated data
 		runIn(5, pollChildren, [overwrite: true]) 	// Pick up the changes
@@ -5502,18 +5534,19 @@ def runEvery3Minutes(handler) {
 }
 
 // Alert settings
-@Field final List alertNamesList = 		['auxOutdoorTempAlertNotify','auxRuntimeAlert','auxRuntimeAlertNotify','coldTempAlertEnabled','disableAlertsOnIdt','disableHeatPumpAlerts','hotTempAlertEnabled','humidityAlertNotify',
+@Field final List alertNamesList = 		['auxOutdoorTempAlertNotify','auxOutdoorTempAlertNotifyTechnician','auxRuntimeAlertNotifyTechnician','auxRuntimeAlert','auxRuntimeAlertNotify',
+										 'coldTempAlertEnabled','disableAlertsOnIdt','disableHeatPumpAlerts','hotTempAlertEnabled','humidityAlertNotify',
 										 'humidityHighAlert','humidityLowAlert','randomStartDelayCool','randomStartDelayHeat','tempAlertNotify','ventilatorOffDateTime','wifiOfflineAlert'
 										]
 // Settings (attributes)
-@Field final List settingsNamesList = 	['autoAway','auxOutdoorTempAlertNotifyTechnician','auxRuntimeAlertNotifyTechnician','backlightOffDuringSleep','backlightOffTime','backlightOnIntensity','backlightSleepIntensity',
-										 'compressorProtectionMinTime','compressorProtectionMinTime','condensationAvoid','coolingLockout','dehumidifyWhenHeating','dehumidifyWithAC','disablePreCooling','disablePreHeating','drAccept',
-										 'eiLocation','electricityBillCycleMonths','electricityBillStartMonth','electricityBillingDayOfMonth','enableElectricityBillAlert','enableProjectedElectricityBillAlert','fanControlRequired',
-										 'followMeComfort','groupName','groupRef','groupSetting','hasBoiler','hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasUVFilter','heatPumpGroundWater','heatPumpReversalOnCool',
-										 'holdAction','humidityAlertNotify','humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired','isRentalProperty','isVentilatorTimerOn','lastServiceDate',
-										 'locale','monthlyElectricityBillLimit','monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation','soundAlertVolume','soundTickVolume',
-										 'stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','userAccessCode','userAccessSetting','ventilatorDehumidify','ventilatorFreeCooling',
-										 'ventilatorMinOnTimeAway','ventilatorMinOnTimeHome','ventilatorOffDateTime','ventilatorType'
+@Field final List settingsNamesList = 	['autoAway','backlightOffDuringSleep','backlightOffTime','backlightOnIntensity','backlightSleepIntensity','coldTempAlertEnabled','compressorProtectionMinTime','condensationAvoid',
+										 'coolingLockout','dehumidifyWhenHeating','dehumidifyWithAC','disablePreCooling','disablePreHeating','drAccept','eiLocation','electricityBillCycleMonths','electricityBillStartMonth',
+                                         'electricityBillingDayOfMonth','enableElectricityBillAlert','enableProjectedElectricityBillAlert','fanControlRequired','followMeComfort','groupName','groupRef','groupSetting','hasBoiler',
+                                         /*hasDehumidifier,*/'hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasUVFilter','heatPumpGroundWater','heatPumpReversalOnCool','holdAction','humidityAlertNotify',
+                                         'humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired','isRentalProperty','isVentilatorTimerOn','lastServiceDate','locale','monthlyElectricityBillLimit',
+                                         'monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation','soundAlertVolume','soundTickVolume','stage1CoolingDissipationTime',
+                                         'stage1HeatingDissipationTime','tempAlertNotifyTechnician','userAccessCode','userAccessSetting','ventilatorDehumidify','ventilatorFreeCooling','ventilatorMinOnTimeAway',
+                                         'ventilatorMinOnTimeHome','ventilatorOffDateTime','ventilatorType'
 										]
 // Temperature Settings
 @Field final List tempSettingsList = 	['auxMaxOutdoorTemp','auxOutdoorTempAlert','coldTempAlert','compressorProtectionMinTemp','compressorProtectionMinTemp','coolMaxTemp','coolMinTemp',
@@ -5526,28 +5559,28 @@ def runEvery3Minutes(handler) {
 										 'stage1HeatingDifferentialTemp','tempCorrection'
 										]
 // Settings that are passed directly as Strings (including numbers and logicals)
-@Field final List EcobeeSettings = 		['autoAway','auxOutdoorTempAlertNotifyTechnician','auxRuntimeAlertNotifyTechnician','backlightOffDuringSleep','backlightOffTime','backlightOnIntensity','backlightSleepIntensity',
-										 'coldTempAlertEnabled','compressorProtectionMinTime','compressorProtectionMinTime','condensationAvoid','coolingLockout','dehumidifyWhenHeating','dehumidifyWithAC',
-										 'disablePreCooling','disablePreHeating','drAccept','eiLocation','electricityBillCycleMonths','electricityBillStartMonth','electricityBillingDayOfMonth','enableElectricityBillAlert',
-										 'enableProjectedElectricityBillAlert','fanControlRequired','followMeComfort','groupName','groupRef','groupSetting','heatPumpReversalOnCool','holdAction','hotTempAlertEnabled','humidityAlertNotify',
-										 'humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired','isRentalProperty','isVentilatorTimerOn','lastServiceDate','locale',
-										 'monthlyElectricityBillLimit','monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation','soundAlertVolume','soundTickVolume',
-										 'stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','ventilatorDehumidify','ventilatorFreeCooling','ventilatorMinOnTimeAway','ventilatorMinOnTimeHome'
+@Field final List EcobeeSettings = 		['autoAway','auxOutdoorTempAlertNotify','auxOutdoorTempAlertNotifyTechnician','auxRuntimeAlert','auxRuntimeAlertNotifyTechnician','auxRuntimeAlertNotify','backlightOffDuringSleep',
+										 'backlightOffTime','backlightOnIntensity','backlightSleepIntensity','coldTempAlertEnabled','compressorProtectionMinTime','condensationAvoid','coolingLockout','dehumidifyWhenHeating',
+                                         'dehumidifyWithAC','disableAlertsOnIdt','disableHeatPumpAlerts','disablePreCooling','disablePreHeating','drAccept','eiLocation','electricityBillCycleMonths','electricityBillStartMonth',
+                                         'electricityBillingDayOfMonth','enableElectricityBillAlert','enableProjectedElectricityBillAlert','fanControlRequired','followMeComfort','groupName','groupRef','groupSetting',
+                                         'heatPumpReversalOnCool','holdAction','hotTempAlertEnabled','humidityAlertNotify','humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired',
+                                         'isRentalProperty','isVentilatorTimerOn','lastServiceDate','locale','monthlyElectricityBillLimit','monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician',
+                                         'smartCirculation','soundAlertVolume','soundTickVolume','stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','ventilatorDehumidify','ventilatorFreeCooling',
+                                         'ventilatorMinOnTimeAway','ventilatorMinOnTimeHome','ventilatorOffDateTime', 'ventilatorType'
 										]
 // Settings that are Read Only and cannot be changed
 @Field final List EcobeeROSettings =	['coolMaxTemp','coolMinTemp','coolStages','hasBoiler','hasDehumidifier','hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasHumidifier','hasUVFilter','heatMaxTemp','heatMinTemp',
-										 'heatPumpGroundWater','heatStages','userAccessCode','userAccessSetting'
+										 'heatPumpGroundWater','heatStages','userAccessCode','userAccessSetting','temperature','humidity',
 										]
 // Settings that must be changed only by specific commands
 @Field final List EcobeeDirectSettings= [
 											[name: 'fanMinOnTime',			command: 'setFanMinOnTime'],
 											[name: 'dehumidifierMode',		command: 'setDehumidifierMode'],
 											[name: 'dehumidifierLevel', 	command: 'setDehumiditySetpoint'],
+                                            [name: 'dehumidityLevel',		command: 'setDehumiditySetpoint'],
 											[name: 'dehumiditySetpoint',	command: 'setDehumiditySetpoint'],
-											[name: 'humidity',				command: 'setHumiditySetpoint'],
 											[name: 'humidifierMode',		command: 'setHumidifierMode'],
 											[name: 'humiditySetpoint',		command: 'setHumiditySetpoint'],
-//											[name: 'schedule',				command: 'setSchedule']
 										]
 @Field final List EcobeeDeviceInfo =    [ 'brand','features','identifier','isRegistered','lastModified','modelNumber','name']
 
