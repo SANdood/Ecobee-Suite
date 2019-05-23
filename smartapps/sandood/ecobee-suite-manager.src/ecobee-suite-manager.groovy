@@ -51,8 +51,9 @@
  *  1.7.05 - nonCached currentValue() for HE
  *  1.7.06 - Fixed deleteSensorFromProgram() error
  *	1.7.07 - More generateEvent() & setEcobeeSetting() optimizations; wifi alert
+ *  1.7.08 - Clean up conditional updates
  */
-def getVersionNum() { return "1.7.07" }
+def getVersionNum() { return "1.7.08" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -2038,7 +2039,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
     } */
     
     // if nothing has changed, and this isn't a forced poll, just return (keep count of polls we have skipped)
-    // This probably can't happen anymore...shouldn't event be here if nothing has changed and not a forced poll...
+    // This probably can't happen anymore...shouldn't even be here if nothing has changed and not a forced poll...
     if (!somethingChanged && !forcePoll) {  
     	if (debugLevelFour) LOG("<===== Leaving pollEcobeeAPI() - nothing changed, skipping heavy poll...", 4 )
        	return true		// act like we completed the heavy poll without error
@@ -3116,8 +3117,11 @@ def updateThermostatData() {
         def tempRunningEvent = [:]
        	tempRunningEvent[tid] = (runningEvent != [:]) ? runningEvent : [:]
 		if (tempRunningEvent[tid] != [:]) {
-        	if (atomicState.runningEvent) tempRunningEvent = atomicState.runningEvent + tempRunningEvent
-        	atomicState.runningEvent = tempRunningEvent
+        	if (atomicState.runningEvent && atomicState.runningEvent[tid] != tempRunningEvent[tid]) {
+            	// Update atomicState only if the data changed (avoid hundreds of unnecessary writes to atomicStatae when events are running)
+            	tempRunningEvent = atomicState.runningEvent + tempRunningEvent
+        		atomicState.runningEvent = tempRunningEvent
+            }
 		}
 		String thermostatHold = 'null'
         String holdEndsAt = 'null'
@@ -3382,16 +3386,23 @@ def updateThermostatData() {
         }
 
         // Okey dokey - time to queue all this data into the atomicState.thermostats queue
-        def changeCloud =  atomicState.changeCloud  ? atomicState.changeCloud  : [:]
-		def changeConfig = atomicState.changeConfig ? atomicState.changeConfig : [:]
-        def changeNever =  atomicState.changeNever  ? atomicState.changeNever  : [:]
-        def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
-        def changeOften =  atomicState.changeOften  ? atomicState.changeOften  : [:]
-        def changeAlerts = atomicState.changeAlerts ? atomicState.changeAlerts : [:]
-        def changeAttrs =  atomicState.changeAttrs  ? atomicState.changeAttrs  : [:]
-		def changeDevice=  atomicState.changeDevice ? atomicState.changeDevice : [:]
-        def changeTemps =  atomicState.changeTemps  ? atomicState.changeTemps  : [:]
+        // def changeCloud =  atomicState.changeCloud  ? atomicState.changeCloud  : [:]
+		// def changeConfig = atomicState.changeConfig ? atomicState.changeConfig : [:]
+        // def changeNever =  atomicState.changeNever  ? atomicState.changeNever  : [:]
+        // def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
+        // def changeOften =  atomicState.changeOften  ? atomicState.changeOften  : [:]
+        // def changeAlerts = atomicState.changeAlerts ? atomicState.changeAlerts : [:]
+        // def changeAttrs =  atomicState.changeAttrs  ? atomicState.changeAttrs  : [:]
+		// def changeDevice=  atomicState.changeDevice ? atomicState.changeDevice : [:]
+        // def changeTemps =  atomicState.changeTemps  ? atomicState.changeTemps  : [:]
         
+		boolean settingsUpdated = atomicState.settingsUpdated
+		boolean alertsUpdated = atomicState.alertsUpdated
+		boolean programsUpdated = atomicState.programsUpdated
+		boolean eventsUpdated = atomicState.eventsUpdated
+		//boolean locationUpdated = atomicState.locationUpdated	// this never gets sent anyway
+		boolean extendRTUpdated = atomicState.extendRTUpdated
+		
         //changeEquip was initialized earlier
          
         def data = [forced: forcePoll,]				// Tell the DTH to force-update all attributes, states and tiles
@@ -3418,6 +3429,7 @@ def updateThermostatData() {
         	checkInterval = (pollingInterval <= 5) ? (16*60) : (((pollingInterval+1)*2)*60)
         	if (checkInterval > 3600) checkInterval = 3900 	// 5 minutes longer than an hour
         }
+		def changeCloud =  atomicState.changeCloud  ? atomicState.changeCloud  : [:]
         if ((changeCloud == [:]) || !changeCloud.containsKey(tid) || (changeCloud[tid] == null)) changeCloud[tid] = ['null','null','null','null']
         if (changeCloud[tid][0] != lastPoll) 		{ data += [lastPoll: lastPoll]; 			changeCloud[tid][0] = lastPoll; cldChanged = true; }
         if (changeCloud[tid][1] != apiConnection)	{ data += [apiConnected: apiConnection]; 	changeCloud[tid][1] = apiConnection; cldChanged = true; }
@@ -3428,7 +3440,8 @@ def updateThermostatData() {
         }
         
         // Alerts & Read Only
-        if (alertsUpdated || forcePoll) {
+        if (alertsUpdated || settingsUpdated || forcePoll) {
+			def changeAlerts = atomicState.changeAlerts ? atomicState.changeAlerts : [:]
             if (!changeAlerts?.containsKey(tid)) changeAlerts[tid] = [:]
             def alertValues = []
             boolean alrtChanged = false
@@ -3454,7 +3467,8 @@ def updateThermostatData() {
         }
         
         // Configuration Settings
-        if (forcePoll || atomicState.settingsUpdated) {
+        if (forcePoll || settingsUpdated) {
+			def changeAttrs =  atomicState.changeAttrs  ? atomicState.changeAttrs  : [:]
             if (!changeAttrs?.containsKey(tid)) changeAttrs[tid] = [:]
             def attrValues = []
             boolean attrsChanged = false
@@ -3477,6 +3491,7 @@ def updateThermostatData() {
 		
 		// Thermostat Device Data
 		if (thermostatUpdated || forcePoll) {
+			def changeDevice=  atomicState.changeDevice ? atomicState.changeDevice : [:]
 			if (!changeDevice?.containsKey(tid)) changeDevice[tid] = [:]
             def deviceValues = []
             boolean devsChanged = false
@@ -3498,7 +3513,8 @@ def updateThermostatData() {
 		}
         
         // Temperatures - need to convert from internal F*10 to standard Thermostat units
-        if (thermostatUpdated || forcePoll) {
+        if (settingsUpdated || forcePoll) {
+			def changeTemps =  atomicState.changeTemps  ? atomicState.changeTemps  : [:]
     		if (!changeTemps?.containsKey(tid)) changeTemps[tid] = [:]
             def tempValues = []
             boolean tempsChanged = false
@@ -3525,7 +3541,7 @@ def updateThermostatData() {
         def timeOfDay = atomicState.timeZone ? getTimeOfDay() : getTimeOfDay(tid)
         // log.debug "timeOfDay: ${timeOfDay}"
 		//def configList = [timeOfDay,userPrecision,dbgLevel,tmpScale,settings.mobile] 
-        
+        def changeConfig = atomicState.changeConfig ? atomicState.changeConfig : [:]
         if ((changeConfig == [:]) || !changeConfig.containsKey(tid) || (changeConfig[tid] == null)) changeConfig[tid] = ['null','null','null','null','null']
         
         if (changeConfig[tid][0] != timeOfDay) 		{ data += [timeOfDay: timeOfDay]; 				changeConfig[tid][0] = timeOfDay; cfgsChanged = true; }
@@ -3536,7 +3552,7 @@ def updateThermostatData() {
         if (cfgsChanged) atomicState.changeConfig = changeConfig
         
 		// Thermostat configuration settinngs
-        if ((isConnected && (forcePoll || thermostatUpdated)) || !isConnected) {	// new settings, programs or events
+        if ((isConnected && (forcePoll || thermostatUpdated || settingsUpdated || programsUpdated)) || !isConnected) {	// new settings, programs or events
         	def autoMode = statSettings?.autoHeatCoolFeatureEnabled
             def statHoldAction = statSettings?.holdAction			// thermsotat's preference setting for holdAction:
             														// useEndTime4hour, useEndTime2hour, nextPeriod, indefinite, askMe
@@ -3545,7 +3561,8 @@ def updateThermostatData() {
             // Thermostat configuration stuff that almost never changes - if any one changes, send them all
         	//def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,heatRange,coolRange,climatesList,
         	//					auxHeatMode,hasHumidifier,hasDehumidifier,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
- 			if (forcePoll || (changeNever == [:]) || !changeNever.containsKey(tid)) {														 // || (changeNever[tid] != neverList)) {
+			def changeNever =  atomicState.changeNever  ? atomicState.changeNever  : [:]
+ 			if (forcePoll || settingsUpdated || programsUpdated || (changeNever == [:]) || !changeNever.containsKey(tid)) {														 // || (changeNever[tid] != neverList)) {
             	if (changeNever[tid] == null) changeNever[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null']
             	if (changeNever[tid][0] != statMode) 		{ data += [thermostatMode: statMode]; 			changeNever[tid][0] = statMode; nvrChanged = true; }
                 if (changeNever[tid][1] != autoMode) 		{ data += [autoMode: autoMode]; 				changeNever[tid][1] = autoMode; nvrChanged = true; }
@@ -3561,7 +3578,7 @@ def updateThermostatData() {
                 														coolRangeHigh: coolHigh,
                                                                         coolRangeLow: coolLow]; 			changeNever[tid][6] = coolRange; nvrChanged = true; }
                 if (changeNever[tid][7] != climatesList)	{ data += [programsList: climatesList];			changeNever[tid][7] = climatesList; nvrChanged = true; }
-                if (changeNever[tid][8] != auxHeatMode) 	{ data += [auxHeatMode: auxHeatMode]; 			changeNever[tid][8] = statMode; nvrChanged = true; }
+                if (changeNever[tid][8] != auxHeatMode) 	{ data += [auxHeatMode: auxHeatMode]; 			changeNever[tid][8] = auxHeatMode; nvrChanged = true; }
                 if (changeNever[tid][9] != hasHumidifier) 	{ data += [hasHumidifier: hasHumidifier]; 		changeNever[tid][9] = hasHumidifier; nvrChanged = true; }
                 if (changeNever[tid][10] != hasDehumidifier){ data += [hasDehumidifier: hasDehumidifier]; 	changeNever[tid][10] = hasDehumidifier; nvrChanged = true;}
                 if (changeNever[tid][11] != tempHeatDiff) 	{ data += [heatDifferential: 
@@ -3590,7 +3607,8 @@ def updateThermostatData() {
                 }
             }
             def rareChanged = false
-		    if (forcePoll || (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) { 
+			def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
+		    if (forcePoll || eventsUpdated || settingsUpdated || extendRTUpdated || (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) { 
 				if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
 				if (changeRarely[tid][0] != fanMinOnTime) 			{ data += [fanMinOnTime: fanMinOnTime]; 				changeRarely[tid][0] = fanMinOnTime; rareChanged = true; }
                 if (changeRarely[tid][1] != thermostatHold)			{ data += [thermostatHold: thermostatHold];				changeRarely[tid][1] = thermostatHold; rareChanged = true; }
@@ -3625,11 +3643,12 @@ def updateThermostatData() {
         // MOVED TO THE BOTTOM because these values are dependent upon changes to states above when they get to the thermostat DTH
         // Runtime stuff that changes most frequently - we test them 1 at a time, and send only the ones that change
         // Send these first, as they generally are the reason anything else changes (so the thermostat's notification log makes sense)
-		if (forcePoll || runtimeUpdated || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
+		if (forcePoll || runtimeUpdated || settingsUpdated || extendRTUpdated || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
         	String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
             def oftenList = [tempTemperature,occupancy,runtime.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
             					tempWeatherPressure,humiditySetpointDisplay,userPrecision]
             def lastOList = []
+			def changeOften =  atomicState.changeOften  ? atomicState.changeOften  : [:]
             lastOList = changeOften[tid]
             if (forcePoll || !lastOList || (lastOList.size() < 12)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1]
             if (lastOList[11] != userPrecision) data+= [decimalPrecision: userPrecision,]															// send first so that DTH uses the latest setting
