@@ -13,8 +13,9 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - Internal optimizations, better type-ing & cosmetic cleanups
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -114,7 +115,7 @@ def mainPage() {
                 	   required: true, multiple: false, submitOnChange: true)
 				paragraph ''
 				input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
-				paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever setpoints are adjusted\n" : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
+				paragraph isHE ? "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
 			}
         }
         if (!settings?.tempDisable && settings?.theThermostat) {
@@ -211,7 +212,7 @@ def mainPage() {
 				}
 			}
         }
-        section(title: "Temporarily Disable") {
+        section(title: "Temporary Pause") {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)
 		}
     	section (getVersionLabel()) {}
@@ -228,6 +229,7 @@ void uninstalled() {
 }
 
 void updated() {
+	atomicState.version = getVersionLabel()
 	LOG("updated() with settings: ${settings}", 3, "", 'trace')
 	unsubscribe()
     unschedule()
@@ -259,25 +261,24 @@ def initialize() {
 	
 	if(settings.tempDisable) {
     	LOG("Temporarily Paused", 2, null, "warn")
-    	return true
     }
 
     subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
-    subscribe(settings.theThermostat, 'currentProgram', modeOrProgramHandler)
+    subscribe(settings.theThermostat, 'currentProgram', ProgramChangeHandler)
     // if (thePrograms) subscribe(settings.theThermostat, "currentProgram", modeOrProgramHandler)
-    if (statModes) subscribe(settings.theThermostat, "thermostatMode", modeOrProgramHandler)
+    if (statModes) subscribe(settings.theThermostat, "thermostatMode", ModeChangeHandler)
 
-    def h = settings.humidistat.currentHumidity
+    def h = isST? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
     atomicState.humidity = h
-
+	atomicState.because = " because ${app.label} was (re)initialized"
     runIn(2, atomicHumidityUpdater, [overwrite: true])
+	
     if ((h != null) && (h >= 0) && (h <= 100)) {
     	LOG("Initialization complete...current humidity is ${h}%",2,null,'info')
-        return true
     } else {
     	LOG("Initialization error...invalid humidity: (${h}) - please check settings and retry", 2, null, 'error')
-        return false
     }
+	return
 }
 
 def configured() {
@@ -298,15 +299,23 @@ def heatConfigured() {
             (settings.heatClo != null && ( settings.heatClo == 'custom' ? settings.heatCloCustom != null : true)))
 }
 
-def modeOrProgramHandler(evt) {
-    LOG("Program is: ${evt.value}",3,null,'info')
-    runIn(2, atomicHumidityUpdater, [overwrite: true])
+def programChangeHandler(evt) {
+    LOG("Thermostat Program is: ${evt.value}",3,null,'info')
+	atomicState.because = " because the thermostat's Program changed to ${evt.value}"
+    runIn(10, atomicHumidityUpdater, [overwrite: true])				// Wait a bit longer for all the setpoints to update after the program change
+}
+
+def modeChangeHandler(evt) {
+    LOG("Thermostat Mode is: ${evt.value}",3,null,'info')
+	atomicState.because = " because the thermostat's Mode changeg to ${evt.value}"
+    runIn(5, atomicHumidityUpdater, [overwrite: true])				// Mode changes don't directly impact setpoints, but give it time just in case
 }
 
 def humidityChangeHandler(evt) {
 	if (evt.numberValue != null) {
         atomicState.humidity = evt.numberValue
-        runIn(2, atomicHumidityUpdater, [overwrite: true])
+		atomicState.because = " because the humidity changed to ${evt.value}%"
+        runIn(2, atomicHumidityUpdater, [overwrite: true])			// Humidity changes are independent of thermostat settings, no need to wait long
     }
 }
 
@@ -320,16 +329,21 @@ def humidityUpdate( humidity ) {
 }
 
 def humidityUpdate( Integer humidity ) {
+	if (atomicState.version != getVersionLabel()) {
+		LOG("Code version updated, re-initializing...",1,null,'warn')
+		updated()
+		return			// just ignore the original call, because updated/initalize will call us again
+	}
     if (humidity == null) {
-    	log("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
+    	LOG("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
         return
     }
 
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
 
-    def currentProgram = settings.theThermostat.currentValue('currentProgram')
-    def currentMode = settings.theThermostat.currentValue('thermostatMode')
+    def currentProgram 	= isST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
+    def currentMode 	= isST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)
 	def andOr = (settings.enable != null) ? settings.enable : 'or'
 	if ((settings.thePrograms == null) || (settings.statModes == null)) andOr = 'or'		// if they only provided one of them, ignore 'and'
     boolean isOK = ((settings.thePrograms == null) && (settings.statModes == null)) ? true: false // isOK if both are null
@@ -352,10 +366,10 @@ def humidityUpdate( Integer humidity ) {
         return
     }
 
-    def heatSetpoint = settings.theThermostat.currentValue('heatingSetpoint')
-    def coolSetpoint = settings.theThermostat.currentValue('coolingSetpoint')
-	def curHeat = heatSetpoint
-	def curCool = coolSetpoint
+    def heatSetpoint = (isST ? settings.theThermostat.currentValue('heatingSetpoint') : settings.theThermostat.currentValue('heatingSetpoint', true)) as BigDecimal
+    def coolSetpoint = (isST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)) as BigDecimal
+	def curHeat = roundIt(heatSetpoint, 2)
+	def curCool = roundIt(coolSetpoint, 2)
     if (settings.heatPmv != null) {
         heatSetpoint = calculateHeatSetpoint()
     }
@@ -366,13 +380,13 @@ def humidityUpdate( Integer humidity ) {
     	changeSetpoints(currentProgram, heatSetpoint, coolSetpoint)
 	} else {
 		// Could be outside of the allowed range, or just too small of a difference...
-		LOG("The calculated Thermal Comfort setpoint(s) are the same as the current setpoints (${heatSetpoint}/${coolSetpoint})", 3, null, 'info')
+		LOG("The calculated Thermal Comfort setpoints (${heatSetpoint}/${coolSetpoint}) are the same as the current setpoints (${curHeat}/${curCool})", 3, null, 'info')
 	}
 }
 
 private def changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
-	def delta = settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal
+	def delta = isST ? settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal : settings.theThermostat.currentValue('heatCoolMinDelta', true) as BigDecimal
 	def fixed
 	def ht = heatTemp.toBigDecimal()
 	def ct = coolTemp.toBigDecimal()
@@ -404,7 +418,7 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 		}
 		if (!fixed) {
 			// Hmmm...looks like we're adjusting both, and so we don't know which to fix
-			def lastMode = settings.theThermostat.currentValue('lastOpState')	// what did the thermostat most recently do?
+			def lastMode = isST ? settings.theThermostat.currentValue('lastOpState') : settings.theThermostat.currentValue('lastOpState', true)	// what did the thermostat most recently do?
 			if (lastMode != null) {
 				if (lastMode.contains('cool')) {
 					ht = ct - delta							// move the other one
@@ -424,10 +438,13 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 			heatTemp = ht
 		}
 	}
-	def msg = "Setting ${settings.theThermostat.displayName}'s heatingSetpoint to ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and coolingSetpoint to " +
-			  "${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}for the ${program} program, because the relative humidity is now ${atomicState.humidity}%"
+	theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
+	String because = atomicState.because
+	String s = settings.theThermostat.displayName.endsWith('s') ? "'" : "'s"
+	def msg = "I set ${settings.theThermostat.displayName}${s} heatingSetpoint to ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and coolingSetpoint to " +
+		"${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}for the ${program} program${because}"
 	sendMessage( msg )
-    theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
+	atomicState.because = ''
 }
 
 private roundIt( value, decimals=0 ) {
@@ -511,20 +528,20 @@ private def calculatePmv(temp, units, rh, met, clo) {
 
 private def calculateHeatSetpoint() {
     def targetPmv = settings.heatPmv=='custom' ? settings.heatPmvCustom : settings.heatPmv as BigDecimal
-    def met = settings.heatMet=='custom' ? settings.heatMetCustom : settings.heatMet as BigDecimal
-    def clo = settings.heatClo=='custom' ? settings.heatCloCustom : settings.heatClo as BigDecimal
+    def met = 		settings.heatMet=='custom' ? settings.heatMetCustom : settings.heatMet as BigDecimal
+    def clo = 		settings.heatClo=='custom' ? settings.heatCloCustom : settings.heatClo as BigDecimal
 
     def units = getTemperatureScale()
 	def step = (units == 'C') ? 0.5 : 1.0
     def range = getHeatRange()
-    def min = range[0]
-    def max = range[1]
-    def preferred = max
-    def goodSP = preferred
+    def min = range[0] as BigDecimal
+    def max = range[1] as BigDecimal
+    def preferred = max as BigDecimal
+    def goodSP = preferred as BigDecimal
     def pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
-    def goodPMV = pmv
+    def goodPMV = pmv 
     while (preferred >= min && pmv >= targetPmv) {
-    	goodSP = preferred
+    	goodSP = preferred as BigDecimal
         preferred = preferred - step
         goodPMV = pmv
         pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
@@ -538,20 +555,20 @@ private def calculateHeatSetpoint() {
 
 private def calculateCoolSetpoint() {
     def targetPmv = settings.coolPmv=='custom' ? settings.coolPmvCustom : settings.coolPmv as BigDecimal
-    def met = settings.coolMet=='custom' ? settings.coolMetCustom : settings.coolMet as BigDecimal
-    def clo = settings.coolClo=='custom' ? settings.coolCloCustom : settings.coolClo as BigDecimal
+    def met = 		settings.coolMet=='custom' ? settings.coolMetCustom : settings.coolMet as BigDecimal
+    def clo = 		settings.coolClo=='custom' ? settings.coolCloCustom : settings.coolClo as BigDecimal
 
     def units = getTemperatureScale()
 	def step = (units == 'C') ? 0.5 : 1.0
     def range = getCoolRange()
-    def min = range[0]
-    def max = range[1]
-    def preferred = min
-    def goodSP = preferred
+    def min = range[0] as BigDecimal
+    def max = range[1] as BigDecimal
+    def preferred = min as BigDecimal
+    def goodSP = preferred as BigDecimal
     def pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     def goodPMV = pmv
     while (preferred <= max && pmv <= targetPmv) {
-    	goodSP = preferred
+    	goodSP = preferred as BigDecimal
         preferred = preferred + step
         goodPMV = pmv
         pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
@@ -564,14 +581,14 @@ private def calculateCoolSetpoint() {
 }
 
 def getHeatRange() {
-    def low = settings.theThermostat.currentValue('heatRangeLow')
-    def high = settings.theThermostat.currentValue('heatRangeHigh')
+    def low  = isST ? settings.theThermostat.currentValue('heatRangeLow')  : settings.theThermostat.currentValue('heatRangeLow', true)
+    def high = isST ? settings.theThermostat.currentValue('heatRangeHigh') : settings.theThermostat.currentValue('heatRangeHigh', true)
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
 def getCoolRange() {
-    def low = settings.theThermostat.currentValue('coolRangeLow')
-    def high = settings.theThermostat.currentValue('coolRangeHigh')
+    def low  = isST ? settings.theThermostat.currentValue('coolRangeLow')  : settings.theThermostat.currentValue('coolRangeLow', true)
+    def high = isST ? settings.theThermostat.currentValue('coolRangeHigh') : settings.theThermostat.currentValue('coolRangeHigh', true)
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
