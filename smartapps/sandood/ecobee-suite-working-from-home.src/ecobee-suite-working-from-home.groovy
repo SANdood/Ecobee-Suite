@@ -14,8 +14,11 @@
  *
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
+ *	1.7.02 - Optionally identify who is still home in logs and notifications
+ *	1.7.03 - Miscellaneous optimizations
+ *  1.7.04 - Fixed myThermostats subscription (thx @astephon88) & missing sendMessages
  */
-def getVersionNum() { return "1.7.01" }
+def getVersionNum() { return "1.7.04" }
 private def getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -77,6 +80,7 @@ def mainPage() {
 		if (settings?.myThermostats && !settings?.tempDisable) {
             section (title: "Conditions") {
                 input(name: "people", type: "capability.presenceSensor", title: "When any of these are present...",  multiple: true, required: true, submitOnChange: true)
+				input(name: "identify", type: 'bool', title: 'Identify who is home for logs & notifications?', required: (settings.people != null), defaultValue: false)
 				input(name: "timeOfDay", type: "time", title: "At this time of day",  required: (settings.onAway == null), submitOnChange: true)
 				paragraph ''
 				input(name: "onAway", type: "bool", title: "When thermostat${settings?.myThermostats?.size()>1?'s change':'changes'} to 'Away'", defaultValue: false, required: (settings.timeOfDay == null), submitOnChange: true)
@@ -142,7 +146,7 @@ def mainPage() {
 				}
 			}				
         }
-        section(title: "Temporarily Disable?") {
+        section(title: "Temporary Pause") {
            	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
 		section (getVersionLabel()) {}
@@ -170,7 +174,7 @@ def initialize() {
     	return true
     }
     if (settings.timeOfDay != null) schedule(timeToday(settings.timeOfDay, location.timeZone), "checkPresence")
-    if (settings.onAway) subscribe(settings.theThermostats, "currentProgram", "checkProgram")
+    if (settings.onAway) subscribe(settings.myThermostats, "currentProgram", "checkProgram")
 }
 
 def checkPresence() {
@@ -182,23 +186,33 @@ def checkPresence() {
         if (isST && wfhPhrase) {
             location.helloHome.execute(wfhPhrase)
         	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
-			sendMessage("I executed '${wfhPhrase}' because someone is still home.")
+			def who = whoIsHome()
+			sendMessage("I executed '${wfhPhrase}' because ${who} ${who.contains(' and ')?'are':'is'} still home")
             multiple = true
         }
         if (settings.setMode) {
         	location.setMode(settings.setMode)
-            sendMessage("I ${multiple?'also ':''}changed Location Mode to ${settings.setMode}.")
+            sendMessage("I ${multiple?'also ':''}changed Location Mode to ${settings.setMode}")
             multiple = true
         }
         if (settings.setHome) {
+			def verified = true
         	myThermostats.each { tstat ->
 				def ncCp = isST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
-        		if (ncCp != "Home") tstat.home()
+				if (ncCp != "Home") {
+					tstat.home()
+					verified = false
+				}
         	}
             def tc = myThermostats.size()
             def also = multiple ? 'also ' : ''
-            sendMessage("I ${also}verified that thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} ${tc>1?'are':'is'} set to the 'Home' program because someone is still home.")
-            runIn(300, checkHome, [overwrite: true])
+			def who = whoIsHome()
+			if (verified) {
+				sendMessage("I ${also} verified that thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} ${tc>1?'are':'is'} set to the 'Home' program because ${who} ${who.contains(' and ')?'are':'is'} still home")
+			} else {
+				sendMessage("I ${also} changed thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because ${who} ${who.contains(' and ')?'are':'is'} still home")
+				runIn(300, checkHome, [overwrite: true])
+			}
         }
     }
 }
@@ -209,17 +223,18 @@ def checkProgram(evt) {
     def multiple = false
     if (settings.onAway && (evt.value == 'Away') && anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
     	evt.device.home()
-        sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because Thermostat ${evt.device.displayName} changed to 'Away' and someone is still home.")
+		def who = whoIsHome()
+        sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because Thermostat ${evt.device.displayName} changed to 'Away' and ${who} ${who.contains(' and ')?'are':'is'} still home")
         runIn(300, checkHome, [overwrite: true])
         
     	if (isST && wfhPhrase) {
             location.helloHome.execute(wfhPhrase)
         	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
-			send("I also executed '${wfhPhrase}'.")
+			sendMessage("I also executed '${wfhPhrase}'")
         }
     	if (settings.setMode) {
         	location.setMode(settings.setMode)
-            send("And I changed Location Mode to ${settings.setMode}.")
+            sendMessage("And I changed Location Mode to ${settings.setMode}")
             multiple = true
         } 
     }
@@ -247,6 +262,29 @@ private anyoneIsHome() {
   }
   LOG("anyoneIsHome: ${result}", 4, null, 'trace')
   return result
+}
+
+private String whoIsHome() {
+	if (!settings.identify) return "somebody"
+	
+	String names = ""
+	settings.people.each {
+		if (it.currentPresence == 'present') {
+			names = (names == "") ? it.displayName : (names.contains(it.displayName) ? names : names + ", ${it.displayName}")
+		}
+	}
+	if (names != "") {
+		if (names.contains(', ')) {
+			int comma = names.lastIndexOf(', ')
+			String front = names.substring(0, comma)
+			String tail = names.substring(comma+2)
+			return front + ' and ' + tail
+		} else {
+			return names
+		}
+	} else {
+		return "nobody"
+	}
 }
 
 // return all the modes that ALL thermostats support
