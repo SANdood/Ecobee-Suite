@@ -43,8 +43,9 @@
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixed initialization error
+ *	1.7.03 - Cosmetic cleanup, and nonCached currentValue() on Hubitat
  */
-def getVersionNum() { return "1.7.02" }
+def getVersionNum() { return "1.7.03" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -193,7 +194,7 @@ def mainPage() {
             }          
 		} // End if (myThermostats?.size() > 0)
 
-		section(title: "Temporarily Disable?") {
+		section(title: "Temporary Pause") {
 			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
@@ -273,20 +274,38 @@ def initialize() {
     		def tmpThermSavedState = [:]
     		settings.myThermostats.each() { therm ->
     			def tid = getDeviceId(therm.deviceNetworkId)
-    			tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode'), ]
-                if (settings.adjustSetpoints) {
-                	tmpThermSavedState[tid] += [
-                									heatSP: therm.currentValue('heatingSetpoint'), 
-                                            		coolSP: therm.currentValue('coolingSetpoint'),
-                                            		heatAdj: 999.0,
-                                            		coolAdj: 999.0,
-                                            		holdType: therm.currentValue('lastHoldType'),
-                                            		thermostatHold: therm.currentValue('thermostatHold'),
-                                            		currentProgramName: therm.currentValue('currentProgramName'),	// Hold: Home
-													currentProgramId: therm.currentValue('currentProgramId'),		// home
-													currentProgram: therm.currentValue('currentProgram'),			// Home
-                                          	  ]
-                }
+				if (isST) {
+					tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode'), ]
+					if (settings.adjustSetpoints) {
+						tmpThermSavedState[tid] += [
+														heatSP: therm.currentValue('heatingSetpoint'), 
+														coolSP: therm.currentValue('coolingSetpoint'),
+														heatAdj: 999.0,
+														coolAdj: 999.0,
+														holdType: therm.currentValue('lastHoldType'),
+														thermostatHold: therm.currentValue('thermostatHold'),
+														currentProgramName: therm.currentValue('currentProgramName'),	// Hold: Home
+														currentProgramId: therm.currentValue('currentProgramId'),		// home
+														currentProgram: therm.currentValue('currentProgram'),			// Home
+												  ]
+					}
+				} else {
+					// We have to ensure we get the latest values on HE - it caches stuff when it probably shouldn't
+					tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode', true), ]
+					if (settings.adjustSetpoints) {
+						tmpThermSavedState[tid] += [
+														heatSP: therm.currentValue('heatingSetpoint', true), 
+														coolSP: therm.currentValue('coolingSetpoint', true),
+														heatAdj: 999.0,
+														coolAdj: 999.0,
+														holdType: therm.currentValue('lastHoldType', true),
+														thermostatHold: therm.currentValue('thermostatHold', true),
+														currentProgramName: therm.currentValue('currentProgramName', true),	// Hold: Home
+														currentProgramId: therm.currentValue('currentProgramId', true),		// home
+														currentProgram: therm.currentValue('currentProgram', true),			// Home
+												  ]
+					}
+				}
     		}
     		atomicState.thermSavedState = tmpThermSavedState
     	}
@@ -447,16 +466,17 @@ def turnOffHVAC() {
             } else if ((settings.hvacOff == null) || settings.hvacOff) {
             	// turn off the HVAC
                 makeReservation(tid, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
-    			if (therm.currentValue('thermostatMode') != 'off') {
-                	tmpThermSavedState[tid].mode = therm.currentValue('thermostatMode')
+				def ncTm = isST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
+    			if (ncTm != 'off') {
+                	tmpThermSavedState[tid].mode = ncTm				// therm.currentValue('thermostatMode')
             		therm.setThermostatMode('off')
                 	tstatNames << therm.device.displayName		// only report the ones that aren't off already
                 	LOG("${therm.device.displayName} turned off (was ${tmpThermSavedState[tid].mode})",2,null,'info')    
             	}
             } else if (settings.adjustSetpoints) {
             	// Adjust the setpoints
-                def h = therm.currentValue('heatingSetpoint') 
-                def c = therm.currentValue('coolingSetpoint')
+                def h = isST ? therm.currentValue('heatingSetpoint') : therm.currentValue('heatingSetpoint', true)
+                def c = isST ? therm.currentValue('coolingSetpoint') : therm.currentValue('coolingSetpoint', true)
                 // save the current values for when we turn back on
                 tmpThermSavedState[tid].heatSP = h
                 tmpThermSavedState[tid].coolSP = c
@@ -465,13 +485,21 @@ def turnOffHVAC() {
                 tmpThermSavedState[tid].heatAdj = h
                 tmpThermSavedState[tid].coolAdj = c
                 
-                tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType')
-                tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold')
-                tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName')	// Hold: Home
-                tmpThermSavedState[tid].currentProgramId = therm.currentValue('currentProgramId')		// home
-                tmpThermSavedState[tid].currentProgram = therm.currentValue('currentProgram')			// Home
-                tmpThermSavedState[tid].scheduledProgram = therm.currentValue('scheduledProgram')
-                
+				if (isST) {
+					tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType')
+					tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold')
+					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName')	// Hold: Home
+					tmpThermSavedState[tid].currentProgramId = therm.currentValue('currentProgramId')		// home
+					tmpThermSavedState[tid].currentProgram = therm.currentValue('currentProgram')			// Home
+					tmpThermSavedState[tid].scheduledProgram = therm.currentValue('scheduledProgram')
+				} else {
+					tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType', true)
+					tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold', true)
+					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName', true)	// Hold: Home
+					tmpThermSavedState[tid].currentProgramId = therm.currentValue('currentProgramId', true)		// home
+					tmpThermSavedState[tid].currentProgram = therm.currentValue('currentProgram', true)			// Home
+					tmpThermSavedState[tid].scheduledProgram = therm.currentValue('scheduledProgram', true)
+				}
                 therm.setHeatingSetpoint(h, 'nextTransition')
                 therm.setCoolingSetpoint(c, 'nextTransition')
                 LOG("${therm.device.displayName} heatingSetpoint adjusted to ${h}, coolingSetpoint to ${c}",2,null,'info')
@@ -580,7 +608,8 @@ def turnOnHVAC() {
                         LOG("${therm.device.displayName} resumed current program",2,null,'info')
                     } else if (tmpThermSavedState[tid].currentProgramName == ('Hold: ' + tmpThermSavedState[tid].currentProgram)) {
                     	// we were in a hold of a named program - reinstate the hold IF the saved scheduledProgram == the current scheduledProgram
-                        if (tmpThermSavedState[tid].scheduledProgram == therm.currentValue('scheduledProgram')) {
+						def ncSp = isST ? therm.currentValue('scheduledProgram') : therm.currentValue('scheduledProgram', true)
+                        if (tmpThermSavedState[tid].scheduledProgram == ncSp) {
                         	therm.setThermostatProgram(tmpThermSavedState[tid].currentProgram, holdType)
                         	LOG("${therm.device.displayName} returned to ${tmpThermSavedState[tid]} program (${holdType})",2,null,'info')
                         }
