@@ -1,6 +1,6 @@
 Free Universal Ecobee Suite, version: 1.7.** 
 ======================================================
-***Latest Update: 1.7.01-7 - Ecobee Suite Manager, Thermostat and Modes/(Routines)/Switches/Program Helper were updated 21 May 2019 at 4:45pm EDT***
+***Latest Update: 1.7.01-9 - Ecobee Suite Manager, Thermostat and Thermal Comfort Helper were updated 24 May 2019 at 9:40pm EDT***
 
 Hubitat users now can utilize the latest functionality of my Ecobee Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
@@ -206,6 +206,11 @@ That said, at the end of the 9 seconds, your Hubitat-based Ecobee Thermostat is 
 Note that ALL of the interactions between the Helper Applications and the Devices is local on Hubitat, so there is less network latency and operational delay. Importantly, the code only runs typically 3-6 seconds per minute; this does NOT appear to have any significant performance impact on your Hubitat hub in any way.
 
 Of course, Your Mileage May Vary (YMMV). If you see abnormally long cycle times in the Live Logs for Ecobee Suite Manager, try rebooting your Hubitat hub. If that doesn't solve it, then please the author know on either the Hubitat or Community pages noted above.
+
+#### A Note on Performance In General
+Changes made during the week ending May 24, 2019 have totally revamped how changes are recognized, processed and dispatched by Ecobee Suite Manager. One of the major improvements is the extensive reduction of writes to the backing store (atomicState & state variables). Reducing the writes benefits especially Hubitat, which runs entirely off of local Flash storage which tends to wear out the more times it is written to. Reducing atomicState writes everywhere possible, in particular, significantly speeds up processing and dispatching updates from the Ecobee servers to the SmartThings/Hubitat device(s).
+
+One side-effect of the updated approach is that during the inital startup period update cycles will generally take longer, as the initial datapoints are saved for future changes comparisons. After this startup period (usually 10-20 minutes, dependent on the number of devices you have), things will stabilize and generally cycle times will shorten significantly. There will still be the occaisional long cycle, but for the most part cycles are signficantly better on both platforms with the new logic.
 
 -------------------------
 # <a name="installation">Installation</a>
