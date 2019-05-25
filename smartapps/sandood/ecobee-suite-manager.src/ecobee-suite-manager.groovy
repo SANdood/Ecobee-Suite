@@ -52,8 +52,9 @@
  *  1.7.06 - Fixed deleteSensorFromProgram() error
  *	1.7.07 - More generateEvent() & setEcobeeSetting() optimizations; wifi alert
  *  1.7.08 - Clean up conditional updates
+ *	1.7.09 - Fixed climates & setpoints update consistency
  */
-def getVersionNum() { return "1.7.08" }
+def getVersionNum() { return "1.7.09" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -2985,12 +2986,14 @@ def updateThermostatData() {
     // Handle things that only change when runtime object is updated)
         def occupancy = 'not supported'
         def tempTemperature
-        def tempHeatingSetpoint = 0.0
-        def tempCoolingSetpoint = 999.0
         def tempWeatherTemperature
         def tempWeatherDewpoint
         def tempWeatherHumidity
         def tempWeatherPressure
+		
+		// it appears these can change without runtimeUpdated being set true
+		def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (runtime?.desiredHeat / 10.0), 'F', apiPrecision)
+        def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (runtime?.desiredCool / 10.0), 'F', apiPrecision)
         
         if (forcePoll || runtimeUpdated) {
 			// Occupancy (motion)
@@ -3022,8 +3025,6 @@ def updateThermostatData() {
             // 		 can operate efficiently. So, while the user can specify a display precision of 0, 1 or 2 decimal digits, we ALWAYS keep and send max decimal digits and let the device handler adjust for display
             //		 For Fahrenheit, we keep the 1 decimal digit the API provides, for Celsius we allow for 2 decimal digits as a result of the mathematical calculation       
 			tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature.toBigDecimal() / 10.0), 'F', apiPrecision)
-        	tempHeatingSetpoint = myConvertTemperatureIfNeeded( (runtime.desiredHeat / 10.0), 'F', apiPrecision)
-        	tempCoolingSetpoint = myConvertTemperatureIfNeeded( (runtime.desiredCool / 10.0), 'F', apiPrecision)
         	//if (atomicState.weather && atomicState.weather?.containsKey(tid) && atomicState.weather[tid].containsKey('temperature')) {
             // log.debug atomicState.weather[tid]
             def weather = atomicState.weather
@@ -3035,11 +3036,9 @@ def updateThermostatData() {
             if (weather[tid]?.humidity != null) tempWeatherHumidity = weather[tid].humidity
             if (weather[tid]?.pressure != null) tempWeatherPressure = usingMetric ? weather[tid].pressure : roundIt((weather[tid].pressure * 0.02953),2) //milliBars to inHg
         }
-     
-     // EQUIPMENT SPECIFICS
-		def auxHeatMode =  (statSettings?.hasHeatPump) && (statSettings?.hasForcedAir || statSettings?.hasElectric || statSettings?.hasBoiler) // 'auxHeat1' == 'emergency' if using a heatPump
         
-	// handle[tid] things that only change when the thermostat object is updated
+	// handle[tid] things that only change when the thermostat object is updated (actually, just settingsUpdated)
+		def auxHeatMode
 		def heatHigh
 		def heatLow
 		def coolHigh
@@ -3050,7 +3049,8 @@ def updateThermostatData() {
         def tempCoolDiff = 0.0
         def tempHeatCoolMinDelta = 1.0
 
-		if (forcePoll || thermostatUpdated) {
+		if (forcePoll || settingsUpdated) {
+			auxHeatMode =  (statSettings?.hasHeatPump) && (statSettings?.hasForcedAir || statSettings?.hasElectric || statSettings?.hasBoiler) // 'auxHeat1' == 'emergency' if using a heatPump
             tempHeatDiff = usingMetric ? roundIt((statSettings.stage1HeatingDifferentialTemp / 1.8), 0) / 10.0 : statSettings.stage1HeatingDifferentialTemp / 10.0
             tempCoolDiff = usingMetric ? roundIt((statSettings.stage1CoolingDifferentialTemp / 1.8), 0) / 10.0 : statSettings.stage1CoolingDifferentialTemp / 10.0
             tempHeatCoolMinDelta = usingMetric ? roundIt((statSettings.heatCoolMinDelta / 1.8), 0) / 10.0 : statSettings.heatCoolMinDelta / 10.0
@@ -3062,7 +3062,6 @@ def updateThermostatData() {
 			heatLow =  myConvertTemperatureIfNeeded((statSettings.heatRangeLow  / 10.0), 'F', 1)
 			coolHigh = myConvertTemperatureIfNeeded((statSettings.coolRangeHigh / 10.0), 'F', 1)
 			coolLow =  myConvertTemperatureIfNeeded((statSettings.coolRangeLow  / 10.0), 'F', 1)
-			
 			// calculate these anyway (for now) - it's easier to read the range while debugging
 			heatRange = (heatLow && heatHigh) ? "(${roundIt(heatLow,0)}..${roundIt(heatHigh,0)})" : (usingMetric ? '(5..35)' : '(45..95)')
 			coolRange = (coolLow && coolHigh) ? "(${roundIt(coolLow,0)}..${roundIt(coolHigh,0)})" : (usingMetric ? '(5..35)' : '(45..95)')
@@ -3115,7 +3114,7 @@ def updateThermostatData() {
         
         // store the currently running event (in case we need to modify or delete it later, as in Vacation handling)
         def tempRunningEvent = [:]
-       	tempRunningEvent[tid] = (runningEvent != [:]) ? runningEvent : [:]
+       	tempRunningEvent[tid] = runningEvent 	// was: (runningEvent != [:]) ? runningEvent : [:]
 		if (tempRunningEvent[tid] != [:]) {
         	if (atomicState.runningEvent && atomicState.runningEvent[tid] != tempRunningEvent[tid]) {
             	// Update atomicState only if the data changed (avoid hundreds of unnecessary writes to atomicStatae when events are running)
@@ -3267,7 +3266,7 @@ def updateThermostatData() {
         if (hasDehumidifier && (extendedRuntime && extendedRuntime.desiredDehumidity && extendedRuntime.desiredDehumidity[2])) {
         	dehumiditySetpoint = extendedRuntime.desiredDehumidity[2]	
 		}
-        def humiditySetpointDisplay = 0
+        def humiditySetpointDisplay = null
 		switch (statMode) {
 			case 'heat':
 				if (hasHumidifier) humiditySetpointDisplay = humiditySetpoint
@@ -3330,7 +3329,6 @@ def updateThermostatData() {
                 LOG("${tstatName} is in Smart Recovery (${tid}), temp: ${tempTemperature}, setpoint: ${tempCoolingSetpoint}",3,null,'info')
             }
         }
-        
         if (forcePoll || (equipStatus != lastEquipStatus)) {
 			if (equipStatus == 'fan') {
 				equipOpStat = 'fan only'
@@ -3404,8 +3402,10 @@ def updateThermostatData() {
 		boolean extendRTUpdated = atomicState.extendRTUpdated
 		
         //changeEquip was initialized earlier
-         
+		// log.trace "force: ${forcePoll}, runtime: ${runtimeUpdated}, thermostat: ${thermostatUpdated}, events: ${eventsUpdated}, settings: ${settingsUpdated}, extend: ${extendRTUpdated}, programs: ${programsUpdated}"
+		
         def data = [forced: forcePoll,]				// Tell the DTH to force-update all attributes, states and tiles
+		def dataStart = data
  
         // Equipment operating status - need to send first so that temperatureDisplay is properly updated after API connection loss/recovery
         if (forcePoll || (lastEquipStatus != equipStatus) || (atomicState.wasConnected != isConnected)) { 
@@ -3413,7 +3413,7 @@ def updateThermostatData() {
             boolean eqpChanged = false
             if ((changeEquip == [:]) || !changeEquip.containsKey(tid) || (changeEquip[tid] == null)) changeEquip[tid] = ['null','null','null']
         	if (changeEquip[tid][0] != equipStatus) 	{ data += [equipmentStatus: equipStatus]; 			changeEquip[tid][0] = equipStatus; eqpChanged = true; }
-        	if (changeEquip[tid][1] != thermOpState)	{ data += [thermostatOperatingState: thermOpStat]; 	changeEquip[tid][1] = thermOpStat; eqpChanged = true; }
+        	if (changeEquip[tid][1] != thermOpStat)		{ data += [thermostatOperatingState: thermOpStat]; 	changeEquip[tid][1] = thermOpStat; eqpChanged = true; }
         	if (changeEquip[tid][2] != equipOpStat)		{ data += [equipmentOperatingState: equipOpStat];	changeEquip[tid][2] = equipOpStat; eqpChanged = true; }
 			if (eqpChanged) {
             	atomicState.changeEquip = changeEquip
@@ -3436,6 +3436,7 @@ def updateThermostatData() {
         if (changeCloud[tid][2] != isConnected)		{ data += [ecobeeConnected: isConnected];	changeCloud[tid][2] = isConnected; cldChanged = true; }
         if (changeCloud[tid][3] != checkInterval)	{ data += [checkInterval: checkInterval];	changeCloud[tid][3] = checkInterval; cldChanged = true; }
         if (cldChanged) {
+			// log.trace "cldChanged: true"
             atomicState.changeCloud = changeCloud
         }
         
@@ -3461,6 +3462,7 @@ def updateThermostatData() {
                 i++
             }
             if (alrtChanged) {
+				// log.trace "alrtChanged: true"
             	changeAlerts[tid] = alertValues
             	atomicState.changeAlerts = changeAlerts
             }
@@ -3484,6 +3486,7 @@ def updateThermostatData() {
                 i++
             }
             if (attrsChanged) {
+				// log.trace "attrsChanged: true"
             	changeAttrs[tid] = attrValues
             	atomicState.changeAttrs = changeAttrs
             }
@@ -3507,6 +3510,7 @@ def updateThermostatData() {
                 i++
             }
             if (devsChanged) {
+				// log.trace "devsChanged: true"
             	changeDevice[tid] = deviceValues
             	atomicState.changeDevice = changeDevice
             }
@@ -3529,6 +3533,7 @@ def updateThermostatData() {
                 i++
             }
             if (tempsChanged) {
+				// log.trace "tempsChanged: true"
             	changeTemps[tid] = tempValues
             	atomicState.changeTemps = changeTemps
             }
@@ -3539,147 +3544,164 @@ def updateThermostatData() {
         String tmpScale = getTemperatureScale()
         boolean cfgsChanged = false
         def timeOfDay = atomicState.timeZone ? getTimeOfDay() : getTimeOfDay(tid)
+		def userPChanged = false
         // log.debug "timeOfDay: ${timeOfDay}"
 		//def configList = [timeOfDay,userPrecision,dbgLevel,tmpScale,settings.mobile] 
         def changeConfig = atomicState.changeConfig ? atomicState.changeConfig : [:]
         if ((changeConfig == [:]) || !changeConfig.containsKey(tid) || (changeConfig[tid] == null)) changeConfig[tid] = ['null','null','null','null','null']
         
         if (changeConfig[tid][0] != timeOfDay) 		{ data += [timeOfDay: timeOfDay]; 				changeConfig[tid][0] = timeOfDay; cfgsChanged = true; }
-        if (changeConfig[tid][1] != userPrecision)	{ data += [decimalPrecision: userPrecision]; 	changeConfig[tid][1] = userPrecision; cfgsChanged = true; }
+        if (changeConfig[tid][1] != userPrecision)	{ data += [decimalPrecision: userPrecision]; 	changeConfig[tid][1] = userPrecision; cfgsChanged = true; userPChanged = true; }
         if (changeConfig[tid][2] != dbgLevel)		{ data += [debugLevel: dbgLevel];				changeConfig[tid][2] = dbgLevel; cfgsChanged = true; }
         if (changeConfig[tid][3] != tmpScale)		{ data += [temperatureScale: tmpScale];			changeConfig[tid][3] = tmpScale; cfgsChanged = true; }
-        if (changeConfig[tid][4] != settings.mobile)	{ data += [mobile: settings.mobile];			changeConfig[tid][4] = settings.mobile; cfgsChanged = true; }
-        if (cfgsChanged) atomicState.changeConfig = changeConfig
+        if (changeConfig[tid][4] != settings.mobile){ data += [mobile: settings.mobile];			changeConfig[tid][4] = settings.mobile; cfgsChanged = true; }
+		if (cfgsChanged) {
+			// log.trace "cfgsChanged: true"
+			atomicState.changeConfig = changeConfig
+		}
         
-		// Thermostat configuration settinngs
-        if ((isConnected && (forcePoll || thermostatUpdated || settingsUpdated || programsUpdated)) || !isConnected) {	// new settings, programs or events
-        	def autoMode = statSettings?.autoHeatCoolFeatureEnabled
-            def statHoldAction = statSettings?.holdAction			// thermsotat's preference setting for holdAction:
-            														// useEndTime4hour, useEndTime2hour, nextPeriod, indefinite, askMe
-            boolean nvrChanged = false
-        	
-            // Thermostat configuration stuff that almost never changes - if any one changes, send them all
-        	//def neverList = [statMode,autoMode,statHoldAction,coolStages,heatStages,heatRange,coolRange,climatesList,
-        	//					auxHeatMode,hasHumidifier,hasDehumidifier,tempHeatDiff,tempCoolDiff,tempHeatCoolMinDelta] 
-			def changeNever =  atomicState.changeNever  ? atomicState.changeNever  : [:]
- 			if (forcePoll || settingsUpdated || programsUpdated || (changeNever == [:]) || !changeNever.containsKey(tid)) {														 // || (changeNever[tid] != neverList)) {
-            	if (changeNever[tid] == null) changeNever[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null']
-            	if (changeNever[tid][0] != statMode) 		{ data += [thermostatMode: statMode]; 			changeNever[tid][0] = statMode; nvrChanged = true; }
-                if (changeNever[tid][1] != autoMode) 		{ data += [autoMode: autoMode]; 				changeNever[tid][1] = autoMode; nvrChanged = true; }
-                if (changeNever[tid][2] != statHoldAction)	{ data += [statHoldAction: statHoldAction]; 	changeNever[tid][2] = statHoldAction; nvrChanged = true; }
-                if (changeNever[tid][3] != coolStages) 		{ data += [coolStages: coolStages, 
-                														coolMode: (coolStages > 0)]; 		changeNever[tid][3] = coolStages; nvrChanged = true; }
-                if (changeNever[tid][4] != heatStages) 		{ data += [heatStages: heatStages,
-                														heatMode: (heatStages > 0)]; 		changeNever[tid][4] = heatStages; nvrChanged = true; }
-                if (changeNever[tid][5] != heatRange) 		{ data += [heatRange: heatRange,
-                														heatRangeHigh: heatHigh,
-                                                                        heatRangeLow: heatLow]; 			changeNever[tid][5] = heatRange; nvrChanged = true; }
-                if (changeNever[tid][6] != coolRange) 		{ data += [coolRange: coolRange,
-                														coolRangeHigh: coolHigh,
-                                                                        coolRangeLow: coolLow]; 			changeNever[tid][6] = coolRange; nvrChanged = true; }
-                if (changeNever[tid][7] != climatesList)	{ data += [programsList: climatesList];			changeNever[tid][7] = climatesList; nvrChanged = true; }
-                if (changeNever[tid][8] != auxHeatMode) 	{ data += [auxHeatMode: auxHeatMode]; 			changeNever[tid][8] = auxHeatMode; nvrChanged = true; }
-                if (changeNever[tid][9] != hasHumidifier) 	{ data += [hasHumidifier: hasHumidifier]; 		changeNever[tid][9] = hasHumidifier; nvrChanged = true; }
-                if (changeNever[tid][10] != hasDehumidifier){ data += [hasDehumidifier: hasDehumidifier]; 	changeNever[tid][10] = hasDehumidifier; nvrChanged = true;}
-                if (changeNever[tid][11] != tempHeatDiff) 	{ data += [heatDifferential: 
-                														String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision))]; 	
-                                                                        									changeNever[tid][11] = tempHeatDiff; nvrChanged = true; }
-                if (changeNever[tid][12] != tempCoolDiff) 	{ data += [coolDifferential: 
-                														String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision)),]; 
-                                                                        									changeNever[tid][12] = tempCoolDiff; nvrChanged = true; }
-                if (changeNever[tid][13] != tempHeatCoolMinDelta){ data += [heatCoolMinDelta: 
-                														String.format("%.${apiPrecision}f", roundIt(tempHeatCoolMinDelta, apiPrecision))]; 
-                                                                        									changeNever[tid][13] = tempheatCoolMinDelta; nvrChanged = true; }
-            	if (nvrChanged) atomicState.changeNever = changeNever
-        	}
-            
-            // Thermostat operational things that rarely change, (a few times a day at most)
-            //
-            // First, we need to clean up Fan Holds
-            if ((thermostatHold != 'null') && (thermostatHold != '') && (currentClimateName == 'Hold: Fan')) {
-            	if (currentFanMode == 'on') { currentClimateName = 'Hold: Fan On' }
-                else if (currentFanMode == 'auto') {
-                	if (statMode == 'off') {
-                    	if (fanMinOnTime != 0) {currentClimateName = "Hold: Circulate"}
-                    } else {
-                    	currentClimateName = (fanMinOnTime == 0) ? 'Hold: Auto' : 'Hold: Circulate'
-                    }
-                }
-            }
-            def rareChanged = false
-			def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
-		    if (forcePoll || eventsUpdated || settingsUpdated || extendRTUpdated || (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) { 
-				if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
-				if (changeRarely[tid][0] != fanMinOnTime) 			{ data += [fanMinOnTime: fanMinOnTime]; 				changeRarely[tid][0] = fanMinOnTime; rareChanged = true; }
-                if (changeRarely[tid][1] != thermostatHold)			{ data += [thermostatHold: thermostatHold];				changeRarely[tid][1] = thermostatHold; rareChanged = true; }
-                if (changeRarely[tid][2] != holdEndsAt) 			{ data += [holdEndsAt: holdEndsAt]; 					changeRarely[tid][2] = holdEndsAt; rareChanged = true; }
-                if (changeRarely[tid][3] != statusMsg) 				{ data += [holdStatus: statusMsg]; 						changeRarely[tid][3] = statusMsg; rareChanged = true; }
-                if (changeRarely[tid][4] != humiditySetpoint) 		{ data += [humiditySetpoint: humiditySetpoint]; 		changeRarely[tid][4] = humiditySetpoint; rareChanged = true; }
-                if (changeRarely[tid][5] != humidifierMode)			{ data += [humidifierMode: humidifierMode]; 			changeRarely[tid][5] = humidifierMode; rareChanged = true; }
-                if (changeRarely[tid][6] != dehumiditySetpoint) 	{ data += [dehumiditySetpoint: dehumiditySetpoint,
-                																dehumidityLevel: dehumiditySetpoint,
-                                                                                dehumidifierLevel: dehumiditySetpoint];		changeRarely[tid][6] = dehumiditySetpoint; rareChanged = true; }
-                if (changeRarely[tid][7] != dehumidifierMode) 		{ data += [dehumidifierMode: dehumidifierMode]; 		changeRarely[tid][7] = dehumidifierMode; rareChanged = true; }
-                if (changeRarely[tid][8] != currentClimate) 		{ data += [currentProgram: currentClimate]; 			changeRarely[tid][8] = currentClimate; rareChanged = true; }
-                if (changeRarely[tid][9] != currentClimateName) 	{ data += [currentProgramName: currentClimateName]; 	changeRarely[tid][9] = currentClimateName; rareChanged = true; }
-                if (changeRarely[tid][10] != currentClimateId) 		{ data += [currentProgramId: currentClimateId]; 		changeRarely[tid][10] = currentClimateId; rareChanged = true; }
-                if (changeRarely[tid][11] != scheduledClimateName)	{ data += [scheduledProgramName: scheduledClimateName,
-                																scheduledProgram: scheduledClimateName]; 	changeRarely[tid][11] = scheduledClimateName; rareChanged = true; }
-                if (changeRarely[tid][12] != scheduledClimateId) 	{ data += [scheduledProgramId: scheduledClimateId];		changeRarely[tid][12] = scheduledClimateId; rareChanged = true; }
-                if (changeRarely[tid][13] != currentFanMode) 		{ data += [thermostatFanMode: currentFanMode]; 			changeRarely[tid][13] = currentFanMode; rareChanged = true; }
-                if (changeRarely[tid][14] != currentVentMode) 		{ data += [vent: currentVentMode]; 						changeRarely[tid][14] = currentVentMode; rareChanged = true; }
-                if (changeRarely[tid][15] != ventMinOnTime) 		{ data += [ventilatorMinOnTime: ventMinOnTime]; 		changeRarely[tid][15] = ventMinOnTime; rareChanged = true; }
-                
-            	if (rareChanged) atomicState.changeRarely = changeRarely
-                
-                // Save the Program when it changes so that we can get to it easily for the child sensors
-        		def tempProgram = [:]
-                tempProgram[tid] = currentClimateName
-        		if (atomicState.currentProgramName) tempProgram = atomicState.currentProgramName + tempProgram
-        		atomicState.currentProgramName = tempProgram
-        	}     
-    	}
+		// Thermostat configuration settings
+		// thermostatUpdated || runtimeUpdated || forcePoll || settingsUpdated || eventsUpdated || programsUpdated
+        // if ((isConnected && (thermostatUpdated || runtimeUpdated || forcePoll || settingsUpdated || programsUpdated || eventsUpdated || extendRTUpdated)) || !isConnected) {	// new settings, programs or events
+		boolean nvrChanged = false
+		// Thermostat configuration stuff that almost never changes - if any one changes, send them all
+		def changeNever =  atomicState.changeNever  ? atomicState.changeNever  : [:]
+		if (settingsUpdated || forcePoll || programsUpdated || (changeNever == [:]) || !changeNever.containsKey(tid)) {														 // || (changeNever[tid] != neverList)) {
+			if (changeNever[tid] == null) changeNever[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+			if (settingsUpdated || forcePoll) {
+				def autoMode = statSettings?.autoHeatCoolFeatureEnabled
+				def statHoldAction = statSettings?.holdAction			// thermsotat's preference setting for holdAction:
+																		// useEndTime4hour, useEndTime2hour, nextPeriod, indefinite, askMe
+				if (changeNever[tid][0] != statMode) 		{ data += [thermostatMode: statMode]; 			changeNever[tid][0] = statMode; nvrChanged = true; }
+				if (changeNever[tid][1] != autoMode) 		{ data += [autoMode: autoMode]; 				changeNever[tid][1] = autoMode; nvrChanged = true; }
+				if (changeNever[tid][2] != statHoldAction)	{ data += [statHoldAction: statHoldAction]; 	changeNever[tid][2] = statHoldAction; nvrChanged = true; }
+				if (changeNever[tid][3] != coolStages) 		{ data += [coolStages: coolStages, 
+																		coolMode: (coolStages > 0)]; 		changeNever[tid][3] = coolStages; nvrChanged = true; }
+				if (changeNever[tid][4] != heatStages) 		{ data += [heatStages: heatStages,
+																		heatMode: (heatStages > 0)]; 		changeNever[tid][4] = heatStages; nvrChanged = true; }
+				if (changeNever[tid][5] != heatRange) 		{ data += [heatRange: heatRange,
+																		heatRangeHigh: heatHigh,
+																		heatRangeLow: heatLow]; 			changeNever[tid][5] = heatRange; nvrChanged = true; }
+				if (changeNever[tid][6] != coolRange) 		{ data += [coolRange: coolRange,
+																		coolRangeHigh: coolHigh,
+																		coolRangeLow: coolLow]; 			changeNever[tid][6] = coolRange; nvrChanged = true; }
+				if (changeNever[tid][11] != tempHeatDiff)	{ data += [heatDifferential: 
+																		String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision))]; 	
+																											changeNever[tid][11] = tempHeatDiff; nvrChanged = true; }
+				if (changeNever[tid][12] != tempCoolDiff) 	{ data += [coolDifferential: 
+																		String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision)),]; 
+																											changeNever[tid][12] = tempCoolDiff; nvrChanged = true; }
+				if (changeNever[tid][13] != tempHeatCoolMinDelta){ data += [heatCoolMinDelta: 
+																		String.format("%.${apiPrecision}f", roundIt(tempHeatCoolMinDelta, apiPrecision))]; 
+																											changeNever[tid][13] = tempHeatCoolMinDelta; nvrChanged = true; }
+				if (changeNever[tid][8] != auxHeatMode) 	{ data += [auxHeatMode: auxHeatMode]; 			changeNever[tid][8] = auxHeatMode; nvrChanged = true; }
+				if (changeNever[tid][9] != hasHumidifier) 	{ data += [hasHumidifier: hasHumidifier]; 		changeNever[tid][9] = hasHumidifier; nvrChanged = true; }
+				if (changeNever[tid][10] != hasDehumidifier){ data += [hasDehumidifier: hasDehumidifier]; 	changeNever[tid][10] = hasDehumidifier; nvrChanged = true;}
+			}
+			if (forcePoll || programsUpdated) {
+				if (changeNever[tid][7] != climatesList)	{ data += [programsList: climatesList];			changeNever[tid][7] = climatesList; nvrChanged = true; }
+			}
+			if (nvrChanged) {
+				// log.trace "nvrChanged: true"
+				atomicState.changeNever = changeNever
+			}
+		}
+
+		// Thermostat operational things that rarely change, (a few times a day at most)
+		//
+		// First, we need to clean up Fan Holds
+		if ((thermostatHold != 'null') && (thermostatHold != '') && (currentClimateName == 'Hold: Fan')) {
+			if (currentFanMode == 'on') { currentClimateName = 'Hold: Fan On' }
+			else if (currentFanMode == 'auto') {
+				if (statMode == 'off') {
+					if (fanMinOnTime != 0) {currentClimateName = "Hold: Circulate"}
+				} else {
+					currentClimateName = (fanMinOnTime == 0) ? 'Hold: Auto' : 'Hold: Circulate'
+				}
+			}
+		}
+		def rareChanged = false
+        def needPrograms = false
+		def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
+		if (thermostatUpdated || runtimeUpdated || forcePoll || settingsUpdated || eventsUpdated || programsUpdated || (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {  
+			if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+			// The order of these is IMPORTANT - Do setpoints and all equipment changes before notifying of the hold and program change...
+			if (tempHeatingSetpoint && ((changeRarely[tid][15] != tempHeatingSetpoint) || forcePoll || userPChanged))	{ 
+				needPrograms = true; changeRarely[tid][15] = tempHeatingSetpoint; data += [heatingSetpoint: String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),] 
+			}
+            if (tempCoolingSetpoint && ((changeRarely[tid][16] != tempCoolingSetpoint) || forcePoll || userPChanged))	{ 
+				needPrograms = true; changeRarely[tid][16] = tempCoolingSetpoint; data += [coolingSetpoint: String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),] 
+			}
+			if (changeRarely[tid][12] != currentFanMode) 		{ data += [thermostatFanMode: currentFanMode]; 			changeRarely[tid][12] = currentFanMode; rareChanged = true; }
+			if (changeRarely[tid][13] != currentVentMode) 		{ data += [vent: currentVentMode]; 						changeRarely[tid][13] = currentVentMode; rareChanged = true; }
+			if (changeRarely[tid][14] != ventMinOnTime) 		{ data += [ventilatorMinOnTime: ventMinOnTime]; 		changeRarely[tid][14] = ventMinOnTime; rareChanged = true; }
+			if (changeRarely[tid][0] != fanMinOnTime) 			{ data += [fanMinOnTime: fanMinOnTime]; 				changeRarely[tid][0] = fanMinOnTime; rareChanged = true; }
+			if (changeRarely[tid][5] != humidifierMode)			{ data += [humidifierMode: humidifierMode]; 			changeRarely[tid][5] = humidifierMode; rareChanged = true; }
+			if (changeRarely[tid][6] != dehumidifierMode) 		{ data += [dehumidifierMode: dehumidifierMode]; 		changeRarely[tid][6] = dehumidifierMode; rareChanged = true; }
+			if (changeRarely[tid][1] != thermostatHold)			{ data += [thermostatHold: thermostatHold];				changeRarely[tid][1] = thermostatHold; rareChanged = true; }
+			if (changeRarely[tid][2] != holdEndsAt) 			{ data += [holdEndsAt: holdEndsAt]; 					changeRarely[tid][2] = holdEndsAt; rareChanged = true; }
+			if (changeRarely[tid][3] != statusMsg) 				{ data += [holdStatus: statusMsg]; 						changeRarely[tid][3] = statusMsg; rareChanged = true; }
+			if ((currentClimate != 'null') && (changeRarely[tid][7] != currentClimate))
+																{ data += [currentProgram: currentClimate]; 			changeRarely[tid][7] = currentClimate; rareChanged = true; }
+			if ((currentClimateName != 'null') && (changeRarely[tid][8] != currentClimateName))
+																{ data += [currentProgramName: currentClimateName]; 	changeRarely[tid][8] = currentClimateName; rareChanged = true; }
+			if ((currentClimateId != 'null') && (changeRarely[tid][9] != currentClimateId))		
+																{ data += [currentProgramId: currentClimateId]; 		changeRarely[tid][9] = currentClimateId; rareChanged = true; }
+			if (changeRarely[tid][10] != scheduledClimateName)	{ data += [scheduledProgramName: scheduledClimateName,
+																			scheduledProgram: scheduledClimateName]; 	changeRarely[tid][10] = scheduledClimateName; rareChanged = true; }
+			if (changeRarely[tid][11] != scheduledClimateId) 	{ data += [scheduledProgramId: scheduledClimateId];		changeRarely[tid][11] = scheduledClimateId; rareChanged = true; }
+
+			if (rareChanged) {
+				atomicState.changeRarely = changeRarely
+			}
+			
+			// If the setpoints change, then double-check to see if the currently running Program has changed.
+            // We do this by ensuring that the rest of the thermostat datasets (settings, program, events) are 
+            // collected on the next poll, if they weren't collected in this poll.
+            atomicState.needPrograms = (needPrograms && (!thermostatUpdated && !forcePoll))
+
+			// Save the Program when it changes so that we can get to it easily for the child sensors
+			def tempProgram = [:]
+			tempProgram[tid] = currentClimateName
+			if (atomicState.currentProgramName) tempProgram = atomicState.currentProgramName + tempProgram
+			atomicState.currentProgramName = tempProgram
+		}     
+
         
         // MOVED TO THE BOTTOM because these values are dependent upon changes to states above when they get to the thermostat DTH
         // Runtime stuff that changes most frequently - we test them 1 at a time, and send only the ones that change
         // Send these first, as they generally are the reason anything else changes (so the thermostat's notification log makes sense)
-		if (forcePoll || runtimeUpdated || settingsUpdated || extendRTUpdated || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
+		if (runtimeUpdated || forcePoll || extendRTUpdated) { // || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
         	String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
             def oftenList = [tempTemperature,occupancy,runtime.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
-            					tempWeatherPressure,humiditySetpointDisplay,userPrecision]
+            					tempWeatherPressure,humiditySetpoint,dehumiditySetpoint,humiditySetpointDisplay,userPrecision]
             def lastOList = []
 			def changeOften =  atomicState.changeOften  ? atomicState.changeOften  : [:]
             lastOList = changeOften[tid]
-            if (forcePoll || !lastOList || (lastOList.size() < 12)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1]
-            if (lastOList[11] != userPrecision) data+= [decimalPrecision: userPrecision,]															// send first so that DTH uses the latest setting
-            if (lastOList[0] != tempTemperature) data += [temperature: String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision)),]
-            if (lastOList[1] != occupancy) data += [motion: occupancy,]
-            if (lastOList[2] != runtime.actualHumidity) data += [humidity: runtime.actualHumidity,]
-            if (lastOList[10] != humiditySetpointDisplay) data += [humiditySetpointDisplay: humiditySetpointDisplay,]
-            // send these next two also when the userPrecision changes
-            def needPrograms = false
-            if ((tempHeatingSetpoint != 0.0) && ((lastOList[3] != tempHeatingSetpoint) || (lastOList[11] != userPrecision))) { needPrograms = true; data += [heatingSetpoint: String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),] }
-            if ((tempCoolingSetpoint != 999.0) && ((lastOList[4] != tempCoolingSetpoint) || (lastOList[11] != userPrecision))) { needPrograms = true; data += [coolingSetpoint: String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),] }
-            if (wSymbol && (lastOList[5] != wSymbol)) data += [weatherSymbol: wSymbol]
-            if (tempWeatherTemperature && ((lastOList[6] != tempWeatherTemperature) || (lastOList[11] != userPrecision))) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision)),]
-           	if (tempWeatherHumidity && (lastOList[7] != tempWeatherHumidity)) data += [weatherHumidity: tempWeatherHumidity,]
-            if (tempWeatherDewpoint && ((lastOList[8] != tempWeatherDewpoint) || (lastOList[11] != userPrecision))) data += [weatherDewpoint: String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision)),]
-            if (tempWeatherPressure && (lastOList[9] != tempWeatherPressure)) data += [weatherPressure: tempWeatherPressure,]
-            
+            if (forcePoll || !lastOList || (lastOList.size() < 14)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1,-1,-1]
+			if (forcePoll || (lastOList[0] != tempTemperature)) data += [temperature: String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision)),]
+			if (forcePoll || (lastOList[2] != runtime.actualHumidity)) data += [humidity: runtime.actualHumidity,]
+			if (wSymbol && (lastOList[5] != wSymbol)) data += [weatherSymbol: wSymbol]
+			if (tempWeatherTemperature && ((lastOList[6] != tempWeatherTemperature) || userPChanged)) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision)),]
+			if (tempWeatherHumidity && (lastOList[7] != tempWeatherHumidity)) data += [weatherHumidity: tempWeatherHumidity,]
+			if (tempWeatherDewpoint && ((lastOList[8] != tempWeatherDewpoint) || userPChanged)) data += [weatherDewpoint: String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision)),]
+			if (tempWeatherPressure && (lastOList[9] != tempWeatherPressure)) data += [weatherPressure: tempWeatherPressure,]
+			if (lastOList[1] != occupancy) data += [motion: occupancy,]
+			if (humiditySetpointDisplay && (lastOList[12] != humiditySetpointDisplay)) data += [humiditySetpointDisplay: humiditySetpointDisplay,]
+			if (lastOList[10] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint]
+			if (lastOList[11] != dehumiditySetpoint) data += [dehumiditySetpoint: dehumiditySetpoint, dehumidityLevel: dehumiditySetpoint, dehumidifierLevel: dehumiditySetpoint]
+			
             if (changeOften[tid] != oftenList) {
             	changeOften[tid] = oftenList
             	atomicState.changeOften = changeOften
             }
-            // If the setpoints change, then double-check to see if the currently running Program has changed.
-            // We do this by ensuring that the rest of the thermostat datasets (settings, program, events) are 
-            // collected on the next poll, if they weren't collected in this poll.
-            atomicState.needPrograms = (needPrograms && (!thermostatUpdated && !forcePoll))
 		}
         
         if (debugLevelFour) LOG("updateThermostatData() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
 
 		// it is possible that thermostatSummary indicated things have changed that we don't care about...
-		if (data != [:]) {
+		// so don't send ANYTHING if we only have the initial forcePoll status for this tid
+		if (data != dataStart) {
         	data += [ thermostatTime:stat.thermostatTime, ]
             // if (forcePoll) data += [forced: false,]			// end of forced update
         	tstatNames += [tstatName]
