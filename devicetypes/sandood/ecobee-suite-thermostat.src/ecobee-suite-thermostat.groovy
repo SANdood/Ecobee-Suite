@@ -58,8 +58,9 @@
  *  1.7.05 - noCache most currentValue() for HE
  *	1.7.06 - More sendValue cleanup
  *	1.7.07 - Added dehumidifierLevel/setpoint, fix setFanMinOnTime()
+ *	1.7.08 - Updating setpoints & climates fixed
  */
-def getVersionNum() { return "1.7.07" }
+def getVersionNum() { return "1.7.08" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -943,6 +944,7 @@ def generateEvent(Map results) {
 
 				case 'heatingSetpoint':
 					if (isChange || forceChange) {
+						//log.debug "heatingSetpoint Change (${isChange}/${forceChange}): ${sendValue}"
 						//LOG("heatingSetpoint: ${sendValue}",3,null,'info')
 						// We have to send for backwards compatibility
 						sendEvent(name: 'heatingSetpointDisplay', value: sendValue, unit: tu, /* isStateChange: isChange,*/ displayed: false) // for the slider
@@ -980,6 +982,7 @@ def generateEvent(Map results) {
 
 				case 'coolingSetpoint':
 					if (isChange || forceChange) {
+						//log.debug "coolingSetpoint Change (${isChange}/${forceChange}): ${sendValue}"
 						//LOG("coolingSetpoint: ${sendValue}",3,null,'info')
 						sendEvent(name: 'coolingSetpointDisplay', value: sendValue, unit: tu,  displayed: false) // for the slider
 						objectsUpdated++
@@ -1225,25 +1228,28 @@ def generateEvent(Map results) {
 				case 'currentProgram':
 					// LOG("currentProgram: ${sendValue}", 3, null, 'info')
 					// always update the button states, even if the value didn't change
-					switch (sendValue) {
-						case 'Home':
-							disableHomeButton()
-							break;
-						case 'Away':
-							disableAwayButton()
-							break;
-						case 'Sleep':
-							disableSleepButton()
-							break;
-						default:
-							if ((device.currentValue('currentProgramName') != 'Vacation') && (device.currentValue('thermostatHold') != 'vacation')) {
-								enableAllProgramButtons()
-							} else {
-								disableVacationButtons()
-							}
-							break;
+					if (isST) {
+						switch (sendValue) {
+							case 'Home':
+								disableHomeButton()
+								break;
+							case 'Away':
+								disableAwayButton()
+								break;
+							case 'Sleep':
+								disableSleepButton()
+								break;
+							default:
+								if ((device.currentValue('currentProgramName') != 'Vacation') && (device.currentValue('thermostatHold') != 'vacation')) {
+									enableAllProgramButtons()
+								} else {
+									disableVacationButtons()
+								}
+								break;
+						}
 					}
 					if (isChange || forceChange) {
+						//log.debug "currentProgram Change (${isChange}/${forceChange}): ${sendValue}"
 						event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
 						// sendEvent(name: 'schedule', value: sendValue, isStateChange: true, displayed: false, descriptionText: "Current Schedule is ${sendValue}") // compatibility with new Capability definition
 					}
@@ -2489,6 +2495,7 @@ void setThermostatProgram(String program, String holdType=null, Integer holdHour
 	}
 
 	// if the requested program is the same as the one that is supposed to be running, then just resumeProgram
+	def needRefresh = true
 	if (scheduledProgram == program) {
 		if (resumeProgramInternal(true)) {							// resumeAll so that we get back to scheduled program
 			LOG("Thermostat Program is ${program} (resumed)", 2, this, 'info')
@@ -2502,10 +2509,11 @@ void setThermostatProgram(String program, String holdType=null, Integer holdHour
 		}
 	} else {
 		resumeProgramInternal(true)							// resumeAll before we change the program
+		needRefresh = false
 	}
 
 	if ( parent.setProgram(this, program, deviceId, sendHoldType, sendHoldHours) ) {
-		runIn(5, refresh, [overwrite: true])
+		if (needRefresh) runIn(5, refresh, [overwrite: true])
 
 		LOG("Thermostat Program is Hold: ${program}",2,this,'info')
 		generateProgramEvent(program, program)				// ('Hold: '+program)
@@ -2639,11 +2647,11 @@ private def resumeProgramInternal(resumeAll=true) {
 	String thermostatHold = isST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
 	if ((thermostatHold == null) || (thermostatHold == '') || (thermostatHold == 'null')) {
 		LOG('resumeProgram() - No current hold', 2, null, 'info')
-		sendEvent(name: 'resumeProgram', value: 'resume dis', descriptionText: 'resumeProgram is done', displayed: false, isStateChange: true)
+		if (isST) sendEvent(name: 'resumeProgram', value: 'resume dis', descriptionText: 'resumeProgram is done', displayed: false, isStateChange: true)
 		return result
 	} else if (thermostatHold =='vacation') { // this shouldn't happen anymore - button changes to Cancel when in Vacation mode
 		LOG('resumeProgram() - Cannot resume from Vacation hold', 2, null, 'error')
-		sendEvent(name: 'resumeProgram', value: 'cancel', descriptionText: 'resumeProgram is done', displayed: false, isStateChange: true)
+		if (isST) sendEvent(name: 'resumeProgram', value: 'cancel', descriptionText: 'resumeProgram is done', displayed: false, isStateChange: true)
 		return false
 	} else {
 		LOG("resumeProgram() - Hold type is ${thermostatHold}", 4)
@@ -2656,7 +2664,7 @@ private def resumeProgramInternal(resumeAll=true) {
 	if (parent.resumeProgram(this, deviceId, resumeAll)) {
 		def updates = [ 'holdStatus': 'null', 'thermostatHold' : 'null', 'holdEndsAt' : 'null' ]
 		generateEvent(updates)
-		sendEvent(name: "resumeProgram", value: "resume dis", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
+		if (isST) sendEvent(name: "resumeProgram", value: "resume dis", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
 		sendEvent(name: 'thermostatStatus', value: 'Resume Program succeeded', displayed: false, isStateChange: true)
 		LOG("resumeProgram(${resumeAll}) - succeeded", 2,null,'info')
 		runIn(5, refresh, [overwrite:true])
@@ -2684,7 +2692,7 @@ def generateProgramEvent(String program, String failedProgram='') {
     	updates += ['thermostatHold':'hold']
     }
 	generateEvent(updates)
-	updateProgramButtons()
+	if (isST) updateProgramButtons()
 	return
 }
 
