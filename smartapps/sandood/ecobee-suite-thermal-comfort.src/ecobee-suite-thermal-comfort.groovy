@@ -14,8 +14,9 @@
  *
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Internal optimizations, better type-ing & cosmetic cleanups
+ *  1.7.02 - Adjusted for synchronized setpoints/climates udpates
  */
-def getVersionNum() { return "1.7.01" }
+def getVersionNum() { return "1.7.02" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -344,6 +345,7 @@ def humidityUpdate( Integer humidity ) {
 
     def currentProgram 	= isST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
     def currentMode 	= isST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)
+
 	def andOr = (settings.enable != null) ? settings.enable : 'or'
 	if ((settings.thePrograms == null) || (settings.statModes == null)) andOr = 'or'		// if they only provided one of them, ignore 'and'
     boolean isOK = ((settings.thePrograms == null) && (settings.statModes == null)) ? true: false // isOK if both are null
@@ -371,12 +373,13 @@ def humidityUpdate( Integer humidity ) {
 	def curHeat = roundIt(heatSetpoint, 2)
 	def curCool = roundIt(coolSetpoint, 2)
     if (settings.heatPmv != null) {
-        heatSetpoint = calculateHeatSetpoint()
+        heatSetpoint = calculateHeatSetpoint() as BigDecimal
     }
     if (settings.coolPmv != null) {
-        coolSetpoint = calculateCoolSetpoint()
+        coolSetpoint = calculateCoolSetpoint() as BigDecimal
     }
 	if ((heatSetpoint != curHeat) || (coolSetpoint != curCool)) {
+		// LOG("Before changeSetpoints - Current setpoints (H/C): ${curHeat}/${curCool}, calculated setpoints: ${heatSetpoint}/${coolSetpoint}", 2, null, 'warn')
     	changeSetpoints(currentProgram, heatSetpoint, coolSetpoint)
 	} else {
 		// Could be outside of the allowed range, or just too small of a difference...
@@ -438,12 +441,17 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 			heatTemp = ht
 		}
 	}
+	def currentProgram 	= isST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
 	theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
-	String because = atomicState.because
-	String s = settings.theThermostat.displayName.endsWith('s') ? "'" : "'s"
-	def msg = "I set ${settings.theThermostat.displayName}${s} heatingSetpoint to ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and coolingSetpoint to " +
-		"${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}for the ${program} program${because}"
-	sendMessage( msg )
+	
+	// Only send the notification if we are changing the CURRENT program - program could have changed under us...
+	if (currentProgram == program) {
+		String because = atomicState.because
+		String s = settings.theThermostat.displayName.endsWith('s') ? "'" : "'s"
+		def msg = "I set ${settings.theThermostat.displayName}${s} heatingSetpoint to ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and coolingSetpoint to " +
+			"${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}for the ${program} program${because}"
+		sendMessage( msg )
+	}
 	atomicState.because = ''
 }
 
