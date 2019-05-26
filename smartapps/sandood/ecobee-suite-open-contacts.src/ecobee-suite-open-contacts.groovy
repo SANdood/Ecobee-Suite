@@ -44,8 +44,9 @@
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixed initialization error
  *	1.7.03 - Cosmetic cleanup, and nonCached currentValue() on Hubitat
+ * 	1.7.04 - Fix myThermostats (should have been theThermostats)
  */
-def getVersionNum() { return "1.7.03" }
+def getVersionNum() { return "1.7.04" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -101,7 +102,7 @@ def mainPage() {
             }          
 		}
     
-		if (!settings.tempDisable && (settings.myThermostats?.size() > 0)) {
+		if (!settings.tempDisable && (settings.theThermostats?.size() > 0)) {
 
 			section(title: "Select HVAC Off Actions") {
             	paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle actions by turning on Quiet Time from this Helper instead of taking HVAC actions directly. The Quiet Time Helper also offers additional control options.')
@@ -192,7 +193,7 @@ def mainPage() {
 					}
             	}
             }          
-		} // End if (myThermostats?.size() > 0)
+		} // End if (theThermostats?.size() > 0)
 
 		section(title: "Temporary Pause") {
 			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
@@ -219,7 +220,7 @@ def updated() {
 }
 
 def clearReservations() {
-	myThermostats?.each {
+	theThermostats?.each {
     	cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff') 
 	}
 }
@@ -272,7 +273,7 @@ def initialize() {
     	// Initialize the saved state values
     	if (!settings.quietTime) {
     		def tmpThermSavedState = [:]
-    		settings.myThermostats.each() { therm ->
+    		settings.theThermostats.each() { therm ->
     			def tid = getDeviceId(therm.deviceNetworkId)
 				if (isST) {
 					tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode'), ]
@@ -456,7 +457,7 @@ def turnOffHVAC() {
     def tmpThermSavedState = atomicState.thermSavedState
     def tstatNames = []
     def doHVAC = action.contains('HVAC')
-    settings.myThermostats.each() { therm ->
+    settings.theThermostats.each() { therm ->
     	def tid = getDeviceId(therm.deviceNetworkId)
         if( doHVAC ) {
         	if (settings.quietTime) {
@@ -545,7 +546,7 @@ def turnOffHVAC() {
     	}
     } else {
     	if (action.contains('Notify')) {
-        	sendMessage("${settings.myThermostats} already off.")
+        	sendMessage("${settings.theThermostats} already off.")
             LOG('All thermostats are already off',2,null,'info')
         }
     }
@@ -564,7 +565,7 @@ def turnOnHVAC() {
 	   	// Restore to previous state 
         // LOG("Restoring to previous state", 5) 
         
-        settings.myThermostats.each { therm ->
+        settings.theThermostats.each { therm ->
 			// LOG("Working on thermostat: ${therm}", 5)
             tstatNames << therm.displayName
             def tid = getDeviceId(therm.deviceNetworkId)
