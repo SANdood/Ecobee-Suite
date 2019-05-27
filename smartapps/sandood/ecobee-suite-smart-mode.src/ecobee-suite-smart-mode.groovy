@@ -45,8 +45,9 @@
  *	1.6.20 - Handle null list of Climates
  *	1.6.21 - Added option to change heat/cool setpoints instead of/in addition to changing the mode
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - Fixed thermostats*.auto()
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -675,7 +676,7 @@ def temperatureUpdate( BigDecimal temp ) {
             	// Do we check for/cancel reservations?
             	cancelReservation(tid, 'modeOff')
             	if (!anyReservations(tid, 'modeOff')) {
-                	evt.device.setThermostatMode('auto')		// allow choice, keep reservation if off
+                	thermostats*.auto() // .setThermostatMode('auto')		// allow choice, keep reservation if off
             	}
             }
             atomicState.locModeEnabled = false
@@ -1049,7 +1050,7 @@ void makeReservation(String tid, String type='modeOff' ) {
 }
 // Cancel my reservation
 void cancelReservation(String tid, String type='modeOff') {
-	log.debug "cancel ${tid}, ${type}"
+	//log.debug "cancel ${tid}, ${type}"
 	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
