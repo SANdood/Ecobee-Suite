@@ -34,8 +34,9 @@
  *	1.7.04 - noncached currentValue() on HE
  *	1.7.05 - Belt & suspenders for thermostatHold compares
  *	1.7.06 - Cosmetic Cleanups
+ *  1.7.07 - Fixed variable definition (ncCp)
  */
-def getVersionNum() { return "1.7.06" }
+def getVersionNum() { return "1.7.07" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -604,7 +605,7 @@ def changeProgramHandler(evt) {
                 				done = true
                             }
 						} else {
-							ncCp = isST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+							String ncCp = isST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
 							if (ncCp == atomicState.programParam) {
 								// we are in a hold already, and the program is the one we want...
 								// Assume (for now) that the fan settings are also what we want (because another instance set them when they set the Hold)
@@ -707,7 +708,7 @@ def whatHoldType(statDevice) {
             }
             break;
         case 'Thermostat Setting':
-       		def statHoldType = isSP ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
+       		String statHoldType = isSP ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
             switch(statHoldType) {
             	case 'useEndTime4hour':
                 	sendHoldType = 4
@@ -722,6 +723,7 @@ def whatHoldType(statDevice) {
                 case 'indefinite':
                 case 'askMe':
                 case null :
+				case '':
                 default :
                 	sendHoldType = 'indefinite'
                     break;
