@@ -15,8 +15,10 @@
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Internal optimizations, better type-ing & cosmetic cleanups
  *  1.7.02 - Adjusted for synchronized setpoints/climates udpates
+ *	1.7.03 - No adjustements when thermostat is in Vacation Mode
+ *	1.7.04 - Stop repeated messages...
  */
-def getVersionNum() { return "1.7.02" }
+def getVersionNum() { return "1.7.04" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -269,7 +271,7 @@ def initialize() {
     // if (thePrograms) subscribe(settings.theThermostat, "currentProgram", modeOrProgramHandler)
     if (statModes) subscribe(settings.theThermostat, "thermostatMode", ModeChangeHandler)
 
-    def h = isST? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
+    def h = isST ? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
     atomicState.humidity = h
 	atomicState.because = " because ${app.label} was (re)initialized"
     runIn(2, atomicHumidityUpdater, [overwrite: true])
@@ -339,10 +341,15 @@ def humidityUpdate( Integer humidity ) {
     	LOG("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
         return
     }
-
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
-
+	String statHold = isST ? settings.theThermostat.currentValue('thermostatHold') : settings.theThermostat.currentValue('thermostatHold', true)
+	if (statHold == 'vacation') {
+		LOG("${settings.theThermostat.displayName} is in Vacation Mode, not adjusting setpoints", 3, null, 'warn')
+		return
+	}
+	
+	
     def currentProgram 	= isST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
     def currentMode 	= isST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)
 
@@ -368,18 +375,18 @@ def humidityUpdate( Integer humidity ) {
         return
     }
 
-    def heatSetpoint = (isST ? settings.theThermostat.currentValue('heatingSetpoint') : settings.theThermostat.currentValue('heatingSetpoint', true)) as BigDecimal
-    def coolSetpoint = (isST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)) as BigDecimal
-	def curHeat = roundIt(heatSetpoint, 2)
-	def curCool = roundIt(coolSetpoint, 2)
+    def heatSetpoint = roundIt(((isST ? settings.theThermostat.currentValue('heatingSetpoint') : settings.theThermostat.currentValue('heatingSetpoint', true)) as BigDecimal), 2)
+    def coolSetpoint = roundIt(((isST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)) as BigDecimal), 2)
+	def curHeat = heatSetpoint
+	def curCool = coolSetpoint
     if (settings.heatPmv != null) {
-        heatSetpoint = calculateHeatSetpoint() as BigDecimal
+        heatSetpoint = roundIt((calculateHeatSetpoint() as BigDecimal), 2)
     }
     if (settings.coolPmv != null) {
-        coolSetpoint = calculateCoolSetpoint() as BigDecimal
+        coolSetpoint = roundIt((calculateCoolSetpoint() as BigDecimal), 2)
     }
 	if ((heatSetpoint != curHeat) || (coolSetpoint != curCool)) {
-		// LOG("Before changeSetpoints - Current setpoints (H/C): ${curHeat}/${curCool}, calculated setpoints: ${heatSetpoint}/${coolSetpoint}", 2, null, 'warn')
+		LOG("Before changeSetpoints - Current setpoints (H/C): ${curHeat}/${curCool}, calculated setpoints: ${heatSetpoint}/${coolSetpoint}", 2, null, 'info')
     	changeSetpoints(currentProgram, heatSetpoint, coolSetpoint)
 	} else {
 		// Could be outside of the allowed range, or just too small of a difference...
@@ -448,9 +455,10 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 	if (currentProgram == program) {
 		String because = atomicState.because
 		String s = settings.theThermostat.displayName.endsWith('s') ? "'" : "'s"
-		def msg = "I set ${settings.theThermostat.displayName}${s} heatingSetpoint to ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and coolingSetpoint to " +
+		def msg = "I changed ${settings.theThermostat.displayName}${s} setpoints to Heat: ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and Cool: " +
 			"${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}for the ${program} program${because}"
-		sendMessage( msg )
+		if (msg != atomicState.lastMsg) sendMessage( msg )	// don't send the same message over and over again (shouldn't be happening anyway)
+		atomicState.lastMsg = msg
 	}
 	atomicState.because = ''
 }
