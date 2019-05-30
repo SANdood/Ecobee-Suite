@@ -35,8 +35,9 @@
  *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *  1.7.01 - nonCached currentValue() for HE
+ *  1.7.02 - more nonCached cases for HE
  */
-def getVersionNum() { return "1.7.01" }
+def getVersionNum() { return "1.7.02" }
 private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -249,7 +250,7 @@ def initialize() {
         }
     }
 
-	def fanOnTime = theThermostat.currentValue('fanMinOnTime')
+	def fanOnTime = isST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)
     int currentOnTime = (fanOnTime != null) ? fanOnTime as Integer : 0
     boolean vacationHold = (theThermostat.currentValue("currentProgram") == "Vacation")
     
@@ -269,11 +270,12 @@ def initialize() {
     
     // Check the humidity?
     if (isOK && settings.theHumidistat) {
-    	if (settings.theHumidistat.currentHumidity.toInteger() <= settings.highHumidity) {
+		def ncCh = isST ? settings.theHumidistat.currentValue('humidity') : settings.theHumidistat.currentValue('humidity', true)
+    	if (ncCh.toInteger() <= settings.highHumidity) {
         	isOK == false
-            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
+            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
 		} else {
-			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), adjusting", 3, null, "info")
+			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${ncCh}% (${settings.highHumidity}% set), adjusting", 3, null, "info")
 		}
     }
     
@@ -338,7 +340,7 @@ def quietOnHandler(evt) {
 	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
 	if (!atomicState.quietNow) {
     	atomicState.quietNow = true
-		def fanOnTime = theThermostat.currentValue('fanMinOnTime')
+		def fanOnTime = isST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)
         Integer currentOnTime = (fanOnTime != null) ? fanOnTime as Integer : 0	
         atomicState.quietOnTime = currentOnTime
         LOG("Quiet Time enabled, ${app.name} will stop updating circulation time", 3, null, 'info')
@@ -376,19 +378,22 @@ def modeOrProgramHandler(evt=null) {
 	// Allow adjustments if location.mode OR thermostat.currentProgram match configuration settings
     boolean isOK = true
     if (theModes || thePrograms  || statModes) {
+		def ncCp = isST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
+		def ncTm = isST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
     	isOK = (theModes && theModes.contains(location.mode)) ? true : 
-        			((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : 
-                    	((statModes && statModes.contains(theThermostat.currentValue('thermostatMode'))) ? true : false))
+        			((thePrograms && thePrograms.contains( ncCp )) ? true : 
+                    	((statModes && statModes.contains(  )) ? true : false))
         if (!isOK) LOG("Not in specified Mode or Program, not adjusting", 3, null, "info")
     }
     
     // Check the humidity?
     if (isOK && settings.theHumidistat) {
-    	if (settings.theHumidistat.currentHumidity.toInteger() <= settings.highHumidity) {
+		def ncCh = isST ? settings.theHumidistat.currentValue('humidity') : settings.theHumidistat.currentValue('humidity', true)
+    	if (ncCh.toInteger() <= settings.highHumidity) {
         	isOK == false
-            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
+            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
 		} else {
-			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${settings.theHumidistat.currentHumidity}% (${settings.highHumidity}% set), adjusting enabled", 3, null, "info")
+			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${ncCh}% (${settings.highHumidity}% set), adjusting enabled", 3, null, "info")
 		}
     }
     
@@ -422,8 +427,9 @@ def deltaHandler(evt=null) {
         return
     }
     def tid = getDeviceId(theThermostat.deviceNetworkId)
+	def ncFmot = isST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)
     if (!vacationHold) {
-        if (anyReservations(tid, 'circOff') && (theThermostat.currentValue('fanMinOnTime').toInteger() == 0)) {
+        if (anyReservations(tid, 'circOff') && (ncFmot.toInteger() == 0)) {
             // Looks like somebody else has turned off circulation
             if (!haveReservation(tid, 'circOff')) {		// is it me?
                 // Not me, so we can't be changing circulation
@@ -431,7 +437,7 @@ def deltaHandler(evt=null) {
             }
         }
     } else {
-    	if (anyReservations(tid, 'vacaCircOff') && (theThermostat.currentValue('fanMinOnTime').toInteger() == 0)) {
+    	if (anyReservations(tid, 'vacaCircOff') && (ncFmot.toInteger() == 0)) {
             // Looks like somebody else has turned off circulation
             if (!haveReservation(tid, 'vacaCircOff')) {		// is it me?
                 // Not me, so we can't be changing circulation
@@ -449,7 +455,7 @@ def deltaHandler(evt=null) {
         	LOG("Called with ${evt.device} ${evt.name} ${evt.value}",3,null,'trace')
         }
         if (settings.minFanOnTime == settings.maxFanOnTime) {
-        	if (theThermostat.currentValue('fanMinOnTime')?.toInteger() == settings.minFanOnTime.toInteger()) {
+        	if (ncFmot?.toInteger() == settings.minFanOnTime.toInteger()) {
     			LOG('Configured min==max==fanMinOnTime, nothing to do, skipping...',2,null,'info')
         		return // nothing to do
             } else {
@@ -474,7 +480,7 @@ def calcTemps() {
 	LOG('Calculating temperatures...', 3, null, 'info')
         
     // Makes no sense to change fanMinOnTime while heating or cooling is running - take action ONLY on events while idle or fan is running
-    def statState = theThermostat.currentValue("thermostatOperatingState")
+    def statState = isST ? theThermostat.currentValue("thermostatOperatingState") : theThermostat.currentValue("thermostatOperatingState", true)
     if (statState && (statState.contains('ea') || statState.contains('oo'))) {
     	LOG("${theThermostat} is ${statState}, no adjustments made", 4, "", 'info' )
         return
@@ -516,7 +522,7 @@ def calcTemps() {
     if (outdoorSensor) {
     	def outTemp = null
         if (outdoorSensor.id == theThermostat.id) {
-        	outTemp = theThermostat.currentValue("weatherTemperature")
+        	outTemp = isST ? theThermostat.currentValue("weatherTemperature") : theThermostat.currentValue("weatherTemperature", true)
             LOG("Using ${theThermostat.displayName}'s weatherTemperature (${outTemp}°)",4,null,"info")
         } else {
         	outTemp = outdoorSensor.currentValue("temperature")
@@ -573,7 +579,8 @@ def calcTemps() {
     	currentOnTime = roundIt(atomicState.quietOnTime, 0)
         atomicState.quietOnTime = null
     } else {
-    	currentOnTime = theThermostat.currentValue('fanMinOnTime').toInteger() ?: 0	// EcobeeSuite Manager will populate this with Vacation.fanMinOnTime if necessary
+		def ncFmot = isST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)
+    	currentOnTime = ncFmot.toInteger() ?: 0	// EcobeeSuite Manager will populate this with Vacation.fanMinOnTime if necessary
 	}
     def newOnTime = roundIt(currentOnTime, 0)
 	def tid = getDeviceId(theThermostat.deviceNetworkId)
