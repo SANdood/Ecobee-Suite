@@ -59,8 +59,9 @@
  *	1.7.06 - More sendValue cleanup
  *	1.7.07 - Added dehumidifierLevel/setpoint, fix setFanMinOnTime()
  *	1.7.08 - Updating setpoints & climates fixed
+ *	1.7.09 - Updating timeOfDay & weatherSymbol fixed
  */
-def getVersionNum() { return "1.7.08" }
+def getVersionNum() { return "1.7.09" }
 private def getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -1179,6 +1180,7 @@ def generateEvent(Map results) {
 				case 'dehumiditySetpoint':
 					if (isChange || forceChange) {
 						sendEvent(name: 'dehumidifierLevel', value: sendValue, unit: '%', descriptionText: "Dehumidifier level is ${sendValue}%", isStateChange: true, displayed: false)
+						sendEvent(name: 'dehumidityLevel', value: sendValue, unit: '%', descriptionText: "Dehumidity level is ${sendValue}%", isStateChange: true, displayed: false)
 						event = eventFront + [value: sendValue, unit: '%', descriptionText: "Dehumidifier setpoint is ${sendValue}%", isStateChange: true, displayed: true]
 					}
 					break;
@@ -1261,17 +1263,8 @@ def generateEvent(Map results) {
 					break;
 
 				case 'weatherSymbol':
-				case 'timeOfDay':
-					// Check to see if it is night time, if so change to a night symbol
-					def ncWs = isST ? device.currentValue('weatherSymbol') : device.currentValue('weatherSymbol', true)
-					Integer symbolNum = (name == 'weatherSymbol') ? value as Integer : ( ncWs?:sendValue) as Integer
-					String timeOfDay
-					if (name == 'timeOfDay') {
-						timeOfDay = value
-						objectsUpdated++
-					} else {
-						timeOfDay = isST ? device.currentValue('timeOfDay') : device.currentValue('timeOfDay', true)
-					}
+					Integer symbolNum = value as Integer
+					String timeOfDay = isST ? device.currentValue('timeOfDay') : device.currentValue('timeOfDay', true)
 					if ((timeOfDay == 'night') && (symbolNum < 100)) {
 						symbolNum = symbolNum + 100
 					} else if ((timeOfDay == 'day') && (symbolNum >= 100)) {
@@ -1279,7 +1272,22 @@ def generateEvent(Map results) {
 					}
 					isChange = isStateChange(device, 'weatherSymbol', symbolNum.toString())
 					if (isChange) event = [name: 'weatherSymbol', linkText: linkText, handlerName: 'weatherSymbol', value: "${symbolNum}", descriptionText: "Weather Symbol is ${symbolNum}", isStateChange: true, displayed: true]
-					sendEvent( name: 'timeOfDay', value: timeOfDay, displayed: false, isStateChange: true )
+					break;
+				
+				case 'timeOfDay':
+					// Check to see if it is night time, if so change to a night symbol
+					if (isChange) {
+						def weatherSymbol = isST ? device.currentValue('weatherSymbol') : device.currentValue('weatherSymbol', true)
+						Integer symbolNum = weatherSymbol as Integer
+						if ((sendVal == 'night') && (symbolNum < 100)) {
+							symbolNum = symbolNum + 100
+						} else if ((sendVal == 'day') && (symbolNum >= 100)) {
+							symbolNum = symbolNum - 100
+						}
+						isChange = isStateChange(device, 'weatherSymbol', symbolNum.toString())
+						if (isChange) sendEvent(name: 'weatherSymbol', linkText: linkText, handlerName: 'weatherSymbol', value: "${symbolNum}", descriptionText: "Weather Symbol is ${symbolNum}", isStateChange: true, displayed: true)
+						event = eventFront + [value: sendValue, descriptionText: '', isStateChange: true, displayed: false]
+					}
 					break;
 
 				case 'thermostatHold':
