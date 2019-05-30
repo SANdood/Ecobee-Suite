@@ -30,8 +30,9 @@
  *	1.6.14 - Fixed typo (thanks @jml923)
  *	1.6.15 - Added scheduled Auto Off for Quiet Time
  *	1.7.00 - Initial Release of Universal Ecobee Suite
+ *	1.7.01 - Use nonCached currentValue() for stat attributes on Hubitat
  */
-def getVersionNum() { return "1.7.00" }
+def getVersionNum() { return "1.7.01" }
 private def getVersionLabel() { return "Ecobee Suite Quiet Time Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -239,23 +240,43 @@ def initialize() {
     def statState = [:]
     settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
-    	statState[tid] = [
-        					thermostatMode: 	stat.currentValue('thermostatMode'),
-                            thermostatFanMode: 	stat.currentValue('thermostatFanMode'),
-                            fanMinOnTime:		stat.currentValue('fanMinOnTime'),
-                            heatingSetpoint:	stat.currentValue('heatingSetpoint'),
-                            coolingSetpoint:	stat.currentValue('coolingSetpoint'),
-                           	holdType:			stat.currentValue('lastHoldType'),
-                            hasHumidifier:		stat.currentValue('hasHumidifier'),
-                            humidifierMode:		stat.currentValue('humidifierMode'),
-                            hasDehumidifier:	stat.currentValue('hasDehumidifier'),
-                            dehumidifierMode:	stat.currentValue('dehumidifierMode'),
-                            thermostatHold:		stat.currentValue('thermostatHold'),
-                            currentProgramName:	stat.currentValue('currentProgramName'),
-                            currentProgramId:	stat.currentValue('currentProgramId'),
-                            currentProgram:		stat.currentValue('currentProgram'),
-                            scheduledProgram:	stat.currentValue('scheduledProgram'),
-        				 ]         
+		if (isST) {
+			statState[tid] = [
+								thermostatMode: 	stat.currentValue('thermostatMode'),
+								thermostatFanMode: 	stat.currentValue('thermostatFanMode'),
+								fanMinOnTime:		stat.currentValue('fanMinOnTime'),
+								heatingSetpoint:	stat.currentValue('heatingSetpoint'),
+								coolingSetpoint:	stat.currentValue('coolingSetpoint'),
+								holdType:			stat.currentValue('lastHoldType'),
+								hasHumidifier:		stat.currentValue('hasHumidifier'),
+								humidifierMode:		stat.currentValue('humidifierMode'),
+								hasDehumidifier:	stat.currentValue('hasDehumidifier'),
+								dehumidifierMode:	stat.currentValue('dehumidifierMode'),
+								thermostatHold:		stat.currentValue('thermostatHold'),
+								currentProgramName:	stat.currentValue('currentProgramName'),
+								currentProgramId:	stat.currentValue('currentProgramId'),
+								currentProgram:		stat.currentValue('currentProgram'),
+								scheduledProgram:	stat.currentValue('scheduledProgram'),
+							 ]   
+		} else {
+			statState[tid] = [
+								thermostatMode: 	stat.currentValue('thermostatMode', true),
+								thermostatFanMode: 	stat.currentValue('thermostatFanMode', true),
+								fanMinOnTime:		stat.currentValue('fanMinOnTime', true),
+								heatingSetpoint:	stat.currentValue('heatingSetpoint', true),
+								coolingSetpoint:	stat.currentValue('coolingSetpoint', true),
+								holdType:			stat.currentValue('lastHoldType', true),
+								hasHumidifier:		stat.currentValue('hasHumidifier', true),
+								humidifierMode:		stat.currentValue('humidifierMode', true),
+								hasDehumidifier:	stat.currentValue('hasDehumidifier', true),
+								dehumidifierMode:	stat.currentValue('dehumidifierMode', true),
+								thermostatHold:		stat.currentValue('thermostatHold', true),
+								currentProgramName:	stat.currentValue('currentProgramName', true),
+								currentProgramId:	stat.currentValue('currentProgramId', true),
+								currentProgram:		stat.currentValue('currentProgram', true),
+								scheduledProgram:	stat.currentValue('scheduledProgram', true),
+							 ] 
+		}
         atomicState.statState = statState
     }
 	subscribe(qtSwitch, "switch.${settings.qtOn}", quietOnHandler)
@@ -372,12 +393,12 @@ def turnOnQuietTime() {
 	settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
         if (settings.hvacOff) {
-        	statState[tid].thermostatMode = stat.currentValue('thermostatMode')
+        	statState[tid].thermostatMode = isST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
             makeReservation(tid, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
             if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
             LOG("${stat.device.displayName} Mode is Off",3,null,'info')
         } else if (settings.hvacMode) {
-        	statState[tid].thermostatMode = stat.currentValue('thermostatMode')
+        	statState[tid].thermostatMode = isST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
             if (settings.quietMode == 'off') {
             	makeReservation(tid, 'modeOff')
                 if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
@@ -390,21 +411,21 @@ def turnOnQuietTime() {
             }
         }
         if (settings.fanOff) { 
-        	statState[tid].thermostatFanMode = stat.currentValue('thermostatFanMode')
+        	statState[tid].thermostatFanMode = isST ? stat.currentValue('thermostatFanMode') : stat.currentValue('thermostatMode', true)
             makeReservation(tid, 'fanOff')						// reserve the fanOff also
             stat.setThermostatFanMode('off','indefinite')
             LOG("${stat.device.displayName} Fan Mode is off",3,null,'info')
         }
         if (settings.circOff) { 
-        	statState[tid].fanMinOnTime = stat.currentValue('fanMinOnTime')
+        	statState[tid].fanMinOnTime = isST ? stat.currentValue('fanMinOnTime') : stat.currentValue('fanMinOnTime', true)
             makeReservation(tid, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
             stat.setFanMinOnTime(0)
             LOG("${stat.device.displayName} Circulation time is 0 mins/hour",3,null,'info')
         }
         if ( !settings.hvacOff && !settings.hvacMode && settings.adjustSetpoints) {
-        	statState[tid].holdType = stat.currentValue('lastHoldType')
-        	statState[tid].heatingSetpoint = stat.currentValue('heatingSetpointDisplay')
-            statState[tid].coolingSetpoint = stat.currentValue('coolingSetpointDisplay')
+        	statState[tid].holdType = 			isST ? stat.currentValue('lastHoldType') 			: stat.currentValue('lastHoldType', true)
+        	statState[tid].heatingSetpoint = 	isST ? stat.currentValue('heatingSetpointDisplay') 	: stat.currentValue('heatingSetpointDisplay', true)
+            statState[tid].coolingSetpoint = 	isST ? stat.currentValue('coolingSetpointDisplay') 	: stat.currentValue('coolingSetpointDisplay', true)
             def h = statState[tid].heatingSetpoint + settings.heatAdjust
             def c = statState[tid].coolingSetpoint + settings.coolAdjust
             stat.setHeatingSetpoint(h, 'indefinite')
@@ -474,8 +495,9 @@ def quietOffHandler(evt=null) {
    		settings.theThermostats.each() { stat ->
         	def tid = getDeviceId(stat.deviceNetworkId)
         	cancelReservation(tid, 'circOff')			// ASAP so SmartCirculation can carry on
-        	if ((settings.hvacOff || settings.hvacMode) && statState[tid]?.thermostatMode) { 
-            	if (statState[tid]?.thermostatMode != 'off' && (stat.currentValue('thermostatMode') == 'off')) {
+        	if ((settings.hvacOff || settings.hvacMode) && statState[tid]?.thermostatMode) {
+				def ncTm = isST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
+            	if (statState[tid]?.thermostatMode != 'off' && (ncTm == 'off')) {
                 	if (settings.hvacOff || (settings.hvacMode && (settings.quietMode == 'off'))) {	
                     	// we wanted it off
                     	def i = countReservations(tid, 'modeOff') - (haveReservation(tid, 'modeOff')? 1 : 0)
@@ -529,7 +551,8 @@ def quietOffHandler(evt=null) {
                     } else if (settings.setpointResume == 'Resume Current Program') {
                     	// If the scheduled program is still the same as when quiet time started, and there was a hold active at the start of Quiet Time
                         // then resume the program that was current at that time
-                        if ((stat.currentValue('scheduledProgram') == statState[tid].scheduledProgram) && (statState[tid].currentProgram != statState[tid].scheduledProgram)) {
+						def ncSp = isST ? stat.currentValue('scheduledProgram') : stat.currentValue('scheduledProgram', true)
+                        if ((ncSp == statState[tid].scheduledProgram) && (statState[tid].currentProgram != statState[tid].scheduledProgram)) {
                         	stat.setProgram(statState[tid].currentProgram)
                             LOG("${stat.device.displayName} resumed prior Hold: ${statState[tid].currentProgram}",3,null,'info')
                         } else {
