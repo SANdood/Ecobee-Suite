@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.7.09",
+			"version": 	"1.7.10",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -42,7 +42,7 @@
 				"name": 	"ecobee Suite Quiet Time",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.00",
+				"version": 	"1.7.01",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
 				"optional": 	false
@@ -51,7 +51,7 @@
 				"name": 	"ecobee Suite Routines",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.07",
+				"version": 	"1.7.08",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
 				"optional": 	false
@@ -60,7 +60,7 @@
 				"name": 	"ecobee Suite Smart Circulation",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.01",
+				"version": 	"1.7.02",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
 				"optional": 	false
@@ -114,7 +114,7 @@
 				"name": 	"ecobee Suite Thermal Comfort",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.02",
+				"version": 	"1.7.04",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
 				"optional": 	false
@@ -143,7 +143,7 @@
 			"name": 	"Ecobee Suite Sensor",
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
-			"version": 	"1.7.08",
+			"version": 	"1.7.09",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
 			"optional": 	false
 		}
