@@ -45,21 +45,22 @@
  *	1.7.02 - Fixed initialization error
  *	1.7.03 - Cosmetic cleanup, and nonCached currentValue() on Hubitat
  * 	1.7.04 - Fix myThermostats (should have been theThermostats)
+ *	1.7.05 - More nonCached cleanup
  */
-def getVersionNum() { return "1.7.04" }
+def getVersionNum() { return "1.7.05" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-	name: "ecobee Suite Open Contacts",
-	namespace: "sandood",
-	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nTurn HVAC on/off based on status of contact sensors or switches (e.g. doors, windows, or fans)",
-	category: "Convenience",
-	parent: "sandood:Ecobee Suite Manager",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	name: 			"ecobee Suite Open Contacts",
+	namespace: 		"sandood",
+	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nTurn HVAC on/off based on status of contact sensors or switches (e.g. doors, windows, or fans)",
+	category: 		"Convenience",
+	parent: 		"sandood:Ecobee Suite Manager",
+	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false,
-    pausable: true
+    pausable: 		true
 )
 
 preferences {
@@ -243,11 +244,13 @@ def initialize() {
     	if (contactOpen) {
     		subscribe(contactSensors, "contact.open", sensorOpened)
 			subscribe(contactSensors, "contact.closed", sensorClosed)
-            contactOffState = contactSensors.currentContact.contains('open')
+            // contactOffState = contactSensors.currentContact.contains('open')
+			contactOffState = (isST ? contactSensors.currentValue('contact') : contactSensors.currentValue('contact', true)).contains('open')
        	} else {
         	subscribe(contactSensors, "contact.closed", sensorOpened)
 			subscribe(contactSensors, "contact.open", sensorClosed)
-            contactOffState = contactSensors.currentContact.contains('closed')
+            // contactOffState = contactSensors.currentContact.contains('closed')
+			contactOffState = (isST ? contactSensors.currentValue('contact') : contactSensors.currentValue('contact', true)).contains('closed')
         }
     }
     LOG("contactOffState = ${contactOffState}",2,null,'trace')
@@ -261,7 +264,8 @@ def initialize() {
         } else {
         	subscribe(theSwitches, "switch.off", sensorOpened)
             subscribe(theSwitches, "switch.on", sensorClosed)
-            switchOffState = theSwitches.currentSwitch.contains('off')
+			switchOffState = (isST ? theSwitches.currentValue('switch') : theSwitches.currentValue('switch', true)).contains('off')
+            // switchOffState = theSwitches.currentSwitch.contains('off')
         }
     }
     LOG("switchOffState = ${switchOffState}",2,null,'trace')
