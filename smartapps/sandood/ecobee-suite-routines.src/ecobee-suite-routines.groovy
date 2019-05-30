@@ -35,8 +35,9 @@
  *	1.7.05 - Belt & suspenders for thermostatHold compares
  *	1.7.06 - Cosmetic Cleanups
  *  1.7.07 - Fixed variable definition (ncCp)
+ *  1.7.08 - Cleaned up messages (a little - more still to do)
  */
-def getVersionNum() { return "1.7.07" }
+def getVersionNum() { return "1.7.08" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -548,7 +549,7 @@ def changeProgramHandler(evt) {
             		String scheduledProgram = isST ? stat.currentValue("scheduledProgram") : stat.currentValue("scheduledProgram", true)
         			stat.resumeProgram(true) 												// resumeAll to get back to the scheduled program
                 	if (atomicState.fanMinutes != null) stat.setFanMinOnTime(atomicState.fanMinutes)		// and reset the fanMinOnTime as requested
-					sendMessage("And I resumed the scheduled ${scheduledProgram} program on ${stat}")
+					sendMessage("I resumed the scheduled ${scheduledProgram} program on ${stat}")
             	} else {
             		// Resume Program requested, but no hold is currently active
                 	sendMessage("I was asked to Resume Program on ${stat}, but there is no Hold currently active")
@@ -574,9 +575,9 @@ def changeProgramHandler(evt) {
                         if (settings.statOff) {
                         	// Don't grab a reservation here, since we won't be around later to release it
                         	stat.off()
-                            sendMessage("And I verified that ${stat.displayName} is already in the ${atomicState.programParam} program, so I turned off the HVAC as requested")
+                            sendMessage("I verified that ${stat.displayName} is already in the ${atomicState.programParam} program, so I turned off the HVAC as requested")
                         } else {
-                			sendMessage("And I verified that ${stat.displayName} is already in the ${atomicState.programParam} program${fanSet?' with the requested fan settings':''}")
+                			sendMessage("I verified that ${stat.displayName} is already in the ${atomicState.programParam} program${fanSet?' with the requested fan settings':''}")
                         }
                 		done = true
                     } else if ((thermostatHold == 'hold') || currentProgramName.startsWith('Hold')) { // (In case the Vacation hasn't cleared yet)
@@ -598,9 +599,9 @@ def changeProgramHandler(evt) {
                             	if (settings.statOff) {
                                 	// Don't make a reservation, since we won't be around later to release it
                             		stat.off()
-                                    sendMessage("And I resumed the scheduled ${atomicState.programParam} program on ${stat.displayName}, then I turned off the HVAC as requested")
+                                    sendMessage("I resumed the scheduled ${atomicState.programParam} program on ${stat.displayName}, then I turned off the HVAC as requested")
                                 } else {
-                					sendMessage("And I resumed the scheduled ${atomicState.programParam} program on ${stat.displayName}${fanSet?' with the requested fan settings':''}")
+                					sendMessage("I resumed the scheduled ${atomicState.programParam} program on ${stat.displayName}${fanSet?' with the requested fan settings':''}")
                                 }
                 				done = true
                             }
@@ -651,9 +652,9 @@ def changeProgramHandler(evt) {
                         }
                         if (settings.statOff) {
                         	stat.off()
-                            sendMessage("And I set ${stat.displayName} to Hold: ${atomicState.programParam}${timeStr}, then I turned off the HVAC as requested")
+                            sendMessage("I set ${stat.displayName} to Hold: ${atomicState.programParam}${timeStr}, then I turned off the HVAC as requested")
                         } else {
-							sendMessage("And I set ${stat.displayName} to Hold: ${atomicState.programParam}${timeStr}${fanSet?' with the requested fan settings':''}")
+							sendMessage("I set ${stat.displayName} to Hold: ${atomicState.programParam}${timeStr}${fanSet?' with the requested fan settings':''}")
                         }
                		}
             	} // else { assert atomicState.programParam == null; must have been 'Resume Program' or an old 'Cancel Vacation'  }
