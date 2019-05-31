@@ -17,8 +17,9 @@
  *  1.7.02 - Adjusted for synchronized setpoints/climates udpates
  *	1.7.03 - No adjustements when thermostat is in Vacation Mode
  *	1.7.04 - Stop repeated messages...
+ *	1.7.05 - Cleanup arguments passed to setProgramSetpoint()
  */
-def getVersionNum() { return "1.7.04" }
+def getVersionNum() { return "1.7.05" }
 private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -449,7 +450,7 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 		}
 	}
 	def currentProgram 	= isST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
-	theThermostat.setProgramSetpoints( program, heatTemp, coolTemp )
+	theThermostat.setProgramSetpoints( program, heatTemp.toString(), coolTemp.toString() )
 	
 	// Only send the notification if we are changing the CURRENT program - program could have changed under us...
 	if (currentProgram == program) {
