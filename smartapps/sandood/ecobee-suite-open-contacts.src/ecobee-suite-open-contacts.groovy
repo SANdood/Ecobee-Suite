@@ -46,8 +46,9 @@
  *	1.7.03 - Cosmetic cleanup, and nonCached currentValue() on Hubitat
  * 	1.7.04 - Fix myThermostats (should have been theThermostats)
  *	1.7.05 - More nonCached cleanup
+ *	1.7.06 - Fixed multi-contact/multi-switch initialization
  */
-def getVersionNum() { return "1.7.05" }
+def getVersionNum() { return "1.7.06" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -241,31 +242,38 @@ def initialize() {
 
 	boolean contactOffState = false
 	if (contactSensors) {
+    	def openSensors = 0
+        def closedSensors = 0
+        contactSensors.each {
+            if (it?.currentContact == 'open') { openSensors++; } else { closedSensors++; }
+        }
     	if (contactOpen) {
-    		subscribe(contactSensors, "contact.open", sensorOpened)
-			subscribe(contactSensors, "contact.closed", sensorClosed)
-            // contactOffState = contactSensors.currentContact.contains('open')
-			contactOffState = (isST ? contactSensors.currentValue('contact') : contactSensors.currentValue('contact', true)).contains('open')
+        	subscribe(contactSensors, "contact.open", sensorOpened)
+            subscribe(contactSensors, "contact.closed", sensorClosed)
+        	contactOffState = (openSensors != 0) 		// true if any of the sensors are currently open
        	} else {
         	subscribe(contactSensors, "contact.closed", sensorOpened)
 			subscribe(contactSensors, "contact.open", sensorClosed)
-            // contactOffState = contactSensors.currentContact.contains('closed')
-			contactOffState = (isST ? contactSensors.currentValue('contact') : contactSensors.currentValue('contact', true)).contains('closed')
+			contactOffState = (closedSensors != 0)
         }
     }
     LOG("contactOffState = ${contactOffState}",2,null,'trace')
     
     boolean switchOffState = false
     if (theSwitches) {
+    	def onSwitches = 0
+        def offSwitches = 0
+        theSwitches.each {
+        	if (it.currentSwitch == 'on') { onSwitches++ } else { offSwitches++ }
+        }
     	if (switchOn) {
         	subscribe(theSwitches, "switch.on", sensorOpened)
             subscribe(theSwitches, "switch.off", sensorClosed)
-            switchOffState = (isST ? theSwitches.currentValue('switch') : theSwitches.currentValue('switch', true)).contains('on')
+            switchOffState = (onSwitches != 0)
         } else {
         	subscribe(theSwitches, "switch.off", sensorOpened)
             subscribe(theSwitches, "switch.on", sensorClosed)
-			switchOffState = (isST ? theSwitches.currentValue('switch') : theSwitches.currentValue('switch', true)).contains('off')
-            // switchOffState = theSwitches.currentSwitch.contains('off')
+			switchOffState = (offSwitches != 0)
         }
     }
     LOG("switchOffState = ${switchOffState}",2,null,'trace')
