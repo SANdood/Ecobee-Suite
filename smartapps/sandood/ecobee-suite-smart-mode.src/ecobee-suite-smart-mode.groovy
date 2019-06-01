@@ -12,21 +12,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	1.4.0  - Initial release
- *	1.4.01 - Added unschedule() to updated()
- *	1.4.02 - Shortened LOG and NOTIFY strings when reporting on multiple thermostats
- *	1.4.03 - Fix frequency enum translations
- *	1.4.04 - Fixed notifications
- *	1.4.05 - Change the mode only ONCE when crossing a configured threshold (for coexistence with other Helpers/Instances)
- *	1.4.06 - Added more data validation around outside temp sources
- *	1.4.07 - Added inside temperature Mode change options
- *	1.4.08 - Tweaked inside temp change - don't switch to auto if mode is already the correct one (cool/heat)
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Allow Ecobee Suite Thermostats only
- *	1.5.02 - Converted all math to BigDecimal
- *	1.5.03 - Added (optional) dewpoint override for belowTemp Off Mode
- *	1.5.04 - Added modeOff reservation support to avoid conflicts with other Helper Apps
- *	1.5.05 - Added multiple SMS support (Contacts being deprecated by ST)
+ * <snip>
  *	1.6.00 - Release number synchronization
  *	1.6.01 - Fixed sendMessage()
  *	1.6.02 - Fix reservation initialization error
@@ -46,8 +32,9 @@
  *	1.6.21 - Added option to change heat/cool setpoints instead of/in addition to changing the mode
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Fixed thermostats*.auto()
+ *  1.7.02 - Fixed SMS text entry
  */
-def getVersionNum() { return "1.7.01" }
+def getVersionNum() { return "1.7.02" }
 private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -249,7 +236,7 @@ def mainPage() {
 			if (settings.notify) {
 				if (isST) {
 					section("Notifications") {
-						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 						if (settings.speak) {
@@ -266,7 +253,7 @@ def mainPage() {
 						paragraph ""
 					}
 					section("Use SMS to Phone(s) (limit 10 messages per day)") {
-						input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
 							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
 						paragraph ""
 					}
@@ -1092,11 +1079,11 @@ private def sendMessage(notificationMessage) {
 					def phones = settings.phone.split(";")
 					for ( def i = 0; i < phones.size(); i++) {
 						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
 			} 
 			if (settings.pushNotify) {
@@ -1127,11 +1114,11 @@ private def sendMessage(notificationMessage) {
 					def phones = phone.split(",")
 					for ( def i = 0; i < phones.size(); i++) {
 						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
 			}
 			if (settings.speak) {
