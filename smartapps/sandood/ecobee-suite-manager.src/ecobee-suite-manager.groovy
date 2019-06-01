@@ -21,12 +21,6 @@
  *
  *  See Github Changelog for complete change history
  * 	<snip>
- *	1.5.00- Release number synchronization
- *	1.5.01- pollEcobeeAPI() now uses asynchttp
- *	1.5.02-	Cleanup of obsolete code
- *	1.5.03- Converted all temperature calculations to BigDecimal for better precision/rounding
- *	1.5.04- Added outdoor Dewpoint, Humidity & Barometric Pressure for Smart Mode's use
- *	1.5.05- Added support for multiple SMS numbers (Contacts being deprecated by ST)
  *	1.6.00- Release number synchronization
  *	1.6.10- Re-implemented reservations 
  *	1.6.11- Removed location.contactBook support - deprecated by SmartThings
@@ -55,8 +49,9 @@
  *	1.7.09 - Fixed climates & setpoints update consistency
  *	1.7.10 - Optimized update processing
  *  1.7.11 - Fix thermostatOperatingStateDisplay
+ *  1.7.12 - Fixed SMS text entry
  */
-def getVersionNum() { return "1.7.11" }
+def getVersionNum() { return "1.7.12" }
 private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 private def getMyNamespace() { return "sandood" }
 
@@ -428,7 +423,7 @@ def preferencesPage() {
 		if (isST) {
 			section("Notifications") {
 				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most once per hour."
-				input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+				input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 				input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 				input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 				if (settings.speak) {
@@ -447,7 +442,7 @@ def preferencesPage() {
 				paragraph ""
 			}
 			section("Use SMS to Phone(s) (limit 10 messages per day)") {
-				input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+				input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
 					  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
 				paragraph ""
 			}
@@ -5296,11 +5291,11 @@ private def sendPushAndFeeds(notificationMessage) {
 					def phones = settings.phone.split(";")
 					for ( def i = 0; i < phones.size(); i++) {
 						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
 					}
 				} else {
 					LOG("Sending SMS to ${phone}", 3, null, 'info')
-					sendSmsMessage(phone, msg)						// Only to SMS contact
+					sendSmsMessage(phone.trim(), msg)						// Only to SMS contact
 				}
 			} 
 			if (settings.pushNotify) {
@@ -5332,11 +5327,11 @@ private def sendPushAndFeeds(notificationMessage) {
 					def phones = phone.split(",")
 					for ( def i = 0; i < phones.size(); i++) {
 						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
 					}
 				} else {
 					LOG("Sending SMS to ${phone}", 3, null, 'info')
-					sendSmsMessage(phone, msg)						// Only to SMS contact
+					sendSmsMessage(phone.trim(), msg)						// Only to SMS contact
 				}
 			}
 			if (settings.speak) {
