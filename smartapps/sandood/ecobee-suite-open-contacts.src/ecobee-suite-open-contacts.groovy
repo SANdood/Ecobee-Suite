@@ -36,8 +36,9 @@
  *	1.7.05 - More nonCached cleanup
  *	1.7.06 - Fixed multi-contact/multi-switch initialization
  *	1.7.07 - Fixed SMS text entry
+ *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  */
-def getVersionNum() { return "1.7.07" }
+def getVersionNum() { return "1.7.08" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -116,6 +117,7 @@ def mainPage() {
                         }
                     }
            		}
+				paragraph('Note that no HVAC On actions will be taken if the HVAC was already Off when the first contact sensor or switch would have turned it off; the HVAC will remain Off when all the contacts & switches are reset.')
             }
             
 			section(title: "Select Contact Sensors") {
@@ -132,6 +134,7 @@ def mainPage() {
                 	input(name: 'switchOn', type: 'bool', title: "Run HVAC Off Actions when ${settings.theSwitches.size()>1?'any of the switches are':'the switch is'} turned on?", required: true, defaultValue: true, submitOnChange: true)
                     paragraph("HVAC Off Actions will be taken off when a switch is turned ${((settings.switchOn==null)||settings.switchOn)?'On':'Off'}")
                 }
+				
         	}
             
             if ((settings.contactSensors != null) || (settings.theSwitches != null)) {
@@ -396,6 +399,9 @@ def sensorOpened(evt=null) {
     def HVACModeState = atomicState.HVACModeState
     if(HVACModeState == 'off' || atomicState.openedState == 'off_pending') {
     	// HVAC is already off
+		if (numOn() == 1) {
+			atomicState.wasAlreadyOff = true
+		}
         return
     }
     int delay = (settings.onDelay?:0) as Integer
@@ -424,6 +430,16 @@ def sensorClosed(evt=null) {
 	def HVACModeState = atomicState.HVACModeState
     
     if ( allClosed() == true) {
+		if (atomicState.wasAlreadyOff == true) {
+			// Don't turn HVAC on if it was already off when the window was opened
+			atomicState.wasAlreadyOff = false
+			LOG("All sensors & switches are reset, but HVAC was already off when the first ${settings.contactSensors?'contact':''} " +
+				"${(settings.contactSensors && settings.theSwitches)?'or ':''}${settings.theSwitches?'switch':''} was " +
+				"${(settings.contactSensors && settings.contactOpen)?'opened':''}${(settings.contactSensors && !settings.contactOpen)?'closed':''}" +
+				"${(settings.contactSensors && settings.theSwitches)?'/':''}" +
+				"${(settings.theSwitches && settings.switchOn)?'turned on':''}${(settings.theSwitches && !settings.switchOn)?'turned off':''}, no action taken.", 2, null, 'info')
+			return
+		}
     	if (HVACModeState.contains('on')) return	// already on, nothing more to do (catches 'on' and 'on_pending')
         int delay = (settings.offDelay?:5).toInteger()
         if (HVACModeState == 'off_pending' ) {
@@ -433,7 +449,7 @@ def sensorClosed(evt=null) {
             return
         }
 	    
-        LOG("All Contact Sensors & Switches are reset, initiating actions.", 5,null,'trace')		
+        LOG("All Contact Sensors & Switches are reset, initiating actions.", 4,null,'trace')		
         
         atomicState.HVACModeState = 'on_pending'
 		unschedule(openedScheduledActions)
@@ -685,6 +701,25 @@ private Boolean allClosed() {
     }
     LOG("Returning ${response}",2,null,'info')
     return response
+}
+
+private def numOpen() {
+	def response = 0
+	if (settings.contactSensors) {
+		if (settings.contactOpen) {
+			response = settings.contactSensors.currentContact.count { it == 'open' }
+		} else {
+			response = settings.contactSensors.currentContact.count { it == 'closed' }
+		}
+	}
+	if (settings.theSwitches) {
+		if ( settings.switchOn ) {
+			response += settings.theSwitches.currentSwitch.count { it == 'on' }
+		} else {
+			response += settings.theSwitches.currentSwitch.count { it == 'off' }
+		}
+	}
+	return response
 }
 
 private def getDeviceId(networkId) {
