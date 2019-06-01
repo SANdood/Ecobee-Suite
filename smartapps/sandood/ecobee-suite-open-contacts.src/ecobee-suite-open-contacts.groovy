@@ -14,18 +14,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.4.00 - Renamed parent Ecobee Suite Manager
- *  1.4.01 - Updated description
- *	1.4.02 - Fixed contact open/closed notification
- *	1.4.03 - Added Temp setpoint option, linkage to Quiet Time
- *	1.4.04 - Changed displayed name for consistency
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Fixed HVACOff
- *	1.5.02 - Allow Ecobee Suite Thermostats only
- *	1.5.03 - Fixed qtOn capitalization error
- *	1.5.04 - Converted all math back to BigDecimal
- *	1.5.05 - Added modeOff reservations support
- *	1.5.06 - Added multiple SMS support (Contacts being deprecated by ST)
  *	1.6.00 - Release number synchronization
  *	1.6.01 - Fixed sendMessage()
  *	1.6.02 - Fix reservation initialization error
@@ -47,8 +35,9 @@
  * 	1.7.04 - Fix myThermostats (should have been theThermostats)
  *	1.7.05 - More nonCached cleanup
  *	1.7.06 - Fixed multi-contact/multi-switch initialization
+ *	1.7.07 - Fixed SMS text entry
  */
-def getVersionNum() { return "1.7.06" }
+def getVersionNum() { return "1.7.07" }
 private def getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -162,8 +151,8 @@ def mainPage() {
 					if (isST) {
 						section("Notifications") {
 							paragraph "A notification will also be sent to the Hello Home log\n"
-							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
-							input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
+							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
 								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
@@ -179,7 +168,7 @@ def mainPage() {
 							paragraph ""
 						}
 						section("Use SMS to Phone(s) (limit 10 messages per day)") {
-							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)",
 								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
 							paragraph ""
 						}
@@ -744,11 +733,11 @@ private def sendMessage(notificationMessage) {
 				def phones = settings.phone.split(";")
 				for ( def i = 0; i < phones.size(); i++) {
 					LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-					sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
 				}
 			} else {
 				LOG("Sending SMS to ${phone}", 3, null, 'info')
-				sendSmsMessage(phone, msg)						// Only to SMS contact
+				sendSmsMessage(phone.trim(), msg)						// Only to SMS contact
 			}
 		} 
 		if (settings.pushNotify) {
@@ -780,11 +769,11 @@ private def sendMessage(notificationMessage) {
 				def phones = phone.split(",")
 				for ( def i = 0; i < phones.size(); i++) {
 					LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-					sendSmsMessage(phones[i], msg)				// Only to SMS contact
+					sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
 				}
 			} else {
 				LOG("Sending SMS to ${phone}", 3, null, 'info')
-				sendSmsMessage(phone, msg)						// Only to SMS contact
+				sendSmsMessage(phone.trim(), msg)						// Only to SMS contact
 			}
 		}
 		if (settings.speak) {
