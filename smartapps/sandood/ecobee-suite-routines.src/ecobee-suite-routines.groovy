@@ -15,13 +15,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- * 	1.4.0 - Renamed parent to Ecobee Suite Manager
- * 	1.4.01 - Updated description
- * 	1.4.02 - Fixed fanMode == Circulate handling
- * 	1.4.03 - Renamed display for consistency
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Allow Ecobee Suite Thermostats only
- *	1.5.02 - Added support for notifications via SMS or Push
  *	1.6.00 - Release number synchronization
  *	1.6.01 - Fixed sendMessage()
  *	1.6.10 - Resync for parent-based reservations
@@ -36,8 +29,9 @@
  *	1.7.06 - Cosmetic Cleanups
  *  1.7.07 - Fixed variable definition (ncCp)
  *  1.7.08 - Cleaned up messages (a little - more still to do)
+ *  1.7.09 - Fixed SMS text entry
  */
-def getVersionNum() { return "1.7.08" }
+def getVersionNum() { return "1.7.09" }
 private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -226,7 +220,7 @@ def mainPage() {
 				if (settings.notify) {
 					if (isST) {
 						section("Notifications") {
-							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with ; )", required: false, submitOnChange: true)
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 							input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
@@ -243,7 +237,7 @@ def mainPage() {
 							paragraph ""
 						}
 						section("Use SMS to Phone(s) (limit 10 messages per day)") {
-							input(name: "phone", type: "string", title: "Phone number(s) for SMS, example +15556667777 (separate multiple with , )", 
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)",
 								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
 							paragraph ""
 						}
@@ -781,11 +775,11 @@ private def sendMessage(notificationMessage) {
 					def phones = settings.phone.split(";")
 					for ( def i = 0; i < phones.size(); i++) {
 						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
 			} 
 			if (settings.pushNotify) {
@@ -816,11 +810,11 @@ private def sendMessage(notificationMessage) {
 					def phones = phone.split(",")
 					for ( def i = 0; i < phones.size(); i++) {
 						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i], msg)				// Only to SMS contact
+						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone, msg)						// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
 			}
 			if (settings.speak) {
