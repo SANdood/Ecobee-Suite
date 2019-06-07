@@ -39,7 +39,7 @@
  *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
  */
-String getVersionNum() { return "1.7.09b" }
+String getVersionNum() { return "1.7.09c" }
 String getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -441,7 +441,7 @@ void sensorClosed(evt=null) {
     LOG("sensorClosed() entered with event ${evt?.device} ${evt?.name}: ${evt?.value}", 3,null,'trace')
 	def HVACModeState = atomicState.HVACModeState
     
-    if ( allClosed() == true) {
+    if (allClosed() == true) {
 		if (atomicState.wasAlreadyOff == true) {
 			// Don't turn HVAC on if it was already off when the window was opened
 			atomicState.wasAlreadyOff = false
@@ -525,14 +525,14 @@ void turnOffHVAC() {
 				if (isST) {
 					tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType')
 					tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold')
-					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName')	// Hold: Home
+					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName')	// Hold: Home, Vacation
 					tmpThermSavedState[tid].currentProgramId = therm.currentValue('currentProgramId')		// home
 					tmpThermSavedState[tid].currentProgram = therm.currentValue('currentProgram')			// Home
 					tmpThermSavedState[tid].scheduledProgram = therm.currentValue('scheduledProgram')
 				} else {
 					tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType', true)
 					tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold', true)
-					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName', true)	// Hold: Home
+					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName', true)	// Hold: Home, Vacation
 					tmpThermSavedState[tid].currentProgramId = therm.currentValue('currentProgramId', true)		// home
 					tmpThermSavedState[tid].currentProgram = therm.currentValue('currentProgram', true)			// Home
 					tmpThermSavedState[tid].scheduledProgram = therm.currentValue('scheduledProgram', true)
@@ -592,11 +592,12 @@ void turnOffHVAC() {
 
 void turnOnHVAC() {
 	// Restore previous state
-	LOG("turnonHVAC() entered", 5,null,'trace')
+	LOG("turnOnHVAC() entered", 5,null,'trace')
     atomicState.HVACModeState = 'on'
     def action = settings.whichAction ? settings.whichAction : 'Notify Only'
-    def doHVAC = action.contains('HVAC')
-    def notReserved = true
+	log.debug "action: ${action}"
+    boolean doHVAC = action.contains('HVAC')
+    boolean notReserved = true
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 	def tstatNames = []
 	
@@ -605,7 +606,7 @@ void turnOnHVAC() {
         // LOG("Restoring to previous state", 5) 
         
         settings.theStats.each { therm ->
-			LOG("Working on thermostat: ${therm}", 5)
+			LOG("Working on thermostat: ${therm}", 2)
             tstatNames << therm.displayName
             def tid = getDeviceId(therm.deviceNetworkId)
             String priorMode = settings.defaultMode
@@ -620,6 +621,7 @@ void turnOnHVAC() {
             		// turn on the HVAC
                     def oldMode = isST ? therm.currentValue('thermostatMode') :  therm.currentValue('thermostatMode', true) 
                     def newMode = (tmpThermSavedState[tid].mode == '') ? 'auto' : tmpThermSavedState[tid].mode
+					log.debug "Current HVAC mode: ${oldMode}, desired HVAC mode: ${newMode}"
                     if (newMode != oldMode) {
                     	def i = countReservations( tid, 'modeOff' ) - (haveReservation(tid, 'modeOff') ? 1 : 0)
                         // log.debug "count=${countReservations(tid,'modeOff')}, have=${haveReservation(tid,'modeOff')}, i=${i}"
