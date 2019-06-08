@@ -33,9 +33,10 @@
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Fixed thermostats*.auto()
  *  1.7.02 - Fixed SMS text entry
+ *	1.7.03 - Fixing private method issue caused by grails
  */
-def getVersionNum() { return "1.7.02" }
-private def getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.03" }
+String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -789,7 +790,7 @@ def temperatureUpdate( BigDecimal temp ) {
 	}
 }
 
-private def changeSetpoints( program, heatTemp, coolTemp ) {
+void changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
 	settings.thermostats.each { stat ->
     	LOG("Setting ${stat.displayName} '${program}' heatingSetpoint to ${heatTemp}°${unit}, coolingSetpoint to ${coolTemp}°${unit}",2,null,'info')
@@ -797,20 +798,20 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
     }
 }
 
-private def getZipTemp() {
+def getZipTemp() {
 	return getTwcTemp('zip')
 }
 
-private def getGPSTemp() {
+def getGPSTemp() {
 	return getTwcTemp('gps')
 }
 
-private def getPwsTemp() {
+def getPwsTemp() {
 	return getWUTemp('pws')
 }
 
 // SmartThings-only
-private def getTwcTemp(type) {
+def getTwcTemp(type) {
 	def isMetric = (getTemperatureScale() == "C")
 	def source = (type == 'zip') ? settings.zipCode : ((type == 'gps')?"${location.latitude},${location.longitude}":null)
     
@@ -851,7 +852,7 @@ private def getTwcTemp(type) {
     return null
 }
 // SmartThings only - deprecated
-private def getWUTemp(type) {
+def getWUTemp(type) {
 	def isMetric = (getTemperatureScale() == "C")
     def tempNow
     def dewpointNow
@@ -913,10 +914,10 @@ def calculateDewpoint( temp, rh, units) {
 	def dpC = 243.04*(Math.log(rh/100.0)+((17.625*t)/(243.04+t)))/(17.625-Math.log(rh/100.0)-((17.625*t)/(243.04+t)))
     return (units == 'C') ? roundIt(dpC, 2) : roundIt(((dpC*1.8)+32), 1)
 }
-private roundIt( value, decimals=0 ) {
+def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-private roundIt( BigDecimal value, decimals=0) {
+def roundIt( BigDecimal value, decimals=0) {
     return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 
@@ -935,7 +936,7 @@ def getThermostatModes() {
 }
 
 // get the combined set of Ecobee Programs applicable for these thermostats
-private def getEcobeePrograms() {
+def getEcobeePrograms() {
 	def programs = ['Away', 'Home', 'Sleep'] 
 
 	if (settings.thermostats?.size() > 0) {
@@ -996,11 +997,11 @@ def getCoolRange() {
     return "${roundIt(low-0.5,0)}..${roundIt(high-0.5,0)}"
 }
 
-private String getZIPcode() {
+String getZIPcode() {
 	return location.zipCode ?: ""
 }
 
-private String getPWSID() {
+String getPWSID() {
 	String PWSID = location.zipCode
 	log.debug "Location ZIP Code ${PWSID}"
 	// find the nearest PWS to the hub's geo location
@@ -1024,7 +1025,7 @@ private String getPWSID() {
 	return PWSID
 }
 
-private def getDeviceId(networkId) {
+ def getDeviceId(networkId) {
 	// def deviceId = networkId.split(/\./).last()	
     // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
     // return deviceId
@@ -1062,14 +1063,14 @@ List getGuestList(String tid, String type='modeOff') {
 }
 
 // Helper Functions
-private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
+void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	def msg = app.label + ': ' + message
 	if (logType == null) logType = 'debug'
 	parent.LOG(msg, level, null, logType, event, displayEvent)
     log."${logType}" message
 }
 
-private def sendMessage(notificationMessage) {
+void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
@@ -1145,7 +1146,7 @@ private def sendMessage(notificationMessage) {
 	}
 }
 
-private def updateMyLabel() {
+void updateMyLabel() {
 	String flag = isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
@@ -1179,16 +1180,16 @@ private def updateMyLabel() {
 //	1.0.0	Initial Release
 //	1.0.1	Use atomicState so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -1196,10 +1197,10 @@ private String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
 	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
