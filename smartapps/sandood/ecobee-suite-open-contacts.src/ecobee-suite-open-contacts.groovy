@@ -38,9 +38,10 @@
  *	1.7.07 - Fixed SMS text entry
  *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
+ *  1.7.10 - Fixed statModeChange() event handler
  */
-String getVersionNum() { return "1.7.09" }
-String getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() 		{ return "1.7.10" }
+String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 			"ecobee Suite Open Contacts",
@@ -286,10 +287,11 @@ def initialize() {
     //if (tempState == null) tempState = (contactOffState || switchOffState)?'off':'on'		// recalculate if we should be off or on
     def tempState = (contactOffState || switchOffState) ? 'off' : 'on'		// recalculate if we should be off or on
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
+	def tmpThermSavedState = [:]
     if (tempState == 'on') {
+		if (atomicState.HVACModeState != 'on') turnOnHVAC()
     	// Initialize the saved state values
-    	if (!settings.quietTime) {
-    		def tmpThermSavedState = [:]
+    	if (!settings.quietTime) {  		
     		theStats.each() { therm ->
     			def tid = getDeviceId(therm.deviceNetworkId)
 				if (isST) {
@@ -327,7 +329,7 @@ def initialize() {
     		}
     		atomicState.thermSavedState = tmpThermSavedState
     	}
-        if (atomicState.HVACModeState != 'on') turnOnHVAC()
+        
     } else {
     	LOG("Initialized while should be 'Off' - can't update states",2,null,'warn')
         if (atomicState.HVACModeState != 'off') turnOffHVAC()
@@ -341,7 +343,7 @@ def initialize() {
             subscribe(theStats, 'coolingSetpoint', coolSPHandler)
         }
     }
-    
+	LOG("initialize() - thermSavedState: ${tmpThermSavedState}",4,null,'trace')
 	LOG("initialize() exiting",2,null,'trace')
 }
 
@@ -355,9 +357,9 @@ def statModeChange(evt) {
         cancelReservation( tid, 'modeOff' )		// might as well give up our reservation
     	if (atomicState.HVACModeState != 'on') atomicState.HVACModeState = 'on'
     }
-    def tmpThermSavedState = atomicState.thermSavedState
-    tmpThermSavedState[tid].mode = evt.value	// update the saved mode
-    atomicState.thermSavedState = tmpThermSavedState
+    // def tmpThermSavedState = atomicState.thermSavedState
+    // tmpThermSavedState[tid].mode = evt.value	// update the saved mode
+    // atomicState.thermSavedState = tmpThermSavedState
 }
     
 def heatSPHandler( evt ) {
@@ -505,9 +507,9 @@ void turnOffHVAC() {
             } else if ((settings.hvacOff == null) || settings.hvacOff) {
             	// turn off the HVAC
                 makeReservation(tid, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
-				def ncTm = isST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
-    			if (ncTm != 'off') {
-                	tmpThermSavedState[tid].mode = ncTm				// therm.currentValue('thermostatMode')
+				def thermostatMode = isST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
+    			if (thermostatMode != 'off') {
+                	tmpThermSavedState[tid].mode = thermostatMode	// therm.currentValue('thermostatMode')
             		therm.setThermostatMode('off')
                 	tstatNames << therm.displayName		// only report the ones that aren't off already
                 	LOG("${therm.displayName} turned off (was ${tmpThermSavedState[tid].mode})",2,null,'info')    
@@ -551,6 +553,7 @@ void turnOffHVAC() {
         }
     }
     atomicState.thermSavedState = tmpThermSavedState
+	LOG("turnOffHVAC() - thermSavedState: ${tmpThermSavedState}", 4, null, 'trace')
     
 	if (tstatNames.size() > 0) {
     	if (action.contains('Notify')) {
@@ -597,7 +600,6 @@ void turnOnHVAC() {
 	LOG("turnOnHVAC() entered", 5,null,'trace')
     atomicState.HVACModeState = 'on'
     def action = settings.whichAction ? settings.whichAction : 'Notify Only'
-	log.debug "action: ${action}"
     boolean doHVAC = action.contains('HVAC')
     boolean notReserved = true
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
@@ -622,7 +624,7 @@ void turnOnHVAC() {
             	} else if ((settings.hvacOff == null) || settings.hvacOff) {
             		// turn on the HVAC
                     def oldMode = isST ? therm.currentValue('thermostatMode') :  therm.currentValue('thermostatMode', true) 
-                    def newMode = (tmpThermSavedState[tid].mode == '') ? 'auto' : tmpThermSavedState[tid].mode
+                    def newMode = (tmpThermSavedState[tid]?.mode == '') ? 'auto' : tmpThermSavedState[tid].mode
 					LOG("Current HVAC mode: ${oldMode}, desired HVAC mode: ${newMode}", 2, null, 'info')
                     if (newMode != oldMode) {
                     	def i = countReservations( tid, 'modeOff' ) - (haveReservation(tid, 'modeOff') ? 1 : 0)
@@ -763,7 +765,7 @@ void makeReservation(String tid, String type='modeOff' ) {
 }
 // Cancel my reservation
 void cancelReservation(String tid, String type='modeOff') {
-	log.debug "cancel ${tid}, ${type}"
+	//log.debug "cancel ${tid}, ${type}"
 	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
