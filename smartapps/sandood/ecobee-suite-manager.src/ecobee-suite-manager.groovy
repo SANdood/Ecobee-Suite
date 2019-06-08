@@ -50,15 +50,16 @@
  *	1.7.10 - Optimized update processing
  *  1.7.11 - Fix thermostatOperatingStateDisplay
  *  1.7.12 - Fixed SMS text entry
+ *	1.7.13 - Don't require Notification/SMS
+ *	1.7.14 - Fixing private method issue caused by grails, display proper platform name everywhere, don't send null temperature
  */
-def getVersionNum() { return "1.7.12" }
-private def getVersionLabel() { return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
-private def getMyNamespace() { return "sandood" }
-
+String getVersionNum() 		{ return "1.7.14" }
+String getVersionLabel() 	{ return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
 import groovy.transform.Field
 
-private def getHelperSmartApps() {
+def getHelperSmartApps() {
 	String mrpTitle = isST ? 'New Mode/Routine/Switches/Program Helper...' : 'New Mode/Switches/Program Helper...'
 	return [ 
 		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",  
@@ -101,7 +102,7 @@ definition(
 	name: "Ecobee Suite Manager",
 	namespace: myNamespace,
 	author: "Barry A. Burke (storageanarchy@gmail.com)",
-	description: "Connect your Ecobee thermostats and sensors to SmartThings, along with a Suite of Helper SmartApps.",
+	description: "Connect your Ecobee thermostats and sensors to ${isST?'SmartThings':'Hubitat'}, along with a Suite of Helper ${isST?'Smart':''}Apps.",
 	category: "My Apps",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
@@ -129,11 +130,9 @@ preferences {
 }
 
 mappings {
-	path("/oauth/initialize") {action: [GET: "oauthInitUrl"]}	// ST only
-	// path("/oauth/stateredirect") {action: [GET: "callback"]}	// HE only
+	path("/oauth/initialize") {action: [GET: "oauthInitUrl"]}
 	path("/callback") {action: [GET: "callback"]}
 	path("/oauth/callback") {action: [GET: "callback"]}
-	
 }
 
 // Begin Preference Pages
@@ -176,15 +175,15 @@ def mainPage() {
 
 		if(atomicState.authToken != null && atomicState.initialized != true) {
         	section() {
-            	paragraph "Please ${isHE?'click':'tap'} 'Done' to save your credentials. Then re-open the SmartApp to continue the setup."
+            	paragraph "Please ${isHE?'click':'tap'} 'Done' to save your credentials. Then re-open the Ecobee Suite Manager to continue the setup."
             }
         }
 
 		// Need to save the initial login to setup the device without timeouts
 		if(atomicState.authToken != null && atomicState.initialized) {
         	if (settings.thermostats?.size() > 0 && atomicState.initialized) {
-            	section("Helper SmartApps") {
-                	href ("helperSmartAppsPage", title: "Helper SmartApps", description: "${isHE?'Click':'Tap'} to manage Helper SmartApps")
+				section("Helper ${isST?'Smart':''}Apps") {
+                	href ("helperSmartAppsPage", title: "Helper ${isST?'Smart':''}Apps", description: "${isHE?'Click':'Tap'} to manage Helper ${isST?'Smart':''}Apps")
                 }            
             }
 			section("Ecobee Devices") {
@@ -332,7 +331,7 @@ def thermsPage(params) {
     LOG("thermsPage() params passed? ${params}", 4, null, "trace")
 
     dynamicPage(name: "thermsPage", title: "Thermostat Selection", params: params, nextPage: "", content: "thermsPage", uninstall: false) {    
-    	section("${isHE?'Click':'Tap'} below to see the list of Ecobee thermostats available in your ecobee account and select the ones you want to connect to SmartThings.") {
+    	section("${isHE?'Click':'Tap'} below to see the list of Ecobee thermostats available in your ecobee account and select the ones you want to connect to ${isST?'SmartThings':'Hubitat'}.") {
 			LOG("thermsPage(): atomicState.settingsCurrentTherms=${atomicState.settingsCurrentTherms}   thermostats=${settings.thermostats}", 4, null, "trace")
 			if (atomicState.settingsCurrentTherms != settings.thermostats) {
 				LOG("atomicState.settingsCurrentTherms != thermostats determined!!!", 4, null, "trace")		
@@ -358,7 +357,7 @@ def sensorsPage() {
 
     dynamicPage(name: "sensorsPage", title: "Sensor Selection", nextPage: "") {
 		if (numFound > 0)  {
-			section("${isHE?'Click':'Tap'} below to see the list of ecobee sensors available for the selected thermostat(s) and choose the ones you want to connect to SmartThings."){
+			section("${isHE?'Click':'Tap'} below to see the list of ecobee sensors available for the selected thermostat(s) and choose the ones you want to connect to ${isST?'SmartThings':'Hubitat'}."){
 				LOG("sensorsPage(): atomicState.settingsCurrentSensors=${atomicState.settingsCurrentSensors}   ecobeesensors=${settings.ecobeesensors}", 4, null, "trace")
 				if (atomicState.settingsCurrentSensors != settings.ecobeesensors) {
 					LOG("atomicState.settingsCurrentSensors != ecobeesensors determined!!!", 4, null, "trace")					
@@ -437,13 +436,12 @@ def preferencesPage() {
 		} else {		// isHE
 			section("Use Notification Device(s)") {
 				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour."
-				input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+				input(name: "notifiers", type: "capability.notification", title: "", required: false, multiple: true, 
 					  description: "Select notification devices", submitOnChange: true)
 				paragraph ""
 			}
 			section("Use SMS to Phone(s) (limit 10 messages per day)") {
-				input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
-					  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+				input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", required: false, submitOnChange: true)
 				paragraph ""
 			}
 			section("Use Speech Device(s)") {
@@ -576,10 +574,10 @@ def refreshAuthTokenPage() {
 def helperSmartAppsPage() {
 	LOG("helperSmartAppsPage() entered", 5)
 
-	LOG("SmartApps available are ${getHelperSmartApps()}", 5, null, "info")
+	LOG("The available Helper ${isST?'Smart':''}Apps are ${getHelperSmartApps()}", 5, null, "info")
 	
- 	dynamicPage(name: "helperSmartAppsPage", title: "Configured Helper SmartApps", install: true, uninstall: false, submitOnChange: true) { 
-    	section("Avalable Helper SmartApps") {
+ 	dynamicPage(name: "helperSmartAppsPage", title: "Configured Helper ${isST?'Smart':''}Apps", install: true, uninstall: false, submitOnChange: true) { 
+    	section("Avalable Helper ${isST?'Smart':''}Apps") {
 			getHelperSmartApps().each { oneApp ->
 				LOG("Processing the app: ${oneApp}", 4, null, "trace")            
             	def allowMultiple = isST ? oneApp.multiple.value : oneApp.multiple
@@ -592,7 +590,7 @@ def helperSmartAppsPage() {
 // End Preference Pages
 
 // Preference Pages Helpers
-private def Boolean testForDeviceHandlers() {
+boolean testForDeviceHandlers() {
 	if (atomicState.runTestOnce != null) { 
     	List myChildren = getAllChildDevices()
         if (atomicState.runTestOnce == false) {
@@ -636,12 +634,12 @@ private def Boolean testForDeviceHandlers() {
     return success
 }
 
-def delayedRemoveChildren() {
+void delayedRemoveChildren() {
 	def myChildren = getAllChildDevices()
 	if (myChildren.size() > 0) removeChildDevices( myChildren, true )
 }
 
-private removeChildDevices(devices, dummyOnly = false) {
+void removeChildDevices(devices, dummyOnly = false) {
 	if (devices != []) {
     	LOG("Removing ${dummyOnly?'test':''} child devices",3,null,'trace')
 	} else {
@@ -662,7 +660,7 @@ private removeChildDevices(devices, dummyOnly = false) {
 // End Preference Pages Helpers
 
 // Ask Alexa Helpers
-private String getMQListNames() {
+String getMQListNames() {
 	if (!listOfMQs || (listOfMQs?.size() == 0)) return ''
 	def temp = []
    	listOfMQs?.each { 
@@ -671,7 +669,7 @@ private String getMQListNames() {
     return ((temp.size() > 1) ? ('(' + temp.join(", ") + ')') : (temp.toString()))?.replaceAll("\\[",'').replaceAll("\\]",'')
 }
 
-def askAlexaMQHandler(evt) {
+void askAlexaMQHandler(evt) {
 	LOG("askAlexaMQHandler ${evt?.name} ${evt?.value}",4,null,'trace')
     
     // Ignore null events
@@ -725,12 +723,12 @@ def askAlexaMQHandler(evt) {
    	}
 }
 
-def deleteAskAlexaAlert( String type, String msgID ) {
+void deleteAskAlexaAlert( String type, String msgID ) {
 	LOG("Deleting ${type} Ask Alexa message ID ${msgID}",2,null,'info')
     sendLocationEvent( name: 'AskAlexaMsgQueueDelete', value: type, unit: msgID, isStateChange: true, data: [ queues: listOfMQs ])
 }
 
-def acknowledgeEcobeeAlert( String deviceId, String ackRef ) {
+void acknowledgeEcobeeAlert( String deviceId, String ackRef ) {
     // 					   {"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
     // def jsonRequestBody = '{"functions":[{"type":"acknowledge"}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","ackRef":"' + ackRef + '","ackType":"accept"}}'
     
@@ -767,7 +765,7 @@ def oauthInitUrl() {
 		return "${apiEndpoint}/authorize?${toQueryString(oauthParams)}"
 	}
 }
-private parseAuthResponse(resp) {
+void parseAuthResponse(resp) {
 	log.debug "response data: ${resp.data}"
 	log.debug "response.headers: "
 	resp.headers.each { log.debug "${it.name} : ${it.value}"}
@@ -821,7 +819,7 @@ def callback() {
 */
 def success() {
 	def message = """
-    <p>Your ecobee Account is now connected to SmartThings!</p>
+	<p>Your ecobee Account is now connected to ${isST?'SmartThings':'Hubitat'}!</p>
 	<p>${isHE?'Close this window and c':'C'}lick 'Done' to finish setup.</p>
     """
 	connectionStatus(message)
@@ -841,13 +839,14 @@ def connectionStatus(message, redirectUrl = null) {
 			<meta http-equiv="refresh" content="3; url=${redirectUrl}" />
 		"""
 	}
+	String hubIcon = isST ? 'https://s3.amazonaws.com/smartapp-icons/Partner/support/st-logo%402x.png' : 'https://raw.githubusercontent.com/SANdood/Icons/master/Hubitat/HubitatLogo.png'
 
 	def html = """
 <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=640">
-<title>Ecobee & SmartThings connection</title>
+<title>Ecobee & ${isST?'SmartThings':'Hubitat'} connection</title>
 <style type="text/css">
         @font-face {
                 font-family: 'Swiss 721 W01 Thin';
@@ -895,7 +894,7 @@ def connectionStatus(message, redirectUrl = null) {
         <div class="container">
                 <img src="https://s3.amazonaws.com/smartapp-icons/Partner/ecobee%402x.png" alt="ecobee icon" />
                 <img src="https://s3.amazonaws.com/smartapp-icons/Partner/support/connected-device-icn%402x.png" alt="connected device icon" />
-                <img src="https://s3.amazonaws.com/smartapp-icons/Partner/support/st-logo%402x.png" alt="SmartThings logo" />
+				<img src="${hubIcon}" alt="${isST?'SmartThings':'Hubitat'} logo" />
                 ${message}
         </div>
 </body>
@@ -1033,13 +1032,13 @@ Map getEcobeeSensors() {
 	return sensorMap
 }
      
-def getThermostatDisplayName(stat) {
+String getThermostatDisplayName(stat) {
 	if(stat?.name)
 		return stat.name.toString()
 	return (getThermostatTypeName(stat) + " (${stat.identifier})").toString()
 }
 
-def getThermostatTypeName(stat) {
+String getThermostatTypeName(stat) {
 	return stat.modelNumber == "siSmart" ? "Smart Si" : "Smart"
 }
 
@@ -1083,7 +1082,7 @@ void updated() {
     initialize()
 }
 
-private def updateMyLabel() {
+void updateMyLabel() {
 	if (isST) return								// ST doesn't support the colored label approach
 	
 	// Display Ecobee connection status as part of the label...
@@ -1279,7 +1278,7 @@ def initialize() {
     spawnDaemon("watchdog", false)
     
     //send activity feeds to tell that device is connected
-    def notificationMessage = aOK ? "is connected to SmartThings" : "had an error during setup of devices"
+	def notificationMessage = aOK ? "is connected to ${isST?'SmartThings':'Hubitat'}" : "had an error during setup of devices"
     sendActivityFeeds(notificationMessage)
     atomicState.timeSendPush = null
     if (!atomicState.initialized) {
@@ -1294,7 +1293,7 @@ def initialize() {
     return aOK
 }
 
-private def createChildrenThermostats() {
+def createChildrenThermostats() {
 	LOG("createChildrenThermostats() entered: thermostats=${settings.thermostats}", 5, null, 'trace')
     // Create the child Thermostat Devices
 	def devices = settings.thermostats.collect { dni ->
@@ -1312,13 +1311,13 @@ private def createChildrenThermostats() {
 		} else {
 			LOG("found ${d.displayName} with id ${dni} already exists", 4, null, 'trace')            
 		}
-		return d
+		// return d
 	}
     LOG("Created/Updated ${devices.size()} thermostats", 4, null, 'trace')    
     return true
 }
 
-private def createChildrenSensors() {
+def createChildrenSensors() {
 	LOG("createChildrenSensors() entered: ecobeesensors=${settings.ecobeesensors}", 5, null, 'trace')
     // Create the child Ecobee Sensor Devices
 	def sensors = settings.ecobeesensors.collect { dni ->
@@ -1336,7 +1335,7 @@ private def createChildrenSensors() {
 		} else {
         	LOG("found ${d.displayName} with id $dni already exists", 4, null, 'trace')
 		}
-		return d
+		// return d
 	}
 	LOG("Created/Updated ${sensors.size()} sensors.", 4, null, 'trace')
     return true
@@ -1381,7 +1380,7 @@ String getChildAppName(String childId) {
 }
 
 // NOTE: For this to work correctly getEcobeeThermostats() and getEcobeeSensors() should be called prior
-private def deleteUnusedChildren() {
+void deleteUnusedChildren() {
 	LOG("deleteUnusedChildren() entered", 5, null, 'trace')
     
     // Always make sure that the dummy devices were deleted
@@ -1496,7 +1495,7 @@ def userDefinedEvent(evt) {
     scheduleWatchdog(evt, true)
 }
 
-def scheduleWatchdog(evt=null, local=false) {
+boolean scheduleWatchdog(evt=null, local=false) {
 	def results = true  
     if (debugLevel(4)) {
     	def evtStr = evt ? "${evt.name}:${evt.value}" : 'null'
@@ -1559,7 +1558,7 @@ def scheduleWatchdog(evt=null, local=false) {
 }
 
 // Watchdog Checker
-private def Boolean isDaemonAlive(daemon="all") {
+boolean isDaemonAlive(daemon="all") {
 	// Daemon options: "poll", "auth", "watchdog", "all"    
     def daemonList = ["poll", "auth", "watchdog", "all"]
     String preText = getDebugLevel() <= 2 ? '' : 'isDeamonAlive() - '
@@ -1607,7 +1606,7 @@ private def Boolean isDaemonAlive(daemon="all") {
     return result
 }
 
-private def Boolean spawnDaemon(daemon="all", unsched=true) {
+boolean spawnDaemon(daemon="all", unsched=true) {
 	// log.debug "spawnDaemon(${daemon}, ${unsched})"
 	// Daemon options: "poll", "auth", "watchdog", "all"    
     def daemonList = ["poll", "auth", "watchdog", "all"]
@@ -1676,7 +1675,7 @@ private def Boolean spawnDaemon(daemon="all", unsched=true) {
     return result
 }
 
-def updateLastPoll(Boolean isScheduled=false) {
+void updateLastPoll(Boolean isScheduled=false) {
 	if (isScheduled) {
     	atomicState.lastScheduledPoll = now()
         atomicState.lastScheduledPollDate =  getTimestamp()
@@ -1708,14 +1707,13 @@ def pollInit() {
 	runIn(2, pollChildren, [overwrite: true]) 		// Hit the ecobee API for update on all thermostats, in 2 seconds
 }
 
-def forceNextPoll() {
+void forceNextPoll() {
 	def updatesLog = atomicState.updatesLog
 	updatesLog.forcePoll = true
 	atomicState.updatesLog = updatesLog
-	return
 }
 
-def pollChildren(deviceId=null,force=false) {
+void pollChildren(deviceId=null,force=false) {
 
 	// Just in case we need to re-initialize anything
     def version = getVersionLabel()
@@ -1781,7 +1779,7 @@ def pollChildren(deviceId=null,force=false) {
     }
 }
 
-def generateAlertsAndEvents() {
+void generateAlertsAndEvents() {
 	generateTheEvents()
 	if (askAlexa) {
 		def startMS = now()
@@ -1791,7 +1789,7 @@ def generateAlertsAndEvents() {
 	}
 }
 
-def generateTheEvents() {
+void generateTheEvents() {
 	boolean debugLevelFour = debugLevel(4)
 	def startMS = now()
     def stats = atomicState.thermostats
@@ -1808,13 +1806,13 @@ def generateTheEvents() {
 }
 
 // enables child SmartApps to send events to child Smart Devices using only the DNI
-def generateChildEvent( childDNI, dataMap) {
+void generateChildEvent( childDNI, dataMap) {
 	getChildDevice(childDNI)?.generateEvent(dataMap)
 }
 
 // NOTE: This only updates the apiConnected state now - this used to resend all the data, but that's pretty much a waste of CPU cycles now.
 // 		 If the UI needs updating, the refresh now does a forcePoll on the entire device.
-private def generateEventLocalParams() {
+void generateEventLocalParams() {
 	// Iterate over all the children
     
     def apiConnection = apiConnected()
@@ -1833,7 +1831,7 @@ private def generateEventLocalParams() {
 // Checks if anything has changed since the last time this routine was called, using lightweight thermostatSummary poll
 // NOTE: Despite the documentation, Runtime Revision CAN change more frequently than every 3 minutes - equipmentStatus is 
 //       apparently updated in real time (or at least very close to real time)
-private boolean checkThermostatSummary(String thermostatIdsString) {
+boolean checkThermostatSummary(String thermostatIdsString) {
 	def startMS 
 	if (atomicState.timers) startMS = now()
 
@@ -2010,7 +2008,7 @@ private boolean checkThermostatSummary(String thermostatIdsString) {
 	return result
 }
 
-private def pollEcobeeAPI(thermostatIdsString = '') {
+boolean pollEcobeeAPI(thermostatIdsString = '') {
 	boolean timers = atomicState.timers
 	def pollEcobeeAPIStart = now()
 	atomicState.pollEcobeeAPIStart = pollEcobeeAPIStart
@@ -2163,7 +2161,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
     return true
 }
 
-def pollEcobeeAPICallback( resp, pollState ) {
+boolean pollEcobeeAPICallback( resp, pollState ) {
 	def startMS = now()
     atomicState.waitingForCallback = false
 	boolean timers = atomicState.timers
@@ -2689,7 +2687,7 @@ def pollEcobeeAPICallback( resp, pollState ) {
 	return result
 }
 
-def sendAlertEvents() {
+void sendAlertEvents() {
 	if (atomicState.alerts == null) return				// silently return until we get the alerts environment initialized
     boolean debugLevelFour = debugLevel(4)
 	// log.debug "askAlexa: ${askAlexa}"
@@ -2823,7 +2821,7 @@ def sendAlertEvents() {
     atomicState.askAlexaAlerts = askAlexaAlerts
 }
 
-private String alertTranslation( alertType, notificationType ){
+String alertTranslation( alertType, notificationType ){
 	switch (alertType) {
     	case 'alert':
         	switch(notificationType) {
@@ -2903,7 +2901,7 @@ private String alertTranslation( alertType, notificationType ){
     return 'An Alert'
 }
 
-def updateSensorData() {
+void updateSensorData() {
 	boolean debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("Entered updateSensorData() ${atomicState.remoteSensors}", 4)
  	def sensorCollector = [:]
@@ -3080,7 +3078,7 @@ def updateSensorData() {
 	if (atomicState.timers) log.debug "TIMER: Sensors update completed @ ${now() - atomicState.pollEcobeeAPIStart}ms"
 }
 
-def updateThermostatData() {
+void updateThermostatData() {
 	boolean timers = atomicState.timers
 	def pollEcobeeAPIStart
 	if (timers) {
@@ -3861,7 +3859,7 @@ def updateThermostatData() {
             def oftenList = [tempTemperature,occupancy,runtime?.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
             					tempWeatherPressure,humiditySetpoint,dehumiditySetpoint,humiditySetpointDisplay,userPrecision]
             
-			if (forcePoll || (lastOList[0] != tempTemperature)) data += [temperature: String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision)),]
+			if (tempTemperature && ((lastOList[0] != tempTemperature) || forcePoll)) data += [temperature: String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision)),]
 			if (forcePoll || (lastOList[2] != runtime.actualHumidity)) data += [humidity: runtime.actualHumidity,]
 			if (humiditySetpointDisplay && (lastOList[12] != humiditySetpointDisplay)) data += [humiditySetpointDisplay: humiditySetpointDisplay,]
 			if (lastOList[10] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint,]
@@ -3906,7 +3904,7 @@ def updateThermostatData() {
 	if (timers) log.debug "TIMER: Thermostats update completed @ ${now() - atomicState.pollEcobeeAPIStart}ms"
 }
 
-def getChildThermostatDeviceIdsString(singleStat = null) {
+String getChildThermostatDeviceIdsString(singleStat = null) {
 	def debugLevelFour = debugLevel(4)
 	if(!singleStat) {
     	if (debugLevelFour) LOG('getChildThermostatDeviceIdsString() - !singleStat returning the list for all thermostats', 1, null, 'info')
@@ -3924,7 +3922,7 @@ def toQueryString(Map m) {
 	return m.collect { k, v -> "${k}=${URLEncoder.encode(v.toString())}" }.sort().join("&")
 }
 
-private refreshAuthToken(child=null) {
+boolean refreshAuthToken(child=null) {
 	def debugLevelFour = debugLevel(4)
 	if (debugLevel(5)) LOG('Entered refreshAuthToken()', 5, null, 'trace')	
 
@@ -4076,7 +4074,7 @@ private refreshAuthToken(child=null) {
 	return true
 }
 
-def queueFailedCall(String routine, String DNI, numArgs, arg1=null, arg2=null, arg3=null, arg4=null, arg5=null, arg6=null, arg7=null) {
+void queueFailedCall(String routine, String DNI, numArgs, arg1=null, arg2=null, arg3=null, arg4=null, arg5=null, arg6=null, arg7=null) {
 	//log.debug "queueCall routine: ${routine}, DNI: ${DNI}, ${arg1}, ${arg2}, ${arg3}, ${arg4}, ${arg5}, ${arg6}, ${arg7}"  // ${routine}" // , args: ${theArgs}"
 	if ((atomicState.connected == 'full') && atomicState.runningCallQueue) return // don't queue when we are clearing the queue
     runIn(2, 'queueCall', [overwrite: false, data: [routine: routine, DNI: DNI, args: [arg1, arg2, arg3, arg4, arg5], done: false, numArgs: numArgs]])
@@ -4084,7 +4082,7 @@ def queueFailedCall(String routine, String DNI, numArgs, arg1=null, arg2=null, a
     atomicState.callsQueued = atomicState.callsQueued + 1
 }
 
-def queueCall(data) {
+void queueCall(data) {
 	def dbgLvl = 1
 	LOG("queueCall() data: ${data}", dbgLvl, null, 'trace')
     
@@ -4110,7 +4108,7 @@ def queueCall(data) {
 	// runIn( 5, runCallQueue )
 }
 
-def runCallQueue() {
+void runCallQueue() {
 	def dbgLvl = 1
 	LOG("runCallQueue() connected: ${atomicState.connected}, callQueue: ${atomicState.callQueue}, runningCallQueue: ${atomicState.runningCallQueue}", dbgLvl, null, 'trace')
 	if (atomicState.connected?.toString() != 'full') return
@@ -4184,7 +4182,7 @@ def runCallQueue() {
     atomicState.queueingFailedCalls = false
 }
 
-def resumeProgram(child, String deviceId, resumeAll=true) {
+boolean resumeProgram(child, String deviceId, resumeAll=true) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4239,7 +4237,7 @@ def resumeProgram(child, String deviceId, resumeAll=true) {
     return result
 }
 
-def setHVACMode(child, deviceId, mode) {
+boolean setHVACMode(child, deviceId, mode) {
 	LOG("setHVACMode(${mode})", 4, child)
     def result = setMode(child, mode, deviceId)
     LOG("setHVACMode(${mode}) returned ${result}", 3, child,result?'info':'warn')    
@@ -4248,7 +4246,7 @@ def setHVACMode(child, deviceId, mode) {
     return result
 }
 
-def setMode(child, mode, deviceId) {
+boolean setMode(child, mode, deviceId) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4281,7 +4279,7 @@ def setMode(child, mode, deviceId) {
 	return result
 }
 
-def setHumidifierMode(child, mode, deviceId) {
+boolean setHumidifierMode(child, mode, deviceId) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4312,7 +4310,7 @@ def setHumidifierMode(child, mode, deviceId) {
 	return result
 }
 
-def setHumiditySetpoint(child, value, deviceId) {
+boolean setHumiditySetpoint(child, value, deviceId) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4343,7 +4341,7 @@ def setHumiditySetpoint(child, value, deviceId) {
 	return result	
 }
 
-def setDehumidifierMode(child, mode, deviceId) {
+boolean setDehumidifierMode(child, mode, deviceId) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4374,7 +4372,7 @@ def setDehumidifierMode(child, mode, deviceId) {
 	return result
 }
 
-def setDehumiditySetpoint(child, value, deviceId) {
+boolean setDehumiditySetpoint(child, value, deviceId) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4405,7 +4403,7 @@ def setDehumiditySetpoint(child, value, deviceId) {
 	return result	
 }
 
-def setFanMinOnTime(child, deviceId, howLong) {
+boolean setFanMinOnTime(child, deviceId, howLong) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4441,7 +4439,7 @@ def setFanMinOnTime(child, deviceId, howLong) {
     return result
 }
 
-def setVacationFanMinOnTime(child, deviceId, howLong) {
+boolean setVacationFanMinOnTime(child, deviceId, howLong) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4504,7 +4502,7 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
     return false
 }
 
-private def createVacationTemplate(child, deviceId) {
+boolean createVacationTemplate(child, deviceId) {
 	String vacationName = 'tempVac810n'
     String statName = getThermostatName(deviceId)
     
@@ -4528,7 +4526,7 @@ private def createVacationTemplate(child, deviceId) {
     return true
 }
 
-def deleteVacation(child, deviceId, vacationName=null ) {
+boolean deleteVacation(child, deviceId, vacationName=null ) {
 	def vacaName = vacationName
     String statName = getThermostatName(deviceId)
 	if (!vacaName) {		// no vacationName specified, let's find out if one is currently running
@@ -4557,7 +4555,7 @@ def deleteVacation(child, deviceId, vacationName=null ) {
 }
 
 // Should only be called by child devices, and they MUST provide sendHoldType and sendHoldHours as of version 1.2.0
-def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHoldHours=2) {
+boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHoldHours=2) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4633,7 +4631,7 @@ def setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', sendHo
 }
 
 // Should only be called by child devices, and they MUST provide sendHoldType and sendHoldHours as of version 1.2.0
-def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite', sendHoldHours=2) {
+boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite', sendHoldHours=2) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4717,7 +4715,7 @@ def setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite'
     return result    
 }
 
-def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendHoldHours=2) {
+boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', sendHoldHours=2) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4789,7 +4787,7 @@ def setProgram(child, program, String deviceId, sendHoldType='indefinite', sendH
 }
 
 ////////////////////////////////////////////////////////////////
-def addSensorToProgram(child, deviceId, sensorId, programId) {
+boolean addSensorToProgram(child, deviceId, sensorId, programId) {
 	String statName = getThermostatName( deviceId )
     String sensName = child.device?.displayName
 	LOG("addSensorToProgram(${sensName},${statName},${sensorId},${programId})",4,child,'trace')
@@ -4835,7 +4833,7 @@ def addSensorToProgram(child, deviceId, sensorId, programId) {
     return false
 }
 /////////////////////////////////////////////////////////////////////
-def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
+boolean deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 	String statName = getThermostatName( deviceId )
     String sensName = child.device?.displayName
 	LOG("deleteSensorFromProgram(${sensName},${statName},${sensorId},${programId})",2,child,'trace')
@@ -4879,7 +4877,7 @@ def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
     return true
 }
 
-def setProgramSetpoints(child, String deviceId, String programName, String heatingSetpoint, String coolingSetpoint) {
+boolean setProgramSetpoints(child, String deviceId, String programName, String heatingSetpoint, String coolingSetpoint) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4954,11 +4952,11 @@ def setProgramSetpoints(child, String deviceId, String programName, String heati
     return false
 }
 
-def updateClimates(data) {
+void updateClimates(data) {
 	updateClimatesDirect(data.child, data.deviceId)
 }
 
-def updateClimatesDirect(child, deviceId) {
+boolean updateClimatesDirect(child, deviceId) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -4996,7 +4994,7 @@ def updateClimatesDirect(child, deviceId) {
     return result    
 }
 
-def setEcobeeSetting(child, String deviceId, String name, String value) {
+boolean setEcobeeSetting(child, String deviceId, String name, String value) {
 	if (child == null) {
        	child = getChildDevice(getThermostatDNI(deviceId))
     }
@@ -5060,7 +5058,7 @@ def setEcobeeSetting(child, String deviceId, String name, String value) {
 }
 
 // API Helper Functions
-private def sendJson(child=null, String jsonBody) {
+boolean sendJson(child=null, String jsonBody) {
 	def debugLevelFour = false // debugLevel(4)
     if (debugLevelFour) LOG("sendJson() - ${jsonBody}",1,child,'debug')
 	def returnStatus
@@ -5162,7 +5160,7 @@ private def sendJson(child=null, String jsonBody) {
 	return result
 }
 
-private def sendJsonRetry() {
+boolean sendJsonRetry() {
 	LOG("sendJsonRetry() called", 4)
     def child = null
     if (atomicState.savedActionChild) {
@@ -5180,23 +5178,23 @@ private def sendJsonRetry() {
     return sendJson(child, atomicState.savedActionJsonBody)
 }
 
-private def getChildThermostatName() { return "Ecobee Suite Thermostat" }
-private def getChildSensorName()     { return "Ecobee Suite Sensor" }
-private def getServerUrl()           { return (isST) ? "https://graph.api.smartthings.com" : getFullApiServerUrl()}	// hubitat: /oauth/authorize}
-private def getShardUrl()            { return (isST) ? getApiServerUrl() : getFullApiServerUrl()+"?access_token=${atomicState.accessToken}" }
-private def getCallbackUrl()         { return (isST) ? "${serverUrl}/oauth/callback" : "https://cloud.hubitat.com/oauth/stateredirect" } // : */ "${serverUrl}/callback" } // &" + URLEncoder.encode("access_token", "UTF-8") + "=" + URLEncoder.encode(atomicState.accessToken, "UTF-8") } // #access_token=${atomicState.accessToken}" }
-private def getBuildRedirectUrl()    { return (isST) ? "${serverUrl}/oauth/initialize?appId=${app.id}&access_token=${atomicState.accessToken}&apiServerUrl=${shardUrl}" : 
+String getChildThermostatName() { return "Ecobee Suite Thermostat" }
+String getChildSensorName()     { return "Ecobee Suite Sensor" }
+String getServerUrl()           { return (isST) ? "https://graph.api.smartthings.com" : getFullApiServerUrl()}	// hubitat: /oauth/authorize}
+String getShardUrl()            { return (isST) ? getApiServerUrl() : getFullApiServerUrl()+"?access_token=${atomicState.accessToken}" }
+String getCallbackUrl()         { return (isST) ? "${serverUrl}/oauth/callback" : "https://cloud.hubitat.com/oauth/stateredirect" } // : */ "${serverUrl}/callback" } // &" + URLEncoder.encode("access_token", "UTF-8") + "=" + URLEncoder.encode(atomicState.accessToken, "UTF-8") } // #access_token=${atomicState.accessToken}" }
+String getBuildRedirectUrl()    { return (isST) ? "${serverUrl}/oauth/initialize?appId=${app.id}&access_token=${atomicState.accessToken}&apiServerUrl=${shardUrl}" : 
 									  				   "${serverUrl}/oauth/stateredirect?access_token=${atomicState.accessToken}" }
-private def getStateUrl() 			 { return "${getHubUID()}/apps/${app?.id}/callback?access_token=${atomicState?.accessToken}" }
-private def getApiEndpoint()         { return "https://api.ecobee.com" }
-private def getInfo()				 { return 'info' }
-private def getWarn()				 { return 'warn' }
-private def getTrace()				 { return 'trace' }
-private def getDebug()				 { return 'debug' }
-private def getError()				 { return 'error' }
+String getStateUrl() 			 { return "${getHubUID()}/apps/${app?.id}/callback?access_token=${atomicState?.accessToken}" }
+String getApiEndpoint()         { return "https://api.ecobee.com" }
+String getInfo()				 { return 'info' }
+String getWarn()				 { return 'warn' }
+String getTrace()				 { return 'trace' }
+String getDebug()				 { return 'debug' }
+String getError()				 { return 'error' }
 
 // This is the API Key from the Ecobee developer page. Can be provided by the app provider or use the appSettings
-private def getEcobeeApiKey() { 
+String getEcobeeApiKey() { 
 	if (isHE) {
 		if (atomicState.apiKey == null) atomicState.apiKey = "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"		// Ecobee key for Ecobee Suite 1.7.** on Hubitat
 		return "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"
@@ -5216,7 +5214,7 @@ private def getEcobeeApiKey() {
     }
 }
 
-private String getThermostatName(String tid) {
+String getThermostatName(String tid) {
     // Get the name for this thermostat
     String DNI = (isHE?'ecobee_suite-thermostat-':'') + ([ app.id, tid ].join('.'))
     def thermostatsWithNames = atomicState.thermostatsWithNames
@@ -5227,11 +5225,11 @@ private String getThermostatName(String tid) {
     return tstatName
 }
 
-private String getThermostatDNI(String tid) {
+String getThermostatDNI(String tid) {
 	return (isHE?'ecobee_suite-thermostat-':'') + ([app.id, tid].join('.'))
 }
 
-private def LOG(message, level=3, child=null, String logType='debug', event=false, displayEvent=true) {
+void LOG(message, level=3, child=null, String logType='debug', event=false, displayEvent=true) {
 	def dbgLevel = debugLevel(level)
     if (!dbgLevel) return 		// let's not waste CPU cycles if we don't have to...
     
@@ -5258,7 +5256,7 @@ private def LOG(message, level=3, child=null, String logType='debug', event=fals
 	//}    
 }
 
-private def debugEvent(message, displayEvent = false) {
+void debugEvent(message, displayEvent = false) {
 	def results = [
 		name: 'appdebug',
 		descriptionText: message,
@@ -5268,7 +5266,7 @@ private def debugEvent(message, displayEvent = false) {
 	sendEvent (results)
 }
 
-private def debugEventFromParent(child, message) {
+void debugEventFromParent(child, message) {
 	 def data = [
             	debugEventFromParent: message
             ]         
@@ -5277,7 +5275,7 @@ private def debugEventFromParent(child, message) {
 
 // TODO: Create a more generic push capability to send notifications
 // send both push notification and mobile activity feeds
-private def sendPushAndFeeds(notificationMessage) {
+void sendPushAndFeeds(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
 	LOG("Notification Time: ${atomicState.timeSendPush}", 2, null, "info")
     
@@ -5353,7 +5351,7 @@ private def sendPushAndFeeds(notificationMessage) {
     }
 }
 
-private def sendActivityFeeds(notificationMessage) {
+void sendActivityFeeds(notificationMessage) {
     def devices = getChildDevices()
     devices.each { child ->
         child.generateActivityFeedsEvent(notificationMessage) //parse received message from parent
@@ -5391,46 +5389,28 @@ def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
     LOG("returnSensorValue == ${returnSensorValue}", 5, null, "trace", false)
     return returnSensorValue
 }
-private roundIt( value, decimals=0 ) {
+def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-private roundIt( BigDecimal value, decimals=0) {
+def roundIt( BigDecimal value, decimals=0) {
     return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-def myEquiv(val1, val2) { 
-	log.trace "\nval1: ${val1}\nval2: ${val2}"
-   if (val1 instanceof List && val2 instanceof List) { 
-	   log.trace "List compare"
-     return val1.toSet() == val2.toSet() 
-   } 
-   if (val1 instanceof Map && val2 instanceof Map) { 
-	   if (val1.size() != val2.size()) {log.trace "wrong size"; return false;}
-     return val1.every { k, v -> 
-		 if (!val2.containsKey(k)) {log.trace "key ${k} missing"; return false ;}
-		 if (!myEquiv(v, val2[k])) {log.trace "value for ${k} mismitach: ${v} / ${val2[k]}"; return false;}
-       true 
-     } 
-   } 
-	log.trace "Value compare"
-   val1 == val2 
-} 
-def wantMetric() {
+boolean wantMetric() {
 	return (getTemperatureScale() == "C")
 }
-
-private cToF(temp) {
+def cToF(temp) {
 	if (debugLevel(5)) LOG("cToF entered with ${temp}", 5, null, "info")
 	if (temp) { return (temp * 1.8 + 32) } else { return null } 
     // return celsiusToFahrenheit(temp)
 }
-private fToC(temp) {	
+def fToC(temp) {	
 	if (debugLevel(5)) LOG("fToC entered with ${temp}", 5, null, "info")
 	if (temp) { return (temp - 32) / 1.8 } else { return null } 
     // return fahrenheitToCelsius(temp)
 }
 
 // Establish the minimum amount of time to wait to do another poll
-private def getMinMinBtwPolls() {
+def getMinMinBtwPolls() {
     // TODO: Make this configurable in the SmartApp
 	return 1
 }
@@ -5440,23 +5420,23 @@ def toJson(Map m) {
 }
 
 // need these next 5 get routines because settings variable defaults aren't set unless the "Preferences" page is actually opened/rendered
-def Integer getPollingInterval() {
+Integer getPollingInterval() {
     return (settings?.pollingInterval?.isNumber() ? settings.pollingInterval as Integer : 5)
 }
 
-private Integer getTempDecimals() {
+Integer getTempDecimals() {
 	return ( settings?.tempDecimals?.isNumber() ? settings.tempDecimals as Integer : (wantMetric() ? 1 : 0))
 }
 
-private Integer getDebugLevel() {
+Integer getDebugLevel() {
 	return ( settings?.debugLevel?.isNumber() ? settings.debugLevel as Integer : 3)
 }
 
-private String getHoldType() {
+String getHoldType() {
 	return settings.holdType ?: 'Until I Change'
 }
 
-private Integer getHoldHours() {
+Integer getHoldHours() {
 	if (settings.holdType) {
     	if (settings.holdType == 'Specified Hours') return ((settings.holdHours != null) && settings.holdHours?.isNumber() ? settings.holdHours as Integer : 2)
         else if (settings.holdType == '2 Hours') return 2
@@ -5465,7 +5445,7 @@ private Integer getHoldHours() {
     }
 }
 
-private def String getTimestamp() {
+String getTimestamp() {
 	// There seems to be some possibility that the timeZone will not be returned and will cause a NULL Pointer Exception
 	def timeZone = location?.timeZone ? location.timeZone : ""
     // LOG("timeZone found as ${timeZone}", 5)
@@ -5476,7 +5456,7 @@ private def String getTimestamp() {
 	}
 }
 
-private def getTimeOfDay(tid = null) {
+String getTimeOfDay(tid = null) {
 	def nowTime 
     if(atomicState.timeZone) {
     	nowTime = new Date().format("HHmm", TimeZone.getTimeZone(atomicState.timeZone)).toInteger()
@@ -5496,7 +5476,7 @@ private def getTimeOfDay(tid = null) {
 // we'd prefer to use the timeZone that the thermostat says it is in, so long as ALL the thermostats agree
 // if thermostats don't have a timeZone, use the SmartThings location.timeZone
 // if ST location doesn't have a time zone, we're just going to have to use ST's "local time"
-private def getTimeZone() {
+String getTimeZone() {
 	def updatesLog = atomicState.updatesLog
 	if ((atomicState.timeZone == null) || updatesLog.forcePoll) {
     	// default to the SmartThings location's timeZone (if there is one)
@@ -5525,7 +5505,7 @@ private def getTimeZone() {
     return atomicState.timeZone
 }
 
-private String getZipCode() {
+String getZipCode() {
 	// default to the SmartThings location's timeZone (if there is one)
 	String myZipCode = location?.zipCode
     if (myZipCode == null) {
@@ -5556,13 +5536,13 @@ private String getZipCode() {
 }
 
 // Are we connected with the Ecobee service?
-private String apiConnected() {
+String apiConnected() {
 	// values can be "full", "warn", "lost"
 	if (atomicState.connected == null) { atomicState.connected = "warn"; updateMyLabel(); }
 	return atomicState.connected?.toString() ?: "lost"
 }
 
-private def apiRestored() {
+void apiRestored() {
 	atomicState.connected = "full"
 	updateMyLabel()
 	unschedule("notifyApiLost")
@@ -5570,7 +5550,7 @@ private def apiRestored() {
     runIn(10, runCallQueue)
 }
 
-private def getDebugDump() {
+def getDebugDump() {
 	 def debugParams = [when:"${getTimestamp()}", whenEpic:"${now()}", 
 				lastPollDate:"${atomicState.lastPollDate}", lastScheduledPollDate:"${atomicState.lastScheduledPollDate}", 
 				lastScheduledWatchdogDate:"${atomicState.lastScheduledWatchdogDate}",
@@ -5581,8 +5561,8 @@ private def getDebugDump() {
 	return debugParams
 }
 
-private def apiLost(where = "[where not specified]") {
-    LOG("apiLost() - ${where}: Lost connection with APIs. unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running the SmartApp and logging in again", 1, null, "error")
+void apiLost(where = "[where not specified]") {
+    LOG("apiLost() - ${where}: Lost connection with APIs. unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running Ecobee Suite Manager ${isST?'Smart':''}App and logging in again", 1, null, "error")
     atomicState.apiLostDump = getDebugDump()
     if (apiConnected() == "lost") {
     	LOG("apiLost() - already in lost atomicState. Nothing else to do. (where= ${where})", 5, null, "trace")
@@ -5590,7 +5570,7 @@ private def apiLost(where = "[where not specified]") {
     }
    
     // provide cleanup steps when API Connection is lost
-	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from SmartThings/Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager SmartApp and re-enter your account login credentials."
+	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from ${isST?'SmartThings':'Hubitat'}/Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager ${isST?'Smart':''}App and re-enter your account login credentials."
     atomicState.connected = "lost"
 	updateMyLabel()
     atomicState.authToken = null
@@ -5598,7 +5578,7 @@ private def apiLost(where = "[where not specified]") {
     sendPushAndFeeds(notificationMessage)
 	generateEventLocalParams()
 
-    LOG("Unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running the SmartApp and logging in again", 0, null, "error")
+    LOG("Unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running the Ecobee Suite Manager ${isST?'Smart':''}App and logging in again", 0, null, "error")
     
     // Notify each child that we lost so it gets logged
     if ( debugLevel(3) ) {
@@ -5612,26 +5592,26 @@ private def apiLost(where = "[where not specified]") {
     runEvery3Hours("notifyApiLost")
 }
 
-def notifyApiLost() {
-	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from SmartThings/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
+void notifyApiLost() {
+	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from ${isST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
     if ( atomicState.connected == "lost" ) {
     	generateEventLocalParams()
 		sendPushAndFeeds(notificationMessage)
-        LOG("notifyApiLost() - API Connection Previously Lost. User MUST reintialize the connection with Ecobee by running the SmartApp and logging in again", 0, null, "error")
+        LOG("notifyApiLost() - API Connection Previously Lost. User MUST reintialize the connection with Ecobee by running the Ecobee Suite Manager ${isST?'Smart':''}App and logging in again", 0, null, "error")
 	} else {
     	// Must have restored connection
         unschedule("notifyApiLost")
     }    
 }
 
-private String childType(child) {
+String childType(child) {
 	// Determine child type (Thermostat or Remote Sensor)
     if ( child.hasCapability("Thermostat") ) { return getChildThermostatName() }
     if ( child.name.contains( getChildSensorName() ) ) { return getChildSensorName() }
     return "Unknown"
 }
 
-private def getFanMinOnTime(child) {
+def getFanMinOnTime(child) {
 	if (debugLevel(4)) LOG("getFanMinOnTime() - Looking up current fanMinOnTime for ${child.device?.displayName}", 1, child)
     String devId = getChildThermostatDeviceIdsString(child)
     LOG("getFanMinOnTime() Looking for ecobee thermostat ${devId}", 5, child, "trace")
@@ -5641,7 +5621,7 @@ private def getFanMinOnTime(child) {
 	return fanMinOnTime
 }
 
-private String getHVACMode(child) {
+String getHVACMode(child) {
 	if (debugLevel(4)) LOG("Looking up current hvacMode for ${child.device?.displayName}", 1, child)
     String devId = getChildThermostatDeviceIdsString(child)
     // LOG("getHVACMode() Looking for ecobee thermostat ${devId}", 5, child, "trace")
@@ -5662,12 +5642,12 @@ def getAvailablePrograms(thermostat) {
     return climates?.collect { it.name }
 }
 
-private def debugLevel(level=3) {
+boolean debugLevel(level=3) {
     Integer dbgLevel = getDebugLevel()
     return (dbgLevel == 0) ? false : (dbgLevel >= level?.toInteger())
 }
 
-private String fixDateTimeString( String dateStr, String timeStr, String thermostatTime) {
+String fixDateTimeString( String dateStr, String timeStr, String thermostatTime) {
 	// date is in ecobee format: YYYY-MM-DD or null (meaning "today")
 	// time is in ecobee format: HH:MM:SS
     def today = new Date().parse('yyyy-MM-dd', thermostatTime)
@@ -5699,7 +5679,7 @@ private String fixDateTimeString( String dateStr, String timeStr, String thermos
     return resultStr
 }
 
-private def getDeviceId(String networkId) {
+String getDeviceId(String networkId) {
 	// def deviceId = networkId.split(/\./).last()	
     // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
     // return deviceId
@@ -5739,12 +5719,12 @@ void cancelReservation( String statId, String childId, String type='modeOff') {
     }
 }
 // Do I have a reservation?
-Boolean haveReservation( String statId, String childId, String type='modeOff') {
+boolean haveReservation( String statId, String childId, String type='modeOff') {
     def reservations = atomicState.reservations
 	return (reservations?."${statId}"?."${type}"?.contains(childId))
 }
 // Do any Apps have reservations?
-Boolean anyReservations( String statId, String type='modeOff') {
+boolean anyReservations( String statId, String type='modeOff') {
 	def reservations = atomicState.reservations
 	return (reservations?."${statId}"?.containsKey(type)) ? (reservations."${statId}"."${type}".size() != 0) : false
 }
@@ -5770,14 +5750,14 @@ List getGuestList(String statId, String type='modeOff') {
     return guestList
 }
 
-def runEvery2Minutes(handler) {
+void runEvery2Minutes(handler) {
 	Random rand = new Random()
     //log.debug "Random2: ${rand}"
     int randomSeconds = rand.nextInt(59)
 	schedule("${randomSeconds} 0/2 * * * ?", handler)
 }
 
-def runEvery3Minutes(handler) {
+void runEvery3Minutes(handler) {
 	Random rand = new Random()
     //log.debug "Random3: ${rand}"
     int randomSeconds = rand.nextInt(59)
@@ -5851,16 +5831,16 @@ def runEvery3Minutes(handler) {
 //	1.0.0	Initial Release
 //	1.0.1	Use atomicState so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -5868,10 +5848,10 @@ private String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
 	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
