@@ -18,9 +18,10 @@
  *	1.7.03 - Miscellaneous optimizations
  *  1.7.04 - Fixed myThermostats subscription (thx @astephon88) & missing sendMessages
  *	1.7.05 - Fixed SMS text entry
+ *	1.7.06 - Fixing private method issue caused by grails
  */
-def getVersionNum() { return "1.7.05" }
-private def getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.06" }
+String getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
     name: "ecobee Suite Working From Home",
@@ -255,7 +256,7 @@ def checkHome() {
     }
 }
 
-private anyoneIsHome() {
+boolean anyoneIsHome() {
   def result = false
 
   if (settings.people.findAll { it?.currentPresence == "present" }) {
@@ -265,7 +266,7 @@ private anyoneIsHome() {
   return result
 }
 
-private String whoIsHome() {
+String whoIsHome() {
 	if (!settings.identify) return "somebody"
 	
 	String names = ""
@@ -302,7 +303,7 @@ def getThermostatModes() {
     return theModes.sort(false)
 }
 
-private getStatModeOk() {
+boolean getStatModeOk() {
 	if (settings.statMode == null) return true
 	def result = false
 	settings.myThermostats?.each { stat ->
@@ -317,13 +318,13 @@ private getStatModeOk() {
 	return result
 }
 
-private getModeOk() {
+boolean getModeOk() {
     def result = (!modes || modes.contains(location.mode))
     LOG("modeOk: ${result}", 4, null, 'trace')
 	return result
 }
 
-private getDaysOk() {
+boolean getDaysOk() {
     def result = true
     if (settings.days) {
         def df = new java.text.SimpleDateFormat("EEEE")
@@ -340,7 +341,7 @@ private getDaysOk() {
     return result
 }
 
-private def sendMessage(notificationMessage) {
+void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
@@ -416,7 +417,7 @@ private def sendMessage(notificationMessage) {
 	}
 }
 
-private def updateMyLabel() {
+void updateMyLabel() {
 	String flag = isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
@@ -438,11 +439,11 @@ private def updateMyLabel() {
 	}
 }
 
-private hideOptions() {
+def hideOptions() {
     return (settings.days || settings.modes) ? false : true
 }
 
-private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
+void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	def messageLbl = "${app.label} ${message}"
 	if (logType == null) logType = 'debug'
 	if (parent) parent.LOG(messageLbl, level, null, logType, event, displayEvent)
@@ -461,16 +462,16 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 //	1.0.0	Initial Release
 //	1.0.1	Use atomicState so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -478,10 +479,10 @@ private String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
 	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
