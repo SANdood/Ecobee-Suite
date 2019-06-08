@@ -39,7 +39,7 @@
  *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
  */
-String getVersionNum() { return "1.7.09c" }
+String getVersionNum() { return "1.7.09d" }
 String getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -223,7 +223,8 @@ void clearReservations() {
 		theThermostats?.each {
 			cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff')
 		}
-	} else {
+	}
+	if (settings.myThermostats) {
 		myThermostats?.each {
     		cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff')
 		}
@@ -283,7 +284,7 @@ def initialize() {
     
     //def tempState = atomicState.HVACModeState
     //if (tempState == null) tempState = (contactOffState || switchOffState)?'off':'on'		// recalculate if we should be off or on
-    def tempState = (contactOffState || switchOffState)?'off':'on'		// recalculate if we should be off or on
+    def tempState = (contactOffState || switchOffState) ? 'off' : 'on'		// recalculate if we should be off or on
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
     if (tempState == 'on') {
     	// Initialize the saved state values
@@ -409,24 +410,25 @@ void sensorOpened(evt=null) {
 	LOG("sensorOpened() entered with event ${evt?.device} ${evt?.name}: ${evt?.value}", 3,null,'trace')
 	
     def HVACModeState = atomicState.HVACModeState
-    if(HVACModeState == 'off' || atomicState.openedState == 'off_pending') {
+    if ((HVACModeState == 'off') || (HVACModeState == 'off_pending')) {
     	// HVAC is already off
-		if (numOn() == 1) {
+		if (numOpen() == 1) {
 			atomicState.wasAlreadyOff = true
 		}
         return
     }
-    Integer delay = (settings.onDelay != null ? settings.onDelay : 0) as Integer
-    if (HVACModeState == 'resume_pending') {
-        atomicState.openedState = 'off'
+    Integer delay = (settings.onDelay ? settings.onDelay : 0) as Integer
+    if (HVACModeState == 'on_pending') {
+		// HVAC is already/still off
         if (delay > 0) unschedule('turnOnHVAC')
-        // HVAC is already/still off
+		atomicState.HVACModeState = 'off'
+		turnOffHVAC()			// Make sure it is really off
         return
     }
 
 	// HVAC is on, turn it off
    	atomicState.HVACModeState = 'off_pending'
-	delay = (settings.offDelay != null ? settings.offDelay : 5) as Integer
+	delay = ((settings.offDelay || (settings.offDelay == 0)) ? settings.offDelay : 5) as Integer
 	if (delay > 0) { runIn(delay*60, 'turnOffHVAC', [overwrite: true]) } else { turnOffHVAC() }  
 }
 
@@ -457,10 +459,10 @@ void sensorClosed(evt=null) {
 			turnOnHVAC()	// Just in case
 			return	// already on, nothing more to do (catches 'on' and 'on_pending')
 		}
-        Integer delay = (settings.offDelay != null ? settings.offDelay : 5) as Integer
-        if (HVACModeState == 'off_pending' ) {
-        	atomicState.HVACModeState = 'on'
+        Integer delay = ((settings.offDelay || (settings.offDelay == 0)) ? settings.offDelay : 5) as Integer
+		if (HVACModeState == 'off_pending' ) {
 			if (delay != 0) unschedule('turnOffHVAC')
+			atomicState.HVACModeState = 'on'
 			LOG("All sensors & switches are reset, off_pending was cancelled", 3, null, 'info')
             // still on
 			turnOnHVAC()	// Just in case
@@ -584,7 +586,7 @@ void turnOffHVAC() {
     	}
     } else {
     	if (action.contains('Notify')) {
-        	sendMessage("${settings.theStats} already off")
+        	sendMessage("${theStats} already off")
             LOG('All thermostats are already off',2,null,'info')
         }
     }
@@ -605,8 +607,8 @@ void turnOnHVAC() {
 	   	// Restore to previous state 
         // LOG("Restoring to previous state", 5) 
         
-        settings.theStats.each { therm ->
-			LOG("Working on thermostat: ${therm}", 2)
+        theStats.each { therm ->
+			LOG("Working on thermostat: ${therm}", 2, null, 'info')
             tstatNames << therm.displayName
             def tid = getDeviceId(therm.deviceNetworkId)
             String priorMode = settings.defaultMode
@@ -621,7 +623,7 @@ void turnOnHVAC() {
             		// turn on the HVAC
                     def oldMode = isST ? therm.currentValue('thermostatMode') :  therm.currentValue('thermostatMode', true) 
                     def newMode = (tmpThermSavedState[tid].mode == '') ? 'auto' : tmpThermSavedState[tid].mode
-					log.debug "Current HVAC mode: ${oldMode}, desired HVAC mode: ${newMode}"
+					LOG("Current HVAC mode: ${oldMode}, desired HVAC mode: ${newMode}", 2, null, 'info')
                     if (newMode != oldMode) {
                     	def i = countReservations( tid, 'modeOff' ) - (haveReservation(tid, 'modeOff') ? 1 : 0)
                         // log.debug "count=${countReservations(tid,'modeOff')}, have=${haveReservation(tid,'modeOff')}, i=${i}"
