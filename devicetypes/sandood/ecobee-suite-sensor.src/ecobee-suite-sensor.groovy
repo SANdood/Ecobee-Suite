@@ -35,10 +35,11 @@
  *	1.6.16 - Log uninstalls also
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() on HE
+ *	1.7.02 - Fixing private method issue caused by grails
  */
-def getVersionNum() { return "1.7.01" }
-private def getVersionLabel() { return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
-private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
+String getVersionNum() 		{ return "1.7.02" }
+String getVersionLabel() 	{ return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
+def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
 	definition (name: "Ecobee Suite Sensor", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)",
@@ -407,24 +408,24 @@ void disableSmartRoom() {
 	sendEvent(name: "SmartRoom", value: "disable", isSateChange: true, displayed: false)		// the Smart Room SmartApp should be watching for this
 }
 
-private String getSensorId() {
+String getSensorId() {
 	def myId = []
     myId = device.deviceNetworkId.split('-') as List
     return (myId[2])
 }
-private roundIt( value, decimals=0 ) {
+def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-private roundIt( BigDecimal value, decimals=0 ) {
+def roundIt( BigDecimal value, decimals=0 ) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 
-private debugLevel(level=3) {
+def debugLevel(level=3) {
 	Integer debugLvlNum = (getParentSetting('debugLevel') ?: level) as Integer
     return ( debugLvlNum >= (level as Integer))
 }
 
-private def LOG(message, Integer level=3, child=null, logType="debug", event=false, displayEvent=false) {
+void LOG(message, Integer level=3, child=null, logType="debug", event=false, displayEvent=false) {
 	def prefix = ""
 	Integer dbgLvl = (getParentSetting('debugLevel') ?: level) as Integer
 	if ( dbgLvl == 5 ) { prefix = "LOG: " }
@@ -434,7 +435,7 @@ private def LOG(message, Integer level=3, child=null, logType="debug", event=fal
 	}    
 }
 
-private def debugEvent(message, displayEvent = false) {
+void debugEvent(message, displayEvent = false) {
 	def results = [
 		name: "appdebug",
 		descriptionText: message,
@@ -473,22 +474,21 @@ def getTempColors() {
 		[value: 95, color: "#d04e00"],
 		[value: 99, color: "#d04e00"],
  */
- 							[value: 0, color: "#153591"],
-							[value: 7, color: "#1e9cbb"],
-							[value: 15, color: "#90d2a7"],
-							[value: 23, color: "#44b621"],
-							[value: 28, color: "#f1d801"],
-							[value: 35, color: "#d04e00"],
-							[value: 37, color: "#bc2323"],
-							// Fahrenheit
-							[value: 40, color: "#153591"],
-							[value: 44, color: "#1e9cbb"],
-							[value: 59, color: "#90d2a7"],
-							[value: 74, color: "#44b621"],
-							[value: 84, color: "#f1d801"],
-							[value: 95, color: "#d04e00"],
-							[value: 96, color: "#bc2323"],
-
+		[value: 0, color: "#153591"],
+		[value: 7, color: "#1e9cbb"],
+		[value: 15, color: "#90d2a7"],
+		[value: 23, color: "#44b621"],
+		[value: 28, color: "#f1d801"],
+		[value: 35, color: "#d04e00"],
+		[value: 37, color: "#bc2323"],
+		// Fahrenheit
+		[value: 40, color: "#153591"],
+		[value: 44, color: "#1e9cbb"],
+		[value: 59, color: "#90d2a7"],
+		[value: 74, color: "#44b621"],
+		[value: 84, color: "#f1d801"],
+		[value: 95, color: "#d04e00"],
+		[value: 96, color: "#bc2323"],
         [value: 451, color: "#ff4d4d"] // Nod to the book and temp that paper burns. Used to catch when the device is offline
 	]
 }
@@ -519,16 +519,16 @@ def getStockTempColors() {
 //	1.0.0	Initial Release
 //	1.0.1	Use state so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (state?.isST != null) ? state.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (state?.isHE != null) ? state.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (state?.isST != null) ? state.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (state?.isHE != null) ? state.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     state?.hubPlatform = pf			// if (state.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -536,10 +536,10 @@ private String getHubPlatform() {
     state?.isHE = pf.startsWith('H')	// if (state.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return state.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return state.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return state.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return state.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (state?.isST != null) ? state?.isST : isST
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
