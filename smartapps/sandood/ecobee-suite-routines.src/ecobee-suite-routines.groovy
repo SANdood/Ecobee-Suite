@@ -30,9 +30,10 @@
  *  1.7.07 - Fixed variable definition (ncCp)
  *  1.7.08 - Cleaned up messages (a little - more still to do)
  *  1.7.09 - Fixed SMS text entry
+ *	1.7.10 - Fixing private method issue caused by grails, "Vacation" from currentProgramName
  */
-def getVersionNum() { return "1.7.09" }
-private def getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.10" }
+String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -291,6 +292,7 @@ def initialize() {
 		subscribe(startSwitches, "switch.${startOn}", changeSwitchHandler)
     } else { // has to be "Ecobee Program"
     	subscribe(myThermostats, "currentProgram", changeSTHandler)
+		subscribe(myThermostats, "currentProgramName", changeSTHandler)
     }
     
 //    if(useSunriseSunset?.size() > 0) {
@@ -304,7 +306,7 @@ def initialize() {
     LOG("initialize() exiting")
 }
 
-private def normalizeSettings() {
+void normalizeSettings() {
 	
 	// whichProgram
 	atomicState.programParam = null
@@ -402,7 +404,7 @@ def changeSwitchHandler(evt) {
 	}
 }
 
-def turnOffStartSwitches() {
+void turnOffStartSwitches() {
 	if (settings.startOff) {
 		settings.startSwitches.each { aSwitch ->
 			if (aSwitch.displayName == atomicState.theSwitch) {
@@ -449,7 +451,7 @@ def changeSTHandler(evt) {
     }
 }
 
-def changeMode(aSwitch = null) {
+void changeMode(aSwitch = null) {
 	if (aSwitch != null) {
 		if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
 			if (location.modes?.find {it.name == settings.runMode}) {
@@ -478,7 +480,7 @@ def changeMode(aSwitch = null) {
 	}
 }
 
-def runRoutine(aSwitch = null) {
+void runRoutine(aSwitch = null) {
 	if (aSwitch != null) {
 		sendMessage("Executing Routine ${settings.runAction} because ${aSwitch} was turned ${settings.startOn}")
 	} else {
@@ -490,7 +492,7 @@ def runRoutine(aSwitch = null) {
 	location.helloHome?.execute(settings.runAction)
 }
 
-def changeSwitches() {
+void changeSwitches() {
 	if (settings.doneSwitches) {
 		settings.doneSwitches.each() {
 			it."${doneOn}()"
@@ -663,7 +665,7 @@ def changeProgramHandler(evt) {
 
 // returns the holdType keyword, OR the number of hours to hold
 // precedence: 1. this SmartApp's preferences, 2. Parent settings.holdType, 3. indefinite (must specify to use the thermostat setting)
-def whatHoldType(statDevice) {
+String whatHoldType(statDevice) {
     def theHoldType = settings.holdType
     def sendHoldType = null
     def parentHoldType = getParentSetting('holdType')
@@ -735,7 +737,7 @@ def whatHoldType(statDevice) {
 
 // Helper Functions
 // get the combined set of Ecobee Programs applicable for these thermostats
-private def getEcobeePrograms() {
+def getEcobeePrograms() {
 	def programs
 	if (myThermostats?.size() > 0) {
 		myThermostats.each { stat ->
@@ -765,7 +767,7 @@ def getThermostatModes() {
     return theModes.sort(false)
 }
 
-private def sendMessage(notificationMessage) {
+void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
@@ -841,7 +843,7 @@ private def sendMessage(notificationMessage) {
 	}
 }
 
-private def updateMyLabel() {
+void updateMyLabel() {
 	String flag = isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
@@ -878,7 +880,7 @@ def getThermostatFanModes() {
     return theFanModes*.capitalize().sort(false)
 }
 
-private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
+void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	def messageLbl = "${app.label} ${message}"
 	if (logType == null) logType = 'debug'
 	parent.LOG(messageLbl, level, null, logType, event, displayEvent)
@@ -897,16 +899,16 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 //	1.0.0	Initial Release
 //	1.0.1	Use atomicState so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -914,10 +916,10 @@ private String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
 	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
