@@ -21,9 +21,10 @@
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Fix sort issue & noCache currentValue() for HE
  *  1.7.02 - Fixed SMS text entry
+ *	1.7.03 - Fixing private method issue caused by grails
  */
-def getVersionNum() { return "1.7.02" }
-private def getVersionLabel() { return "Ecobee Suite Smart Room Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.03" }
+String getVersionLabel() { return "Ecobee Suite Smart Room Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -345,7 +346,7 @@ def windowHandler(evt) {
     }
 }
 
-def ventOff( theVent ) {
+void ventOff( theVent ) {
     if (minimumVentLevel.toInteger() == 0) {
       	if (theVent?.currentSwitch == 'on') theVent.off()
     } else {
@@ -353,7 +354,7 @@ def ventOff( theVent ) {
     }
 }
 
-def checkTheDoors() {
+void checkTheDoors() {
 	LOG("Checking the doors", 3, null, 'trace')
 	Long startTime = now()
 	// check if the door has been closed long enough to turn
@@ -408,7 +409,7 @@ def checkTheDoors() {
 	} // else LOG("No door states ${currentDoorStates.device.displayName}, ${currentDoorStates.name}, ${currentDoorStates.value}",1,null, 'error')
 }
 	
-def activateRoom() {
+void activateRoom() {
 	LOG("Activating the Smart Room", 3, null, 'info')
     def sensorData = [:]
     atomicState.isSmartRoomActive = true
@@ -456,7 +457,7 @@ def activateRoom() {
     LOG("Activated",3,null,'info')
 }
 
-def deactivateRoom() {
+void deactivateRoom() {
 	LOG("Deactivating Smart Room", 3, null, 'info')
     def sensorData = [:]
     atomicState.isSmartRoomActive = false
@@ -549,14 +550,14 @@ def motionHandler(evt) {
 }
 
 // Ask our parents for help sending the events to our peer sensor devices
-private def generateSensorsEvents( Map dataMap ) {
+void generateSensorsEvents( Map dataMap ) {
 	LOG("generating ${dataMap} events for ${theSensors}",3,null,'trace')
 	theSensors.each { DNI ->
         parent.getChildDevice(DNI)?.generateEvent(dataMap)
     }
 }
 
-private def sendMessage(notificationMessage) {
+void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
@@ -632,7 +633,7 @@ private def sendMessage(notificationMessage) {
 	}
 }
 
-private def updateMyLabel() {
+void updateMyLabel() {
 	String flag = isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
@@ -654,13 +655,13 @@ private def updateMyLabel() {
 	}
 }
 
-private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
+void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
 	if (logType == null) logType = 'debug'
 	parent?.LOG(message, level, null, logType, event, displayEvent)
     log."${logType}" message
 }
-			
+
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
@@ -673,16 +674,16 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 //	1.0.0	Initial Release
 //	1.0.1	Use atomicState so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -690,10 +691,10 @@ private String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
 	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
