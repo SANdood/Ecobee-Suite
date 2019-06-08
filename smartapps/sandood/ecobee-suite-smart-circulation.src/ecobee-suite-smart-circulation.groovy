@@ -36,9 +36,10 @@
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *  1.7.01 - nonCached currentValue() for HE
  *  1.7.02 - more nonCached cases for HE
+ *	1.7.03 - Fixing private method issue caused by grails
  */
-def getVersionNum() { return "1.7.02" }
-private def getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.03" }
+String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -640,7 +641,7 @@ def calcTemps() {
 	LOG("No adjustment made",4,"",'info')
 }
 
-private def updateMyLabel() {
+void updateMyLabel() {
 	String flag = isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
@@ -693,20 +694,20 @@ List getGuestList(String tid, String type='modeOff') {
 }
 
 // Helper Functions
-private def getDeviceId(networkId) {
+String getDeviceId(networkId) {
 	// def deviceId = networkId.split(/\./).last()	
     // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
     // return deviceId
     return networkId.split(/\./).last()
 }
 
-private roundIt( value, decimals=0 ) {
+def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-private roundIt( BigDecimal value, decimals=0 ) {
+def roundIt( BigDecimal value, decimals=0 ) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
+void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
 	if (logType == null) logType = 'debug'
 	parent.LOG(message, level, null, logType, event, displayEvent)
@@ -725,16 +726,16 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 //	1.0.0	Initial Release
 //	1.0.1	Use atomicState so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -742,10 +743,10 @@ private String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
 	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
