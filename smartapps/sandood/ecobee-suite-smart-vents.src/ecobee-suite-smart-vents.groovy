@@ -37,9 +37,10 @@
  *	1.6.12 - Added "Generic" (dimmer/switchLevel) Vents
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
+ *	1.7.02 - Fixing private method issue caused by grails
  */
-def getVersionNum() { return "1.7.01" }
-private def getVersionLabel() { return "Ecobee Suite Smart Vents Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.02" }
+String getVersionLabel() { return "Ecobee Suite Smart Vents Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
 definition(
@@ -195,15 +196,15 @@ def initialize() {
     return true
 }
 
-def changeHandler(evt) {
+void changeHandler(evt) {
 	runIn( 2, checkAndSet, [overwrite: true])
 }
 
-def checkAndSet() {
+void checkAndSet() {
 	setTheVents(checkTemperature())
 }
 
-private String checkTemperature() {
+String checkTemperature() {
 	// Be smarter if we are in Smart Recovery mode: follow the thermostat's temperature instead of watching the current setpoint. Otherwise the room won't get the benefits of heat/cool
     // Smart Recovery. Also, we add the heat/cool differential to try and get ahead of the Smart Recovery curve (otherwise we close too early or too often)
     // 
@@ -268,7 +269,7 @@ def getCurrentTemperature() {
     }
 }
 
-private def setTheVents(ventState) {
+void setTheVents(ventState) {
 	if (ventState == 'open') {
         allVentsOpen()
     } else if (ventState == 'closed') {
@@ -276,7 +277,7 @@ private def setTheVents(ventState) {
 	}
 }
 
-private def updateTheVents() {
+void updateTheVents() {
 	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
     theVents.each {
 		if (it.hasCapability('Refresh')) {
@@ -289,19 +290,19 @@ private def updateTheVents() {
     }
 }
 
-def allVentsOpen() {
+void allVentsOpen() {
 	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
     //LOG("Opening the vent${theVents.size()>1?'s':''}",3,null,'info')
 	theVents?.each { ventOn(it) }
 }
 
-def allVentsClosed() {
+void allVentsClosed() {
 	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
     //LOG("Closing the vent${theVents.size()>1?'s':''}",3,null,'info')
 	theVents?.each { ventOff(it) } 
 }
 
-private def ventOff( theVent ) {
+void ventOff( theVent ) {
     if (minimumVentLevel.toInteger() == 0) {
       	if (theVent?.currentSwitch == 'on') {
         	theVent.setLevel(0)
@@ -320,7 +321,7 @@ private def ventOff( theVent ) {
     }
 }
 
-private def ventOn( theVent ) {
+void ventOn( theVent ) {
     boolean changed = false
     if (theVent?.currentSwitch == 'off') {
     	theVent.on()
@@ -337,7 +338,7 @@ private def ventOn( theVent ) {
     }
 }
 
-private def updateMyLabel() {
+void updateMyLabel() {
 	String flag = isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
@@ -360,7 +361,7 @@ private def updateMyLabel() {
 }
 
 // Ask our parents for help sending the events to our peer sensor devices
-private def generateSensorsEvents( Map dataMap ) {
+void generateSensorsEvents( Map dataMap ) {
 	LOG("generating ${dataMap} events for ${theSensors}",3,null,'info')
 	theSensors.each { DNI ->
         parent.getChildDevice(DNI)?.generateEvent(dataMap)
@@ -368,13 +369,13 @@ private def generateSensorsEvents( Map dataMap ) {
 }
 
 // Helper Functions
-private roundIt( value, decimals=0 ) {
+def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-private roundIt( BigDecimal value, decimals=0 ) {
+def roundIt( BigDecimal value, decimals=0 ) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
+void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	if (logType == null) logType = 'debug'
 	log."${logType}" message
 	message = "${app.label} ${message}"
@@ -393,16 +394,16 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 //	1.0.0	Initial Release
 //	1.0.1	Use atomicState so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -410,10 +411,10 @@ private String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
 	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
