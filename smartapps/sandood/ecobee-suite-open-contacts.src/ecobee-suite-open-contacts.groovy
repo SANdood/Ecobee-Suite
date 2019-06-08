@@ -39,8 +39,8 @@
  *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
  */
-String getVersionNum() { return "1.7.10a" }
-String getVersionLabel() { return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() 		{ return "1.7.10c" }
+String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 			"ecobee Suite Open Contacts",
@@ -342,7 +342,7 @@ def initialize() {
             subscribe(theStats, 'coolingSetpoint', coolSPHandler)
         }
     }
-	LOG("Thermostat 'on' saved state: ${tmpThermSavedState}",3,null,'trace')
+	LOG("initialize() - thermSavedState: ${tmpThermSavedState}",4,null,'trace')
 	LOG("initialize() exiting",2,null,'trace')
 }
 
@@ -356,9 +356,9 @@ def statModeChange(evt) {
         cancelReservation( tid, 'modeOff' )		// might as well give up our reservation
     	if (atomicState.HVACModeState != 'on') atomicState.HVACModeState = 'on'
     }
-    def tmpThermSavedState = atomicState.thermSavedState
-    tmpThermSavedState[tid].mode = evt.value	// update the saved mode
-    atomicState.thermSavedState = tmpThermSavedState
+    // def tmpThermSavedState = atomicState.thermSavedState
+    // tmpThermSavedState[tid].mode = evt.value	// update the saved mode
+    // atomicState.thermSavedState = tmpThermSavedState
 }
     
 def heatSPHandler( evt ) {
@@ -552,7 +552,7 @@ void turnOffHVAC() {
         }
     }
     atomicState.thermSavedState = tmpThermSavedState
-	log.debug "thermSavedState: ${tmpThermSavedState}"
+	LOG("turnOffHVAC() - thermSavedState: ${tmpThermSavedState}", 4, null, 'trace')
     
 	if (tstatNames.size() > 0) {
     	if (action.contains('Notify')) {
@@ -599,7 +599,6 @@ void turnOnHVAC() {
 	LOG("turnOnHVAC() entered", 5,null,'trace')
     atomicState.HVACModeState = 'on'
     def action = settings.whichAction ? settings.whichAction : 'Notify Only'
-	log.debug "action: ${action}"
     boolean doHVAC = action.contains('HVAC')
     boolean notReserved = true
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
@@ -765,7 +764,7 @@ void makeReservation(String tid, String type='modeOff' ) {
 }
 // Cancel my reservation
 void cancelReservation(String tid, String type='modeOff') {
-	log.debug "cancel ${tid}, ${type}"
+	//log.debug "cancel ${tid}, ${type}"
 	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
