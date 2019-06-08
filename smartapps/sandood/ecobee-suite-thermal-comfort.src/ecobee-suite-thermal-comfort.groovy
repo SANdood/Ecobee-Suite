@@ -19,9 +19,10 @@
  *	1.7.04 - Stop repeated messages...
  *	1.7.05 - Cleanup arguments passed to setProgramSetpoint()
  *	1.7.06 - Fixed SMS text entry
+ *	1.7.07 - Fixing private method issue caused by grails
  */
-def getVersionNum() { return "1.7.06" }
-private def getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
+String getVersionNum() { return "1.7.07" }
+String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
 
@@ -286,18 +287,18 @@ def initialize() {
 	return
 }
 
-def configured() {
+boolean configured() {
     return ((atomicState.humidity != null) && (settings.theThermostat != null))
 }
 
-def coolConfigured() {
+boolean coolConfigured() {
     return (configured() &&
             (settings.coolPmv != null && ( settings.coolPmv == 'custom' ? settings.coolPmvCustom != null : true)) &&
             (settings.coolMet != null && ( settings.coolMet == 'custom' ? settings.coolMetCustom != null : true)) &&
             (settings.coolClo != null && ( settings.coolClo == 'custom' ? settings.coolCloCustom != null : true)))
 }
 
-def heatConfigured() {
+boolean heatConfigured() {
     return (configured() &&
             (settings.heatPmv != null && ( settings.heatPmv == 'custom' ? settings.heatPmvCustom != null : true)) &&
             (settings.heatMet != null && ( settings.heatMet == 'custom' ? settings.heatMetCustom != null : true)) &&
@@ -324,16 +325,15 @@ def humidityChangeHandler(evt) {
     }
 }
 
-def atomicHumidityUpdater() {
+void atomicHumidityUpdater() {
 	humidityUpdate( atomicState.humidity )
 }
 
-def humidityUpdate( humidity ) {
+void humidityUpdate( humidity ) {
 	if (humidity?.toString().isNumber()) humidityUpdate(humidity as Integer)
-    return
 }
 
-def humidityUpdate( Integer humidity ) {
+void humidityUpdate( Integer humidity ) {
 	if (atomicState.version != getVersionLabel()) {
 		LOG("Code version updated, re-initializing...",1,null,'warn')
 		updated()
@@ -396,7 +396,7 @@ def humidityUpdate( Integer humidity ) {
 	}
 }
 
-private def changeSetpoints( program, heatTemp, coolTemp ) {
+void changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
 	def delta = isST ? settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal : settings.theThermostat.currentValue('heatCoolMinDelta', true) as BigDecimal
 	def fixed
@@ -465,14 +465,14 @@ private def changeSetpoints( program, heatTemp, coolTemp ) {
 	atomicState.because = ''
 }
 
-private roundIt( value, decimals=0 ) {
+def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP)
 }
-private roundIt( BigDecimal value, decimals=0) {
+def roundIt( BigDecimal value, decimals=0) {
     return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP)
 }
 
-private def calculatePmv(temp, units, rh, met, clo) {
+def calculatePmv(temp, units, rh, met, clo) {
     // returns pmv
     // temp, air temperature
     // units, air temperature unit
@@ -544,7 +544,7 @@ private def calculatePmv(temp, units, rh, met, clo) {
     return roundIt(pmv, 2)
 }
 
-private def calculateHeatSetpoint() {
+def calculateHeatSetpoint() {
     def targetPmv = settings.heatPmv=='custom' ? settings.heatPmvCustom : settings.heatPmv as BigDecimal
     def met = 		settings.heatMet=='custom' ? settings.heatMetCustom : settings.heatMet as BigDecimal
     def clo = 		settings.heatClo=='custom' ? settings.heatCloCustom : settings.heatClo as BigDecimal
@@ -571,7 +571,7 @@ private def calculateHeatSetpoint() {
     return goodSP
 }
 
-private def calculateCoolSetpoint() {
+def calculateCoolSetpoint() {
     def targetPmv = settings.coolPmv=='custom' ? settings.coolPmvCustom : settings.coolPmv as BigDecimal
     def met = 		settings.coolMet=='custom' ? settings.coolMetCustom : settings.coolMet as BigDecimal
     def clo = 		settings.coolClo=='custom' ? settings.coolCloCustom : settings.coolClo as BigDecimal
@@ -611,14 +611,14 @@ def getCoolRange() {
 }
 
 // Helper Functions
-private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
+void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	def msg = app.label + ': ' + message
 	if (logType == null) logType = 'debug'
 	parent.LOG(msg, level, null, logType, event, displayEvent)
     log."${logType}" message
 }
 
-private def sendMessage(notificationMessage) {
+void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${settings.notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
@@ -696,7 +696,7 @@ private def sendMessage(notificationMessage) {
 	}
 }
 
-private def updateMyLabel() {
+void updateMyLabel() {
 	String flag = isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
@@ -730,16 +730,16 @@ private def updateMyLabel() {
 //	1.0.0	Initial Release
 //	1.0.1	Use atomicState so that it is universal
 //
-private String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-private Boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-private Boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
 //  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
 //  - "if (state.isST)" is more efficient than "if (isSTHub)"
 //
-private String getHubPlatform() {
+String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -747,10 +747,10 @@ private String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-private Boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-private Boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
-private def getParentSetting(String settingName) {
+def getParentSetting(String settingName) {
 	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
 	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
