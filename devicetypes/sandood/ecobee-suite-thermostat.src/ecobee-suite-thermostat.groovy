@@ -62,9 +62,10 @@
  *	1.7.09 - Updating timeOfDay & weatherSymbol fixed
  *	1.7.10 - Cleanup state changes, fix thermostatOperatingStateDisplay
  *  1.7.11 - Don't accept null temperature, fixing private method issue caused by grails
+ *	1.7.12 - Register for new health check mechanism, don't register for Health Check if test install
  */
-String getVersionNum() { return "1.7.11" }
-String getVersionLabel() { return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
+String getVersionNum() 		{ return "1.7.12" }
+String getVersionLabel() 	{ return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
 
@@ -841,9 +842,19 @@ void uninstalled() {
 void updated() {
 	getHubPlatform()
 	LOG("${getVersionLabel()} updated",1,null,'trace')
-	sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
+	
+	if (!device.displayName.contains('TestingForInstall')) {
+	// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
+		sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
+		if (isST) {
+			sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
+			updateDataValue("EnrolledUTDH", "true")
+		}
+	} else {
+		return
+	}
+	
 	resetUISetpoints()
-	// testChildren()
 	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
 	state.version = getVersionLabel()
 	runIn(2, 'forceRefresh', [overwrite: true])
