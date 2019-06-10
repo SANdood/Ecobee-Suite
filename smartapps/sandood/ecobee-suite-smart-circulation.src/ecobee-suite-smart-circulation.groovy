@@ -38,9 +38,9 @@
  *  1.7.02 - more nonCached cases for HE
  *	1.7.03 - Fixing private method issue caused by grails
  *	1.7.04 - Fix error message when temps don't converge
- *	1.7.05 - Fix adjustments down (was getting stuck unless delta < 1.0)
+ *	1.7.05 - Fix adjustments down (was getting stuck unless delta < 1.0), fix broken mode handler
  */
-String getVersionNum() { return "1.7.05a" }
+String getVersionNum() { return "1.7.05b" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -229,7 +229,7 @@ def initialize() {
     subscribe(theThermostat, "thermostatOperatingState", modeOrProgramHandler)		// so we can see when the fan runs
     if (thePrograms) subscribe(theThermostat, "currentProgram", modeOrProgramHandler)
     // subscribe(theThermostat, "thermostatHold", modeOrProgramHandler)
-    subscribe(location, "routineExecuted", modeOrProgramHandler)    
+    // subscribe(location, "routineExecuted", modeOrProgramHandler)    
     if (theModes) subscribe(location, "mode", modeOrProgramHandler)
     if (statModes) subscribe(theThermostat, "thermostatMode", modeOrProgramHandler)
     
@@ -381,18 +381,18 @@ def modeOrProgramHandler(evt=null) {
 	// Allow adjustments if location.mode OR thermostat.currentProgram match configuration settings
     boolean isOK = true
     if (theModes || thePrograms  || statModes) {
-		def ncCp = isST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
-		def ncTm = isST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
+		String currentProgram = isST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
+		String thermostatMode = isST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
     	isOK = (theModes && theModes.contains(location.mode)) ? true : 
-        			((thePrograms && thePrograms.contains( ncCp )) ? true : 
-                    	((statModes && statModes.contains(  )) ? true : false))
+        			((thePrograms && thePrograms.contains( currentProgram )) ? true : 
+                    	((statModes && statModes.contains( thermostatMode )) ? true : false))
         if (!isOK) LOG("Not in specified Mode or Program, not adjusting", 3, null, "info")
     }
     
     // Check the humidity?
     if (isOK && settings.theHumidistat) {
-		def ncCh = isST ? settings.theHumidistat.currentValue('humidity') : settings.theHumidistat.currentValue('humidity', true)
-    	if (ncCh.toInteger() <= settings.highHumidity) {
+		def currentHumidity = isST ? settings.theHumidistat.currentValue('humidity') : settings.theHumidistat.currentValue('humidity', true)
+    	if ((currentHumidity as Integer) <= settings.highHumidity) {
         	isOK == false
             LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
 		} else {
@@ -430,9 +430,9 @@ def deltaHandler(evt=null) {
         return
     }
     def tid = getDeviceId(theThermostat.deviceNetworkId)
-	def ncFmot = isST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)
+	def fanMinOnTime = isST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)
     if (!vacationHold) {
-        if (anyReservations(tid, 'circOff') && (ncFmot.toInteger() == 0)) {
+        if (anyReservations(tid, 'circOff') && ((fanMinOnTime as Integer) == 0)) {
             // Looks like somebody else has turned off circulation
             if (!haveReservation(tid, 'circOff')) {		// is it me?
                 // Not me, so we can't be changing circulation
