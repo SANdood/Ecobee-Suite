@@ -36,10 +36,12 @@
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() on HE
  *	1.7.02 - Fixing private method issue caused by grails
+ *  1.7.03 - Register new health check; auto reload new versions, avoid Health Check for test device install
  */
-String getVersionNum() 		{ return "1.7.02" }
+String getVersionNum() 		{ return "1.7.03" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
+import groovy.json.*
 
 metadata {
 	definition (name: "Ecobee Suite Sensor", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)",
@@ -253,13 +255,24 @@ void updated() {
 	state?.hubPlatform = null
 	getHubPlatform()
 	LOG("${getVersionLabel()} updated",1,null,'info')
-	sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
+	state.version = getVersionLabel()
+	
+	if (!device.displayName.contains('TestingForInstall')) {
+		// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
+		sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
+		if (isST) {
+			sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
+			updateDataValue("EnrolledUTDH", "true")
+		}
+	}
 }
 
 void noOp() {}
 
 def generateEvent(Map results) {
 	LOG("generateEvent(): parsing data ${results}",3,null,'trace')
+	if (!state.version || (state.version != getVersionLabel())) updated()
+	
 	def startMS = now()
 	Integer objectsUpdated = 0
 	String tempScale = getTemperatureScale()
