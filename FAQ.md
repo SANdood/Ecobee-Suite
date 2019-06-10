@@ -2,6 +2,7 @@ Free Universal Ecobee Suite FAQ
 ======================================================
 
 ### During initial authentication, When I hit save, I get a Red Box error “Device still in use. Remove from any SmartApps or Dashboards.” 
+### After completing authentication, I get the error "Your are not authorized to perform the requested operation." when I try to exit out of Ecobee Suite Manager.
 
 During authentication, ES Manager creates 2 temporary devices to verify that the device drivers are properly installed, and it tries to delete them immediately afterwards. Occasionally the delete fails, especially if you are running Health Check (the devices register as 'in use' during health checks). 
 
