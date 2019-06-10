@@ -52,8 +52,9 @@
  *  1.7.12 - Fixed SMS text entry
  *	1.7.13 - Don't require Notification/SMS
  *	1.7.14 - Fixing private method issue caused by grails, display proper platform name everywhere, don't send null temperature
+ *  1.7.15 - Fixed a debugLevelFour error
  */
-String getVersionNum() 		{ return "1.7.14" }
+String getVersionNum() 		{ return "1.7.15" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -2140,7 +2141,7 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
    //     	runtimeUpdated: 	runtimeUpdated,
    //     	getWeather: 		getWeather,
    //     	somethingChanged: 	somethingChanged,
-   //		thermostatIdsString:thermostatIdsString,
+   			thermostatIdsString:thermostatIdsString,
    //		jsonRequestBody:	jsonRequestBody,
         	checkTherms:		checkTherms,
 	]
@@ -2183,7 +2184,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	
     String preText = getDebugLevel() <= 2 ? '' : 'pollEcobeeAPICallback() - '
 	// def somethingChanged = 		pollState.somethingChanged
-	if (debugLevelFour) thermostatIdsString = pollState.thermostatIdsString
+	String thermostatIdsString = debugLevelFour ? pollState.thermostatIdsString : ''
 	// def jsonRequestBody = 		pollState.jsonRequestBody
     def checkTherms =			pollState.checkTherms
 	if (debugLevelFour) LOG("=====> pollEcobeeAPICallback() entered - thermostatIdsString = ${thermostatIdsString}", 1, null, "info")
