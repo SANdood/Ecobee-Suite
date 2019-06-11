@@ -520,7 +520,7 @@ def insideChangeHandler(evt) {
                     coolOverride = true
                 } else if (settings.insideAuto && (cMode != 'cool')) {
                 	newMode = 'auto'
-                    coolOverride = true
+                    // coolOverride = true
                 }
             }
         }
@@ -535,7 +535,7 @@ def insideChangeHandler(evt) {
                         heatOverride = true
                     } else if (settings.insideAuto && (cMode != 'heat')) {
                     	newMode = 'auto'
-                        heatOverride = true
+                        // heatOverride = true
                     }
                 }
             }
@@ -561,13 +561,15 @@ def insideChangeHandler(evt) {
                         sendMessage("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
                     }
                 }
+            } else {
+                insideOverride[tid] = false
             }
         } else {
         	if (atomicState.locModeEnabled) {
                 // Do we check for/cancel reservations?
                 cancelReservation(tid, 'modeOff')
                 if (!anyReservations(tid, 'modeOff')) {
-                    insideOverride[tid] = true
+                    // insideOverride[tid] = true
                     evt.device.setThermostatMode('auto')		// allow choice, keep reservation if off
                 }
                 atomicState.locModeEnabled = false
