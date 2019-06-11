@@ -34,9 +34,10 @@
  *	1.7.01 - Fixed thermostats*.auto()
  *  1.7.02 - Fixed SMS text entry
  *	1.7.03 - Fixing private method issue caused by grails
- *	1.7.04 - Trying to fix reservations issues
+ *	1.7.04 - Trying to fix reservations
+ *  1.7.05 - Fixing inside override issues
  */
-String getVersionNum() { return "1.7.04" }
+String getVersionNum() { return "1.7.05" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -493,31 +494,48 @@ boolean initialize() {
 
 def insideChangeHandler(evt) {
     def theTemp = evt.numberValue
+    def unit = getTemperatureScale()
+    if (theTemp == null) {
+    	LOG("Ignoring invalid temperature: ${theTemp}°${unit}", 2, null, 'warn')
+        return
+    }
+    theTemp = roundIt(theTemp, (unit=='C'?2:1))
+    LOG("${evt.device.displayName} Temperature is: ${theTemp}°${unit}",3,null,'info')
+    
     def newMode = null
+    def insideOverride = atomicState.insideOverride ?: [:]
+    def coolOverride = false
+    def heatOverride = false
+    String tid = getDeviceId(evt.device.deviceNetworkId)
+    
     if (theTemp != null) {
-    	theTemp = evt.numberValue
-    	def coolSP = isST ? evt.device.currentValue('coolingSetpoint') : evt.device.currentValue('coolingSetpoint', true)
+    	// theTemp = evt.numberValue
+    	def coolSP = (isST ? evt.device.currentValue('coolingSetpoint') : evt.device.currentValue('coolingSetpoint', true)) as BigDecimal
         if (coolSP != null) {
-        	coolSP = coolSP.toBigDecimal()
+        	//coolSP = coolSP.toBigDecimal()
         	if (theTemp > coolSP) {
 				String cMode = isST ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
             	if (settings.aboveCool) {
                 	newMode = 'cool'
+                    coolOverride = true
                 } else if (settings.insideAuto && (cMode != 'cool')) {
                 	newMode = 'auto'
+                    coolOverride = true
                 }
             }
         }
         if (newMode == null) {
-       		def heatSP = isST ? evt.device.currentValue('heatingSetpoint') : evt.device.currentValue('heatingSetpoint', true)
+       		def heatSP = (isST ? evt.device.currentValue('heatingSetpoint') : evt.device.currentValue('heatingSetpoint', true)) as BigDecimal
             if (heatSP != null) {
-            	heatSP = heatSP.toBigDecimal()
+            	// heatSP = heatSP.toBigDecimal()
 				if (theTemp < heatSP) {
 					String cMode = isST ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
                 	if (settings.belowHeat) {
                     	newMode = 'heat'
+                        heatOverride = true
                     } else if (settings.insideAuto && (cMode != 'heat')) {
                     	newMode = 'auto'
+                        heatOverride = true
                     }
                 }
             }
@@ -527,15 +545,17 @@ def insideChangeHandler(evt) {
         	atomicState.locModeEnabled = true
             if (newMode != null) {
                 String cMode = isSt ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
+				// log.debug "newMode: ${newMode}, cMode: ${cMode}"
                 if (cMode != newMode) {
-                    def tid = getDeviceId(evt.device.deviceNetworkId)
                     if ((cMode == 'off') && anyReservations( tid, 'modeOff' )) {
                         // if ANYBODY (including me) has a reservation on this being off, I can't turn it back on
+                        insideOverride[tid] = false
                         LOG("${evt.device.displayName} inside temp is ${theTemp}°${evt.unit}, but can't change to ${newMode} since ${getGuestList(tid,'offMode').toString()[1..-2]} have offMode reservations",2,null,'warn')
                         // Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
                     } else {
                         // not currently off or there are no modeOff reservations, change away!
                         cancelReservation(tid, 'modeOff' )
+                        insideOverride[tid] = (coolOverride || heatOverride)
                         evt.device.setThermostatMode(newMode)
                         LOG("${evt.device.displayName} temp is ${theTemp}°${evt.unit}, changed thermostat to ${newMode} mode",3,null,'trace')
                         sendMessage("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
@@ -545,15 +565,16 @@ def insideChangeHandler(evt) {
         } else {
         	if (atomicState.locModeEnabled) {
                 // Do we check for/cancel reservations?
-                def tid = getDeviceId(evt.device.deviceNetworkId)
                 cancelReservation(tid, 'modeOff')
                 if (!anyReservations(tid, 'modeOff')) {
+                    insideOverride[tid] = true
                     evt.device.setThermostatMode('auto')		// allow choice, keep reservation if off
                 }
                 atomicState.locModeEnabled = false
             }
         }
     }
+    atomicState.insideOverride = insideOverride
 }
 
 def thermostatModeHandler(evt) {
@@ -750,40 +771,45 @@ def temperatureUpdate( BigDecimal temp ) {
 	if (desiredMode != null) {
     	String changeNames = ""
         String sameNames = ""
+        def insideOverride = atomicState.insideOverride
 		settings.thermostats.each { 
-        	def cMode = isST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
-            def tid = getDeviceId(it.deviceNetworkId)
-			if ( cMode != desiredMode) {
-            	if (desiredMode == 'off') {
-                	makeReservation(tid, 'modeOff')
-                    it.setThermostatMode( 'off' )
-                } else {
-                	// Desired mode IS NOT 'off'
-                	if (cMode == 'off') {
-                    	cancelReservation(tid,'modeOff')
-                    	if (countReservations(tid, 'modeOff') == 0) {
-                    		// nobody else has a reservation on modeOff
-							it.setThermostatMode(desiredMode)
-                			changeNames += changeNames ? ", ${it.displayName}" : it.displayName
-						} else {
-                    		// somebody else still has a 'modeOff' reservation so we can't turn it on
-							def reservedBy = getGuestList(tid,'modeOff')
-							log.debug "Reservations: ${reservedBy}"
-                            def msg = "The Outside  Temperature is ${temp}°${unit}, but I can't change ${it.displayName} to ${desiredMode} Mode because ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations"
-                            LOG(msg ,2,null,'warn')
-                            sendMessage(msg)
-                            // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
-                    	}
+        	String cMode = isST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
+            String tid = getDeviceId(it.deviceNetworkId)
+            if (!insideOverride || !insideOverride.containsKey(tid) || !insideOverride[tid]) {
+                if (cMode != desiredMode) {
+                    if (desiredMode == 'off') {
+                        makeReservation(tid, 'modeOff')
+                        it.setThermostatMode( 'off' )
                     } else {
-                    	// Not off currently, so we can change freely
-                        cancelReservation(tid, 'modeOff')	// just in case
-                    	it.setThermostatMode(desiredMode)
+                        // Desired mode IS NOT 'off'
+                        if (cMode == 'off') {
+                            cancelReservation(tid,'modeOff')
+                            if (countReservations(tid, 'modeOff') == 0) {
+                                // nobody else has a reservation on modeOff
+                                it.setThermostatMode(desiredMode)
+                                changeNames += changeNames ? ", ${it.displayName}" : it.displayName
+                            } else {
+                                // somebody else still has a 'modeOff' reservation so we can't turn it on
+                                def reservedBy = getGuestList(tid,'modeOff')
+                                log.debug "Reservations: ${reservedBy}"
+                                def msg = "The Outside  Temperature is ${temp}°${unit}, but I can't change ${it.displayName} to ${desiredMode} Mode because ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations"
+                                LOG(msg ,2,null,'warn')
+                                sendMessage(msg)
+                                // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
+                            }
+                        } else {
+                            // Not off currently, so we can change freely
+                            cancelReservation(tid, 'modeOff')	// just in case
+                            it.setThermostatMode(desiredMode)
+                        }
                     }
+                } else {
+                    // already running the mode we want
+                    (desireMode == 'off') ? makeReservation(tid, 'modeOff') : cancelReservation(tid, 'modeOff')
+                    sameNames += sameNames ? ", ${it.displayName}" : it.displayName
                 }
             } else {
-            	// already running the mode we want
-            	(desireMode == 'off') ? makeReservation(tid, 'modeOff') : cancelReservation(tid, 'modeOff')
-	            sameNames += sameNames ? ", ${it.displayName}" : it.displayName
+                LOG("Inside Temperature has overridden calculated Thermostat Mode, will not change ${it.displayName} to ${desiredMode} mode", 2, null, 'info')
             }
 		}
         def multi=0
