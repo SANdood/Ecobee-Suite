@@ -36,8 +36,9 @@
  *	1.7.03 - Fixing private method issue caused by grails
  *	1.7.04 - Trying to fix reservations
  *  1.7.05 - Fixing inside override issues
+ *  1.7.06 - Don't do inside override until temp reaches setpoint+differential
  */
-String getVersionNum() { return "1.7.05" }
+String getVersionNum() { return "1.7.06" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -495,6 +496,7 @@ boolean initialize() {
 def insideChangeHandler(evt) {
     def theTemp = evt.numberValue
     def unit = getTemperatureScale()
+    def diffAdjust = ((unit == 'F') ? -0.1 : -0.055) as BigDecimal
     if (theTemp == null) {
     	LOG("Ignoring invalid temperature: ${theTemp}°${unit}", 2, null, 'warn')
         return
@@ -509,11 +511,11 @@ def insideChangeHandler(evt) {
     String tid = getDeviceId(evt.device.deviceNetworkId)
     
     if (theTemp != null) {
-    	// theTemp = evt.numberValue
     	def coolSP = (isST ? evt.device.currentValue('coolingSetpoint') : evt.device.currentValue('coolingSetpoint', true)) as BigDecimal
         if (coolSP != null) {
-        	//coolSP = coolSP.toBigDecimal()
-        	if (theTemp > coolSP) {
+            coolSP += diffAdjust
+            def coolDiff = (isST ? evt.device.currentValue('coolDifferential') : evt.device.currentValue('coolDifferential', true)) as BigDecimal
+        	if (theTemp >= (coolSP + coolDiff)) {
 				String cMode = isST ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
             	if (settings.aboveCool) {
                 	newMode = 'cool'
@@ -527,8 +529,9 @@ def insideChangeHandler(evt) {
         if (newMode == null) {
        		def heatSP = (isST ? evt.device.currentValue('heatingSetpoint') : evt.device.currentValue('heatingSetpoint', true)) as BigDecimal
             if (heatSP != null) {
-            	// heatSP = heatSP.toBigDecimal()
-				if (theTemp < heatSP) {
+            	def heatDiff = (isST ? evt.device.currentValue('heatDifferential') : evt.device.currentValue('heatDifferential', true)) as BigDecimal
+				if (theTemp <= (heatSP - heatDiff)) {
+                    heatSP += diffAdjust
 					String cMode = isST ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
                 	if (settings.belowHeat) {
                     	newMode = 'heat'
