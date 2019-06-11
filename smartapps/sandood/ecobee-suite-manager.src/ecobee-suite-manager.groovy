@@ -53,8 +53,9 @@
  *	1.7.13 - Don't require Notification/SMS
  *	1.7.14 - Fixing private method issue caused by grails, display proper platform name everywhere, don't send null temperature
  *  1.7.15 - Fixed a debugLevelFour error
+ *	1.7.16 - Better logging for Reservations
  */
-String getVersionNum() 		{ return "1.7.15" }
+String getVersionNum() 		{ return "1.7.16" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -5705,7 +5706,7 @@ void makeReservation( String statId, String childId, String type='modeOff' ) {
     if (!reservations."${statId}"."${type}"?.contains(childId)) {
     	reservations."${statId}"."${type}" << childId
         atomicState.reservations = reservations
-        LOG("'${type}' reservation created for ${childName}",2,null,'info')
+        LOG("'${type}' reservation created for ${childName} (${childId})",2,null,'info')
     }
 }
 // Cancel my reservation
@@ -5716,39 +5717,49 @@ void cancelReservation( String statId, String childId, String type='modeOff') {
     if (reservations?."${statId}"?."${type}"?.contains(childId)) {
     	reservations."${statId}"."${type}" = reservations."${statId}"."${type}" - [childId]
         atomicState.reservations = reservations
-        LOG("'${type}' reservation cancelled for ${childName}",2,null,'info')
+		LOG("'${type}' reservation cancelled for ${childName} (${childId})",2,null,'info')
     }
 }
 // Do I have a reservation?
 boolean haveReservation( String statId, String childId, String type='modeOff') {
+	def childName = getChildAppName( childId )
     def reservations = atomicState.reservations
-	return (reservations?."${statId}"?."${type}"?.contains(childId))
+	boolean result = (reservations?."${statId}"?."${type}"?.contains(childId))
+	LOG("${childName} (${childId}) does ${result?'':'not '} hold a '${type}' reservation",2,null,'info')
+	return result
 }
 // Do any Apps have reservations?
 boolean anyReservations( String statId, String type='modeOff') {
 	def reservations = atomicState.reservations
-	return (reservations?."${statId}"?.containsKey(type)) ? (reservations."${statId}"."${type}".size() != 0) : false
+	boolean result = (reservations?."${statId}"?.containsKey(type)) ? (reservations."${statId}"."${type}".size() != 0) : false
+	LOG("${result?'Somebody':'Nobody'} holds '${type}' reservations",2,null,'info')
+	return result
 }
 // How many apps have reservations?
 Integer countReservations(String statId, String type='modeOff') {
 	def reservations = atomicState.reservations
-	return (reservations?."${statId}"?.containsKey(type)) ? reservations."${statId}"."${type}".size() : 0
+	Integer result = ((reservations?."${statId}"?.containsKey(type)) ? reservations."${statId}"."${type}".size() : 0) as Integer
+	LOG("There ${result>1?'are':'is'} ${result} '${type}' reservation${result>1?'s':''}",2,null,'info')
+	return result
 }
 // Get the list of app IDs that have reservations
 List getReservations(String statId, String type='modeOff') {
 	def reservations = atomicState.reservations
-    return (reservations?."${statId}"?.containsKey(type)) ? reservations."${statId}"."${type}" : []
+    def result = (reservations?."${statId}"?.containsKey(type)) ? reservations."${statId}"."${type}" : []
+	LOG("AppIds holding '${type}' reservations: ${result}",2,null,'info')
+	return result
 }
 // Get the list of app Names that have reservations
 List getGuestList(String statId, String type='modeOff') {
-	def guestList = []
+	def result = []
 	def reservations = atomicState.reservations
     if (reservations?."${statId}"?.containsKey(type)) {
         reservations."${statId}"."${type}".each {
-        	guestList << getChildAppName( it )
+        	result << getChildAppName( it )
         }
     }
-    return guestList
+	LOG("Apps holding '${type}' reservations: ${result}",2,null,'info')
+    return result
 }
 
 void runEvery2Minutes(handler) {
