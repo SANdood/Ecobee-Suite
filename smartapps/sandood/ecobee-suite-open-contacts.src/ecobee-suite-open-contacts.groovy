@@ -39,8 +39,9 @@
  *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
  *  1.7.10 - Fixed statModeChange() event handler
+ *  1.7.11 - Prevent duplicate notifications
  */
-String getVersionNum() 		{ return "1.7.10" }
+String getVersionNum() 		{ return "1.7.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -289,7 +290,7 @@ def initialize() {
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 	def tmpThermSavedState = [:]
     if (tempState == 'on') {
-		if (atomicState.HVACModeState != 'on') turnOnHVAC()
+		if (atomicState.HVACModeState != 'on') turnOnHVAC(true)
     	// Initialize the saved state values
     	if (!settings.quietTime) {  		
     		theStats.each() { therm ->
@@ -332,7 +333,7 @@ def initialize() {
         
     } else {
     	LOG("Initialized while should be 'Off' - can't update states",2,null,'warn')
-        if (atomicState.HVACModeState != 'off') turnOffHVAC()
+        if (atomicState.HVACModeState != 'off') turnOffHVAC(true)
     }
     
     // TODO: Subscribe to the thermostat states to be notified when the HVAC is turned on or off outside of the SmartApp?
@@ -424,7 +425,7 @@ void sensorOpened(evt=null) {
 		// HVAC is already/still off
         if (delay > 0) unschedule('turnOnHVAC')
 		atomicState.HVACModeState = 'off'
-		turnOffHVAC()			// Make sure it is really off
+		turnOffHVAC(true)			// Make sure it is really off
         return
     }
 
@@ -458,7 +459,7 @@ void sensorClosed(evt=null) {
 		}
 		if (HVACModeState.contains('on')) {
 			LOG("All sensors & switches are reset, and HVAC is already on", 3, null, 'info')
-			turnOnHVAC()	// Just in case
+			turnOnHVAC(true)	// Just in case
 			return	// already on, nothing more to do (catches 'on' and 'on_pending')
 		}
         Integer delay = ((settings.offDelay || (settings.offDelay == 0)) ? settings.offDelay : 5) as Integer
@@ -467,7 +468,7 @@ void sensorClosed(evt=null) {
 			atomicState.HVACModeState = 'on'
 			LOG("All sensors & switches are reset, off_pending was cancelled", 3, null, 'info')
             // still on
-			turnOnHVAC()	// Just in case
+			turnOnHVAC(true)	// Just in case
             return
         }
 	    
@@ -488,7 +489,7 @@ void closedScheduledActions() {
 	turnOnHVAC()
 }
 
-void turnOffHVAC() {
+void turnOffHVAC(quietly = false) {
 	// Save current states
     LOG("turnoffHVAC() entered...", 5,null,'trace')
     atomicState.HVACModeState = 'off'
@@ -556,7 +557,7 @@ void turnOffHVAC() {
 	LOG("turnOffHVAC() - thermSavedState: ${tmpThermSavedState}", 4, null, 'trace')
     
 	if (tstatNames.size() > 0) {
-    	if (action.contains('Notify')) {
+    	if (action.contains('Notify')  && !quietly) {
     		boolean notified = false
 			def tstatModes = isST ? theStats.currentValue('thermostatMode') : theStats.currentValue(thermostatMode, true)
 			boolean isOn = tstatModes.contains('auto') || tstatModes.contains('heat') || tstatModes.contains('cool')
@@ -588,14 +589,14 @@ void turnOffHVAC() {
         	if (notified) LOG('Notifications sent',2,null,'info')
     	}
     } else {
-    	if (action.contains('Notify')) {
+    	if (action.contains('Notify') && !quietly) {
         	sendMessage("${theStats} already off")
             LOG('All thermostats are already off',2,null,'info')
         }
     }
 }
 
-void turnOnHVAC() {
+void turnOnHVAC(quietly = false) {
 	// Restore previous state
 	LOG("turnOnHVAC() entered", 5,null,'trace')
     atomicState.HVACModeState = 'on'
@@ -674,7 +675,7 @@ void turnOnHVAC() {
 		} 
 	}
     
-    if ( action.contains('Notify') ) {
+    if ( action.contains('Notify') && !quietly ) {
 		if (!doHVAC && (tstatNames == [])) tstatNames = theStats.displayName
     	boolean notified = false
         Integer delay = (settings.onDelay != null ? settings.onDelay : 0) as Integer
