@@ -34,8 +34,9 @@
  *	1.7.01 - Fixed thermostats*.auto()
  *  1.7.02 - Fixed SMS text entry
  *	1.7.03 - Fixing private method issue caused by grails
+ *	1.7.04 - Trying to fix reservations issues
  */
-String getVersionNum() { return "1.7.03" }
+String getVersionNum() { return "1.7.04" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -350,20 +351,20 @@ boolean initialize() {
                 }
             }
             subscribe( settings.thermometer, 'temperature', tempChangeHandler)
-            def latest = settings.thermometer.currentState("temperature")
+            def latest = isST ? settings.thermometer.currentState("temperature") : settings.thermometer.currentState("temperature", true)
 			def unit = latest.unit
             def t 
             if (latest.numberValue != null) {
             	t = roundIt(latest.numberValue, (unit=='C'?2:1))
             	if (dewBelowOverride) {
-                	latest = settings.humidistat.currentState('humidity')
+                	latest = isST ? settings.humidistat.currentState('humidity') : settings.humidistat.currentState('humidity', true)
             		if (latest.value != null) {
                     	def h = latest.numberValue
             			atomicState.humidity = h
-                        LOG("Humidity is: ${h}%",3,null,'info')
+                        LOG("Outside Humidity is: ${h}%",3,null,'info')
                 		def d = calculateDewpoint( t, h, unit )
             			atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
+                        LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
                    	}
                 }
             	tempNow = t 
@@ -374,20 +375,20 @@ boolean initialize() {
         case 'station':
         	if (settings.smartWeather) {
             	subscribe(settings.smartWeather, 'temperature', tempChangeHandler)
-                def latest = settings.smartWeather.currentState('temperature')
+                def latest = isST ? settings.smartWeather.currentState('temperature') : settings.smartWeather.currentState('temperature', true)
                 def t = latest.numberValue
                 def unit = latest.unit
                 if (t != null) {
                 	t = latest.numberValue
                 	if (dewBelowOverride) {
                 		subscribe(settings.smartWeather, 'relativeHumidity', humidityChangeHandler)
-                		latest = settings.smartWeather.currentState('relativeHumidity')
+                		latest = isST ? settings.smartWeather.currentState('relativeHumidity') : settings.smartWeather.currentState('relativeHumidity', true)
                 		if (latest?.numberValue != null) {
                         	def h = roundIt(latest.numberValue, (unit=='C'?2:1))
-                        	LOG("Humidity is: ${h}%",3,null,'info')
+                        	LOG("Outside Humidity is: ${h}%",3,null,'info')
                 			def d = calculateDewpoint( t, h, unit )
                             atomicState.dewpoint = d
-                            LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
+                            LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
                         }
                     }
                 	tempNow = t 
@@ -401,7 +402,7 @@ boolean initialize() {
                     if (latest?.numberValue != null) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
+                        LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
                     }
                 }
             	subscribe(settings.smartWeather2, 'temperature', tempChangeHandler)
@@ -414,15 +415,15 @@ boolean initialize() {
             	def latest
                 if (settings.dewBelowOverride) {
                 	subscribe(settings.meteoWeather, 'dewpoint', dewpointChangeHandler)
-                	latest = settings.meteoWeather.currentState('dewpoint')
+                	latest = isST ? settings.meteoWeather.currentState('dewpoint') : settings.meteoWeather.currentState('dewpoint', true)
                     if (latest?.numberValue != null) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
+                        LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
                     }
                 }
             	subscribe(settings.meteoWeather, 'temperature', tempChangeHandler)
-                latest = settings.meteoWeather.currentState('temperature')
+                latest = isST ? settings.meteoWeather.currentState('temperature') : settings.meteoWeather.currentState('temperature', true)
             	if (latest?.numberValue != null) { 
                 	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                     temperatureUpdate(tempNow) 
@@ -431,15 +432,15 @@ boolean initialize() {
             	def latest
                 if (settings.dewBelowOverride) {
                 	subscribe(settings.meteoWeather, 'dewPoint', dewpointChangeHandler)
-                	latest = settings.meteoWeather.currentState('dewPoint')
+                	latest = isST ? settings.meteoWeather.currentState('dewPoint') : settings.meteoWeather.currentState('dewPoint', true)
                     if (latest?.numberValue != null) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
+                        LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
                     }
                 }
             	subscribe(settings.meteoWeather, 'temperature', tempChangeHandler)
-                latest = settings.meteoWeather.currentState('temperature')
+                latest = isST ? settings.meteoWeather.currentState('temperature') : settings.meteoWeather.currentState('temperature', true)
             	if (latest?.numberValue != null) { 
                 	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                     temperatureUpdate(tempNow) 
@@ -453,15 +454,15 @@ boolean initialize() {
 			theStat = settings.thermostats.size() == 1 ? settings.thermostats[0] : settings.tstatTemp
             if (dewBelowOverride) {
             	subscribe(theStat, 'weatherDewpoint', dewpointChangeHandler)
-            	latest = theStat.currentState('weatherDewpoint')
+            	latest = isST ? theStat.currentState('weatherDewpoint') : theStat.currentState('weatherDewpoint', true)
             	if (latest?.numberValue != null) {
                 	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                 	atomicState.dewpoint = d
-                    LOG("Dewpoint is: ${d}°${gu}",3,null,'info')
+                    LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
                 }
             }
             subscribe(theStat, 'weatherTemperature', tempChangeHandler)
-            latest = theStat.currentState('weatherTemperature')
+            latest = isST ? theStat.currentState('weatherTemperature') : theStat.currentState('weatherTemperature', true)
             if (latest?.numberValue != null) {
             	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                 temperatureUpdate(tempnow) 
@@ -482,7 +483,7 @@ boolean initialize() {
     atomicState.locModeEnabled = theModes ? theModes.contains(location.mode) : true
     if (tempNow) {
     	atomicState.temperature = tempNow
-    	LOG("Initialization complete...current temperature is ${tempNow}°${gu}",2,null,'info')
+    	LOG("Initialization complete...current Outside Temperature is ${tempNow}°${gu}",2,null,'info')
         return true
     } else {
     	LOG("Initialization error...invalid temperature: ${tempNow}°${gu} - please check settings and retry", 2, null, 'error')
@@ -495,25 +496,27 @@ def insideChangeHandler(evt) {
     def newMode = null
     if (theTemp != null) {
     	theTemp = evt.numberValue
-    	def coolSP = evt.device.currentValue('coolingSetpoint')
+    	def coolSP = isST ? evt.device.currentValue('coolingSetpoint') : evt.device.currentValue('coolingSetpoint', true)
         if (coolSP != null) {
         	coolSP = coolSP.toBigDecimal()
         	if (theTemp > coolSP) {
+				String cMode = isST ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
             	if (settings.aboveCool) {
                 	newMode = 'cool'
-                } else if (settings.insideAuto && (evt.device.currentValue('thermostatMode') != 'cool')) {
+                } else if (settings.insideAuto && (cMode != 'cool')) {
                 	newMode = 'auto'
                 }
             }
         }
         if (newMode == null) {
-       		def heatSP = evt.device.currentValue('heatingSetpoint')
+       		def heatSP = isST ? evt.device.currentValue('heatingSetpoint') : evt.device.currentValue('heatingSetpoint', true)
             if (heatSP != null) {
             	heatSP = heatSP.toBigDecimal()
 				if (theTemp < heatSP) {
+					String cMode = isST ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
                 	if (settings.belowHeat) {
                     	newMode = 'heat'
-                    } else if (settings.insideAuto && (evt.device.currentValue('thermostatMode') != 'heat')) {
+                    } else if (settings.insideAuto && (cMode != 'heat')) {
                     	newMode = 'auto'
                     }
                 }
@@ -523,7 +526,7 @@ def insideChangeHandler(evt) {
         if (okMode) {
         	atomicState.locModeEnabled = true
             if (newMode != null) {
-                def cMode = evt.device.currentValue('thermostatMode')
+                String cMode = isSt ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
                 if (cMode != newMode) {
                     def tid = getDeviceId(evt.device.deviceNetworkId)
                     if ((cMode == 'off') && anyReservations( tid, 'modeOff' )) {
@@ -580,25 +583,25 @@ def tempChangeHandler(evt) {
             	// Somebody is updating atomicState.humidity, so we need to calculate the dewpoint
                 // (Sources that provide dewpoint directly will not update atomicState.humidity)
             	if (settings.tempSource == 'sensors') {    
-            		def latest = settings.humidistat.currentState('humidity')
+            		def latest = isST ? settings.humidistat.currentState('humidity') : settings.humidistat.currentState('humidity', true)
             		if (latest.numberValue != null) {
                     	def h = latest.numberValue
             			atomicState.humidity = h
-                        LOG("Humidity is: ${h}%",3,null,'info')
+                        LOG("Outside Humidity is: ${h}%",3,null,'info')
                 		def d = calculateDewpoint( t, h, evt.unit )
             			atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°${evt.unit}",3,null,'info')
+                        LOG("Outside Dewpoint is: ${d}°${evt.unit}",3,null,'info')
                         runIn(2, atomicTempUpdater, [overwrite: true] )		// humidity might be updated also
                         return
                    	}
                 } else if ((settings.tempSource == 'station') && settings.smartWeather) {
-                	def latest = settings.smartWeather.currentState('relativeHumidity')
+                	def latest = isST ? settings.smartWeather.currentState('relativeHumidity') : settings.smartWeather.currentState('relativeHumidity', true)
                     if (latest.numberValue != null) {
                     	h = latest.numberValue
-                        LOG("Humidity is: ${h}%",3,null,'info')
+                        LOG("Outside Humidity is: ${h}%",3,null,'info')
                 		def d = calculateDewpoint( t, h, unit )
                         atomicState.dewpoint = d
-                        LOG("Dewpoint is: ${d}°${evt.unit}",3,null,'info')
+                        LOG("Outside Dewpoint is: ${d}°${evt.unit}",3,null,'info')
                         runIn(2, atomicTempUpdater, [overwrite: true] )		// humidity might be updated also
                         return
                     }
@@ -617,7 +620,7 @@ def dewpointChangeHandler(evt) {
 	if (evt.numberValue != null) {
     	def d = roundIt(evt.numberValue, (evt.unit=='C'?2:1))
     	atomicState.dewpoint = d
-        LOG("Dewpoint is: ${d}°${evt.unit}",3,null,'info')
+        LOG("Outside Dewpoint is: ${d}°${evt.unit}",3,null,'info')
         runIn(2, atomicTempUpdater, [overwrite: true]) 		// wait for temp to be updated also
     }
 }
@@ -627,10 +630,10 @@ def humidityChangeHandler(evt) {
     	t = atomicState.temperature
         u = getTemperatureScale()
         atomicState.humidity = evt.numberValue
-        LOG("Humidity is: ${evt.numberValue}%",3,null,'info')
+        LOG("Outside Humidity is: ${evt.numberValue}%",3,null,'info')
     	def d = calculateDewpoint(t, evt.numberValue, u)
         atomicState.dewpoint = d
-        LOG("Dewpoint is: ${d}°${getTemperatureScale()}",3,null,'info')
+        LOG("Outside Dewpoint is: ${d}°${getTemperatureScale()}",3,null,'info')
         runIn(2, atomicTempUpdater, [overwrite: true])
     }
 }
@@ -651,7 +654,7 @@ def temperatureUpdate( BigDecimal temp ) {
     
     temp = roundIt(temp, (unit=='C'?2:1))
     atomicState.temperature = temp
-    LOG("Temperature is: ${temp}°${unit}",3,null,'info')
+    LOG("Outside Temperature is: ${temp}°${unit}",3,null,'info')
     
     def okMode = theModes ? theModes.contains(location.mode) : true
     if (okMode) {
@@ -748,7 +751,7 @@ def temperatureUpdate( BigDecimal temp ) {
     	String changeNames = ""
         String sameNames = ""
 		settings.thermostats.each { 
-        	def cMode = it.currentValue('thermostatMode')
+        	def cMode = isST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
             def tid = getDeviceId(it.deviceNetworkId)
 			if ( cMode != desiredMode) {
             	if (desiredMode == 'off') {
@@ -764,7 +767,9 @@ def temperatureUpdate( BigDecimal temp ) {
                 			changeNames += changeNames ? ", ${it.displayName}" : it.displayName
 						} else {
                     		// somebody else still has a 'modeOff' reservation so we can't turn it on
-                            def msg = "The temperature is ${temp}°${unit}, but I can't change ${it.displayName} to ${desiredMode} Mode because ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations"
+							def reservedBy = getGuestList(tid,'modeOff')
+							log.debug "Reservations: ${reservedBy}"
+                            def msg = "The Outside  Temperature is ${temp}°${unit}, but I can't change ${it.displayName} to ${desiredMode} Mode because ${getGuestList(tid,'modeOff').toString()[1..-2]} hold 'modeOff' reservations"
                             LOG(msg ,2,null,'warn')
                             sendMessage(msg)
                             // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
@@ -840,7 +845,7 @@ def getTwcTemp(type) {
                 }
                 atomicState.dewpoint = dewpointNow
             }
-            LOG("Dewpoint is: ${dewpointNow}°${isMetric?'C':'F'}",2,null,'info')
+            LOG("Outside Dewpoint is: ${dewpointNow}°${isMetric?'C':'F'}",2,null,'info')
         	temperatureUpdate(tempNow)
             return tempNow
         } else {
@@ -896,7 +901,7 @@ def getWUTemp(type) {
                 }
                 atomicState.dewpoint = dewpointNow
             }
-            LOG("Dewpoint is: ${dewpointNow}°${isMetric?'C':'F'}",2,null,'info')
+            LOG("Outside Dewpoint is: ${dewpointNow}°${isMetric?'C':'F'}",2,null,'info')
         	temperatureUpdate(tempNow)
             return tempNow
         } else {
@@ -1025,11 +1030,8 @@ String getPWSID() {
 	return PWSID
 }
 
- def getDeviceId(networkId) {
-	// def deviceId = networkId.split(/\./).last()	
-    // LOG("getDeviceId() returning ${deviceId}", 4, null, 'trace')
-    // return deviceId
-    return networkId.split(/\./).last()
+def getDeviceId(networkId) {
+    return networkId.split(/\./).last() as String
 }
 
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
@@ -1042,11 +1044,11 @@ void cancelReservation(String tid, String type='modeOff') {
 	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
-Boolean haveReservation(String tid, String type='modeOff') {
+boolean haveReservation(String tid, String type='modeOff') {
 	return parent.haveReservation( tid, app.id as String, type )
 }
 // Do any Apps have reservations?
-Boolean anyReservations(String tid, String type='modeOff') {
+boolean anyReservations(String tid, String type='modeOff') {
 	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
