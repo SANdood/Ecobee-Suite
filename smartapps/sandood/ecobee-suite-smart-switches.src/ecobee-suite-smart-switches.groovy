@@ -27,8 +27,9 @@
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixing private method issue caused by grails
+ *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  */
-String getVersionNum() { return "1.7.02" }
+String getVersionNum() { return "1.7.04" }
 String getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -251,7 +252,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
