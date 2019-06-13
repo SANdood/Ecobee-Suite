@@ -37,9 +37,11 @@
  *	1.7.04 - Trying to fix reservations
  *  1.7.05 - Fixing inside override issues
  *  1.7.06 - Don't do inside override until temp reaches setpoint+differential
+ *  1.7.07 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *  1.7.08 - Added settings option to allow internal temp/setpoint to override 'off' (but only if we hold the only 'off' Reservation)
  */
-String getVersionNum() { return "1.7.06" }
-String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.08" }
+String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -60,7 +62,7 @@ preferences {
 }
 
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: (isHE?'<b>':'') + "${getVersionLabel()}" + (isHE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
 			String defaultLabel = "Smart Mode & Setpoints"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -95,7 +97,7 @@ def mainPage() {
 			}
 		}
         if (!settings?.tempDisable && (settings?.thermostats?.size()>0)) {
-			section(title: "Outdoor Weather Source") {
+			section(title: (isHE?'<b>':'') + "Outdoor Weather Source" + (isHE?'</b>':'')) {
 				input(name: 'tempSource', title: 'Monitor this weather source', type: 'enum', required: true, multiple: false,  
 					  options: (isST?[
 						  'ecobee':"Ecobee Thermostat's Weather", 
@@ -151,7 +153,7 @@ def mainPage() {
 					}
 				}
 			}
-			section(title: "Outdoor Temperature 'Above' Settings") {
+			section(title: (isHE?'<b>':'') + "Outdoor Temperature 'Above' Settings" + (isHE?'</b>':'')) {
 				// need to set min & max - get from thermostat range
        			input(name: "aboveTemp", title: "When the outdoor temperature is at or above...", type: 'decimal', description: "Enter decimal temperature (${settings.belowTemp?'optional':'required'})", 
                 		range: getThermostatRange(), required: !settings.belowTemp, submitOnChange: true)
@@ -174,7 +176,7 @@ def mainPage() {
                     }
 				}
 			}
-            section(title: "Outdoor Temperature 'Below' Settings") {
+            section(title: (isHE?'<b>':'') + "Outdoor Temperature 'Below' Settings" + (isHE?'</b>':'')) {
             	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'decimal', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", 
                 		range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
 				if (settings.belowTemp) {
@@ -203,7 +205,7 @@ def mainPage() {
             	}
             }
 			if ((settings.belowTemp && settings.aboveTemp) && (settings.belowTemp != settings.aboveTemp)) {
-            	section(title: "Outdoor Temperature 'Between' Settings") {
+            	section(title: (isHE?'<b>':'') + "Outdoor Temperature 'Between' Settings" + (isHE?'</b>':'')) {
 					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', 
                     		required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
             		input(name: 'betweenSetpoints', title: 'Change Program Setpoints', type: 'bool', required: false, defaultValue: false, submitOnChange: true) 
@@ -218,21 +220,37 @@ def mainPage() {
                     }
 				}
             }
-            section(title: "Indoor Temperature Settings (Optional)") {
+            section(title: (isHE?'<b>':'') + 'Indoor Temperature Settings (Optional)' + (isHE?'</b>':'')) {
             	if (getThermostatModes().contains('cool') && !settings.insideAuto) {
             		input(name: 'aboveCool', title: 'Set thermostat Mode to Cool if its indoor temperature is above its Cooling Setpoint (optional)?', type: 'bool', defaultValue: false, 
-                    		submitOnChange: true)
+                          submitOnChange: true)
+                    if (settings.aboveCool) {
+                        paragraph "Mode will be set to 'cool' when the indoor temperature reaches the Cooling Setpoint PLUS the Cooling Setpoint Differential MINUS ${((getTemperatureScale()=='F')?'0.1':'0.055')}°" +
+                              " - This is just before the thermostat will demand Cool from the HVAC"
+                    }
                 }
                 if (getThermostatModes().contains('heat') && !settings.insideAuto) {
                 	input(name: 'belowHeat', title: 'Set thermostat Mode to Heat if its indoor temperature is below its Heating Setpoint (optional)?', type: 'bool', defaultValue: false, 
-                    		submitOnChange: true)
+                          submitOnChange: true)
+                    if (settings.aboveCool) {
+                        paragraph "Mode will be set to 'heat' when the indoor temperature reaches the Heating Setpoint MINUS the Heating Setpoint Differential PLUS ${((getTemperatureScale()=='F')?'0.1':'0.055')}°" +
+                              " - This is just before the thermostat will demand Heat from the HVAC"
+                    }
                 }
                 if (getThermostatModes().contains('auto') && !(settings.aboveCool || settings.belowHeat)) {
                 	input(name: 'insideAuto', title: 'Set thermostat Mode to Auto if its indoor temperature is above or below its Setpoints (optional)?', type: 'bool', defaultValue: false, 
-                    		submitOnChange: true)
+                          submitOnChange: true)
+                    if (settings.insideAuto) {
+                        paragraph "Mode will be set to 'auto' when the indoor temperature falls outside the Cooling and Heating Setpoints (adjusted by the appropriate differentials) - This is just before the" +
+                                  " thermostat will demand Heat or Cool from the HVAC"
+                    }
+                }
+                if ((settings.aboveCool || settings.belowHeat || settings.insideAuto) && (settings.aboveMode?.contains('off') || settings.belowMode?.contains('off') || settings.betweenMode?.contains('off'))) {
+                    input(name: 'insideOverridesOff', title: "Allow the above indoor temperature/setpoint operations to change the Mode when the HVAC is 'off'?", type: 'bool', defaultValue: false, 
+                          submitOnChange: true)
                 }
 			}
-			section(title: "Options") {
+			section(title: (isHE?'<b>':'') + "Additional Options" + (isHE?'</b>':'')) {
             	input(name: "theModes",type: "mode", title: "Change Thermostat Mode only when the Location Mode is", multiple: true, required: false)
 				input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
 				paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
@@ -251,17 +269,17 @@ def mainPage() {
 						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
 					}
 				} else {		// isHE
-					section("Use Notification Device(s)") {
+					section("<b>Use Notification Device(s)</b>") {
 						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
 							  description: "Select notification devices", submitOnChange: true)
 						paragraph ""
 					}
-					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+					section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
 							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
 						paragraph ""
 					}
-					section("Use Speech Device(s)") {
+					section("<b>Use Speech Device(s)</b>") {
 						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
 						if (settings.speak) {
 							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
@@ -273,7 +291,7 @@ def mainPage() {
 				}
 			}
         }
-        section(title: "Temporary Disable") {
+        section(title: (isHE?'<b>':'') + "Temporary Disable" + (isHE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
 		}
     	section (getVersionLabel()) {}
@@ -550,18 +568,19 @@ def insideChangeHandler(evt) {
                 String cMode = isSt ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
 				// log.debug "newMode: ${newMode}, cMode: ${cMode}"
                 if (cMode != newMode) {
-                    if ((cMode == 'off') && anyReservations( tid, 'modeOff' )) {
-                        // if ANYBODY (including me) has a reservation on this being off, I can't turn it back on
+                    boolean override = ((cMode != 'off') || (settings.insideOverridesOff && (!anyReservations(tid, 'modeOff') || ((countReservations(tid, 'modeOff') == 1) && haveReservation(tid, 'modeOff')))))
+                    if (!override) {
+                        // if Anybode else (but not me) has a reservation on this being off, I can't turn it back on
                         insideOverride[tid] = false
                         LOG("${evt.device.displayName} inside temp is ${theTemp}°${evt.unit}, but can't change to ${newMode} since ${getGuestList(tid,'offMode').toString()[1..-2]} have offMode reservations",2,null,'warn')
                         // Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
                     } else {
-                        // not currently off or there are no modeOff reservations, change away!
+                        // not currently off or there are no modeOff reservations (other than my own), change away!
                         cancelReservation(tid, 'modeOff' )
                         insideOverride[tid] = (coolOverride || heatOverride)
                         evt.device.setThermostatMode(newMode)
-                        LOG("${evt.device.displayName} temp is ${theTemp}°${evt.unit}, changed thermostat to ${newMode} mode",3,null,'trace')
-                        sendMessage("Thermostat ${evt.device.displayName} temperature is ${theTemp}°, so I changed it to ${newMode} mode")
+                        LOG("${evt.device.displayName} temperature (inside) is ${theTemp}°${evt.unit}, changed thermostat to ${newMode} mode",3,null,'trace')
+                        sendMessage("Thermostat ${evt.device.displayName} inside temperature is ${theTemp}°, so I changed it to ${newMode} mode")
                     }
                 }
             } else {
@@ -1194,7 +1213,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
