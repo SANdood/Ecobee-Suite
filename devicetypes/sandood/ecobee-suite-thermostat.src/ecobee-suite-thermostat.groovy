@@ -26,12 +26,6 @@
  *	See Github Changelog for complete change history
  *
  * <snip>
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Removed deprecated getLinkText()
- *	1.5.02 - Added more Weather data for Smart Mode
- *	1.5.03 - Converted all math to BigDecimal for better precision & rounding
- *	1.5.04 - Changed humidity/dehumidity setpoint attributes to "number"
- *	1.5.05 - Added reservations manager for better Helper cooperation
  *	1.6.00 - Release number synchronization
  *	1.6.02 - Fix reservations initialization error
  *	1.6.03 - Automatically re-run updated() if VersionLabel changes
@@ -63,15 +57,23 @@
  *	1.7.10 - Cleanup state changes, fix thermostatOperatingStateDisplay
  *  1.7.11 - Don't accept null temperature, fixing private method issue caused by grails
  *	1.7.12 - Register for new health check mechanism, don't register for Health Check if test install
+ *  1.7.13 - Added importUrl for HE IDE
  */
-String getVersionNum() 		{ return "1.7.12" }
+String getVersionNum() 		{ return "1.7.13" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat,\nversion ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
 
 metadata {
-	definition (name: "Ecobee Suite Thermostat", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)",
-					mnmn: "SmartThings", vid: "SmartThings-smartthings-Z-Wave_Thermostat") {		// add (rough) approximations for the new Samsung (Connect) app
+	definition (
+        name:        "Ecobee Suite Thermostat", 
+        namespace:   "sandood", 
+        author:      "Barry A. Burke (storageanarchy@gmail.com)",		
+        mnmn:        "SmartThings", 
+        vid:         "SmartThings-smartthings-Z-Wave_Thermostat",
+        importUrl:   "https://github.com/SANdood/Ecobee-Suite/raw/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
+    ) 
+    {		
 		capability "Thermostat"
 		capability "Actuator"
 		capability "Relative Humidity Measurement"
