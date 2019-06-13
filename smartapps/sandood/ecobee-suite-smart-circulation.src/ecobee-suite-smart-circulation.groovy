@@ -39,8 +39,9 @@
  *	1.7.03 - Fixing private method issue caused by grails
  *	1.7.04 - Fix error message when temps don't converge
  *	1.7.05 - Fix adjustments down (was getting stuck unless delta < 1.0), fix broken mode handler, reservations work, fix 'Vacation'
+ *  1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  */
-String getVersionNum() { return "1.7.05" }
+String getVersionNum() { return "1.7.06" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -561,10 +562,10 @@ def calcTemps() {
             }
         }
         if (!inRange) {
-        	LOG("In/Out temperature delta (${inoutDelta}°) not in range (${adjRange}), skipping...",4,"","trace")
+        	LOG("In/Out temperature delta (${inoutDelta}°) not in range (${adjRange}), skipping...", 4, null, "trace")
             return
         } else {
-        	LOG("In/Out temperature delta (${inoutDelta}°) is in range (${adjRange}), adjusting...",4,"","trace")
+        	LOG("In/Out temperature delta (${inoutDelta}°) is in range (${adjRange}), adjusting...", 4, null, "trace")
         }
     }
     
@@ -660,7 +661,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
