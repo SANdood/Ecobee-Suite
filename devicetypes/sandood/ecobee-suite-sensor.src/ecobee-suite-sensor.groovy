@@ -37,16 +37,23 @@
  *	1.7.01 - nonCached currentValue() on HE
  *	1.7.02 - Fixing private method issue caused by grails
  *  1.7.03 - Register new health check; auto reload new versions, avoid Health Check for test device install
+ *  1.7.04 - Added importUrl for HE IDE
  */
-String getVersionNum() 		{ return "1.7.03" }
+String getVersionNum() 		{ return "1.7.04" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 import groovy.json.*
 
 metadata {
-	definition (name: "Ecobee Suite Sensor", namespace: "sandood", author: "Barry A. Burke (storageanarchy@gmail.com)",
-    				mnmn: "SmartThings", vid: "generic-motion") {				// for the new Samsung (Connect) app
-
+	definition (
+        name:         "Ecobee Suite Sensor", 
+        namespace:    "sandood", 
+        author:       "Barry A. Burke (storageanarchy@gmail.com)",
+        mnmn:         "SmartThings",          // for the new Samsung (Connect) app
+        vid:          "generic-motion",        // for the new Samsung (Connect) app
+        importUrl:    "https://github.com/SANdood/Ecobee-Suite/raw/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy"
+    ) 
+    {		
 		capability "Temperature Measurement"
 		capability "Motion Sensor"
 		capability "Sensor"
