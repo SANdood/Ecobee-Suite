@@ -19,15 +19,16 @@
  *  1.7.04 - Fixed myThermostats subscription (thx @astephon88) & missing sendMessages
  *	1.7.05 - Fixed SMS text entry
  *	1.7.06 - Fixing private method issue caused by grails
+ *  1.7.07 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  */
-String getVersionNum() { return "1.7.06" }
+String getVersionNum() { return "1.7.07" }
 String getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
     name: "ecobee Suite Working From Home",
     namespace: "sandood",
     author: "Barry A. Burke",
-    description: "If, after thermostat mode change to 'Away' and/or at a particular time of day, anyone is still at home, " +
+    description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nIf, after thermostat mode change to 'Away' and/or at a particular time of day, anyone is still at home, " +
     			 "${isST?'trigger a \'Working From Home\' Routine (opt), ':''}, change the Location mode (opt), and/or reset thermostat(s) to 'Home' program (opt).",
     category: "Convenience",
     parent: "sandood:Ecobee Suite Manager",
@@ -432,7 +433,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
