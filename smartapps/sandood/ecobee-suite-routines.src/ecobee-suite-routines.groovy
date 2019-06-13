@@ -31,8 +31,9 @@
  *  1.7.08 - Cleaned up messages (a little - more still to do)
  *  1.7.09 - Fixed SMS text entry
  *	1.7.10 - Fixing private method issue caused by grails, "Vacation" from currentProgramName
+ *  1.7.11 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  */
-String getVersionNum() { return "1.7.10" }
+String getVersionNum() { return "1.7.11" }
 String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -858,7 +859,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
