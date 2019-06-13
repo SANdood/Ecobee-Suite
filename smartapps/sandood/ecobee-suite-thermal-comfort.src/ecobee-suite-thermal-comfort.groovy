@@ -20,8 +20,9 @@
  *	1.7.05 - Cleanup arguments passed to setProgramSetpoint()
  *	1.7.06 - Fixed SMS text entry
  *	1.7.07 - Fixing private method issue caused by grails
+ *  1.7.08 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  */
-String getVersionNum() { return "1.7.07" }
+String getVersionNum() { return "1.7.08" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
@@ -711,7 +712,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
