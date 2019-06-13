@@ -12,22 +12,7 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	1.0.1  - Initial Release
- *	1.0.2  - Misc optimizations and logging changes
- *	1.0.3  - Correct preferences page naming
- *	1.0.4  - Updated settings and TempDisable handling
- *	1.0.5  - Added "Smarter" temp following logic - works better with Smart Recovery
- *	1.0.6  - Fixed setup error
- *	1.0.7  - Added 'smarter' handling of SMart Recovery when following thermostat setpoints
- *	1.0.8  - Fixed setpoint settings, added current status displays in setup
- *	1.0.9  - Close the vents if idle while in cool Mode
- *  1.2.0  - Sync version number with new holdHours/holdAction support
- *	1.2.1  - Protect against LOG type errors
- *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
- *	1.4.0  - Renamed parent Ecobee Suite Manager
- *	1.4.01 - Select ventState when disabling, better temperature validation
- *	1.4.02 - Added configurable heat & cool offsets when following thermostat setpoints
- *	1.4.03 - Fixed a type conversion typo
+ * <snip>
  *	1.5.00 - Release number synchronization
  *	1.5.01 - Allow Ecobee Suite Thermostats only
  *	1.5.02 - Converted all math to BigDecimal
@@ -38,8 +23,9 @@
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixing private method issue caused by grails
+ *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  */
-String getVersionNum() { return "1.7.02" }
+String getVersionNum() { return "1.7.03" }
 String getVersionLabel() { return "Ecobee Suite Smart Vents Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -353,7 +339,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:orange"> Paused</span>' : ' (paused)')
+		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
