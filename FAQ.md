@@ -10,6 +10,19 @@ To clear this up in SmartThings, simply go into the IDE, click `My Devices` at t
 
 On Hubutat, you can delete the "test" devices from the "Devices" page which is accessed from the left menu pane of the Hubitat web interface.
 
+### How do I report a problem with Ecobee Suite?
+I prefer to have issues reported using the current [RELEASE] threads on either [hubitat.community.com](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-7/15813) or [smartthings.community.com](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-7/163929).
+
+When reporting an issue, I require:
+* A description of the problem, including the operation that didn't work, or caused the issue
+* The **Version Numbers** for the following:
+  - **Ecobee Suite Manager**
+  - **Ecobee Suite Thermostat**
+  - And if your problem is related to a Helper app, the **Ecobee Suite XXXX Helper**
+* A snapshot of Live Logging for each of the above *at the time the problem occured.* The log entries are designed to help us both understand what is going on. Note that most problems are related to a failure or error condition somewhere, so look for the keywords 'error' and 'warn' in the Live Log. 
+
+Send all of the above to me in the appropriate forum - ideally in a PM because the logs do reveal certain "secrets" about your environment.
+
 ### (ST) My EcoSensor and EcoTherm devices all show as 'Unavailable' on SmartThings
 
 I generally advise ES users to turn off Health Check. SmartThings never officially released support for 3rd party applications using Health Check, and they seem to continuously change the implementation so that reverse-engineered support for it sometimes fails for no apparent reason.
