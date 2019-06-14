@@ -41,9 +41,10 @@
  *	1.7.05 - Fix adjustments down (was getting stuck unless delta < 1.0), fix broken mode handler, reservations work, fix 'Vacation'
  *  1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.07 - Added option to require ALL or ANY of the Modes/Programs restrictions
+ *	1.7.08 - Fixed typos and formatting
  */
-String getVersionNum() { return "1.7.07" }
-String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.08" }
+String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -65,7 +66,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: (isHE?'<b>':'') + "${getVersionLabel()}" + (isHE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
 			String defaultLabel = "Smart Circulation"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -100,11 +101,12 @@ def mainPage() {
 		}
         
         if (!settings.tempDisable && settings.theThermostat) {
-        	section(title: "Select Indoor Temperature Sensors") {
+        	section(title: (isHE?'<b>':'') + "Select Indoor Temperature Sensors" + (isHE?'</b>':'')) {
             	input(name: "theSensors", title: "Use which indoor temperature sensor(s)", type: "capability.temperatureMeasurement", required: true, multiple: true, submitOnChange: true)
+				if (isHE) paragraph ''
 			}
         
-       		section(title: "Fan On Time Automation Configuration") {
+       		section(title: (isHE?'<b>':'') + "Fan On Time Automation Configuration" + (isHE?'</b>':'')) {
         		paragraph("Increase Circulation time (min/hr) when the difference between the maximum and the minimum temperature reading of the above sensors is more than this.")
             	input(name: "deltaTemp", type: "enum", title: "Select temperature delta", required: true, defaultValue: "2.0", multiple:false, options:["1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0", "7.5", "10.0"])
             	paragraph("Minimum Circulation time (min/hr). Includes heating, cooling and fan only minutes.")
@@ -117,9 +119,10 @@ def mainPage() {
             	input(name: "fanOnTimeDelta", type: "number", title: "Minutes per adjustment (1-20)", required: true, defaultValue: "5", description: "5", range: "1..20")
             	paragraph("Minimum number of minutes between adjustments.")
             	input(name: "fanAdjustMinutes", type: "number", title: "Time adjustment frequency in minutes (5-60)", required: true, defaultValue: "10", description: "15", range: "5..60")
+				if (isHE) paragraph ''
         	}
             
-            section(title: "Indoors/Outdoors Temperature Delta") {
+            section(title: (isHE?'<b>':'') + "Indoors/Outdoors Temperature Delta" + (isHE?'</b>':'')) {
             	paragraph("To apply above adjustments based on inside/outside temperature difference, first select an outside temperature source (indoor temperature will be the average of the sensors selected above).")
                 input(name: "outdoorSensor", title: "Use which outdoor temperature sensor", type: "capability.temperatureMeasurement", required: false, multiple: false, submitOnChange: true)
                 if (settings.outdoorSensor) {
@@ -128,14 +131,16 @@ def mainPage() {
 							options: ["More than 10 degrees warmer", "5 to 10 degrees warmer", "0 to 4.9 degrees warmer", "-4.9 to -0.1 degrees cooler",
                             			"-10 to -5 degrees cooler", "More than 10 degrees cooler"], submitOnChange: true)
                 }
+				if (isHE) paragraph ''
             }
        
-        	section(title: "Vacation Hold Override") {
+        	section(title: (isHE?'<b>':'') + "Vacation Hold Override" + (isHE?'</b>':'')) {
         		paragraph("The thermostat's Circulation setting is overridden when a Vacation is in effect. If you would like to automate the Circulation time during a Vacation hold, enable this setting.")
             	input(name: "vacationOverride", type: "bool", title: "Override fan during Vacation hold?", defaulValue: false)
+				if (isHE) paragraph ''
         	}
        
-			section(title: "Enable only for specific modes or programs?") {
+			section(title: (isHE?'<b>':'') + "Enable only for specific modes or programs?" + (isHE?'</b>':'')) {
 				def multiple = false
             	input(name: "theModes", type: "mode", title: "Only when the Location Mode is", multiple: true, required: false, submitOnChange: true)
                 input(name: "statModes", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, submitOnChange: true, options: getThermostatModesList())
@@ -144,32 +149,35 @@ def mainPage() {
 					multiple = true
 					input(name: 'needAll', type: 'bool', title: 'Require ALL conditions to be met?', required: true, defaultValue: false, submitOnChange: true)
 				}
-				if (multiple) {
+				if (!multiple) {
 					paragraph("Circulation time (min/hr) will only be adjusted when the above condition is met.")
 				} else {
 					paragraph("Circulation time (min/hr) will ${settings.needAll?'only ':''}be adjusted when ${settings.needAll?'ALL':'ANY'} of the above conditions are met.")	 
 				}
+				if (isHE) paragraph ''
         	}
             
-            section(title: "Enable only when relative humidity is high?") {
+            section(title: (isHE?'<b>':'') + "Enable only when relative humidity is high?" + (isHE?'</b>':'')) {
             	paragraph("Circulation time (min/hr) is adjusted only when the relative humidity is higher than a specified value")
                 input(name: "theHumidistat", type: "capability.relativeHumidityMeasurement", title: "Use this humidity sensor (blank to disable)", multiple: false, required: false, submitOnChange: true)
                 if (settings.theHumidistat) {
                 	input( name: "highHumidity", type: "number", title: "Adjust circulation only when ${settings.theHumidistat.displayName}'s Relative Humidity is higher than:", range: "0..100", required: true)
                 }
+				if (isHE) paragraph ''
             }
             
-            section(title: "'Quiet Time' Integration") {
+            section(title: (isHE?'<b>':'') + "'Quiet Time' Integration" + (isHE?'</b>':'')) {
             	paragraph("You can configure this Helper to integrate with one or more instances of the Ecobee Suite Quiet Time Helper: This helper will stop updating circulation when one or more Quiet Time switch(es) are enabled.")
             	input(name: "quietSwitches", type: "capability.switch", title: "Select Quiet Time control switch(es)", multiple: true, required: false, submitOnChange: true)
                 if (settings.quietSwitches) {
                 	paragraph("All selected Quiet Time switches must use the same state to turn on Quiet Time.")
                 	input(name: "qtOn", type: "enum", title: "Disable circulation when any of these Quiet Switches is:", defaultValue: 'on', required: true, multiple: false, options: ["on","off"])
                 }
+				if (isHE) paragraph ''
             }
 		}
         
-		section(title: "Temporarily Disable?") {
+		section(title: (isHE?'<b>':'') + "Temporarily Disable?" + (isHE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
