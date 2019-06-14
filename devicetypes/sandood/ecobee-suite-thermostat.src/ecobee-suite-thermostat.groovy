@@ -59,8 +59,9 @@
  *	1.7.12 - Register for new health check mechanism, don't register for Health Check if test install
  *  1.7.13 - Added importUrl for HE IDE
  *  1.7.14 - Added current/scheduledProgramOwner and ProgramType
+ *	1.7.15 - Fixed currrentThermostat typo (x2)
  */
-String getVersionNum() 		{ return "1.7.14" }
+String getVersionNum() 		{ return "1.7.15" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2734,10 +2735,10 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 	String currentThermostatHold
     if (isST) {
     	currentProgramName = device.currentValue('currentProgramName')
-    	currrentThermostatHold = device.currentValue('thermostatHold')
+    	currentThermostatHold = device.currentValue('thermostatHold')
     } else {
     	currentProgramName = device.currentValue('currentProgramName', true)
-    	currrentThermostatHold = device.currentValue('thermostatHold', true)
+    	currentThermostatHold = device.currentValue('thermostatHold', true)
     }
     
 	if (((currentThermostatHold != '') && (currentThermostatHold != null) && (currentThermostatHold != 'null')) || currentProgramName.startsWith('Hold') || currentProgramName.startsWith('Auto ')) {
