@@ -55,9 +55,10 @@
  *  1.7.15 - Fixed a debugLevelFour error
  *	1.7.16 - Better logging for Reservations
  *  1.7.17 - Better logging for setXXXX() functions (ID the thermostat)
+ *  1.7.18 - Added current/scheduledProgramOwner and ProgramType attributes, fixed some typos
  */
-String getVersionNum() 		{ return "1.7.17" }
-String getVersionLabel() 	{ return "Ecobee Suite Manager,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() 		{ return "1.7.18" }
+String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
 import groovy.transform.Field
@@ -102,16 +103,16 @@ def getHelperSmartApps() {
 }
  
 definition(
-	name: "Ecobee Suite Manager",
-	namespace: myNamespace,
-	author: "Barry A. Burke (storageanarchy@gmail.com)",
+	name:        "Ecobee Suite Manager",
+	namespace:     myNamespace,
+	author:      "Barry A. Burke (storageanarchy@gmail.com)",
 	description: "Connect your Ecobee thermostats and sensors to ${isST?'SmartThings':'Hubitat'}, along with a Suite of Helper ${isST?'Smart':''}Apps.",
-	category: "My Apps",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	category:    "My Apps",
+	iconUrl:     "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url:   "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: true,
-	oauth: true,
-    pausable: false
+	oauth:       true,
+    pausable:    false
 ) {
 	appSetting "clientId"
 }
@@ -158,7 +159,7 @@ def mainPage() {
     }
     if (atomicState.initialized) { readyToInstall = true }
     
-	dynamicPage(name: "mainPage", title: "Welcome to ${getVersionLabel()}", install: readyToInstall, uninstall: false, submitOnChange: true) {
+	dynamicPage(name: "mainPage", title: (isHE?'<b>':'') + "Welcome to ${getVersionLabel()}" + (isHE?'</b>':''), install: readyToInstall, uninstall: false, submitOnChange: true) {
     	def ecoAuthDesc = (atomicState.authToken != null) ? "[Connected]\n" :"[Not Connected]\n"        
 		
         // If not device Handlers we cannot proceed
@@ -185,11 +186,11 @@ def mainPage() {
 		// Need to save the initial login to setup the device without timeouts
 		if(atomicState.authToken != null && atomicState.initialized) {
         	if (settings.thermostats?.size() > 0 && atomicState.initialized) {
-				section("Helper ${isST?'Smart':''}Apps") {
+				section((isHE?'<b>':'') + "Helper ${isST?'Smart':''}Apps" + (isHE?'</b>':'')) {
                 	href ("helperSmartAppsPage", title: "Helper ${isST?'Smart':''}Apps", description: "${isHE?'Click':'Tap'} to manage Helper ${isST?'Smart':''}Apps")
                 }            
             }
-			section("Ecobee Devices") {
+			section((isHE?'<b>':'') + "Ecobee Devices" + (isHE?'</b>':'')) {
 				def howManyThermsSel = settings.thermostats?.size() ?: 0
                 def howManyTherms = atomicState.numAvailTherms ?: "?"
                 def howManySensors = atomicState.numAvailSensors ?: "?"
@@ -206,7 +207,7 @@ def mainPage() {
             		href ("sensorsPage", title: "Sensors", description: "${isHE?'Click':'Tap'} to select Sensors [${howManySensorsSel}/${howManySensors}]")
 	            }
     	    }        
-	        section("Preferences") {
+	        section((isHE?'<b>':'') + "Preferences" + (isHE?'</b>':'')) {
     	    	href ("preferencesPage", title: "Ecobee Suite Preferences", description: "${isHE?'Click':'Tap'} to review global settings")
 				if (isST) {
 					href ("askAlexaPage", title: "Ask Alexa Preferences", description: "Tap to review Ask Alexa settings")
@@ -222,7 +223,7 @@ def mainPage() {
     	} // End if(atomicState.authToken)
         
         // Setup our API Tokens       
-		section("Ecobee Authentication") {
+		section((isHE?'<b>':'') + "Ecobee Authentication" + (isHE?'</b>':'')) {
 			href ("authPage", title: "Ecobee API Authorization", description: "${ecoAuthDesc}${isHE?'Click':'Tap'} for ecobee Credentials")
 		}      
 		if ( debugLevel(5) ) {
@@ -230,11 +231,11 @@ def mainPage() {
 				href ("debugDashboardPage", description: "${isHE?'Click':'Tap'} to enter the Debug Dashboard", title: "Debug Dashboard")
 			}
 		}
-		section("Remove Ecobee Suite") {
+		section((isHE?'<b>':'') + "Remove Ecobee Suite" + (isHE?'</b>':'')) {
 			href ("removePage", description: "${isHE?'Click':'Tap'} to remove ${app.name}", title: "Remove this instance")
 		}            
 		
-		section ("Name this instance of Ecobee Suite Manager") {
+		section ((isHE?'<b>':'') + "Name this instance of Ecobee Suite Manager" + (isHE?'</b>':'')) {
 			label name: "name", title: "Assign a name", required: false, defaultValue: app.name, submitOnChange: true
 			if (isHE) {
 				if (!app.label) {
@@ -333,7 +334,7 @@ def thermsPage(params) {
     LOG("thermsPage() starting settings: ${settings}")
     LOG("thermsPage() params passed? ${params}", 4, null, "trace")
 
-    dynamicPage(name: "thermsPage", title: "Thermostat Selection", params: params, nextPage: "", content: "thermsPage", uninstall: false) {    
+    dynamicPage(name: "thermsPage", title: (isHE?'<b>':'') + "Thermostat Selection" + (isHE?'</b>':''), params: params, nextPage: "", content: "thermsPage", uninstall: false) {    
     	section("${isHE?'Click':'Tap'} below to see the list of Ecobee thermostats available in your ecobee account and select the ones you want to connect to ${isST?'SmartThings':'Hubitat'}.") {
 			LOG("thermsPage(): atomicState.settingsCurrentTherms=${atomicState.settingsCurrentTherms}   thermostats=${settings.thermostats}", 4, null, "trace")
 			if (atomicState.settingsCurrentTherms != settings.thermostats) {
@@ -358,7 +359,7 @@ def sensorsPage() {
     
     LOG("options = getEcobeeSensors == ${options}")
 
-    dynamicPage(name: "sensorsPage", title: "Sensor Selection", nextPage: "") {
+    dynamicPage(name: "sensorsPage", title: (isHE?'<b>':'') + "Sensor Selection" + (isHE?'</b>':''), nextPage: "") {
 		if (numFound > 0)  {
 			section("${isHE?'Click':'Tap'} below to see the list of ecobee sensors available for the selected thermostat(s) and choose the ones you want to connect to ${isST?'SmartThings':'Hubitat'}."){
 				LOG("sensorsPage(): atomicState.settingsCurrentSensors=${atomicState.settingsCurrentSensors}   ecobeesensors=${settings.ecobeesensors}", 4, null, "trace")
@@ -379,7 +380,7 @@ def sensorsPage() {
 }
 
 def askAlexaPage() {
-	dynamicPage(name: "askAlexaPage", title: "Ask Alexa Integration", nextPage: "") {
+	dynamicPage(name: "askAlexaPage", title: (isHE?'<b>':'') + 'Ask Alexa Integration' + (isHE?'</b>':''), nextPage: "") {
 	
 		if (isHE) {
 			section('Ask Alexa integration is not supported on Hubitat (yet)') {
@@ -421,7 +422,7 @@ def askAlexaPage() {
 
 def preferencesPage() {
     LOG("=====> preferencesPage() entered. settings: ${settings}", 5)
-    dynamicPage(name: "preferencesPage", title: "Update Ecobee Suite Manager Preferences", nextPage: "") {
+    dynamicPage(name: "preferencesPage", title: (isHE?'<b>':'') + 'Update Ecobee Suite Manager Preferences' + (isHE?'</b>':''), nextPage: "") {
 		if (isST) {
 			section("Notifications") {
 				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most once per hour."
@@ -437,17 +438,17 @@ def preferencesPage() {
 				paragraph("A notification is always sent to the Hello Home log whenever an action is taken")
 			}
 		} else {		// isHE
-			section("Use Notification Device(s)") {
+			section("<b>Use Notification Device(s)</b>") {
 				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour."
 				input(name: "notifiers", type: "capability.notification", title: "", required: false, multiple: true, 
 					  description: "Select notification devices", submitOnChange: true)
 				paragraph ""
 			}
-			section("Use SMS to Phone(s) (limit 10 messages per day)") {
+			section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
 				input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", required: false, submitOnChange: true)
 				paragraph ""
 			}
-			section("Use Speech Device(s)") {
+			section("<b>Use Speech Device(s)</b>") {
 				input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 				if (settings.speak) {
 					input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
@@ -464,7 +465,7 @@ def preferencesPage() {
 			}
         }
 		
-      	section("How long do you want Hold events to last?") {
+      	section((isHE?'<b>':'') + "How long do you want Hold events to last?" + (isHE?'</b>':'')) {
             input(name: "holdType", title:"Select Hold Type", type: "enum", required:false, multiple:false, defaultValue: "Until I Change", submitOnChange: true, description: "Until I Change", 
             	options: ["Until I Change", "Until Next Program", "2 Hours", "4 Hours", "Specified Hours", "Thermostat Setting"])
             if (settings.holdType=="Specified Hours") {
@@ -499,14 +500,14 @@ def debugDashboardPage() {
 	LOG("=====> debugDashboardPage() entered.", 5)    
     
     dynamicPage(name: "debugDashboardPage", title: "") {
-    	section (getVersionLabel())
-		section("Commands") {
+    	section((isHE?'<b>':'') + getVersionLabel() + (isHE?'</b>':''))
+		section((isHE?'<b>':'') + "Commands" + (isHE?'</b>':'')) {
         	href(name: "pollChildrenPage", title: "", required: false, page: "pollChildrenPage", description: "Tap to execute: pollChildren()")
             href(name: "refreshAuthTokenPage", title: "", required: false, page: "refreshAuthTokenPage", description: "Tap to execute: refreshAuthToken()")
             href(name: "updatedPage", title: "", required: false, page: "updatedPage", description: "Tap to execute: updated()")
         }    	
         
-    	section("Settings Information") {
+    	section((isHE?'<b>':'') + "Settings Information" + (isHE?'</b>':'')) {
         	paragraph "debugLevel: ${getDebugLevel()}"
             paragraph "holdType: ${getHoldType()}"
             if (settings.holdType && settings.holdType.contains('Hour')) paragraph "holdHours: ${getHoldHours()}"
@@ -518,7 +519,7 @@ def debugDashboardPage() {
             paragraph "Decimal Precision: ${getTempDecimals()}"
             if (askAlexa) paragraph 'Ask Alexa support is enabled'
         }
-        section("Dump of Debug Variables") {
+        section((isHE?'<b>':'') + "Dump of Debug Variables" + (isHE?'</b>':'')) {
         	def debugParamList = getDebugDump()
             LOG("debugParamList: ${debugParamList}", 4, null, "debug")
             //if ( debugParamList?.size() > 0 ) {
@@ -529,7 +530,7 @@ def debugDashboardPage() {
                 }
             }
         }
-    	section("Commands") {
+    	section((isHE?'<b>':'') + "Commands" + (isHE?'</b>':'')) {
         	href(name: "pollChildrenPage", title: "", required: false, page: "pollChildrenPage", description: "Tap to execute command: pollChildren()")
             href ("removePage", description: "Tap to remove Ecobee Suite Manager ", title: "")
         }
@@ -579,8 +580,8 @@ def helperSmartAppsPage() {
 
 	LOG("The available Helper ${isST?'Smart':''}Apps are ${getHelperSmartApps()}", 5, null, "info")
 	
- 	dynamicPage(name: "helperSmartAppsPage", title: "Configured Helper ${isST?'Smart':''}Apps", install: true, uninstall: false, submitOnChange: true) { 
-    	section("Avalable Helper ${isST?'Smart':''}Apps") {
+ 	dynamicPage(name: "helperSmartAppsPage", title: (isHE?'<b>':'') + "Configured Helper ${isST?'Smart':''}Apps" + (isHE?'</b>':''), install: true, uninstall: false, submitOnChange: true) { 
+    	section((isHE?'<b>':'') + "Avalable Helper ${isST?'Smart':''}Apps" + (isHE?'</b>':'')) {
 			getHelperSmartApps().each { oneApp ->
 				LOG("Processing the app: ${oneApp}", 4, null, "trace")            
             	def allowMultiple = isST ? oneApp.multiple.value : oneApp.multiple
@@ -3242,6 +3243,8 @@ void updateThermostatData() {
         String currentClimateName = 'null'
 		String currentClimateId = 'null'
         String currentClimate = 'null'
+        String currentClimateOwner = 'null'
+        String currentClimateType = 'null'
         String currentFanMode = 'null'
         def currentVentMode = statSettings.vent
         def ventMinOnTime = statSettings.ventilatorMinOnTime
@@ -3253,13 +3256,20 @@ void updateThermostatData() {
         String scheduledClimateId = 'unknown'
 		String scheduledClimateName = 'Unknown'
         def schedClimateRef = null
+        String scheduledClimateOwner = 'null'
+        String scheduledClimateType = 'null'
+        
         if (program != [:]) {
         	scheduledClimateId = program.currentClimateRef 
         	schedClimateRef = program.climates.find { it.climateRef == scheduledClimateId }
             scheduledClimateName = schedClimateRef.name
+            scheduledClimateOwner = schedClimateRef.owner
+            scheduledClimateType = schedClimateRef.type
             program.climates?.each { climatesList += '"'+it.name+'"' } // read with: programsList = new JsonSlurper().parseText(theThermostat.currentValue('programsList'))
+            climatesList.sort()
         }
-		if (debugLevelFour) LOG("${tstatName} -> scheduledClimateId: ${scheduledClimateId}, scheduledClimateName: ${scheduledClimateName}, climatesList: ${climatesList.toString()}", 1, null, 'info')
+		if (debugLevelFour) LOG("${tstatName} -> scheduledClimateId: ${scheduledClimateId}, scheduledClimateName: ${scheduledClimateName}, scheduledClimateOwner: ${scheduledClimateOwner}, " +
+                      "scheduledClimateType: ${scheduledClimateType}, climatesList: ${climatesList.toString()}", 1, null, 'info')
         
 		// check which program is actually running now
         def vacationTemplate = false
@@ -3272,7 +3282,7 @@ void updateThermostatData() {
                 }
             }
 		}
-        
+
         // hack to fix ecobee bug where template is not created until first Vacation is created, which screws up resumeProgram() (last hold event is not deleted)
         if (!vacationTemplate) {
         	LOG("No vacation template exists for thermostat ${tstatName} (${tid}), creating one...", 2, null, 'warn')
@@ -3282,14 +3292,14 @@ void updateThermostatData() {
         
         // store the currently running event (in case we need to modify or delete it later, as in Vacation handling)
         def tempRunningEvent = [:]
-       	tempRunningEvent[tid] = runningEvent 	// was: (runningEvent != [:]) ? runningEvent : [:]
-		if (tempRunningEvent[tid] != [:]) {
-        	if (atomicState.runningEvent && atomicState.runningEvent[tid] != tempRunningEvent[tid]) {
-            	// Update atomicState only if the data changed (avoid hundreds of unnecessary writes to atomicStatae when events are running)
-            	tempRunningEvent = atomicState.runningEvent + tempRunningEvent
-        		atomicState.runningEvent = tempRunningEvent
-            }
-		}
+       	tempRunningEvent[tid] = runningEvent
+
+        if (!atomicState.runningEvent || (!atomicState.runningEvent[tid] && (runningEvent != [:])) || (atomicState.runningEvent[tid] != tempRunningEvent[tid])) {
+            // Update atomicState only if the data changed (avoid hundreds of unnecessary writes to atomicStatae when events are running)
+            tempRunningEvent = atomicState.runningEvent + tempRunningEvent
+            atomicState.runningEvent = tempRunningEvent
+        }
+
 		String thermostatHold = 'null'
         String holdEndsAt = 'null'
         if (timers) log.debug "TIMER: Finished updating currentClimate for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
@@ -3363,11 +3373,14 @@ void updateThermostatData() {
             holdEndsAt = fixDateTimeString( runningEvent.endDate, runningEvent.endTime, statTime[tid])
 			thermostatHold = runningEvent.type
             String tempClimateRef = runningEvent.holdClimateRef ? runningEvent.holdClimateRef : ''
+            def currentClimateRef = program.climates.find { it.climateRef == tempClimateRef }
             switch (runningEvent.type) {
             	case 'hold':
             		if (tempClimateRef != '') {
-						currentClimate = (program.climates.find { it.climateRef == tempClimateRef }).name
+						currentClimate = currentClimateRef.name
                			currentClimateName = 'Hold: ' + currentClimate
+                        currentClimateOwner = currentClimateRef?.owner
+                        currentClimateType = currentClimateRef?.type
                 	} else if ((runningEvent.name=='auto')||(runningEvent.name=='hold')) {		// Handle the "auto" climates (includes fan on override, and maybe the Smart Recovery?)
                     	if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false)) {
                         	currentClimateName = 'Hold: Fan'
@@ -3378,38 +3391,51 @@ void updateThermostatData() {
                 	}
                     break;
                 case 'vacation':
+                    currentClimate = 'Vacation'
                		currentClimateName = 'Vacation'
+                    currentClimateType = 'calendarEvent'       // At least that is what it SHOULD be
+                    currentClimateOwner = 'user'                //
                 	fanMinOnTime = runningEvent.fanMinOnTime
                     break;
                 case 'quickSave':
                		currentClimateName = 'Quick Save'
+                    currentClimateOwner = currentClimateRef?.owner
+                    currentClimateType = currentClimateRef?.type
                     break;
                 case 'autoAway':
              		currentClimateName = 'Auto Away'
                     currentClimate = 'Away'
+                    currentClimateOwner = currentClimateRef?.owner
+                    currentClimateType = currentClimateRef?.type
                 	break;
                 case 'autoHome':
                		currentClimateName = 'Auto Home'
                     currentClimate = 'Home'
+                    currentClimateOwner = currentClimateRef?.owner
+                    currentClimateType = currentClimateRef?.type
                     break;
             	default:                
                		currentClimateName = (runningEvent.type != null) ? runningEvent.type : 'null'
                     break;
             }
-			currentClimateId = tempClimateRef
+			currentClimateId = tempClimateRef ?: 'null'
 		} else if (isConnected) {
 			if (scheduledClimateId) {
         		currentClimateId = scheduledClimateId
         		currentClimateName = scheduledClimateName
 				currentClimate = scheduledClimateName
+                currentClimateOwner = scheduledClimateOwner
+                currentClimateType = scheduledClimateType
 			} else {
         		LOG(preText+'Program or running Event missing', 1, null, 'warn')
-            	currentClimateName = 'null'
-        		currentClimateId = 'null' 
-                currentClimate = 'null'
+                // These were already initialized above
+            	//currentClimateName = 'null'
+        		//currentClimateId = 'null' 
+                //currentClimate = 'null'
         	}
 		}
-        if (debugLevelFour) LOG("updateThermostatData(${tstatName} ${tid}) - currentClimate: ${currentClimate}, currentClimateName: ${currentClimateName}, currentClimateId: ${currentClimateId}", 1, null, 'trace')
+        if (debugLevelFour) LOG("updateThermostatData(${tstatName} ${tid}) - currentClimate: ${currentClimate}, currentClimateName: ${currentClimateName}, currentClimateId: ${currentClimateId}, " +
+                                "currentClimateOwner: ${currentClimateOwner}, currentClimateType: ${currentClimateType}", 1, null, 'trace')
 
         // Note that fanMode == 'auto' might be changedby the Thermostat DTH to 'off' or 'circulate' dependent on  HVACmode and fanMinRunTime
         if (runningEvent) {
@@ -3727,7 +3753,7 @@ void updateThermostatData() {
         if (changeConfig[tid][3] != tmpScale)		{ data += [temperatureScale: tmpScale];			changeConfig[tid][3] = tmpScale; cfgsChanged = true; }
         if (changeConfig[tid][4] != settings.mobile){ data += [mobile: settings.mobile];			changeConfig[tid][4] = settings.mobile; cfgsChanged = true; }
 		if (cfgsChanged) {
-			log.trace "cfgsChanged: true"
+			//log.trace "cfgsChanged: true"
 			atomicState.changeConfig = changeConfig
 		}
 		if (timers) log.debug "TIMER: Finished queueing Config data for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
@@ -3771,7 +3797,7 @@ void updateThermostatData() {
 				if (changeNever[tid][10] != hasDehumidifier){ data += [hasDehumidifier: hasDehumidifier]; 	changeNever[tid][10] = hasDehumidifier; nvrChanged = true;}
 			}
 			if (forcePoll || programUpdated) {
-				if (changeNever[tid][7] != climatesList)	{ data += [programsList: climatesList];			changeNever[tid][7] = climatesList; nvrChanged = true; }
+				if (climatesList && (changeNever[tid][7] != climatesList))	{ data += [programsList: climatesList];			changeNever[tid][7] = climatesList; nvrChanged = true; }
 			}
 			if (nvrChanged) {
 				// log.trace "nvrChanged: true"
@@ -3797,7 +3823,7 @@ void updateThermostatData() {
 		def needPrograms = false
 		def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
 		if (thermostatUpdated || runtimeUpdated ||  equipUpdated || forcePoll || settingsUpdated || eventsUpdated || programUpdated || rtReallyUpdated || extendRTUpdated || (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {  
-			if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+			if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
 			// The order of these is IMPORTANT - Do setpoints and all equipment changes before notifying of the hold and program change...
 			if (tempHeatingSetpoint && (forcePoll || (changeRarely[tid][15] != tempHeatingSetpoint) || userPChanged))	{ 
 				needPrograms = true
@@ -3811,25 +3837,26 @@ void updateThermostatData() {
                 data += [coolingSetpoint: String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),] 
                 rareChanged = true
 			}
-            if (changeRarely[tid][4] != statMode) 				{ data += [thermostatMode: statMode]; 					changeRarely[tid][4] = statMode; 				rareChanged = true; }
-			if (changeRarely[tid][12] != currentFanMode) 		{ data += [thermostatFanMode: currentFanMode]; 			changeRarely[tid][12] = currentFanMode; 		rareChanged = true; }
-			if (changeRarely[tid][13] != currentVentMode) 		{ data += [vent: currentVentMode]; 						changeRarely[tid][13] = currentVentMode; 		rareChanged = true; }
-			if (changeRarely[tid][14] != ventMinOnTime) 		{ data += [ventilatorMinOnTime: ventMinOnTime]; 		changeRarely[tid][14] = ventMinOnTime; 			rareChanged = true; }
-			if (changeRarely[tid][0] != fanMinOnTime) 			{ data += [fanMinOnTime: fanMinOnTime]; 				changeRarely[tid][0] = fanMinOnTime; 			rareChanged = true; }
-			if (changeRarely[tid][5] != humidifierMode)			{ data += [humidifierMode: humidifierMode]; 			changeRarely[tid][5] = humidifierMode; 			rareChanged = true; }
-			if (changeRarely[tid][6] != dehumidifierMode) 		{ data += [dehumidifierMode: dehumidifierMode]; 		changeRarely[tid][6] = dehumidifierMode; 		rareChanged = true; }
-			if (changeRarely[tid][1] != thermostatHold)			{ data += [thermostatHold: thermostatHold];				changeRarely[tid][1] = thermostatHold; 			rareChanged = true; }
-			if (changeRarely[tid][2] != holdEndsAt) 			{ data += [holdEndsAt: holdEndsAt]; 					changeRarely[tid][2] = holdEndsAt; 				rareChanged = true; }
-			if (changeRarely[tid][3] != statusMsg) 				{ data += [holdStatus: statusMsg]; 						changeRarely[tid][3] = statusMsg; 				rareChanged = true; }
-			if ((currentClimate != 'null') && (forcePoll || (changeRarely[tid][7] != currentClimate)))
-																{ data += [currentProgram: currentClimate]; 			changeRarely[tid][7] = currentClimate; 			rareChanged = true; }
-			if ((currentClimateName != 'null') && (forcePoll || (changeRarely[tid][8] != currentClimateName)))
-																{ data += [currentProgramName: currentClimateName]; 	changeRarely[tid][8] = currentClimateName; 		rareChanged = true; }
-			if ((currentClimateId != 'null') && (forcePoll || (changeRarely[tid][9] != currentClimateId)))		
-																{ data += [currentProgramId: currentClimateId]; 		changeRarely[tid][9] = currentClimateId; 		rareChanged = true; }
+            if (changeRarely[tid][4]  != statMode) 				{ data += [thermostatMode: statMode]; 					    changeRarely[tid][4]  = statMode; 				rareChanged = true; }
+			if (changeRarely[tid][12] != currentFanMode) 		{ data += [thermostatFanMode: currentFanMode]; 			    changeRarely[tid][12] = currentFanMode; 		rareChanged = true; }
+			if (changeRarely[tid][13] != currentVentMode) 		{ data += [vent: currentVentMode]; 						    changeRarely[tid][13] = currentVentMode; 		rareChanged = true; }
+			if (changeRarely[tid][14] != ventMinOnTime) 		{ data += [ventilatorMinOnTime: ventMinOnTime]; 		    changeRarely[tid][14] = ventMinOnTime; 			rareChanged = true; }
+			if (changeRarely[tid][0]  != fanMinOnTime) 			{ data += [fanMinOnTime: fanMinOnTime]; 				    changeRarely[tid][0]  = fanMinOnTime; 			rareChanged = true; }
+			if (changeRarely[tid][5]  != humidifierMode)		{ data += [humidifierMode: humidifierMode]; 			    changeRarely[tid][5]  = humidifierMode; 		rareChanged = true; }
+			if (changeRarely[tid][6]  != dehumidifierMode) 		{ data += [dehumidifierMode: dehumidifierMode]; 		    changeRarely[tid][6]  = dehumidifierMode; 		rareChanged = true; }
+			if (changeRarely[tid][1]  != thermostatHold)		{ data += [thermostatHold: thermostatHold];				    changeRarely[tid][1]  = thermostatHold; 		rareChanged = true; }
+			if (changeRarely[tid][2]  != holdEndsAt) 			{ data += [holdEndsAt: holdEndsAt]; 					    changeRarely[tid][2]  = holdEndsAt; 			rareChanged = true; }
+			if (changeRarely[tid][3]  != statusMsg) 			{ data += [holdStatus: statusMsg]; 						    changeRarely[tid][3]  = statusMsg; 				rareChanged = true; }
+			if (changeRarely[tid][7]  != currentClimate)		{ data += [currentProgram: currentClimate]; 			    changeRarely[tid][7]  = currentClimate; 		rareChanged = true; }
+			if (changeRarely[tid][8]  != currentClimateName)	{ data += [currentProgramName: currentClimateName]; 	    changeRarely[tid][8]  = currentClimateName; 	rareChanged = true; }
+			if (changeRarely[tid][9]  != currentClimateId)		{ data += [currentProgramId: currentClimateId]; 		    changeRarely[tid][9]  = currentClimateId; 		rareChanged = true; }
 			if (changeRarely[tid][10] != scheduledClimateName)	{ data += [scheduledProgramName: scheduledClimateName,
-																			scheduledProgram: scheduledClimateName]; 	changeRarely[tid][10] = scheduledClimateName; 	rareChanged = true; }
-			if (changeRarely[tid][11] != scheduledClimateId) 	{ data += [scheduledProgramId: scheduledClimateId];		changeRarely[tid][11] = scheduledClimateId; 	rareChanged = true; }
+																		   scheduledProgram: scheduledClimateName]; 	    changeRarely[tid][10] = scheduledClimateName; 	rareChanged = true; }
+			if (changeRarely[tid][11] != scheduledClimateId) 	{ data += [scheduledProgramId: scheduledClimateId];		    changeRarely[tid][11] = scheduledClimateId; 	rareChanged = true; }
+            if (changeRarely[tid][15] != currentClimateOwner)	{ data += [currentProgramOwner: currentClimateOwner]; 	    changeRarely[tid][15] = currentClimateOwner; 	rareChanged = true; }
+            if (changeRarely[tid][16] != currentClimateType)	{ data += [currentProgramType: currentClimateType]; 	    changeRarely[tid][16] = currentClimateType; 	rareChanged = true; }
+            if (changeRarely[tid][17] != scheduledClimateOwner) { data += [scheduledProgramOwner: scheduledClimateOwner]; 	changeRarely[tid][17] = scheduledClimateOwner; 	rareChanged = true; }
+            if (changeRarely[tid][18] != scheduledClimateType)	{ data += [scheduledProgramType: scheduledClimateType]; 	changeRarely[tid][18] = scheduledClimateType; 	rareChanged = true; }
 
 			if (rareChanged) {
 				atomicState.changeRarely = changeRarely
@@ -4527,7 +4554,7 @@ boolean deleteVacation(child, deviceId, vacationName=null ) {
 	if (!vacaName) {		// no vacationName specified, let's find out if one is currently running
         def evt = atomicState.runningEvent[deviceId]
     	if (!evt ||  (evt.running != true) || (evt.type != "vacation") || !evt.name) {
-    		LOG("deleteVacation() for ${child} (${deviceId}) - Vacation not active", 4, child, 'warn')
+    		LOG("deleteVacation() for ${child} (${deviceId}) - Vacation not active", 1, child, 'warn')
         	return true	// Asked us to delete the current vacation, and there isn't one - I'd still call that a success!
         }
         vacaName = evt.name as String		// default names are Very Big Numbers
@@ -4538,7 +4565,7 @@ boolean deleteVacation(child, deviceId, vacationName=null ) {
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
     def result = sendJson(child, jsonRequestBody)
-    LOG("deleteVacation()  for ${child} (${deviceId}) returned ${result}", 4, child,result?'info':'warn')
+    LOG("deleteVacation() for ${child} (${deviceId}) returned ${result}", 2, child,result?'info':'warn')
     
     if (vacationName == null) {
     	resumeProgram(child, deviceId, true)		// force back to previously scheduled program
