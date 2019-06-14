@@ -40,8 +40,9 @@
  *	1.7.04 - Fix error message when temps don't converge
  *	1.7.05 - Fix adjustments down (was getting stuck unless delta < 1.0), fix broken mode handler, reservations work, fix 'Vacation'
  *  1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.07 - Added option to require ALL or ANY of the Modes/Programs restrictions
  */
-String getVersionNum() { return "1.7.06" }
+String getVersionNum() { return "1.7.07" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -135,11 +136,19 @@ def mainPage() {
         	}
        
 			section(title: "Enable only for specific modes or programs?") {
-        		paragraph("Circulation time (min/hr) is only adjusted while in these modes *OR* programs. The time will remain at the last setting while in other modes. If you want different circulation times" +
-						  "for other modes or programs, create multiple Smart Circulation handlers.")
-            	input(name: "theModes", type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
-                input(name: "statModes", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, options: getThermostatModesList())
-            	input(name: "thePrograms", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Program is", multiple: true, required: false, options: getProgramsList())
+				def multiple = false
+            	input(name: "theModes", type: "mode", title: "Only when the Location Mode is", multiple: true, required: false, submitOnChange: true)
+                input(name: "statModes", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, submitOnChange: true, options: getThermostatModesList())
+            	input(name: "thePrograms", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Program is", multiple: true, required: false, subbmitOnChange: true, options: getProgramsList())
+				if ((settings.theModes && settings.statModes) || (settings.statModes && settings.thePrograms) || (settings.thePrograms && settings.theModes)) {
+					multiple = true
+					input(name: 'needAll', type: 'bool', title: 'Require ALL conditions to be met?', required: true, defaultValue: false, submitOnChange: true)
+				}
+				if (multiple) {
+					paragraph("Circulation time (min/hr) will only be adjusted when the above condition is met.")
+				} else {
+					paragraph("Circulation time (min/hr) will ${settings.needAll?'only ':''}be adjusted when ${settings.needAll?'ALL':'ANY'} of the above conditions are met.")	 
+				}
         	}
             
             section(title: "Enable only when relative humidity is high?") {
@@ -265,12 +274,18 @@ def initialize() {
     // Also allow if none are configured
     boolean isOK = true
     if (theModes || thePrograms  || statModes) {
-		String ncCp = isST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
-		String ncTm = isST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
-    	isOK = (theModes && theModes.contains(location.mode)) ? true : 
-        			((thePrograms && thePrograms.contains(ncCp)) ? true : 
-                    	((statModes && statModes.contains(ncTm)) ? true : false))
-        if (!isOK) LOG("Not in specified Mode or Program, not adjusting", 3, null, "info")
+		String currentProgram = isST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
+		String thermostatMode = isST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
+		if (settings.needAll) {
+			isOK = 				settings.theModes ?		settings.theModes.contains(location.mode) 		: true
+			if (isOK) isOK = 	settings.thePrograms ?	settings.thePrograms.contains(currentProgram) 	: true
+			if (isOK) isOK = 	settings.statModes ?	settings.statModes.contains(thermostatMode)		: true
+		} else {
+			isOK = 				(theModes && theModes.contains(location.mode))
+			if (!isOK) isOK = 	(thePrograms && thePrograms.contains(currentProgram))
+			if (!isOK) isOK = 	(statModes && statModes.contains(thermostatMode))
+		}
+		if (!isOK) LOG("Not in specified Modes ${settings.needAll?'and':'or'} Programs, not adjusting", 3, null, "info")
     }
     
     // Check the humidity?
@@ -380,15 +395,22 @@ def modeOrProgramHandler(evt=null) {
     	return true
     }
     
-	// Allow adjustments if location.mode OR thermostat.currentProgram match configuration settings
+	// Allow adjustments if Location Mode and/or Thermostat Program and/or Thermostat Mode is currently as configured
+    // Also allow if none are configured
     boolean isOK = true
     if (theModes || thePrograms  || statModes) {
 		String currentProgram = isST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
 		String thermostatMode = isST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
-    	isOK = (theModes && theModes.contains(location.mode)) ? true : 
-        			((thePrograms && thePrograms.contains( currentProgram )) ? true : 
-                    	((statModes && statModes.contains( thermostatMode )) ? true : false))
-        if (!isOK) LOG("Not in specified Mode or Program, not adjusting", 3, null, "info")
+		if (settings.needAll) {
+			isOK = 				settings.theModes ?		settings.theModes.contains(location.mode) 		: true
+			if (isOK) isOK = 	settings.thePrograms ?	settings.thePrograms.contains(currentProgram) 	: true
+			if (isOK) isOK = 	settings.statModes ?	settings.statModes.contains(thermostatMode)		: true
+		} else {
+			isOK = 				(theModes && theModes.contains(location.mode))
+			if (!isOK) isOK = 	(thePrograms && thePrograms.contains(currentProgram))
+			if (!isOK) isOK = 	(statModes && statModes.contains(thermostatMode))
+		}
+		if (!isOK) LOG("Not in specified Modes ${settings.needAll?'and':'or'} Programs, not adjusting", 3, null, "info")
     }
     
     // Check the humidity?
