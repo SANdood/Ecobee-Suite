@@ -42,8 +42,9 @@
  *  1.7.11 - Prevent duplicate notifications
  *  1.7.12 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *  1.7.13 - Wasn't saving thermState when turning back on
+ *	1.7.14 - Fix thermSavedState initialization
  */
-String getVersionNum() 		{ return "1.7.13" }
+String getVersionNum() 		{ return "1.7.14" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -65,7 +66,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: (isHE?'<b>':'') + "${getVersionLabel()} + (isHE?'</b>':'')", uninstall: true, install: true) {
     	section(title: "") {
         	String defaultLabel = "Contacts & Switches"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -100,12 +101,13 @@ def mainPage() {
 				} else {
             		input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
 				}
+                if (isHE) paragraph ''
             }          
 		}
     
 		if (!settings.tempDisable && ((settings.theThermostats?.size() > 0) || (settings.myThermostats?.size() > 0))) {
 
-			section(title: "Select HVAC Off Actions") {
+			section(title: (isHE?'<b>':'') + "Select HVAC Off Actions" + (isHE?'</b>':'')) {
             	paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle actions by turning on Quiet Time from this Helper instead of taking HVAC actions directly. The Quiet Time Helper also offers additional control options.')
                 input(name: 'quietTime', type: 'bool', title: 'Enable Quiet Time?', required: true, defaultValue: false, submitOnChange: true)
                 if (settings.quietTime) {
@@ -126,42 +128,47 @@ def mainPage() {
                         }
                     }
            		}
-				paragraph('Note that no HVAC On actions will be taken if the HVAC was already Off when the first contact sensor or switch would have turned it off; the HVAC will remain Off when all the contacts & switches are reset.')
+				paragraph('Note that no HVAC On actions will be taken if the HVAC was already Off when the first contact sensor or switch would have turned it' +
+                		  'off; the HVAC will remain Off when all the contacts & switches are reset.')
+                if (isHE) paragraph ''
             }
             
-			section(title: "Select Contact Sensors") {
+			section(title: (isHE?'<b>':'') + "Select Contact Sensors" + (isHE?'</b>':'')) {
 				input(name: "contactSensors", title: "Contact Sensors: ", type: "capability.contactSensor", required: false, multiple: true,  submitOnChange: true)
                 if (settings.contactSensors) {
                 	input(name: 'contactOpen', type: 'bool', title: "Run HVAC Off Actions when ${settings.contactSensors.size()>1?'any of the contacts are':'the contact is'} open?", required: true, defaultValue: true, submitOnChange: true)
                    	paragraph("HVAC Off Actions will be taken when a contact sensor is ${((settings.contactOpen==null)||settings.contactOpen)?'Open':'Closed'}.")
                 }
+                if (isHE) paragraph ''
 			}
             
-            section(title: "Select Switches") {
+            section(title: (isHE?'<b>':'') + "Select Switches" + (isHE?'</b>':'')) {
             	input(name: "theSwitches", title: "Switches: ", type: "capability.switch", required: false, multiple: true,  submitOnChange: true)
                 if (settings.theSwitches) {
                 	input(name: 'switchOn', type: 'bool', title: "Run HVAC Off Actions when ${settings.theSwitches.size()>1?'any of the switches are':'the switch is'} turned on?", required: true, defaultValue: true, submitOnChange: true)
                     paragraph("HVAC Off Actions will be taken off when a switch is turned ${((settings.switchOn==null)||settings.switchOn)?'On':'Off'}")
                 }
-				
+				if (isHE) paragraph ''
         	}
             
             if ((settings.contactSensors != null) || (settings.theSwitches != null)) {
-				section(title: "Timers") {
+				section(title: (isHE?'<b>':'') + "Timers" + (isHE?'</b>':'')) {
 					input(name: "offDelay", title: "Delay time (in minutes) before turning off HVAC or Sending Notification [Default=5]", type: "enum", required: true, 
                     	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: 5)
 					input(name: "onDelay", title: "Delay time (in minutes) before turning HVAC back on  or Sending Notification [Default=0]", type: "enum", required: true, 
                     	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: 0)
+                    if (isHE) paragraph ''
 	        	}
             
-            	section(title: "Action Preferences") {
+            	section(title: (isHE?'<b>':'') + "Action Preferences" + (isHE?'</b>':'')) {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
                     	options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
+                    if (isHE) paragraph ''
 				}
                         
 				if (settings.whichAction != "HVAC Actions Only") {
 					if (isST) {
-						section("Notifications") {
+						section((isHE?'<b>':'') + "Notifications" + (isHE?'</b>':'')) {
 							paragraph "A notification will also be sent to the Hello Home log\n"
 							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
@@ -171,20 +178,21 @@ def mainPage() {
 								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
 								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
-							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+                            if (isHE) paragraph ""
 						}
 					} else {		// isHE
-						section("Use Notification Device(s)") {
+						section((isHE?'<b>':'') + "Use Notification Device(s)" + (isHE?'</b>':'')) {
 							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
 								  description: "Select notification devices", submitOnChange: true)
-							paragraph ""
+							if (isHE) paragraph ""
 						}
-						section("Use SMS to Phone(s) (limit 10 messages per day)") {
+						section((isHE?'<b>':'') + "Use SMS to Phone(s) (limit 10 messages per day)" + (isHE?'</b>':'')) {
 							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)",
 								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
-							paragraph ""
+							if (isHE) paragraph ""
 						}
-						section("Use Speech Device(s)") {
+						section((isHE?'<b>':'') + "Use Speech Device(s)" + (isHE?'</b>':'')) {
 							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
 								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
@@ -192,13 +200,14 @@ def mainPage() {
 								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
 							paragraph "A 'HelloHome' notification will also be sent to the Location Event log\n"
+                            if (isHE) paragraph ''
 						}
 					}
             	}
             }          
 		} // End if (theThermostats?.size() > 0)
 
-		section(title: "Temporary Pause") {
+		section(title: (isHE?'<b>':'') + "Temporary Pause" + (isHE?'</b>':'')) {
 			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
@@ -208,14 +217,14 @@ def mainPage() {
 
 // Main functions
 void installed() {
-	LOG("installed() entered", 5)
+	LOG("installed() entered", 5, null, 'info')
 	initialize()  
 }
 void uninstalled () {
    clearReservations()
 }
 void updated() {
-	LOG("updated() entered", 5)
+	LOG("updated() entered", 5, null, 'info')
 	unsubscribe()
 	unschedule()
 	initialize()
@@ -266,7 +275,7 @@ def initialize() {
 			contactOffState = (closedSensors != 0)
         }
     }
-    LOG("contactOffState = ${contactOffState}",2,null,'trace')
+    LOG("contactOffState = ${contactOffState}",2,null,'info')
     
     boolean switchOffState = false
     if (theSwitches) {
@@ -285,7 +294,7 @@ def initialize() {
 			switchOffState = (offSwitches != 0)
         }
     }
-    LOG("switchOffState = ${switchOffState}",2,null,'trace')
+    LOG("switchOffState = ${switchOffState}",2,null,'info')
     
     //def tempState = atomicState.HVACModeState
     //if (tempState == null) tempState = (contactOffState || switchOffState)?'off':'on'		// recalculate if we should be off or on
@@ -298,6 +307,7 @@ def initialize() {
     	if (!settings.quietTime) {  		
     		theStats.each() { therm ->
     			def tid = getDeviceId(therm.deviceNetworkId)
+				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
 				if (isST) {
 					tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode'), HVACModeState: 'on', ]
 					if (settings.adjustSetpoints) {
@@ -351,14 +361,14 @@ def initialize() {
         }
     }
     atomicState.thermSavedState = tmpThermSavedState
-	LOG("initialize() - thermSavedState: ${tmpThermSavedState}",4,null,'trace')
+	LOG("initialize() - thermSavedState: ${tmpThermSavedState}",4,null,'debug')
 	LOG("initialize() exiting",2,null,'trace')
 }
 
 def statModeChange(evt) {
 	// only gets called if we are turning off the HVAC (not for quietTime or setpointAdjust operations)
     def tid = getDeviceId(evt.device.deviceNetworkId)
-    tmpThermSavedState = atomicState.thermSavedState
+    def tmpThermSavedState = atomicState.thermSavedState
 	if (evt.value == 'off') {
     	if (atomicState.HVACModeState != 'off') atomicState.HVACModeState = 'off'
         tmpThermSavedState[tid].HVACModeState = 'off'
@@ -455,7 +465,7 @@ void openedScheduledActions() {		// preserved only for backwards compatibility
 // "sensorClosed" called when state change should turn HVAC On (routine name preserved for backwards compatibility with prior implementations)
 void sensorClosed(evt=null) {
 	// Turn HVAC Off action has occured
-    LOG("sensorClosed() entered with event ${evt?.device} ${evt?.name}: ${evt?.value}", 3,null,'trace')
+    LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 3,null,'trace')
 	def HVACModeState = atomicState.HVACModeState
     
     if (allClosed() == true) {
@@ -466,7 +476,8 @@ void sensorClosed(evt=null) {
 				"${(settings.contactSensors && settings.theSwitches)?'or ':''}${settings.theSwitches?'switch':''} was " +
 				"${(settings.contactSensors && settings.contactOpen)?'opened':''}${(settings.contactSensors && !settings.contactOpen)?'closed':''}" +
 				"${(settings.contactSensors && settings.theSwitches)?'/':''}" +
-				"${(settings.theSwitches && settings.switchOn)?'turned on':''}${(settings.theSwitches && !settings.switchOn)?'turned off':''}, no action taken.", 3, null, 'info')
+				"${(settings.theSwitches && settings.switchOn)?'turned on':''}${(settings.theSwitches && !settings.switchOn)?'turned off':''}, no action taken.",
+                3, null, 'info')
 			return
 		}
 		if (HVACModeState.contains('on')) {
@@ -503,10 +514,10 @@ void closedScheduledActions() {
 
 void turnOffHVAC(quietly = false) {
 	// Save current states
-    LOG("turnoffHVAC(${quietly}) entered...", 4,null,'trace')
+    LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'trace')
     atomicState.HVACModeState = 'off'
     def action = settings.whichAction ? settings.whichAction :'Notify Only'
-    def tmpThermSavedState = atomicState.thermSavedState
+    def tmpThermSavedState = atomicState.thermSavedState ?: [:]
     def tstatNames = []
     def doHVAC = action.contains('HVAC')
     def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
@@ -567,7 +578,7 @@ void turnOffHVAC(quietly = false) {
         }
     }
     atomicState.thermSavedState = tmpThermSavedState
-	LOG("turnOffHVAC() - thermSavedState: ${tmpThermSavedState}", 4, null, 'trace')
+	LOG("turnOffHVAC() - thermSavedState: ${tmpThermSavedState}", 4, null, 'debug')
     
 	if (tstatNames.size() > 0) {
     	if (action.contains('Notify')  && !quietly) {
@@ -611,7 +622,7 @@ void turnOffHVAC(quietly = false) {
 
 void turnOnHVAC(quietly = false) {
 	// Restore previous state
-    LOG("turnOnHVAC(${quietly}) entered...", 4,null,'trace')
+    LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'trace')
     atomicState.HVACModeState = 'on'
     def action = settings.whichAction ? settings.whichAction : 'Notify Only'
     boolean doHVAC = action.contains('HVAC')
