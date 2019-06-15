@@ -39,6 +39,7 @@
  *  1.7.06 - Don't do inside override until temp reaches setpoint+differential
  *  1.7.07 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *  1.7.08 - Added settings option to allow internal temp/setpoint to override 'off' (but only if we hold the only 'off' Reservation)
+ *	1.7.09 - When mode changes away, release reservations and set stats Mode to doneMode (if any)
  */
 String getVersionNum() { return "1.7.08" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
@@ -252,6 +253,10 @@ def mainPage() {
 			}
 			section(title: (isHE?'<b>':'') + "Additional Options" + (isHE?'</b>':'')) {
             	input(name: "theModes",type: "mode", title: "Change Thermostat Mode only when the Location Mode is", multiple: true, required: false)
+				if (settings.theModes) {
+					input(name: 'doneMode', title: "When the Location Mode is no longer valid, reset thermostat mode to (optional)", type: 'enum', 
+                    		required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
+				}
 				input(name: 'notify', type: 'bool', title: "Notify on Activations?", required: false, defaultValue: false, submitOnChange: true)
 				paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
         	}            
@@ -317,7 +322,7 @@ void clearReservations() {
     }
 }
 void updated() {
-	LOG("updated() with settings: ${settings}", 3, "", 'trace')
+	LOG("updated() with settings: ${settings}", 3, "", 'info')
 	unsubscribe()
     unschedule()
     atomicState.aboveChanged = false
@@ -561,7 +566,8 @@ def insideChangeHandler(evt) {
                 }
             }
         }
-        def okMode = theModes ? theModes.contains(location.mode) : true
+		
+        def okMode = settings.theModes ? settings.theModes.contains(location.mode) : true
         if (okMode) {
         	atomicState.locModeEnabled = true
             if (newMode != null) {
@@ -588,11 +594,11 @@ def insideChangeHandler(evt) {
             }
         } else {
         	if (atomicState.locModeEnabled) {
-                // Do we check for/cancel reservations?
+                // Mode no longer valid, but it once was, so release any reservations and leave the HVAC where it is...
+				LOG("Location Mode (${location.mode}) is no longer valid, releasing reservations${settings.doneMode?', and resetting Thermostat Mode to '+settings.doneMode.toString().capitalize():''}",2,null,'info')
                 cancelReservation(tid, 'modeOff')
                 if (!anyReservations(tid, 'modeOff')) {
-                    // insideOverride[tid] = true
-                    evt.device.setThermostatMode('auto')		// allow choice, keep reservation if off
+					if (settings.doneMode) thermostats*."${settings.doneMode}"()
                 }
                 atomicState.locModeEnabled = false
             }
@@ -706,18 +712,17 @@ def temperatureUpdate( BigDecimal temp ) {
     	atomicState.locModeEnabled = true
     } else {
     	if (atomicState.locModeEnabled) {
-        	// release all the reservations and reset the mode
+			LOG("Location Mode (${location.mode}) is no longer valid, releasing reservations${settings.doneMode?', and resetting Thermostat Mode to '+settings.doneMode.toString().capitalize():''}",2,null,'info')
+        	// release all the reservations 
         	settings.thermostats.each { 
             	def tid = getDeviceId(it.deviceNetworkId)
-            	// Do we check for/cancel reservations?
             	cancelReservation(tid, 'modeOff')
             	if (!anyReservations(tid, 'modeOff')) {
-                	thermostats*.auto() // .setThermostatMode('auto')		// allow choice, keep reservation if off
+					if (settings.doneMode) thermostats*."${settings.doneMode}"() 
             	}
             }
             atomicState.locModeEnabled = false
         }
-        //LOG something
         return
     }
     
