@@ -43,8 +43,9 @@
  *  1.7.12 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *  1.7.13 - Wasn't saving thermState when turning back on
  *	1.7.14 - Fix thermSavedState initialization
+ *	1.7.15 - And fixed it some more
  */
-String getVersionNum() 		{ return "1.7.14" }
+String getVersionNum() 		{ return "1.7.15" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -66,7 +67,7 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: (isHE?'<b>':'') + "${getVersionLabel()} + (isHE?'</b>':'')", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: (isHE?'<b>':'') + getVersionLabel() + (isHE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
         	String defaultLabel = "Contacts & Switches"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -368,7 +369,9 @@ def initialize() {
 def statModeChange(evt) {
 	// only gets called if we are turning off the HVAC (not for quietTime or setpointAdjust operations)
     def tid = getDeviceId(evt.device.deviceNetworkId)
-    def tmpThermSavedState = atomicState.thermSavedState
+    def tmpThermSavedState = atomicState.thermSavedState ?: [:]
+    if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+    
 	if (evt.value == 'off') {
     	if (atomicState.HVACModeState != 'off') atomicState.HVACModeState = 'off'
         tmpThermSavedState[tid].HVACModeState = 'off'
@@ -390,8 +393,9 @@ def heatSPHandler( evt ) {
 		def tid = getDeviceId(evt.device.deviceNetworkId)
     
     	// save the new value
-		def tmpThermSavedState = atomicState.thermSavedState
-    	if (tmpThermSavedState[tid].heatAdj == evt.numberValue) return 	// we generated this event (below)
+		def tmpThermSavedState = atomicState.thermSavedState ?: [:]
+        if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+    	if ((tmpThermSavedState[tid].containsKey(heatAdj)) && (tmpThermSavedState[tid].heatAdj == evt.numberValue)) return 	// we generated this event (below)
     	tmpThermSavedState[tid].heatSP = evt.numberValue
     
     	// if (!atomicState.HVACModeState.contains('off')) {			// Only adjust setpoints when the HVAC is not off
@@ -412,8 +416,9 @@ def coolSPHandler( evt ) {
         def tid = getDeviceId(evt.device.deviceNetworkId)
 
         // save the new value
-        def tmpThermSavedState = atomicState.thermSavedState
-        if (tmpThermSavedState[tid].coolAdj == evt.numberValue) return
+        def tmpThermSavedState = atomicState.thermSavedState ?: [:]
+        if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+        if ((tmpThermSavedState[tid].containsKey('coolAdj')) && (tmpThermSavedState[tid].coolAdj == evt.numberValue)) return
         tmpThermSavedState[tid].coolSP = evt.numberValue
 
         //if (!atomicState.HVACModeState.contains('off')) {
@@ -523,6 +528,7 @@ void turnOffHVAC(quietly = false) {
     def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 	theStats.each() { therm ->
     	def tid = getDeviceId(therm.deviceNetworkId)
+        if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
         if( doHVAC ) {
         	if (settings.quietTime) {
             	// Turn on quiet time
@@ -629,18 +635,17 @@ void turnOnHVAC(quietly = false) {
     boolean notReserved = true
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 	def tstatNames = []
-	
+	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
     if (doHVAC) {
-	   	// Restore to previous state 
-        // LOG("Restoring to previous state", 5) 
-        
         theStats.each { therm ->
 			LOG("Working on thermostat: ${therm}", 2, null, 'info')
             tstatNames << therm.displayName
             def tid = getDeviceId(therm.deviceNetworkId)
+            if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+            
             String priorMode = settings.defaultMode
-            def tmpThermSavedState = atomicState.thermSavedState
-            if (tmpThermSavedState?.containsKey(tid)) {
+            
+           //if (tmpThermSavedState?.containsKey(tid)) {
             	if (settings.quietTime) {
             		// Turn on quiet time
             		def onOff = settings.qtOn=='on' ? 'off' : 'on'
@@ -697,7 +702,7 @@ void turnOnHVAC(quietly = false) {
                     	LOG("${therm.displayName} heatingSetpoint returned to ${h}, coolingSetpoint to ${c} (${holdType})",2,null,'info')
                     }
             	}
-            }
+            //}
 		} 
 	}
     atomicState.thermSavedState = tmpThermSavedState
