@@ -44,8 +44,9 @@
  *  1.7.13 - Wasn't saving thermState when turning back on
  *	1.7.14 - Fix thermSavedState initialization
  *	1.7.15 - And fixed it some more
+ *	1.7.16 - And still more
  */
-String getVersionNum() 		{ return "1.7.15" }
+String getVersionNum() 		{ return "1.7.16" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -98,9 +99,11 @@ def mainPage() {
 				paragraph "WARNING: Temporarily Paused - re-enable below." 
 			} else { 
 				if (settings.theThermostats || !settings.myThermostats) {
-					input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+					input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", 
+                    		required: true, multiple: true, submitOnChange: true)
 				} else {
-            		input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+            		input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", 
+                    		required: true, multiple: true, submitOnChange: true)
 				}
                 if (isHE) paragraph ''
             }          
@@ -437,10 +440,12 @@ def coolSPHandler( evt ) {
 
 // "sensorOpened" called when state change should turn HVAC off - routine name preserved for backwards compatibility with prior implementations
 void sensorOpened(evt=null) {
-	LOG("sensorOpened() entered with event ${evt?.device} ${evt?.name}: ${evt?.value}", 3,null,'trace')
+	LOG("sensorOpened() - ${evt?.device} ${evt?.name} ${evt?.value}", 3,null,'trace')
 	
     def HVACModeState = atomicState.HVACModeState
-    if ((HVACModeState == 'off') || (HVACModeState == 'off_pending')) {
+    if (HVACModeState == 'off_pending') return		// already in process of turning off
+    
+    if (HVACModeState == 'off') { // || (HVACModeState == 'off_pending')) {
     	// HVAC is already off
 		if (numOpen() == 1) {
 			atomicState.wasAlreadyOff = true
@@ -471,9 +476,11 @@ void openedScheduledActions() {		// preserved only for backwards compatibility
 void sensorClosed(evt=null) {
 	// Turn HVAC Off action has occured
     LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 3,null,'trace')
-	def HVACModeState = atomicState.HVACModeState
+	def HVACModeState = atomicState.HVACModeStat
     
     if (allClosed() == true) {
+    	if (HVACModeState == 'on_pending') return
+        
 		if (atomicState.wasAlreadyOff == true) {
 			// Don't turn HVAC on if it was already off when the window was opened
 			atomicState.wasAlreadyOff = false
@@ -485,7 +492,7 @@ void sensorClosed(evt=null) {
                 3, null, 'info')
 			return
 		}
-		if (HVACModeState.contains('on')) {
+		if (HVACModeState == 'on') {
 			LOG("All sensors & switches are reset, and HVAC is already on", 3, null, 'info')
 			turnOnHVAC(true)	// Just in case
 			return	// already on, nothing more to do (catches 'on' and 'on_pending')
@@ -821,7 +828,7 @@ List getGuestList(String tid, String type='modeOff') {
 }
 
 void sendMessage(notificationMessage) {
-	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
+	LOG("Notification Message: ${notificationMessage}", 2, null, "info")
     String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 	if (isST) {
 		if (phone) { // check that the user did select a phone number
