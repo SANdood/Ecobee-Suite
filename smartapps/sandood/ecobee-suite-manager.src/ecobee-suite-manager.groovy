@@ -56,8 +56,9 @@
  *	1.7.16 - Better logging for Reservations
  *  1.7.17 - Better logging for setXXXX() functions (ID the thermostat)
  *  1.7.18 - Added current/scheduledProgramOwner and ProgramType attributes, fixed some typos
+ *	1.7.19 - Run update() if the (HE only?) hub reboots, Fixed reservations, Read Only attributes cleanup
  */
-String getVersionNum() 		{ return "1.7.18" }
+String getVersionNum() 		{ return "1.7.19" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -1062,7 +1063,7 @@ void uninstalled() {
 void updated() {	
     LOG("Updated with settings: ${settings}",2,null,'warn')	
     
-    if (!atomicState.atomicMigrate) {
+    if (!atomicState?.atomicMigrate) {
     	LOG("updated() - Migrating state to atomicState...", 2, null, "warn")        
         try {
         	state.collect {
@@ -1120,6 +1121,11 @@ void updateMyLabel() {
 			break;
 	}
 	if (newLabel && (app.label != newLabel)) app.updateLabel(newLabel)
+}
+
+def rebooted(evt) {
+	LOG("Hub rebooted, re-initializing", 1, null, 'debug')
+	initialize()
 }
 
 def initialize() {	
@@ -1272,6 +1278,7 @@ def initialize() {
     subscribe(location, "sunset", sunsetEvent)
     subscribe(location, "sunrise", sunriseEvent)
     subscribe(location, "position", scheduleWatchdog)
+	subscribe(location, "systemStart", rebooted)								// re-initialize if the hub reboots (HE only?)
        
     // Schedule the various handlers
     LOG("Spawning scheduled events from initialize()", 5, null, "trace")
@@ -5740,21 +5747,21 @@ boolean haveReservation( String statId, String childId, String type='modeOff') {
 // Do any Apps have reservations?
 boolean anyReservations( String statId, String type='modeOff') {
 	def reservations = atomicState.reservations
-	boolean result = (reservations?."${statId}"?.containsKey(type)) ? (reservations."${statId}"."${type}".size() != 0) : false
+	boolean result = ((reservations?."${statId}"?.containsKey(type)) && (reservations."${statId}"."${type}" != [])) ? (reservations."${statId}"."${type}".size() != 0) : false
 	LOG("${result?'Somebody':'Nobody'} holds '${type}' reservations",2,null,'info')
 	return result
 }
 // How many apps have reservations?
 Integer countReservations(String statId, String type='modeOff') {
 	def reservations = atomicState.reservations
-	Integer result = ((reservations?."${statId}"?.containsKey(type)) ? reservations."${statId}"."${type}".size() : 0) as Integer
+	Integer result = (((reservations?."${statId}"?.containsKey(type)) && (reservations."${statId}"."${type}" != [])) ? reservations."${statId}"."${type}".size() : 0) as Integer
 	LOG("There ${result>1?'are':'is'} ${result} '${type}' reservation${result>1?'s':''}",2,null,'info')
 	return result
 }
 // Get the list of app IDs that have reservations
 List getReservations(String statId, String type='modeOff') {
 	def reservations = atomicState.reservations
-    def result = (reservations?."${statId}"?.containsKey(type)) ? reservations."${statId}"."${type}" : []
+    def result = ((reservations?."${statId}"?.containsKey(type)) && (reservations."${statId}"."${type}" != [])) ? reservations."${statId}"."${type}" : []
 	LOG("AppIds holding '${type}' reservations: ${result}",2,null,'info')
 	return result
 }
@@ -5762,7 +5769,7 @@ List getReservations(String statId, String type='modeOff') {
 List getGuestList(String statId, String type='modeOff') {
 	def result = []
 	def reservations = atomicState.reservations
-    if (reservations?."${statId}"?.containsKey(type)) {
+    if ((reservations?."${statId}"?.containsKey(type)) && (reservations."${statId}"."${type}" != [])) {
         reservations."${statId}"."${type}".each {
         	result << getChildAppName( it )
         }
@@ -5820,9 +5827,10 @@ void runEvery3Minutes(handler) {
                                          'smartCirculation','soundAlertVolume','soundTickVolume','stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','ventilatorDehumidify','ventilatorFreeCooling',
                                          'ventilatorMinOnTimeAway','ventilatorMinOnTimeHome','ventilatorOffDateTime', 'ventilatorType'
 										]
-// Settings that are Read Only and cannot be changed
+// Settings that are Read Only and cannot be changed directly
 @Field final List EcobeeROSettings =	['coolMaxTemp','coolMinTemp','coolStages','hasBoiler','hasDehumidifier','hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasHumidifier','hasUVFilter','heatMaxTemp','heatMinTemp',
-										 'heatPumpGroundWater','heatStages','userAccessCode','userAccessSetting','temperature','humidity',
+										 'heatPumpGroundWater','heatStages','userAccessCode','userAccessSetting','temperature','humidity','currentProgram','currentProgramName','currentProgramId','currentProgramOwner',
+										 'currentProgramType','scheduledProgram','scheduledProgramName','scheduledProgramId','scheduledProgramOwner','scheduledProgramType','debugLevel','decimalPrecision',
 										]
 // Settings that must be changed only by specific commands
 @Field final List EcobeeDirectSettings= [
