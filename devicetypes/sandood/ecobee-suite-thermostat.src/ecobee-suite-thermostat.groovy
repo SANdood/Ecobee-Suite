@@ -60,8 +60,9 @@
  *  1.7.13 - Added importUrl for HE IDE
  *  1.7.14 - Added current/scheduledProgramOwner and ProgramType
  *	1.7.15 - Fixed currrentThermostat typo (x2)
+*	1.7.16 - Fixed nagging command error & preferences{}
  */
-String getVersionNum() 		{ return "1.7.15" }
+String getVersionNum() 		{ return "1.7.16" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -73,8 +74,8 @@ metadata {
         author:      "Barry A. Burke (storageanarchy@gmail.com)",		
         mnmn:        "SmartThings", 
         vid:         "SmartThings-smartthings-Z-Wave_Thermostat",
-        importUrl:   "https://github.com/SANdood/Ecobee-Suite/raw/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
-    ) 
+		importUrl:   "https://github.com/SANdood/Ecobee-Suite/raw/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
+	)
     {		
 		capability "Thermostat"
 		capability "Actuator"
@@ -177,15 +178,15 @@ metadata {
 		attribute 'coolingSetpointTile', 'number'		// Used to show coolAt/coolTo for MultiTile
 		attribute 'coldTempAlert', 'number'
 		attribute 'coldTempAlertEnabled', 'string'
-		attribute 'currentProgram','string'
-		attribute 'currentProgramId','string'
-		attribute 'currentProgramName', 'string'
-        attribute 'currentProgramOwner', 'string'
-        attribute 'currentProgramType', 'string'
-		attribute 'debugEventFromParent','string'
-		attribute 'debugLevel', 'number'
-		attribute 'decimalPrecision', 'number'
-		attribute 'dehumidifierLevel', 'number'		// should be same as dehumiditySetpoint
+		attribute 'currentProgram','string'				// Read only
+		attribute 'currentProgramId','string'			// Read only
+		attribute 'currentProgramName', 'string'		// Read only
+        attribute 'currentProgramOwner', 'string'		// Read only
+        attribute 'currentProgramType', 'string'		// Read only
+		attribute 'debugEventFromParent','string'		// Read only
+		attribute 'debugLevel', 'number'				// Read only - changed in preferences
+		attribute 'decimalPrecision', 'number'			// Read only - changed in preferences
+		attribute 'dehumidifierLevel', 'number'			// should be same as dehumiditySetpoint
 		attribute 'dehumidifierMode', 'string'
 		attribute 'dehumidifyOvercoolOffset', 'number'
 		attribute 'dehumidifyWhenHeating', 'string'
@@ -333,7 +334,18 @@ metadata {
 	}
 
 	simulator { }
-
+	
+    preferences {
+        input(name: "myHoldType", type: "enum", title: "Hold Type", description: 
+			  "When changing temperature or program, use Permanent, Temporary, Hourly, Parent setting or Thermostat setting hold type? (Default: Ecobee Suite Manager's setting)",
+			  required: false, options: ["Permanent", "Temporary", "Hourly", "Parent", "Thermostat"])
+        input(name: "myHoldHours", type: "enum", title: "Hourly Hold Time", description: "If Hourly hold, how many hours do you want to hold? (Default: Ecobee Suite Manager's setting)", 
+			  required: false, options: ['2', '4', '6', '8', '12', '16', '24'])
+        input(name: "smartAuto", type: "bool", title: "Smart Auto Temp Adjust", description: "This flag allows the temperature to be adjusted manually when the thermostat " +
+			  "is in Auto mode. An attempt to determine if the heat or cool setting should be changed is made automatically.", required: false)
+		input(name: "dummy", type: "text", title: "${getVersionLabel()}", description: " ", required: false)
+	}
+	
 	tiles(scale: 2) {
 		multiAttributeTile(name:"temperatureDisplay", type:"thermostat", width:6, height:4, canChangeIcon: true) {
 			tileAttribute("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
@@ -342,8 +354,6 @@ metadata {
 			tileAttribute("device.thermostatSetpoint", key: "VALUE_CONTROL") {
 				attributeState("VALUE_UP", action: "raiseSetpoint")
 				attributeState("VALUE_DOWN", action: "lowerSetpoint")
-//				  attributeState("default", label: '${currentValue}°', defaultState:true)
-//				  attributeState("default", action: "setTemperature")
 			}
 			tileAttribute("device.humidity", key: "SECONDARY_CONTROL") {
 				attributeState("default", label:'${currentValue}%', unit:"Humidity", defaultState: true)
@@ -720,18 +730,6 @@ metadata {
 		valueTile("holdStatus", "device.holdStatus", height: 1, width: 4, decoration: "flat") {
 			state "default",			label:'${currentValue}', defaultState: true //, backgroundColor:"#000000", foregroudColor: "#ffffff"
 		}
-//		  standardTile("ecoLogo", "device.logo", width: 1, height: 1) {
-//			state "default", defaultState: true,  icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"
-//		}
-//		  standardTile("oneBuffer", "device.logo", width: 1, height: 1, decoration: "flat") {
-//			state "default", defaultState: true
-//		  }
-//		  standardTile('twoByTwo', 'device.logo', width: 2, height: 2, decoration: 'flat') {
-//			state "default", defaultState: true
-//		  }
-//		  standardTile('oneByThree', 'device.logo', width: 1, height: 3, decoration: 'flat') {
-//			state "default", defaultState: true
-//		  }
 		valueTile("fanMinOnTime", "device.fanMinOnTime", width: 1, height: 1, decoration: "flat") {
 			state "fanMinOnTime",	label: 'Circulate\n${currentValue}\nmin/hr', defaultState: true
 		}
@@ -788,9 +786,6 @@ metadata {
 			'humidity', "holdStatus", 'humiditySetpointDisplay', // "fanMinOnTime",
 			"tstatDate", "commandDivider", "tstatTime",
 			"mode", "fanModeLabeled",  "resumeProgram",
-			//'heating',"heatSliderControl", "heatingSetpoint", "humidityLogo", "dehumidityLogo",
-			//'cooling',"coolSliderControl", "coolingSetpoint", "humiditySlider", "dehumiditySlider",
-			//'circulating', 'circSliderControl', 'fanMinOnTime',
 			'heating','cooling','circulating','humidityLogo','dehumidityLogo','heatDifferential',
 			'heatSliderControl','coolSliderControl','circSliderControl','humiditySlider','dehumiditySlider','coolDifferential',
 			'heatingSetpoint','coolingSetpoint','fanMinOnTime','humiditySetpoint','dehumiditySetpoint','heatCoolMinDelta',
@@ -800,29 +795,19 @@ metadata {
 			"apiStatus", "lastPoll"
 			])
 	}
-
-	preferences {
-        input "myHoldType", "enum", title: "${getVersionLabel()}\n\nHold Type", description: 
-			"When changing temperature or program, use Permanent, Temporary, Hourly, Parent setting or Thermostat setting hold type?\n\nDefault: Ecobee (Connect) setting",
-            required: false, options:["Permanent", "Temporary", "Hourly", "Parent", "Thermostat"]
-        input "myHoldHours", "enum", title: "Hourly Hold Time", description: "If Hourly hold, how many hours do you want to hold?\n\nDefault: Ecobee (Connect) setting", required: false, options:[2,4,6,8,12,16,24]
-        input "smartAuto", "bool", title: "Smart Auto Temp Adjust", description: "This flag allows the temperature to be adjusted manually when the thermostat " +
-                "is in Auto mode. An attempt to determine if the heat or cool setting should be changed is made automatically.", required: false
-	}
 }
 
 // parse events into attributes
-void parse(String description) {
+def parse(String description) {
 	LOG( "parse() --> Parsing '${description}'" )
-	// Not needed for cloud connected devices
 }
 
-void refresh(force=false) {
+def refresh(force=false) {
 	// No longer require forcePoll on every refresh - just get whatever has changed
 	LOG("refresh() - calling pollChildren ${force?'(forced)':''}, deviceId = ${getDeviceId()}",2,null,'info')
 	parent.pollChildren(getDeviceId(), force) // tell parent to just poll me silently -- can't pass child/this for some reason
 }
-void doRefresh() {
+def doRefresh() {
 	// Pressing refresh within 6 seconds of the prior refresh completing will force a complete poll of the Ecobee cloud - otherwise changes only
 	refresh(state.lastDoRefresh?((now()-state.lastDoRefresh)<6000):false)
 	sendEvent(name: 'doRefresh', value: 'refresh', isStateChange: true, displayed: false)
@@ -830,24 +815,24 @@ void doRefresh() {
 	resetUISetpoints()
 	state.lastDoRefresh = now()	// reset the timer after the UI has been updated
 }
-void resetRefreshButton() {
+def resetRefreshButton() {
 	sendEvent(name: 'doRefresh', value: 'refresh', isStateChange: true, displayed: false)
 }
-void forceRefresh() {
+def forceRefresh() {
 	refresh(true)
 }
 
-void installed() {
+def installed() {
 	LOG("${device.label} being installed",2,null,'info')
 	if (device.label?.contains('TestingForInstall')) return	// we're just going to be deleted in a second...
 	updated()
 }
 
-void uninstalled() {
+def uninstalled() {
 	LOG("${device.label} being uninstalled",2,null,'info')
 }
 
-void updated() {
+def updated() {
 	getHubPlatform()
 	LOG("${getVersionLabel()} updated",1,null,'trace')
 	
@@ -868,13 +853,13 @@ void updated() {
 	runIn(2, 'forceRefresh', [overwrite: true])
 }
 
-void poll() {
+def poll() {
 	LOG("Executing 'poll' using parent SmartApp", 2, null, 'info')
 	parent.pollChildren(getDeviceId(),false) // tell parent to just poll me silently -- can't pass child/this for some reason
 }
 
 // Health Check will ping us based on the frequency we configure in Ecobee (Connect) (derived from poll & watchdog frequency)
-void ping() {
+def ping() {
 	if (isST ) {
 		LOG("Health Check ping - apiConnected: ${device.currentValue('apiConnected')}, ecobeeConnected: ${device.currentValue('ecobeeConnected')}, checkInterval: ${device.currentValue('checkInterval')} seconds",1,null,'warn')
 	} else {
@@ -883,10 +868,7 @@ void ping() {
 	parent.pollChildren(getDeviceId(),true)		// forcePoll just me
 }
 
-// def getManufacturerName() { log.trace "getManufactururerName()"; return null /*"Ecobee"*/ }
-// def getModelName() { log.trace "getModelName()"; return null }
-
-void generateEvent(Map results) {
+def generateEvent(Map results) {
 	if (!state.version || (state.version != getVersionLabel())) updated()
 	def startMS = now()
 	boolean debugLevelFour = debugLevel(4)
@@ -1452,10 +1434,9 @@ void generateEvent(Map results) {
 
 							case 'auto':
 							case 'circulate':
-								// String ncTm = isST ? device.currentValue('thermostatMode') : device.currentValue('thermostatMode', true)
+								def fanMinOnTime = isST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
 								if (tMode == 'off') {
-									def ncFmot = isST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
-									if (ncFmot != 0) {
+									if (fanMinOnTime != 0) {
 										sendValue = 'circulate dis'
 										enableFanOffButton()
 									} else {
@@ -1464,8 +1445,7 @@ void generateEvent(Map results) {
 									}
 								} else {
 									disableFanOffButton()		// can't turn off the fan if the Thermostat isn't off
-									def ncFmot = isST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
-									if (ncFmot != 0) { sendValue = 'circulate' } else { sendValue = 'auto' }
+									if (fanMinOnTime != 0) { sendValue = 'circulate' } else { sendValue = 'auto' }
 								}
 								sendEvent(name: 'thermostatFanModeDisplay', value: sendValue, isStateChange: true, displayed: false)	// have to force it to update for some reason
 								break;
@@ -1970,7 +1950,7 @@ void setHeatingSetpoint(setpoint, String sendHold=null) {
 	}
     if (!setpoint || (setpoint == '') || (setpoint == 'null')) {
     	LOG("setHeatingSetpoint(${setpoint}) - Invalid setpoint",2,null,'warn')
-        return
+		return
     }
 
 	def isMetric = wantMetric()
@@ -1999,10 +1979,6 @@ void setHeatingSetpoint(setpoint, String sendHold=null) {
 	runIn(2, "updateThermostatSetpoints", [overwrite: true])
 }
 
-//void setCoolingSetpoint(setpoint) {
-//	LOG("setCoolingSetpoint() request with setpoint value = ${setpoint} (before toDouble)", 4)
-//	setCoolingSetpoint(setpoint.toDouble())
-//}
 void setCoolingSetpointDelay(setpoint) {
 	LOG("Slider requested cool setpoint: ${setpoint}",4,null,'trace')
 	def runWhen = (getParentSetting('arrowPause') ?: 4 ) as Integer
@@ -2324,8 +2300,6 @@ void lowerSmartSetpoint(heatingSetpoint, coolingSetpoint) {
 }
 
 void resetUISetpoints() {
-	// sendEvent(name: 'newHeatSetpoint', value: 0.0, displayed: false)
-	// sendEvent(name: 'newCoolSetpoint', value: 0.0, displayed: false)
 	state.newHeatSetpoint = null		// NOTE: different names than used by setHeatingSetpoint/setCoolingSetpoint is INTENTIONAL
 	state.newCoolSetpoint = null		// in case some API calls to change temps while user is manually changing them also
 }
@@ -3200,10 +3174,6 @@ def roundIt( value, decimals=0 ) {
 def roundIt( BigDecimal value, decimals=0) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP)
 }
-
-// def getImageURLRoot() {
-//	return "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/dark/"
-//}
 
 String getDeviceId() {
 	def deviceId = device.deviceNetworkId.split(/\./).last()
