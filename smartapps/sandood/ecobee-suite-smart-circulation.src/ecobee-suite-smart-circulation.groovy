@@ -44,7 +44,7 @@
  *	1.7.08 - Fixed typos and formatting
  *	1.7.09 - Optimized some of the isST? stuff
  */
-String getVersionNum() { return "1.7.09" }
+String getVersionNum() { return "1.7.09a" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -232,7 +232,7 @@ def getThermostatModesList() {
 
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 3, "", 'info')
-	boolean ST = getIsSTHub()
+	boolean ST = atomicState.isST
 	atomicState.amIRunning = null // Now using runIn to collapse multiple calls into single calcTemps()
     def mode = location.mode
 	updateMyLabel()
@@ -404,7 +404,7 @@ def modeOrProgramHandler(evt=null) {
     	LOG("${app.name} temporarily disabled as per request.", 2, null, "warn")
     	return true
     }
-    boolean ST = getIsSTHub()
+    boolean ST = atomicState.isST
 	
 	// Allow adjustments if Location Mode and/or Thermostat Program and/or Thermostat Mode is currently as configured
     // Also allow if none are configured
@@ -457,7 +457,7 @@ def deltaHandler(evt=null) {
 
     // Make sure it is OK for us to e changing circulation times
 	if (!atomicState.isOK) return
-    boolean ST = getIsSTHub()
+    boolean ST = atomicState.isST
 	
     String currentProgramName = ST ? theThermostat.currentValue('currentProgramName') : theThermostat.currentValue('currentProgramName', true)
     boolean vacationHold = (currentProgramName && (currentProgramName == 'Vacation'))
@@ -520,7 +520,8 @@ def calcTemps() {
     boolean ST = getIsSTHub()
 	
     // Makes no sense to change fanMinOnTime while heating or cooling is running - take action ONLY on events while idle or fan is running
-    def statState = ST ? theThermostat.currentValue("thermostatOperatingState") : theThermostat.currentValue("thermostatOperatingState", true)
+    // def statState = ST ? theThermostat.currentValue("thermostatOperatingState") : theThermostat.currentValue("thermostatOperatingState", true)
+	def statState = theThermostat.currentValue("thermostatOperatingState")
     if (statState && (statState.contains('ea') || statState.contains('oo'))) {
     	LOG("${theThermostat} is ${statState}, no adjustments made", 4, "", 'info' )
         return
@@ -542,7 +543,8 @@ def calcTemps() {
     def total = 0.0
     def i=0
     theSensors.each {
-    	def temp = ST ? it.currentValue("temperature") : it.currentValue("temperature", true)
+    	// def temp = ST ? it.currentValue("temperature") : it.currentValue("temperature", true)
+		def temp = it.currentValue("temperature")
     	if ((temp != null) && (temp > 0)) {
         	temps += [temp]	// we want to deal with valid inside temperatures only
             total = total + temp
@@ -562,7 +564,8 @@ def calcTemps() {
     if (outdoorSensor) {
     	def outTemp = null
         if (outdoorSensor.id == theThermostat.id) {
-        	outTemp = ST ? theThermostat.currentValue("weatherTemperature") : theThermostat.currentValue("weatherTemperature", true)
+        	// outTemp = ST ? theThermostat.currentValue("weatherTemperature") : theThermostat.currentValue("weatherTemperature", true)
+			outTemp = theThermostat.currentValue("weatherTemperature")
             LOG("Using ${theThermostat.displayName}'s weatherTemperature (${outTemp}°)",4,null,"info")
         } else {
         	outTemp = outdoorSensor.currentValue("temperature")
@@ -619,7 +622,8 @@ def calcTemps() {
     	currentOnTime = roundIt(atomicState.quietOnTime, 0) as Integer
         atomicState.quietOnTime = null
     } else {
-		Integer fanMinOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
+		// Integer fanMinOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
+		Integer fanMinOnTime = theThermostat.currentValue('fanMinOnTime') as Integer
     	currentOnTime = fanMinOnTime ?: 0	// Ecobee Suite Manager will populate this with Vacation.fanMinOnTime if necessary
 	}
     Integer newOnTime = roundIt(currentOnTime, 0) as Integer
@@ -682,7 +686,7 @@ def calcTemps() {
 }
 
 void updateMyLabel() {
-	String flag = isST ? ' (paused)' : '<span '
+	String flag = atomicState?.isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
