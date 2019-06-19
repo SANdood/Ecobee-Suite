@@ -42,9 +42,9 @@
  *  1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.07 - Added option to require ALL or ANY of the Modes/Programs restrictions
  *	1.7.08 - Fixed typos and formatting
- *	1.7.09 - Optimized some of the isST? stuff
+ *	1.7.09 - Optimized isST/isHE
  */
-String getVersionNum() { return "1.7.09a" }
+String getVersionNum() { return "1.7.09c" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -67,7 +67,10 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: (isHE?'<b>':'') + "${getVersionLabel()}" + (isHE?'</b>':''), uninstall: true, install: true) {
+	boolean ST = isST
+	boolean HE = !ST
+	
+	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
 			String defaultLabel = "Smart Circulation"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -75,7 +78,7 @@ def mainPage() {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
-			if (isHE) {
+			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
@@ -96,18 +99,18 @@ def mainPage() {
             }
         	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Paused - re-enable below." }
             else {
-        		input(name: "theThermostat", type:"${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", required: true, multiple: false, 
+        		input(name: "theThermostat", type:"${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", required: true, multiple: false, 
                 submitOnChange: true)
             }
 		}
         
         if (!settings.tempDisable && settings.theThermostat) {
-        	section(title: (isHE?'<b>':'') + "Select Indoor Temperature Sensors" + (isHE?'</b>':'')) {
+        	section(title: (HE?'<b>':'') + "Select Indoor Temperature Sensors" + (HE?'</b>':'')) {
             	input(name: "theSensors", title: "Use which indoor temperature sensor(s)", type: "capability.temperatureMeasurement", required: true, multiple: true, submitOnChange: true)
-				if (isHE) paragraph ''
+				if (HE) paragraph ''
 			}
         
-       		section(title: (isHE?'<b>':'') + "Fan On Time Automation Configuration" + (isHE?'</b>':'')) {
+       		section(title: (HE?'<b>':'') + "Fan On Time Automation Configuration" + (HE?'</b>':'')) {
         		paragraph("Increase Circulation time (min/hr) when the difference between the maximum and the minimum temperature reading of the above sensors is more than this.")
             	input(name: "deltaTemp", type: "enum", title: "Select temperature delta", required: true, defaultValue: "2.0", multiple:false, options:["1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0", "7.5", "10.0"])
             	paragraph("Minimum Circulation time (min/hr). Includes heating, cooling and fan only minutes.")
@@ -120,10 +123,10 @@ def mainPage() {
             	input(name: "fanOnTimeDelta", type: "number", title: "Minutes per adjustment (1-20)", required: true, defaultValue: "5", description: "5", range: "1..20")
             	paragraph("Minimum number of minutes between adjustments.")
             	input(name: "fanAdjustMinutes", type: "number", title: "Time adjustment frequency in minutes (5-60)", required: true, defaultValue: "10", description: "15", range: "5..60")
-				if (isHE) paragraph ''
+				if (HE) paragraph ''
         	}
             
-            section(title: (isHE?'<b>':'') + "Indoors/Outdoors Temperature Delta" + (isHE?'</b>':'')) {
+            section(title: (HE?'<b>':'') + "Indoors/Outdoors Temperature Delta" + (HE?'</b>':'')) {
             	paragraph("To apply above adjustments based on inside/outside temperature difference, first select an outside temperature source (indoor temperature will be the average of the sensors selected above).")
                 input(name: "outdoorSensor", title: "Use which outdoor temperature sensor", type: "capability.temperatureMeasurement", required: false, multiple: false, submitOnChange: true)
                 if (settings.outdoorSensor) {
@@ -132,16 +135,16 @@ def mainPage() {
 							options: ["More than 10 degrees warmer", "5 to 10 degrees warmer", "0 to 4.9 degrees warmer", "-4.9 to -0.1 degrees cooler",
                             			"-10 to -5 degrees cooler", "More than 10 degrees cooler"], submitOnChange: true)
                 }
-				if (isHE) paragraph ''
+				if (HE) paragraph ''
             }
        
-        	section(title: (isHE?'<b>':'') + "Vacation Hold Override" + (isHE?'</b>':'')) {
+        	section(title: (HE?'<b>':'') + "Vacation Hold Override" + (HE?'</b>':'')) {
         		paragraph("The thermostat's Circulation setting is overridden when a Vacation is in effect. If you would like to automate the Circulation time during a Vacation hold, enable this setting.")
             	input(name: "vacationOverride", type: "bool", title: "Override fan during Vacation hold?", defaulValue: false)
-				if (isHE) paragraph ''
+				if (HE) paragraph ''
         	}
        
-			section(title: (isHE?'<b>':'') + "Enable only for specific modes or programs?" + (isHE?'</b>':'')) {
+			section(title: (HE?'<b>':'') + "Enable only for specific modes or programs?" + (HE?'</b>':'')) {
 				def multiple = false
             	input(name: "theModes", type: "mode", title: "Only when the Location Mode is", multiple: true, required: false, submitOnChange: true)
                 input(name: "statModes", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, submitOnChange: true, options: getThermostatModesList())
@@ -155,30 +158,30 @@ def mainPage() {
 				} else {
 					paragraph("Circulation time (min/hr) will ${settings.needAll?'only ':''}be adjusted when ${settings.needAll?'ALL':'ANY'} of the above conditions are met.")	 
 				}
-				if (isHE) paragraph ''
+				if (HE) paragraph ''
         	}
             
-            section(title: (isHE?'<b>':'') + "Enable only when relative humidity is high?" + (isHE?'</b>':'')) {
+            section(title: (HE?'<b>':'') + "Enable only when relative humidity is high?" + (HE?'</b>':'')) {
             	paragraph("Circulation time (min/hr) is adjusted only when the relative humidity is higher than a specified value")
                 input(name: "theHumidistat", type: "capability.relativeHumidityMeasurement", title: "Use this humidity sensor (blank to disable)", multiple: false, required: false, submitOnChange: true)
                 if (settings.theHumidistat) {
                 	input( name: "highHumidity", type: "number", title: "Adjust circulation only when ${settings.theHumidistat.displayName}'s Relative Humidity is higher than:", range: "0..100", required: true)
                 }
-				if (isHE) paragraph ''
+				if (HE) paragraph ''
             }
             
-            section(title: (isHE?'<b>':'') + "'Quiet Time' Integration" + (isHE?'</b>':'')) {
+            section(title: (HE?'<b>':'') + "'Quiet Time' Integration" + (HE?'</b>':'')) {
             	paragraph("You can configure this Helper to integrate with one or more instances of the Ecobee Suite Quiet Time Helper: This helper will stop updating circulation when one or more Quiet Time switch(es) are enabled.")
             	input(name: "quietSwitches", type: "capability.switch", title: "Select Quiet Time control switch(es)", multiple: true, required: false, submitOnChange: true)
                 if (settings.quietSwitches) {
                 	paragraph("All selected Quiet Time switches must use the same state to turn on Quiet Time.")
                 	input(name: "qtOn", type: "enum", title: "Disable circulation when any of these Quiet Switches is:", defaultValue: 'on', required: true, multiple: false, options: ["on","off"])
                 }
-				if (isHE) paragraph ''
+				if (HE) paragraph ''
             }
 		}
         
-		section(title: (isHE?'<b>':'') + "Temporarily Disable?" + (isHE?'</b>':'')) {
+		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
@@ -370,7 +373,7 @@ def quietOnHandler(evt) {
 	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
 	if (!atomicState.quietNow) {
     	atomicState.quietNow = true
-		Integer fanOnTime = (getIsSTHub() ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
+		Integer fanOnTime = (atomicState.isST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
         Integer currentOnTime = fanOnTime?: 0	
         atomicState.quietOnTime = currentOnTime
         LOG("Quiet Time enabled, ${app.name} will stop updating circulation time", 3, null, 'info')
@@ -517,7 +520,7 @@ def deltaHandler(evt=null) {
 
 def calcTemps() {
 	LOG('Calculating temperatures...', 3, null, 'info')
-    boolean ST = getIsSTHub()
+    boolean ST = atomicState.isST
 	
     // Makes no sense to change fanMinOnTime while heating or cooling is running - take action ONLY on events while idle or fan is running
     // def statState = ST ? theThermostat.currentValue("thermostatOperatingState") : theThermostat.currentValue("thermostatOperatingState", true)
@@ -686,7 +689,8 @@ def calcTemps() {
 }
 
 void updateMyLabel() {
-	String flag = atomicState?.isST ? ' (paused)' : '<span '
+	boolean ST = atomicState.isST
+	String flag = ST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
@@ -700,7 +704,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
