@@ -42,9 +42,9 @@
  *  1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.07 - Added option to require ALL or ANY of the Modes/Programs restrictions
  *	1.7.08 - Fixed typos and formatting
- *	1.7.09 - Optimized isST/isHE
+ *	1.7.09 - Optimized isST/isHE, misc optimizations
  */
-String getVersionNum() { return "1.7.09c" }
+String getVersionNum() { return "1.7.09d" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
