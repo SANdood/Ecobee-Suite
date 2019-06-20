@@ -45,8 +45,9 @@
  *	1.7.14 - Fix thermSavedState initialization
  *	1.7.15 - And fixed it some more
  *	1.7.16 - And still more
+ *	1.7.17 - Optimized isST/isHE, more multi-stat/multi-contact work, Global Pause
  */
-String getVersionNum() 		{ return "1.7.16" }
+String getVersionNum() 		{ return "1.7.17" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -68,7 +69,9 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: (isHE?'<b>':'') + getVersionLabel() + (isHE?'</b>':''), uninstall: true, install: true) {
+	boolean ST = isST
+	boolean HE = !ST
+	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + getVersionLabel() + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
         	String defaultLabel = "Contacts & Switches"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -76,7 +79,7 @@ def mainPage() {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
-			if (isHE) {
+			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
@@ -99,19 +102,19 @@ def mainPage() {
 				paragraph "WARNING: Temporarily Paused - re-enable below." 
 			} else { 
 				if (settings.theThermostats || !settings.myThermostats) {
-					input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", 
+					input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", 
                     		required: true, multiple: true, submitOnChange: true)
 				} else {
-            		input(name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", 
+            		input(name: "myThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", 
                     		required: true, multiple: true, submitOnChange: true)
 				}
-                if (isHE) paragraph ''
+                if (HE) paragraph ''
             }          
 		}
     
 		if (!settings.tempDisable && ((settings.theThermostats?.size() > 0) || (settings.myThermostats?.size() > 0))) {
 
-			section(title: (isHE?'<b>':'') + "Select HVAC Off Actions" + (isHE?'</b>':'')) {
+			section(title: (HE?'<b>':'') + "Select HVAC Off Actions" + (HE?'</b>':'')) {
             	paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle actions by turning on Quiet Time from this Helper instead of taking HVAC actions directly. The Quiet Time Helper also offers additional control options.')
                 input(name: 'quietTime', type: 'bool', title: 'Enable Quiet Time?', required: true, defaultValue: false, submitOnChange: true)
                 if (settings.quietTime) {
@@ -134,45 +137,45 @@ def mainPage() {
            		}
 				paragraph('Note that no HVAC On actions will be taken if the HVAC was already Off when the first contact sensor or switch would have turned it' +
                 		  'off; the HVAC will remain Off when all the contacts & switches are reset.')
-                if (isHE) paragraph ''
+                if (HE) paragraph ''
             }
             
-			section(title: (isHE?'<b>':'') + "Select Contact Sensors" + (isHE?'</b>':'')) {
+			section(title: (HE?'<b>':'') + "Select Contact Sensors" + (HE?'</b>':'')) {
 				input(name: "contactSensors", title: "Contact Sensors: ", type: "capability.contactSensor", required: false, multiple: true,  submitOnChange: true)
                 if (settings.contactSensors) {
                 	input(name: 'contactOpen', type: 'bool', title: "Run HVAC Off Actions when ${settings.contactSensors.size()>1?'any of the contacts are':'the contact is'} open?", required: true, defaultValue: true, submitOnChange: true)
                    	paragraph("HVAC Off Actions will be taken when a contact sensor is ${((settings.contactOpen==null)||settings.contactOpen)?'Open':'Closed'}.")
                 }
-                if (isHE) paragraph ''
+                if (HE) paragraph ''
 			}
             
-            section(title: (isHE?'<b>':'') + "Select Switches" + (isHE?'</b>':'')) {
+            section(title: (HE?'<b>':'') + "Select Switches" + (HE?'</b>':'')) {
             	input(name: "theSwitches", title: "Switches: ", type: "capability.switch", required: false, multiple: true,  submitOnChange: true)
                 if (settings.theSwitches) {
                 	input(name: 'switchOn', type: 'bool', title: "Run HVAC Off Actions when ${settings.theSwitches.size()>1?'any of the switches are':'the switch is'} turned on?", required: true, defaultValue: true, submitOnChange: true)
                     paragraph("HVAC Off Actions will be taken off when a switch is turned ${((settings.switchOn==null)||settings.switchOn)?'On':'Off'}")
                 }
-				if (isHE) paragraph ''
+				if (HE) paragraph ''
         	}
             
             if ((settings.contactSensors != null) || (settings.theSwitches != null)) {
-				section(title: (isHE?'<b>':'') + "Timers" + (isHE?'</b>':'')) {
+				section(title: (HE?'<b>':'') + "Timers" + (HE?'</b>':'')) {
 					input(name: "offDelay", title: "Delay time (in minutes) before turning off HVAC or Sending Notification [Default=5]", type: "enum", required: true, 
                     	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: 5)
 					input(name: "onDelay", title: "Delay time (in minutes) before turning HVAC back on  or Sending Notification [Default=0]", type: "enum", required: true, 
                     	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: 0)
-                    if (isHE) paragraph ''
+                    if (HE) paragraph ''
 	        	}
             
-            	section(title: (isHE?'<b>':'') + "Action Preferences" + (isHE?'</b>':'')) {
+            	section(title: (HE?'<b>':'') + "Action Preferences" + (HE?'</b>':'')) {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
                     	options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
-                    if (isHE) paragraph ''
+                    if (HE) paragraph ''
 				}
                         
 				if (settings.whichAction != "HVAC Actions Only") {
-					if (isST) {
-						section((isHE?'<b>':'') + "Notifications" + (isHE?'</b>':'')) {
+					if (ST) {
+						section((HE?'<b>':'') + "Notifications" + (HE?'</b>':'')) {
 							paragraph "A notification will also be sent to the Hello Home log\n"
 							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
@@ -183,20 +186,20 @@ def mainPage() {
 								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
 							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
-                            if (isHE) paragraph ""
+                            if (HE) paragraph ""
 						}
-					} else {		// isHE
-						section((isHE?'<b>':'') + "Use Notification Device(s)" + (isHE?'</b>':'')) {
+					} else {		// HE
+						section((HE?'<b>':'') + "Use Notification Device(s)" + (HE?'</b>':'')) {
 							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
 								  description: "Select notification devices", submitOnChange: true)
-							if (isHE) paragraph ""
+							if (HE) paragraph ""
 						}
-						section((isHE?'<b>':'') + "Use SMS to Phone(s) (limit 10 messages per day)" + (isHE?'</b>':'')) {
+						section((HE?'<b>':'') + "Use SMS to Phone(s) (limit 10 messages per day)" + (HE?'</b>':'')) {
 							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)",
 								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
-							if (isHE) paragraph ""
+							if (HE) paragraph ""
 						}
-						section((isHE?'<b>':'') + "Use Speech Device(s)" + (isHE?'</b>':'')) {
+						section((HE?'<b>':'') + "Use Speech Device(s)" + (HE?'</b>':'')) {
 							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
 								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
@@ -204,14 +207,14 @@ def mainPage() {
 								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
 							paragraph "A 'HelloHome' notification will also be sent to the Location Event log\n"
-                            if (isHE) paragraph ''
+                            if (HE) paragraph ''
 						}
 					}
             	}
             }          
 		} // End if (theThermostats?.size() > 0)
 
-		section(title: (isHE?'<b>':'') + "Temporary Pause" + (isHE?'</b>':'')) {
+		section(title: (HE?'<b>':'') + "Temporary Pause" + (HE?'</b>':'')) {
 			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
@@ -221,47 +224,35 @@ def mainPage() {
 
 // Main functions
 void installed() {
-	LOG("installed() entered", 5, null, 'info')
+	LOG("Installed with settings ${settings}", 4, null, 'trace')
 	initialize()  
 }
 void uninstalled () {
    clearReservations()
 }
 void updated() {
-	LOG("updated() entered", 5, null, 'info')
+	LOG("Updated with settings ${settings}", 4, null, 'trace')
 	unsubscribe()
 	unschedule()
 	initialize()
     // tester()
 }
 
-void clearReservations() {
-	if (settings.theThermostats) {
-		theThermostats?.each {
-			cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff')
-		}
-	}
-	if (settings.myThermostats) {
-		myThermostats?.each {
-    		cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff')
-		}
-	}
-}
 //
 // TODO - if stat goes offline, then comes back online, then re-initialize states...
 //
 def initialize() {
 	LOG("${getVersionLabel()} - Initializing...", 2, "", 'info')
 	updateMyLabel()
-    log.debug "settings: ${settings}"
+    //log.debug "settings: ${settings}"
 	
-	if(tempDisable == true) {
+	if(settings.tempDisable == true) {
     	clearReservations()
-		LOG("Temporarily Paused.", 2, null, "warn")
+		LOG("Temporarily Paused", 3, null, 'info')
 		return true
 	}
     // subscribe(app, appTouch)
-
+	
 	boolean contactOffState = false
 	if (contactSensors) {
     	def openSensors = 0
@@ -312,7 +303,7 @@ def initialize() {
     		theStats.each() { therm ->
     			def tid = getDeviceId(therm.deviceNetworkId)
 				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-				if (isST) {
+				if (atomicState.isST) {
 					tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode'), HVACModeState: 'on', ]
 					if (settings.adjustSetpoints) {
 						tmpThermSavedState[tid] += [
@@ -351,7 +342,7 @@ def initialize() {
     	LOG("Initialized while should be 'Off' - can't update states",2,null,'warn')
         theStats.each() { therm ->
     		def tid = getDeviceId(therm.deviceNetworkId)
-            tmpThermSavedState[tid].mode = (isST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true))
+            tmpThermSavedState[tid].mode = (atomicState.isST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true))
             tmpThermSavedState[tid].HVACModeState = 'off'
         }
         if (atomicState.HVACModeState != 'off') turnOffHVAC(true)
@@ -441,30 +432,57 @@ def coolSPHandler( evt ) {
 // "sensorOpened" called when state change should turn HVAC off - routine name preserved for backwards compatibility with prior implementations
 void sensorOpened(evt=null) {
 	LOG("sensorOpened() - ${evt?.device} ${evt?.name} ${evt?.value}", 3,null,'trace')
+	boolean ST = atomicState.isST
+	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
 	
     def HVACModeState = atomicState.HVACModeState
     if (HVACModeState == 'off_pending') return		// already in process of turning off
     
+	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
     if (HVACModeState == 'off') { // || (HVACModeState == 'off_pending')) {
     	// HVAC is already off
-		if (numOpen() == 1) {
-			atomicState.wasAlreadyOff = true
+		def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue('thermostatMode', true)
+		if (tstatModes.contains('off')) { // at least 1 thermostat is actually off	
+			if (numOpen() == 1) {
+				atomicState.wasAlreadyOff = true
+				theStats.each { therm ->
+					def tid = getDeviceId(therm.deviceNetworkId)
+					if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+					def statMode = ST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
+					tmpThermSavedState[tid].wasAlreadyOff = (statMode == 'off') 
+				}
+			}
+			atomicState.thermSavedState = tmpThermSavedState
+        	return
+		} else {
+			// No stats are actually off, clean up the mess
+			if (HVACModeState != 'on_pending') HVACModeState = 'on'
+			atomicState.HVACModeState = HVACModeState
+			atomicState.wasAlreadyOff = false
+			theStats.each { therm ->
+				def tid = getDeviceId(therm.deviceNetworkId)
+				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+				tmpThermSavedState[tid].wasAlreadyOff = false
+			}
+			atomicState.thermSavedState = tmpThermSavedState
 		}
-        return
     }
-    Integer delay = (settings.onDelay ? settings.onDelay : 0) as Integer
+    Integer delay = (settings.onDelay ?: 0) as Integer
     if (HVACModeState == 'on_pending') {
 		// HVAC is already/still off
         if (delay > 0) unschedule('turnOnHVAC')
 		atomicState.HVACModeState = 'off'
-		turnOffHVAC(true)			// Make sure it is really off
+		turnOffHVAC(true)			// Make sure they are really off
         return
     }
 
 	// HVAC is on, turn it off
    	atomicState.HVACModeState = 'off_pending'
-	delay = ((settings.offDelay || (settings.offDelay == 0)) ? settings.offDelay : 5) as Integer
-	if (delay > 0) { runIn(delay*60, 'turnOffHVAC', [overwrite: true]) } else { turnOffHVAC() }  
+	delay = (settings.offDelay ?: 5) as Integer
+	if (delay > 0) { 
+		runIn(delay*60, 'turnOffHVAC', [overwrite: true])
+		LOG("${theStats.toString()[1..-2]} will be turned off in ${delay} minutes", 2, null, 'info')
+	} else { turnOffHVAC(false) }  
 }
 
 void openedScheduledActions() {		// preserved only for backwards compatibility
@@ -482,22 +500,33 @@ void sensorClosed(evt=null) {
     	if (HVACModeState == 'on_pending') return
         
 		if (atomicState.wasAlreadyOff == true) {
-			// Don't turn HVAC on if it was already off when the window was opened
-			atomicState.wasAlreadyOff = false
-			LOG("All sensors & switches are reset, but HVAC was already off when the first ${settings.contactSensors?'contact':''} " +
-				"${(settings.contactSensors && settings.theSwitches)?'or ':''}${settings.theSwitches?'switch':''} was " +
-				"${(settings.contactSensors && settings.contactOpen)?'opened':''}${(settings.contactSensors && !settings.contactOpen)?'closed':''}" +
-				"${(settings.contactSensors && settings.theSwitches)?'/':''}" +
-				"${(settings.theSwitches && settings.switchOn)?'turned on':''}${(settings.theSwitches && !settings.switchOn)?'turned off':''}, no action taken.",
-                3, null, 'info')
-			return
+			def tmpThermSavedState = atomicState.thermSavedState ?: [:]
+			int i = 0, j = 0
+			def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
+			theStats.each { therm ->
+				j++
+				def tid = getDeviceId(therm.deviceNetworkId)
+				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+				def statMode = ST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
+				if (tmpThermSavedState[tid].containsKey('wasAlreadyOff') && (tmpThermSavedState[tid].wasAlreadyOff == true)) i++
+			}
+			if (i == j) {
+				atomicState.wasAlreadyOff = false
+				LOG("All sensors & switches are reset, but HVAC was already off when the first ${settings.contactSensors?'contact':''} " +
+					"${(settings.contactSensors && settings.theSwitches)?'or ':''}${settings.theSwitches?'switch':''} was " +
+					"${(settings.contactSensors && settings.contactOpen)?'opened':''}${(settings.contactSensors && !settings.contactOpen)?'closed':''}" +
+					"${(settings.contactSensors && settings.theSwitches)?'/':''}" +
+					"${(settings.theSwitches && settings.switchOn)?'turned on':''}${(settings.theSwitches && !settings.switchOn)?'turned off':''}, no action taken.",
+					3, null, 'info')
+				return
+			}
 		}
 		if (HVACModeState == 'on') {
 			LOG("All sensors & switches are reset, and HVAC is already on", 3, null, 'info')
 			turnOnHVAC(true)	// Just in case
 			return	// already on, nothing more to do (catches 'on' and 'on_pending')
 		}
-        Integer delay = ((settings.offDelay || (settings.offDelay == 0)) ? settings.offDelay : 5) as Integer
+        Integer delay = (settings.offDelay?: 5) as Integer
 		if (HVACModeState == 'off_pending' ) {
 			if (delay != 0) unschedule('turnOffHVAC')
 			atomicState.HVACModeState = 'on'
@@ -511,9 +540,12 @@ void sensorClosed(evt=null) {
         
         atomicState.HVACModeState = 'on_pending'
 		unschedule(openedScheduledActions)
-	    delay = (settings.onDelay != null ? settings.onDelay : 0) as Integer
-    	LOG("The on delay is ${delay}",5,null,'info')
-		if (delay > 0) { runIn(delay*60, 'turnOnHVAC', [overwrite: true]) } else { turnOnHVAC() }
+	    delay = (settings.onDelay?: 0) as Integer
+    	//LOG("The on delay is ${delay}",5,null,'info')
+		if (delay > 0) { 
+			runIn(delay*60, 'turnOnHVAC', [overwrite: true]) 
+			LOG("${theStats.toString()[1..-2]} will be turned on in ${delay} minutes", 2, null, 'info')
+		} else { turnOnHVAC(false) }
 	} else {
     	LOG("No action to perform yet...", 5,null,'trace')
     }
@@ -527,12 +559,15 @@ void closedScheduledActions() {
 void turnOffHVAC(quietly = false) {
 	// Save current states
     LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'trace')
+	boolean isST = atomicState.isST
+	
     atomicState.HVACModeState = 'off'
     def action = settings.whichAction ? settings.whichAction :'Notify Only'
     def tmpThermSavedState = atomicState.thermSavedState ?: [:]
     def tstatNames = []
-    def doHVAC = action.contains('HVAC')
+    boolean doHVAC = action.contains('HVAC')
     def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
+	// log.debug "theStats: ${theStats}"
 	theStats.each() { therm ->
     	def tid = getDeviceId(therm.deviceNetworkId)
         if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
@@ -544,18 +579,19 @@ void turnOffHVAC(quietly = false) {
             } else if ((settings.hvacOff == null) || settings.hvacOff) {
             	// turn off the HVAC
                 makeReservation(tid, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
-				def thermostatMode = isST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
+				def thermostatMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
     			if (thermostatMode != 'off') {
                 	tmpThermSavedState[tid].mode = thermostatMode	// therm.currentValue('thermostatMode')
                     tmpThermSavedState[tid].HVACModeState = 'off'
+					tmpThermSavedState[tid].wasAlreadyOff = false
             		therm.setThermostatMode('off')
                 	tstatNames << therm.displayName		// only report the ones that aren't off already
                 	LOG("${therm.displayName} turned off (was ${tmpThermSavedState[tid].mode})",2,null,'info')    
             	}
             } else if (settings.adjustSetpoints) {
             	// Adjust the setpoints
-                def h = isST ? therm.currentValue('heatingSetpoint') : therm.currentValue('heatingSetpoint', true)
-                def c = isST ? therm.currentValue('coolingSetpoint') : therm.currentValue('coolingSetpoint', true)
+                def h = ST ? therm.currentValue('heatingSetpoint') : therm.currentValue('heatingSetpoint', true)
+                def c = ST ? therm.currentValue('coolingSetpoint') : therm.currentValue('coolingSetpoint', true)
                 // save the current values for when we turn back on
                 tmpThermSavedState[tid].heatSP = h
                 tmpThermSavedState[tid].coolSP = c
@@ -564,7 +600,7 @@ void turnOffHVAC(quietly = false) {
                 tmpThermSavedState[tid].heatAdj = h
                 tmpThermSavedState[tid].coolAdj = c
                 
-				if (isST) {
+				if (ST) {
 					tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType')
 					tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold')
 					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName')	// Hold: Home, Vacation
@@ -596,7 +632,7 @@ void turnOffHVAC(quietly = false) {
 	if (tstatNames.size() > 0) {
     	if (action.contains('Notify')  && !quietly) {
     		boolean notified = false
-			def tstatModes = isST ? theStats.currentValue('thermostatMode') : theStats.currentValue(thermostatMode, true)
+			def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue(thermostatMode, true)
 			boolean isOn = tstatModes.contains('auto') || tstatModes.contains('heat') || tstatModes.contains('cool')
         	Integer delay = (settings.offDelay != null ? settings.offDelay : 5) as Integer
     		if (contactSensors) {
@@ -636,6 +672,8 @@ void turnOffHVAC(quietly = false) {
 void turnOnHVAC(quietly = false) {
 	// Restore previous state
     LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'trace')
+	boolean ST = atomicState.isST
+	
     atomicState.HVACModeState = 'on'
     def action = settings.whichAction ? settings.whichAction : 'Notify Only'
     boolean doHVAC = action.contains('HVAC')
@@ -660,8 +698,8 @@ void turnOnHVAC(quietly = false) {
                     LOG("${therm.displayName} Quiet Time disabled (${qtSwitch.displayName} turned ${onOff})",2,null,'info')
             	} else if ((settings.hvacOff == null) || settings.hvacOff) {
             		// turn on the HVAC
-                    def oldMode = isST ? therm.currentValue('thermostatMode') :  therm.currentValue('thermostatMode', true) 
-                    def newMode = (tmpThermSavedState[tid]?.mode == '') ? 'auto' : tmpThermSavedState[tid].mode
+                    def oldMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true) 
+                    def newMode = tmpThermSavedState[tid]?.mode ?: 'auto'
 					LOG("Current HVAC mode: ${oldMode}, desired HVAC mode: ${newMode}", 2, null, 'info')
                     if (newMode != oldMode) {
                     	def i = countReservations( tid, 'modeOff' ) - (haveReservation(tid, 'modeOff') ? 1 : 0)
@@ -674,13 +712,18 @@ void turnOnHVAC(quietly = false) {
                         } else {
                         	// Not off, or nobody else but me has a reservation
                             cancelReservation(tid, 'modeOff')
-                            tmpThermSavedState[tid].HVACModeState = 'on'
-                        	therm.setThermostatMode( newMode )                            
-                			tstatNames << therm.displayName		// only report the ones that aren't off already
-                			LOG("${therm.displayName} ${newMode.capitalize()} Mode restored (was ${oldMode.capitalize()})",2,null,'info')
+							if (tmpThermSavedState[tid].containsKey('wasAlreadyOff') && (tmpThermSavedState[tid].wasAlreadyOff == false)) {
+								tmpThermSavedState[tid].HVACModeState = 'on'
+                        		therm.setThermostatMode( newMode )                            
+                				tstatNames << therm.displayName		// only report the ones that aren't off already
+                				LOG("${therm.displayName} ${newMode.capitalize()} Mode restored (was ${oldMode.capitalize()})",2,null,'info')
+							} else {
+								LOG("${therm.displayName} was already off, not turning back on",2,null,'info')
+							}
                         } 
                     } else {
                     	LOG("${therm.displayName} is already in ${newMode.capitalize()}",2,null,'info')
+						tmpThermSavedState[tid].HVACModeState = 'on'
                     }
             	} else if (settings.adjustSetpoints) {
                 	// Restore the prior values
@@ -693,7 +736,7 @@ void turnOnHVAC(quietly = false) {
                         LOG("${therm.displayName} resumed current program",2,null,'info')
                     } else if (tmpThermSavedState[tid].currentProgramName == ('Hold: ' + tmpThermSavedState[tid].currentProgram)) {
                     	// we were in a hold of a named program - reinstate the hold IF the saved scheduledProgram == the current scheduledProgram
-						def scheduledProgram = isST ? therm.currentValue('scheduledProgram') : therm.currentValue('scheduledProgram', true)
+						def scheduledProgram = ST ? therm.currentValue('scheduledProgram') : therm.currentValue('scheduledProgram', true)
                         if (tmpThermSavedState[tid].scheduledProgram == scheduledProgram) {
                         	therm.setThermostatProgram(tmpThermSavedState[tid].currentProgram, holdType)
                         	LOG("${therm.displayName} returned to ${tmpThermSavedState[tid]} program (${holdType})",2,null,'info')
@@ -715,10 +758,10 @@ void turnOnHVAC(quietly = false) {
     atomicState.thermSavedState = tmpThermSavedState
     
     if ( action.contains('Notify') && !quietly ) {
-		if (!doHVAC && (tstatNames == [])) tstatNames = theStats.displayName
+		if (!doHVAC && (tstatNames == [])) tstatNames = theStats*.displayName
     	boolean notified = false
         Integer delay = (settings.onDelay != null ? settings.onDelay : 0) as Integer
-		def tstatModes = isST ? theStats.currentValue('thermostatMode') : theStats.currentValue('thermostatMode', true)
+		def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue('thermostatMode', true)
 		def isOff = tstatModes?.contains('off')
     	if (contactSensors) {
         	if (delay != 0) {
@@ -830,7 +873,7 @@ List getGuestList(String tid, String type='modeOff') {
 void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "info")
     String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-	if (isST) {
+	if (atomicState.isST) {
 		if (phone) { // check that the user did select a phone number
 			if ( phone.indexOf(";") > 0){
 				def phones = settings.phone.split(";")
@@ -897,7 +940,7 @@ void sendMessage(notificationMessage) {
 }
 
 void updateMyLabel() {
-	String flag = isST ? ' (paused)' : '<span '
+	String flag = atomicState.isST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
@@ -917,9 +960,49 @@ void updateMyLabel() {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-
+def pauseOn() {
+	// Pause this Helper
+	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	if (!settings.tempDisable) {
+		LOG("performing Global Pause",2,null,'info')
+		app.updateSetting("tempDisable", true)
+		atomicState.globalPause = true
+		runIn(2, updated, [overwrite: true])
+	} else {
+		LOG("was already paused, ignoring Global Pause",3,null,'info')
+	}
+}
+def pauseOff() {
+	// Un-pause this Helper
+	if (settings.tempDisable) {
+		def wasAlreadyPaused = atomicState.wasAlreadyPaused
+		if (!wasAlreadyPaused) { // && settings.tempDisable) {
+			LOG("performing Global Unpause",2,null,'info')
+			app.updateSetting("tempDisable", false)
+			runIn(2, updated, [overwrite: true])
+		} else {
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+		}
+	} else {
+		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		atomicState.wasAlreadyPaused = false
+	}
+	atomicState.globalPause = false
+}
+void clearReservations() {
+	if (settings.theThermostats) {
+		theThermostats?.each {
+			cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff')
+		}
+	}
+	if (settings.myThermostats) {
+		myThermostats?.each {
+    		cancelReservation(getDeviceId(it.deviceNetworkId), 'modeOff')
+		}
+	}
+}
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${app.label} ${message}"
+	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
     log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
