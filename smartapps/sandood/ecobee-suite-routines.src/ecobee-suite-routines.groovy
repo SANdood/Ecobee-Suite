@@ -32,9 +32,10 @@
  *  1.7.09 - Fixed SMS text entry
  *	1.7.10 - Fixing private method issue caused by grails, "Vacation" from currentProgramName
  *  1.7.11 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.12 - Optimized isST/isHE, formatting, Global Pause
  */
-String getVersionNum() { return "1.7.11" }
-String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.12" }
+String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -56,7 +57,10 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+	boolean ST = isST
+	boolean HE = !ST
+	
+	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
 		section(title: '') {						// Hubitat doesn't have "Routines" yet
 			String defaultLabel = "Mode${isST?'/Routine':''}/Switches/Program"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -64,7 +68,7 @@ def mainPage() {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
-			if (isHE) {
+			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
@@ -86,14 +90,14 @@ def mainPage() {
         	if(settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
-        		input ("myThermostats", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)            
+        		input ("myThermostats", "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)            
 			}
         }
         
         if (!settings?.tempDisable && (settings?.myThermostats?.size()>0)) {
-			section(title: "Select Trigger") {
+			section(title: (HE?'<b>':'') + "Select Trigger" + (HE?'</b>':'')) {
         		// Settings option for using Mode or Routine
-				input(name: "modeOrRoutine", title: "Use Mode change${isST?', Routine execution':''}, one or more Switch(es), or Ecobee Program change: ", type: "enum", required: true, multiple: false, 
+				input(name: "modeOrRoutine", title: "Use Mode change${ST?', Routine execution':''}, one or more Switch(es), or Ecobee Program change: ", type: "enum", required: true, multiple: false, 
 					  options:(isST?["Mode","Routine","Switch(es)","Ecobee Program"]:["Mode","Switch(es)","Ecobee Program"]), submitOnChange: true)
 				paragraph ''
 			}
@@ -103,11 +107,11 @@ def mainPage() {
 	    	    	// Start defining which Modes(s) to allow the SmartApp to execute in
                     // TODO: Need to run in all modes now and then filter on which modes were selected!!!
     	            //mode(title: "When Hello Mode(s) changes to: ", required: true)
-                    section(title: "Modes") {
+                    section(title: (HE?'<b>':'') + "Modes" + (HE?'</b>':'')) {
                     	input(name: "modes", type: "mode", title: "When Location Mode changes to: ", required: true, multiple: true)
 						paragraph ''
 					}
-                } else if (isST && (settings?.modeOrRoutine == "Routine")) {
+                } else if (ST && (settings?.modeOrRoutine == "Routine")) {
                 	// Routine based inputs
                     def actions = location.helloHome?.getPhrases()*.label
 					if (actions) {
@@ -115,13 +119,13 @@ def mainPage() {
             			actions.sort()
 						LOG("Actions found: ${actions}", 4)
 						// use the actions as the options for an enum input
-                        section(title: "Routines") {
+                        section(title: (HE?'<b>':'') + "Routines" + (HE?'</b>':'')) {
 							input(name: "action", type: "enum", title: "When these Routines execute: ", options: actions, required: true, multiple: true)
 							paragraph ''
                         }
 					}
 				} else if (settings.modeOrRoutine == "Switch(es)") {
-					section(title: "Switches") {
+					section(title: (HE?'<b>':'') + "Switches" + (HE?'</b>':'')) {
 						input(name: 'startSwitches', type: 'capability.switch', required: true, title: 'When any of these switches...', multiple: true, submitOnChange: true)
 						if (settings.startSwitches) {
 							def s = (settings.startSwitches.size() > 1)
@@ -141,7 +145,7 @@ def mainPage() {
                 	def programs = getEcobeePrograms()
                     programs = programs + ["Vacation"]
                     LOG("Found the following programs: ${programs}", 4) 
-                    section(title: "Programs") {
+                    section(title: (HE?'<b>':'') + "Programs" + (HE?'</b>':'')) {
                     	def n = myThermostats?.size()
                     	if (n > 1) paragraph("NOTE: It is recommended (but not required) to select only one thermostat when using Ecobee Programs to control SmartThings Modes or Routines")
                     	input(name: "ctrlProgram", title: "When Ecobee${n>1?'s':''} change${n>1?'':'s'} to Program: ", type: "enum", options: programs, required: true, multiple: true)
@@ -149,7 +153,7 @@ def mainPage() {
                     }
                 }
 
-				section(title: "Actions") {
+				section(title: (HE?'<b>':'') + "Actions" + (HE?'</b>':'')) {
                 	if (settings?.modeOrRoutine != "Ecobee Program") {
                 		def programs = getEcobeePrograms()
                    		programs += ["Resume Program"]
@@ -190,8 +194,8 @@ def mainPage() {
                         }
             	   		// input(name: "useSunriseSunset", title: "Also at Sunrise or Sunset? (optional) ", type: "enum", required: false, multiple: true, description: "Tap to choose...", metadata:[values:["Sunrise", "Sunset"]], submitOnChange: true)                
                 	} else {
-						input(name: "runModeOrRoutine", title: "Change Mode${isST?' or Execute Routine':' to'}:", type: "enum", required: true, multiple: false, defaultValue: "Mode", 
-							  options:(isST?["Mode", "Routine"]:["Mode"]), submitOnChange: true)
+						input(name: "runModeOrRoutine", title: "Change Mode${ST?' or Execute Routine':' to'}:", type: "enum", required: true, multiple: false, defaultValue: "Mode", 
+							  options:(ST?["Mode", "Routine"]:["Mode"]), submitOnChange: true)
                         if ((settings.runModeOrRoutine == null) || (settings.runModeOrRoutine == "Mode")) {
     	                	input(name: "runMode", type: "mode", title: "Change Location Mode to: ", required: true, multiple: false)
                 		} else if (settings.runModeOrRoutine == "Routine") {
@@ -216,12 +220,12 @@ def mainPage() {
 					
 					paragraph ''
 					input(name: "notify", type: "bool", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
-					paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
+					paragraph (HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n")
                 } // End of "Actions" section
 				
 				if (settings.notify) {
-					if (isST) {
-						section("Notifications") {
+					if (ST) {
+						section((HE?'<b>':'') + "Notifications" + (HE?'</b>':'')) {
 							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 							input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
@@ -232,18 +236,18 @@ def mainPage() {
 							}
 							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
 						}
-					} else {		// isHE
-						section("Use Notification Device(s)") {
+					} else {		// HE
+						section((HE?'<b>':'') + "Use Notification Device(s)" + (HE?'</b>':'')) {
 							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
 								  description: "Select notification devices", submitOnChange: true)
 							paragraph ""
 						}
-						section("Use SMS to Phone(s) (limit 10 messages per day)") {
+						section((HE?'<b>':'') + "Use SMS to Phone(s) (limit 10 messages per day)" + (HE?'</b>':'')) {
 							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)",
 								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
 							paragraph ""
 						}
-						section("Use Speech Device(s)") {
+						section((HE?'<b>':'') + "Use Speech Device(s)" + (HE?'</b>':'')) {
 							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
 								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
@@ -256,7 +260,7 @@ def mainPage() {
 				}
             } // End if myThermostats size
         }   
-        section(title: "Temporary Pause") {
+        section(title: (HE?'<b>':'') + "Temporary Pause" + (HE?'</b>':'')) {
            	input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
@@ -266,22 +270,21 @@ def mainPage() {
 
 // Main functions
 def installed() {
-	LOG("installed() entered", 2)
+	LOG("Installed with settings ${settings}", 4, null, 'trace')
 	initialize()  
 }
-
 def updated() {
-	LOG("updated() entered", 2)
+	LOG("Updatedwith settings ${settings}", 4, null, 'trace')
 	unsubscribe()
     unschedule()
     initialize()
 }
-
 def initialize() {
-	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	updateMyLabel()
-    if(tempDisable == true) {
-    	LOG("Temporarily Paused", 2, null, "warn")
+	
+    if (settings.tempDisable) {
+    	LOG("Temporarily Paused", 3, null, 'info')
     	return true
     }
 	
@@ -505,10 +508,12 @@ void changeSwitches() {
 
 def changeProgramHandler(evt) {
 	LOG("changeProgramHander() entered with evt: ${evt.name}: ${evt.value}", 5)
+	boolean ST = atomicState.isST
+	boolean HE = !ST
 	
 	if (settings.modeOrRoutine != "Switch(es)") {
 		// If we aren't using switches, validate that we got the intended event
-		def gotEvent = isHE ? evt.value : ((settings.modeOrRoutine == "Routine") ? evt.displayName : evt.value)
+		def gotEvent = HE ? evt.value : ((settings.modeOrRoutine == "Routine") ? evt.displayName : evt.value)
 		LOG("Event name received: ${gotEvent} and current expected: ${atomicState.expectedEvent}", 5)
 
 		if ( !(atomicState.expectedEvent?.contains(gotEvent)) ) {
@@ -518,7 +523,7 @@ def changeProgramHandler(evt) {
 	}
     settings.myThermostats.each { stat ->
     	LOG("In each loop: Working on stat: ${stat}", 4, null, 'trace')
-        String thermostatHold = isST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true)
+        String thermostatHold = ST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true)
 		log.debug "thermostatHold: ${thermostatHold}"
         boolean vacationHold = (thermostatHold == 'vacation')
         // Can't change the program while in Vacation mode
@@ -543,7 +548,7 @@ def changeProgramHandler(evt) {
         	if (atomicState.doResumeProgram) {
         		LOG("Resuming Program for ${stat}", 4, null, 'trace')
             	if (thermostatHold == 'hold') {
-            		String scheduledProgram = isST ? stat.currentValue("scheduledProgram") : stat.currentValue("scheduledProgram", true)
+            		String scheduledProgram = ST ? stat.currentValue("scheduledProgram") : stat.currentValue("scheduledProgram", true)
         			stat.resumeProgram(true) 												// resumeAll to get back to the scheduled program
                 	if (atomicState.fanMinutes != null) stat.setFanMinOnTime(atomicState.fanMinutes)		// and reset the fanMinOnTime as requested
 					sendMessage("I resumed the scheduled ${scheduledProgram} program on ${stat}")
@@ -557,7 +562,7 @@ def changeProgramHandler(evt) {
         			LOG("Setting Thermostat Program to programParam: ${atomicState.programParam} and holdType: ${settings.holdType}", 4, null, 'trace')      
         			boolean done = false
         			// def currentProgram = stat.currentValue('currentProgram')
-        			String currentProgramName = isST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)	// cancelProgram() will reset the currentProgramName to the scheduledProgramName
+        			String currentProgramName = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)	// cancelProgram() will reset the currentProgramName to the scheduledProgramName
         			if (((thermostatHold == null) || (thermostatHold == '') || (thermostatHold == 'null')) && (currentProgramName == atomicState.programParam)) {
                     	// not in a hold, currentProgram is the desiredProgram
                 		def fanSet = false
@@ -579,7 +584,7 @@ def changeProgramHandler(evt) {
                 		done = true
                     } else if ((thermostatHold == 'hold') || currentProgramName.startsWith('Hold')) { // (In case the Vacation hasn't cleared yet)
                     	// In a hold
-						String ncSp = isST ? stat.currentValue('scheduledProgram') : stat.currentValue('scheduledProgram', true)
+						String ncSp = ST ? stat.currentValue('scheduledProgram') : stat.currentValue('scheduledProgram', true)
             			if ( ncSp == atomicState.programParam) {
                         	// the scheduledProgram is the desiredProgram
                 			stat.resumeProgram(true)	// resumeAll to get back to the originally scheduled program
@@ -603,7 +608,7 @@ def changeProgramHandler(evt) {
                 				done = true
                             }
 						} else {
-							String ncCp = isST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+							String ncCp = ST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
 							if (ncCp == atomicState.programParam) {
 								// we are in a hold already, and the program is the one we want...
 								// Assume (for now) that the fan settings are also what we want (because another instance set them when they set the Hold)
@@ -706,7 +711,7 @@ String whatHoldType(statDevice) {
             }
             break;
         case 'Thermostat Setting':
-       		String statHoldType = isSP ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
+       		String statHoldType = atomicState.isST ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
             switch(statHoldType) {
             	case 'useEndTime4hour':
                 	sendHoldType = 4
@@ -772,7 +777,7 @@ void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-		if (isST) {
+		if (atomicState.isST) {
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -837,7 +842,7 @@ void sendMessage(notificationMessage) {
 		}
     }
 	// Always send to Hello Home / Location Event log
-	if (isST) { 
+	if (atomicState.isST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
@@ -845,7 +850,9 @@ void sendMessage(notificationMessage) {
 }
 
 void updateMyLabel() {
-	String flag = isST ? ' (paused)' : '<span '
+	boolean ST = atomicState.isST
+	
+	String flag = ST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
@@ -859,13 +866,41 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-
+def pauseOn() {
+	// Pause this Helper
+	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	if (!settings.tempDisable) {
+		LOG("performing Global Pause",2,null,'info')
+		app.updateSetting("tempDisable", true)
+		atomicState.globalPause = true
+		runIn(2, updated, [overwrite: true])
+	} else {
+		LOG("was already paused, ignoring Global Pause",3,null,'info')
+	}
+}
+def pauseOff() {
+	// Un-pause this Helper
+	if (settings.tempDisable) {
+		def wasAlreadyPaused = atomicState.wasAlreadyPaused
+		if (!wasAlreadyPaused) { // && settings.tempDisable) {
+			LOG("performing Global Unpause",2,null,'info')
+			app.updateSetting("tempDisable", false)
+			runIn(2, updated, [overwrite: true])
+		} else {
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+		}
+	} else {
+		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		atomicState.wasAlreadyPaused = false
+	}
+	atomicState.globalPause = false
+}
 // return all the fan modes that ALL thermostats support
 def getThermostatFanModes() {
 	def theFanModes = []
@@ -880,12 +915,11 @@ def getThermostatFanModes() {
     theFanModes = (theFanModes - ['off']) + ['default']		// off isn't fully implemented yet
     return theFanModes*.capitalize().sort(false)
 }
-
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	def messageLbl = "${app.label} ${message}"
-	if (logType == null) logType = 'debug'
-	parent.LOG(messageLbl, level, null, logType, event, displayEvent)
+	String msg = "${atomicState.appDisplayName} ${message}"
+    if (logType == null) logType = 'debug'
     log."${logType}" message
+	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
 // **************************************************************************************************************************
