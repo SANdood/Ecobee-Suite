@@ -17,16 +17,17 @@
  *	1.5.01 - Allow Ecobee Suite Thermostats only
  *	1.5.02 - Converted all math to BigDecimal
  *	1.6.00 - Release number synchronization
- *	1.6.10 - Resync for parent-based reservations
- *	1.6.11 - Fix offline sensor temperature values (null instead of Unknown)
+ *	1.6.10 - Resync for parent-based reservatlues (nuions
+ *	1.6.11 - Fix offline sensor temperature vall instead of Unknown)
  *	1.6.12 - Added "Generic" (dimmer/switchLevel) Vents
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixing private method issue caused by grails
  *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.04 - Optimized isST/isHE, formatting, added Global Pause
  */
-String getVersionNum() { return "1.7.03" }
-String getVersionLabel() { return "Ecobee Suite Smart Vents Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.04" }
+String getVersionLabel() { return "Ecobee Suite Smart Vents Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
 definition(
@@ -48,7 +49,10 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+	boolean ST = isST
+	boolean HE = !ST
+	
+	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
         	String defaultLabel = "Smart Vents"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -56,7 +60,7 @@ def mainPage() {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
-			if (isHE) {
+			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
@@ -85,15 +89,15 @@ def mainPage() {
 		}
         
         if (!settings.tempDisable && settings?.theSensors) {
-       		section(title: "Smart Vents: Windows (optional)") {
+       		section(title: (HE?'<b>':'') + "Smart Vents: Windows (optional)" + (HE?'</b>':'')) {
         		paragraph("Windows will temporarily deactivate Smart Vents while they are open")
             	input(name: "theWindows", type: "capability.contactSensor", title: "Which Window contact sensor(s)? (optional)", description: 'Tap to choose...', required: false, multiple: true)
         	}
        
-        	section(title: "Smart Vents: Automated Vents") {
+        	section(title: (HE?'<b>':'') + "Smart Vents: Automated Vents" + (HE?'</b>':'')) {
         		paragraph("Specified Econet, Keen and/or 'generic' vents will be opened until target temperature is achieved, and then closed")
-				input(name: "theEconetVents", type: "${isST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
-					  input(name: "theKeenVents", type: "${isST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", description: 'Tap to choose...', required: false, multiple:true, submitOnChange: true)
+				input(name: "theEconetVents", type: "${ST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
+					  input(name: "theKeenVents", type: "${ST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", description: 'Tap to choose...', required: false, multiple:true, submitOnChange: true)
                 input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
             	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage.")
@@ -101,14 +105,14 @@ def mainPage() {
             	}
         	}
         
-			section(title: "Smart Vents: Thermostat") {
+			section(title: (HE?'<b>':'') + "Smart Vents: Thermostat" + (HE?'</b>':'')) {
 				paragraph("Specify which thermostat to monitor for heating/cooling events")
-				input(name: "theThermostat", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select thermostat", description: 'Tap to choose...', multiple: false, required: true, submitOnChange: true)
+				input(name: "theThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select thermostat", description: 'Tap to choose...', multiple: false, required: true, submitOnChange: true)
 			}
 		
-			section(title: "Smart Vents: Target Temperature") {
+			section(title: (HE?'<b>':'') + "Smart Vents: Target Temperature" + (HE?'</b>':'')) {
             	if (settings.useThermostat && settings.theThermostat) {
-					def ncTsp = isST ? settings.theThermostat.currentValue('thermostatSetpoint') : settings.theThermostat.currentValue('thermostatSetpoint', true)
+					def ncTsp = ST ? settings.theThermostat.currentValue('thermostatSetpoint') : settings.theThermostat.currentValue('thermostatSetpoint', true)
                 	paragraph("Current setpoint of ${settings.theThermostat} is ${ncTsp}°.")
                 }
 				input(name: "useThermostat", type: "bool", title: "Follow setpoints on thermostat${settings.theThermostat?' '+settings.theThermostat.displayName:''}?", required: true, defaultValue: true, submitOnChange: true)
@@ -123,12 +127,12 @@ def mainPage() {
 			}
         } else { 
         	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
-            	section( title: "Disabled Vent State") {
+            	section( title: (HE?'<b>':'') + "Disabled Vent State" + (HE?'</b>':'')) {
             		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:['open','closed','unchanged'], required: true, multiple: false, defaultValue: 'closed')
                 }
       		}
         }        	
-		section(title: "Temporarily Disable?") {
+		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", description: "", defaultValue: false, submitOnChange: true)                
         }
         
@@ -138,33 +142,30 @@ def mainPage() {
 
 // Main functions
 void installed() {
-	LOG("installed() entered", 3, "", 'trace')
+	LOG("Installed with settings ${settings}", 4, null, 'trace')
     initialize()
 }
-
 void updated() {
-	LOG("updated() entered", 3, "", 'trace')
+	LOG("Updated with settings ${settings}", 4, null, 'trace')
 	unsubscribe()
     unschedule()
     initialize()
 }
-
 void uninstalled() {
 	// generateSensorsEvents([doors:'default', windows:'default', vents:'default',SmartRoom:'default'])
 }
-
 def initialize() {
-	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	updateMyLabel()
 	
     atomicState.scheduled = false
     // Now, just exit if we are disabled...
-	if (tempDisable) {
+	if (settings.tempDisable) {
         if (disabledVents && (disabledVents != 'unchanged')) {
         	setTheVents(disabledVents)
-            LOG("Temporarily Paused, setting vents to ${disabledVents}.", 1, null, "warn")
+            LOG("Temporarily Paused, setting vents to ${disabledVents}.", 3, null, 'info')
         } else {
-        	LOG("Temporarily Paused, vents unchanged", 1, null, "warn")
+        	LOG("Temporarily Paused, vents unchanged", 3, null, 'info')
         }
         return true
     }
@@ -194,9 +195,11 @@ String checkTemperature() {
 	// Be smarter if we are in Smart Recovery mode: follow the thermostat's temperature instead of watching the current setpoint. Otherwise the room won't get the benefits of heat/cool
     // Smart Recovery. Also, we add the heat/cool differential to try and get ahead of the Smart Recovery curve (otherwise we close too early or too often)
     // 
-   	def smarter = (isST ? settings.theThermostat.currentValue('thermostatOperatingStateDisplay') : settings.theThermostat.currentValue('thermostatOperatingStateDisplay', true))?.contains('smart')
+	boolean ST = atomicState.isST
+	
+   	def smarter = (ST ? settings.theThermostat.currentValue('thermostatOperatingStateDisplay') : settings.theThermostat.currentValue('thermostatOperatingStateDisplay', true))?.contains('smart')
     
-	def cOpState = isST ? theThermostat.currentValue('thermostatOperatingState') : theThermostat.currentValue('thermostatOperatingState', true)
+	def cOpState = ST ? theThermostat.currentValue('thermostatOperatingState') : theThermostat.currentValue('thermostatOperatingState', true)
     LOG("Current Operating State ${cOpState}",3,null,'info')
 	def cTemp = getCurrentTemperature()
     def offset 
@@ -325,7 +328,8 @@ void ventOn( theVent ) {
 }
 
 void updateMyLabel() {
-	String flag = isST ? ' (paused)' : '<span '
+	boolean ST = atomicState.isST
+	String flag = ST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
@@ -339,7 +343,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
@@ -353,7 +357,35 @@ void generateSensorsEvents( Map dataMap ) {
         parent.getChildDevice(DNI)?.generateEvent(dataMap)
     }
 }
-
+def pauseOn() {
+	// Pause this Helper
+	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	if (!settings.tempDisable) {
+		LOG("performing Global Pause",2,null,'info')
+		app.updateSetting("tempDisable", true)
+		atomicState.globalPause = true
+		runIn(2, updated, [overwrite: true])
+	} else {
+		LOG("was already paused, ignoring Global Pause",3,null,'info')
+	}
+}
+def pauseOff() {
+	// Un-pause this Helper
+	if (settings.tempDisable) {
+		def wasAlreadyPaused = atomicState.wasAlreadyPaused
+		if (!wasAlreadyPaused) { // && settings.tempDisable) {
+			LOG("performing Global Unpause",2,null,'info')
+			app.updateSetting("tempDisable", false)
+			runIn(2, updated, [overwrite: true])
+		} else {
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+		}
+	} else {
+		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		atomicState.wasAlreadyPaused = false
+	}
+	atomicState.globalPause = false
+}
 // Helper Functions
 def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
@@ -362,10 +394,10 @@ def roundIt( BigDecimal value, decimals=0 ) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	if (logType == null) logType = 'debug'
-	log."${logType}" message
-	message = "${app.label} ${message}"
-	parent?.LOG(message, level, null, logType, event, displayEvent)
+	String msg = "${atomicState.appDisplayName} ${message}"
+    if (logType == null) logType = 'debug'
+    log."${logType}" message
+	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
 // **************************************************************************************************************************
