@@ -28,9 +28,10 @@
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixing private method issue caused by grails
  *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.04 - Optimized isST/isHE, added Global Pause
  */
 String getVersionNum() { return "1.7.04" }
-String getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: "ecobee Suite Smart Switches",
@@ -51,7 +52,10 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+	boolean ST = isST
+	boolean HE = !ST
+	
+	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
         	String defaultLabel = "Smart Switch/Dimmer/Vent"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -81,19 +85,19 @@ def mainPage() {
             if (settings.tempDisable) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
-				input(name: "theThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Monitor these Ecobee thermostat(s) for operating state changes:", 
+				input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Monitor these Ecobee thermostat(s) for operating state changes:", 
 					  multiple: true, required: true, submitOnChange: true)
             }
 		}
         
         if (!settings.tempDisable && (settings?.theThermostats?.size() > 0)) {
-        	section(title: "Smart Switches: Operating State") {
+        	section(title: (HE?'<b>':'') + "Smart Switches: Operating State" + (HE?'</b>':'')) {
         		input(name: "theOpState", type: "enum", title: "When ${theThermostats?theThermostats:'thermostat'} changes to one of these Operating States", 
 					  options:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer'], required: true, multiple: true, submitOnChange: true)
 				// mode(title: "Enable only for specific mode(s)")
         	}
        
-        	section(title: "Smart Switches: Actions") {
+        	section(title: (HE?'<b>':'') + "Smart Switches: Actions" + (HE?'</b>':'')) {
 				input(name: 'theOnSwitches', type: 'capability.switch', title: "Turn On these switches", multiple: true, required: false, submitOnChange: true)
           		input(name: 'theOnDimmers', type: 'capability.switchLevel', title: "Set level on these dimmers", multiple: true, required: false, submitOnChange: true)
           		if (settings.theOnDimmers) {
@@ -112,7 +116,7 @@ def mainPage() {
         	}
         }
 		
-		section(title: "Temporarily Disable?") {
+		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                   
         }
         
@@ -122,27 +126,24 @@ def mainPage() {
 
 // Main functions
 void installed() {
-	LOG("installed() entered", 3, "", 'trace')
+	LOG("Installed with settings ${settings}", 4, null, 'trace')
     initialize()
 }
-
 void updated() {
-	LOG("updated() entered", 3, "", 'trace')
+	LOG("Updated with settings ${settings}", 4, null, 'trace')
 	unsubscribe()
     initialize()
 }
-
 void uninstalled() {
 }
-
 def initialize() {
-	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	updateMyLabel()
 	
     atomicState.scheduled = false
     // Now, just exit if we are disabled...
-	if(tempDisable == true) {
-    	LOG("Temporarily Paused", 1, null, "warn")
+	if (settings.tempDisable) {
+    	LOG("Temporarily Paused", 3, null, 'info')
     	return true
     }
 
@@ -152,12 +153,14 @@ def initialize() {
 
 def opStateHandler(evt) {
 	LOG("${evt.name}: ${evt.value}",2,null,'info')
+	boolean ST = atomicState.isST
+	
 	if (evt.value == 'idle') {
     	if (reverseOnIdle) {
         	def isReallyIdle = true
         	if (theThermostats.size() > 1) {
             	theThermostats.each { 
-					String ncTos = isST ? it.currentValue('thermostatOperatingState') : it.currentValue('thermostatOperatingState', true)
+					String ncTos = ST ? it.currentValue('thermostatOperatingState') : it.currentValue('thermostatOperatingState', true)
 					if (ncTos != 'idle') isReallyIdle = false }
             }
             if (isReallyIdle) {	
@@ -238,7 +241,8 @@ void dimmersOn( theDimmers ) {
 }
 
 void updateMyLabel() {
-	String flag = isST ? ' (paused)' : '<span '
+	boolean ST = atomicState.isST
+	String flag = ST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
@@ -252,19 +256,47 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-
+def pauseOn() {
+	// Pause this Helper
+	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	if (!settings.tempDisable) {
+		LOG("performing Global Pause",2,null,'info')
+		app.updateSetting("tempDisable", true)
+		atomicState.globalPause = true
+		runIn(2, updated, [overwrite: true])
+	} else {
+		LOG("was already paused, ignoring Global Pause",3,null,'info')
+	}
+}
+def pauseOff() {
+	// Un-pause this Helper
+	if (settings.tempDisable) {
+		def wasAlreadyPaused = atomicState.wasAlreadyPaused
+		if (!wasAlreadyPaused) { // && settings.tempDisable) {
+			LOG("performing Global Unpause",2,null,'info')
+			app.updateSetting("tempDisable", false)
+			runIn(2, updated, [overwrite: true])
+		} else {
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+		}
+	} else {
+		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		atomicState.wasAlreadyPaused = false
+	}
+	atomicState.globalPause = false
+}
 // Helper Functions
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	if (logType == null) logType = 'debug'
-	log."${logType}" message
-	message = "${app.label} ${message}"
-	parent?.LOG(message, level, null, logType, event, displayEvent)
+	String msg = "${atomicState.appDisplayName} ${message}"
+    if (logType == null) logType = 'debug'
+    log."${logType}" message
+	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
 // **************************************************************************************************************************
