@@ -38,9 +38,10 @@
  *	1.7.02 - Fixing private method issue caused by grails
  *  1.7.03 - Register new health check; auto reload new versions, avoid Health Check for test device install
  *  1.7.04 - Added importUrl for HE IDE
+ *	1.7.05 - Optimized isST
  */
 String getVersionNum() 		{ return "1.7.04" }
-String getVersionLabel() 	{ return "Ecobee Suite Sensor,\nversion ${getVersionNum()} on ${getPlatform()}" }
+String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 import groovy.json.*
 
@@ -281,11 +282,12 @@ def generateEvent(Map results) {
 	if (!state.version || (state.version != getVersionLabel())) updated()
 	
 	def startMS = now()
+	
 	Integer objectsUpdated = 0
 	String tempScale = getTemperatureScale()
     def precision = device.currentValue('decimalPrecision')
     if (!precision) precision = (tempScale == 'C') ? 1 : 0
-    String currentProgramName = isST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
+    String currentProgramName = state.isST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
     def isConnected = (currentProgramName != 'Offline')
 
 	if(results) {
