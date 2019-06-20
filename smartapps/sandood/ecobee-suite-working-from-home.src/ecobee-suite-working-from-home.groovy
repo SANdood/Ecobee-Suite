@@ -20,22 +20,23 @@
  *	1.7.05 - Fixed SMS text entry
  *	1.7.06 - Fixing private method issue caused by grails
  *  1.7.07 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.08 - Optimized isST/isHE, formatting
  */
-String getVersionNum() { return "1.7.07" }
-String getVersionLabel() { return "ecobee Suite Working From Home Helper,\nversion ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.08" }
+String getVersionLabel() { return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-    name: "ecobee Suite Working From Home",
-    namespace: "sandood",
-    author: "Barry A. Burke",
-    description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nIf, after thermostat mode change to 'Away' and/or at a particular time of day, anyone is still at home, " +
-    			 "${isST?'trigger a \'Working From Home\' Routine (opt), ':''}, change the Location mode (opt), and/or reset thermostat(s) to 'Home' program (opt).",
-    category: "Convenience",
-    parent: "sandood:Ecobee Suite Manager",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+    name: 			"ecobee Suite Working From Home",
+    namespace: 		"sandood",
+    author: 		"Barry A. Burke",
+    description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nIf, after thermostat mode change to 'Away' and/or at a particular time of day, anyone is still at home, " +
+    			 	"${isST?'trigger a \'Working From Home\' Routine (opt), ':''}, change the Location mode (opt), and/or reset thermostat(s) to 'Home' program (opt).",
+    category: 		"Convenience",
+    parent: 		"sandood:Ecobee Suite Manager",
+	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: false,
-    pausable: true
+    pausable: 		true
 )
 
 preferences {
@@ -44,7 +45,10 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+	boolean ST = isST
+	boolean HE = !ST
+	
+	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
 		section("") {
         	String defaultLabel = "Working From Home"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -52,7 +56,7 @@ def mainPage() {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
-			if (isHE) {
+			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
@@ -74,14 +78,14 @@ def mainPage() {
         	if(settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
-        		input (name: "myThermostats", type: "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)",
+        		input (name: "myThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)",
                 	   required: true, multiple: true, submitOnChange: true)
 				paragraph ''
 			}
         }
 
 		if (settings?.myThermostats && !settings?.tempDisable) {
-            section (title: "Conditions") {
+            section (title: (HE?'<b>':'') + "Conditions" + (HE?'</b>':'')) {
                 input(name: "people", type: "capability.presenceSensor", title: "When any of these are present...",  multiple: true, required: true, submitOnChange: true)
 				input(name: "identify", type: 'bool', title: 'Identify who is home for logs & notifications?', required: (settings.people != null), defaultValue: false)
 				input(name: "timeOfDay", type: "time", title: "At this time of day",  required: (settings.onAway == null), submitOnChange: true)
@@ -90,8 +94,8 @@ def mainPage() {
 				paragraph ''
             }
             
-			section( title: "Actions") {
-                if (isST) {
+			section( title: (HE?'<b>':'') + "Actions" + (HE?'</b>':'')) {
+                if (ST) {
                     def phrases = location.helloHome?.getPhrases()*.label
                     if (phrases) {
                         phrases.sort()
@@ -103,18 +107,18 @@ def mainPage() {
 				paragraph ''
             }
                 
-            section (title: "Advanced Options") {
+            section (title: (HE?'<b>':'') + "Advanced Options" + (HE?'</b>':'')) {
 				input(name: 'statMode', title: 'Only when thermostat mode is', type: 'enum', required: false, multiple: true, 
                     		options:getThermostatModes(), submitOnChange: true)
                 input(name: "days", type: "enum", title: "Only on certain days of the week", multiple: true, required: false, submitOnChange: true,
                     options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
                 input(name: "modes", type: "mode", title: "Only when Location Mode is", multiple: true, required: false, submitOnChange: true)
 				input(name: "notify", type: "bool", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
-				paragraph isHE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
+				paragraph HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
             }
 			
 			if (settings.notify) {
-				if (isST) {
+				if (ST) {
 					section("Notifications") {
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
@@ -126,18 +130,18 @@ def mainPage() {
 						}
 						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
 					}
-				} else {		// isHE
-					section("Use Notification Device(s)") {
+				} else {		// HE
+					section("<b>Use Notification Device(s)") {
 						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
-							  description: "Select notification devices", submitOnChange: true)
+							  description: "Select notification devices</b>", submitOnChange: true)
 						paragraph ""
 					}
-					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+					section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
 							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
 						paragraph ""
 					}
-					section("Use Speech Device(s)") {
+					section("<b>Use Speech Device(s)</b>") {
 						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
 						if (settings.speak) {
 							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
@@ -149,7 +153,7 @@ def mainPage() {
 				}
 			}				
         }
-        section(title: "Temporary Pause") {
+        section(title: (HE?'<b>':'') + "Temporary Pause" + (HE?'</b>':'')) {
            	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
 		section (getVersionLabel()) {}
@@ -157,36 +161,37 @@ def mainPage() {
 }
 
 void installed() {
+	LOG("Installed with settings ${settings}", 4, null, 'trace')
     initialize()
 }
-
 void updated() {
     unsubscribe()
     unschedule()
-    LOG("Updated with settings ${settings}", 2, null, 'info')
+    LOG("Updated with settings ${settings}", 4, null, 'trace')
     initialize()
 //    checkPresence()
 }
-
 def initialize() {
-	LOG("${getVersionLabel()}\nInitializing...", 2, null, 'info')
+	LOG("${getVersionLabel()} Initializing...", 2, null, 'info')
 	updateMyLabel()
 	
-    if(tempDisable == true) {
-    	LOG("Temporarily Paused", 2, null, "warn")
+    if (settings.tempDisable) {
+    	LOG("Temporarily Paused", 3, null, 'info')
     	return true
     }
+	
     if (settings.timeOfDay != null) schedule(timeToday(settings.timeOfDay, location.timeZone), "checkPresence")
     if (settings.onAway) subscribe(settings.myThermostats, "currentProgram", "checkProgram")
 }
 
 def checkPresence() {
 	LOG("Check presence", 4, null, 'trace')
+	boolean ST = atomicState.isST
 	
     if (anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
     	def multiple = false
 		LOG("Someone is present", 2, null, 'trace')
-        if (isST && wfhPhrase) {
+        if (ST && wfhPhrase) {
             location.helloHome.execute(wfhPhrase)
         	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
 			def who = whoIsHome()
@@ -201,7 +206,7 @@ def checkPresence() {
         if (settings.setHome) {
 			def verified = true
         	myThermostats.each { tstat ->
-				def ncCp = isST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
+				def ncCp = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
 				if (ncCp != "Home") {
 					tstat.home()
 					verified = false
@@ -222,7 +227,8 @@ def checkPresence() {
 
 def checkProgram(evt) {
 	LOG("Check program: ${evt.device.displayName} changed to ${evt.value}", 4, null, 'trace')
-    
+    boolean ST = atomicState.isST
+	
     def multiple = false
     if (settings.onAway && (evt.value == 'Away') && anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
     	evt.device.home()
@@ -230,7 +236,7 @@ def checkProgram(evt) {
         sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because Thermostat ${evt.device.displayName} changed to 'Away' and ${who} ${who.contains(' and ')?'are':'is'} still home")
         runIn(300, checkHome, [overwrite: true])
         
-    	if (isST && wfhPhrase) {
+    	if (ST && wfhPhrase) {
             location.helloHome.execute(wfhPhrase)
         	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
 			sendMessage("I also executed '${wfhPhrase}'")
@@ -244,11 +250,12 @@ def checkProgram(evt) {
 }
 
 def checkHome() {
-	def allSet = true
+	boolean ST = atomicState.isST
+	boolean allSet = true
 	if (settings.setHome) {
     	myThermostats.each { tstat ->
-			def ncCp = isST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
-        	if (ncCp != "Home") { 	// Need to check if in Vacation Mode also...
+			def currentProgram = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
+        	if (currentProgram != "Home") { 	// Need to check if in Vacation Mode also...
             	allSet = false
             	tstat.home()
                 LOG("${app.label} at ${location.name} failed twice to set 'Home' program on ${tstat.displayName}",2,null,'warn')
@@ -306,12 +313,13 @@ def getThermostatModes() {
 
 boolean getStatModeOk() {
 	if (settings.statMode == null) return true
-	def result = false
+	boolean ST = atomicState.isST
+	boolean result = false
 	settings.myThermostats?.each { stat ->
-		def ncTm = isST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
-		log.debug "statMode: ${ncTm}"
-		if (settings.statMode.contains(ncTm)) {
-			log.debug "statModeOk"
+		def statMode = ST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
+		//log.debug "statMode: ${statMode}"
+		if (settings.statMode.contains(statMode)) {
+			//log.debug "statModeOk"
 			result = true
 		}
 	}
@@ -320,13 +328,13 @@ boolean getStatModeOk() {
 }
 
 boolean getModeOk() {
-    def result = (!modes || modes.contains(location.mode))
+    boolean result = (!modes || modes.contains(location.mode))
     LOG("modeOk: ${result}", 4, null, 'trace')
 	return result
 }
 
 boolean getDaysOk() {
-    def result = true
+    boolean result = true
     if (settings.days) {
         def df = new java.text.SimpleDateFormat("EEEE")
         if (location.timeZone) {
@@ -346,7 +354,7 @@ void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-		if (isST) {
+		if (atomicState.isST) {
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -411,7 +419,7 @@ void sendMessage(notificationMessage) {
 		}
     }
 	// Always send to Hello Home / Location Event log
-	if (isST) { 
+	if (atomicState.isST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
@@ -419,7 +427,9 @@ void sendMessage(notificationMessage) {
 }
 
 void updateMyLabel() {
-	String flag = isST ? ' (paused)' : '<span '
+	boolean ST = atomicState.isST
+	
+	String flag = ST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
@@ -433,22 +443,50 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-
+def pauseOn() {
+	// Pause this Helper
+	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	if (!settings.tempDisable) {
+		LOG("performing Global Pause",2,null,'info')
+		app.updateSetting("tempDisable", true)
+		atomicState.globalPause = true
+		runIn(2, updated, [overwrite: true])
+	} else {
+		LOG("was already paused, ignoring Global Pause",3,null,'info')
+	}
+}
+def pauseOff() {
+	// Un-pause this Helper
+	if (settings.tempDisable) {
+		def wasAlreadyPaused = atomicState.wasAlreadyPaused
+		if (!wasAlreadyPaused) { // && settings.tempDisable) {
+			LOG("performing Global Unpause",2,null,'info')
+			app.updateSetting("tempDisable", false)
+			runIn(2, updated, [overwrite: true])
+		} else {
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+		}
+	} else {
+		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		atomicState.wasAlreadyPaused = false
+	}
+	atomicState.globalPause = false
+}
 def hideOptions() {
     return (settings.days || settings.modes) ? false : true
 }
 
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	def messageLbl = "${app.label} ${message}"
-	if (logType == null) logType = 'debug'
-	if (parent) parent.LOG(messageLbl, level, null, logType, event, displayEvent)
+	String msg = "${atomicState.appDisplayName} ${message}"
+    if (logType == null) logType = 'debug'
     log."${logType}" message
+	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
 // **************************************************************************************************************************
