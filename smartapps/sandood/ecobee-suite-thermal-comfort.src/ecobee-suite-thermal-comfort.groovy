@@ -21,9 +21,10 @@
  *	1.7.06 - Fixed SMS text entry
  *	1.7.07 - Fixing private method issue caused by grails
  *  1.7.08 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.09 - Optimized isST/isHE, formatting, added Global Pause
  */
-String getVersionNum() { return "1.7.08" }
-String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper,\nversion ${getVersionNum()} on ${getPlatform()}" }
+String getVersionNum() { return "1.7.09" }
+String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getPlatform()}" }
 
 import groovy.json.*
 
@@ -46,6 +47,9 @@ preferences {
 
 def mainPage() {
     def unit = getTemperatureScale()
+	def ST = isST
+	def HE = !ST
+	
     def coolPmvOptions = [
 			(-1.0): 'Very cool (-1.0)',
 			(-0.5): 'Cool (-0.5)',
@@ -88,7 +92,7 @@ def mainPage() {
             8.7: 'Winter weight duvet [7.7-8.7] (8.7)',
             'custom': 'Custom'
     ]
-	dynamicPage(name: "mainPage", title: "${getVersionLabel()}", uninstall: true, install: true) {
+	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
         	String defaultLabel = "Thermal Comfort"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
@@ -96,7 +100,7 @@ def mainPage() {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
-			if (isHE) {
+			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
@@ -118,15 +122,15 @@ def mainPage() {
         	if (settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
-        		input ("theThermostat", "${isST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", 
+        		input ("theThermostat", "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", 
                 	   required: true, multiple: false, submitOnChange: true)
 				paragraph ''
 				input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
-				paragraph isHE ? "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
+				paragraph HE ? "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
 			}
         }
         if (!settings?.tempDisable && settings?.theThermostat) {
-            section(title: "Sensors") {
+            section(title: (HE?'<b>':'') + "Sensors" + (HE?'</b>':'')) {
                 input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", 
                 	  required: true, multiple: false, submitOnChange: true)
                 if (settings?.humidistat) {
@@ -136,7 +140,7 @@ def mainPage() {
 				paragraph ''
             }
 			
-			section(title: "Cool Comfort Settings") {
+			section(title: (HE?'<b>':'') + "Cool Comfort Settings" + (HE?'</b>':'')) {
        			input(name: "coolPmv", title: "PMV in cool mode${settings.coolPmv!=null&&coolConfigured()?' ('+calculateCoolSetpoint()+'°'+unit+')':''}", 
                 	  type: 'enum', options: coolPmvOptions, required: !settings.heatPmv, submitOnChange: true)
                 if (settings.coolPmv=='custom') {
@@ -153,7 +157,7 @@ def mainPage() {
 				paragraph ''
 			}
 			
-            section(title: "Heat Comfort Settings") {
+            section(title: (HE?'<b>':'') + "Heat Comfort Settings" + (HE?'</b>':'')) {
                 input(name: "heatPmv", title: "PMV in heat mode${settings.heatPmv!=null&&heatConfigured()?' ('+calculateHeatSetpoint()+'°'+unit+')':''}", 
 					  type: 'enum', options: heatPmvOptions, required: !settings.coolPmv, submitOnChange: true)
                 if (settings.heatPmv=='custom') {
@@ -170,7 +174,7 @@ def mainPage() {
 				paragraph ''
             }
 			
-			section(title: "Enable only for specific thermostat modes and/or programs? (optional)") {
+			section(title: (HE?'<b>':'') + "Enable only for specific thermostat modes and/or programs? (optional)" + (HE?'</b>':'')) {
         		// paragraph("Thermostat Modes will only be changed while ${location.name} is in these SmartThings Modes.")
                 input(name: "statModes", type: "enum", title: "When ${settings.theThermostat!=null?settings.theThermostat:'the thermostat'}'s Mode is", 
                 	  multiple: true, required: false, options: getThermostatModesList(), submitOnChange: true)
@@ -184,7 +188,7 @@ def mainPage() {
         	}
 
 			if (settings.notify) {
-				if (isST) {
+				if (ST) {
 					section("Notifications") {
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
@@ -196,18 +200,18 @@ def mainPage() {
 						}
 						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
 					}
-				} else {		// isHE
-					section("Use Notification Device(s)") {
+				} else {		// HE
+					section("<b>Notification Device(s)</b>") {
 						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
 							  description: "Select notification devices", submitOnChange: true)
 						paragraph ''
 					}
-					section("Use SMS to Phone(s) (limit 10 messages per day)") {
+					section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
 							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
 						paragraph ''
 					}
-					section("Use Speech Device(s)") {
+					section("<b>Use Speech Device(s)</b>") {
 						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
 						if (settings.speak) {
 							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
@@ -219,7 +223,7 @@ def mainPage() {
 				}
 			}
         }
-        section(title: "Temporary Pause") {
+        section(title: (HE?'<b>':'') + "Temporarily Pause" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)
 		}
     	section (getVersionLabel()) {}
@@ -227,23 +231,20 @@ def mainPage() {
 }
 
 void installed() {
-	LOG("installed() entered", 3, "", 'trace')
+	LOG("Installed with settings ${settings}", 4, null, 'trace')
     atomicState.humidity = null
 	initialize()
 }
-
 void uninstalled() {
 }
-
 void updated() {
 	atomicState.version = getVersionLabel()
-	LOG("updated() with settings: ${settings}", 3, "", 'trace')
+	LOG("Updated with settings: ${settings}", 4, null, 'trace')
 	unsubscribe()
     unschedule()
     atomicState.humidity = null
     initialize()
 }
-
 def getProgramsList() {
 	def programs = ["Away","Home","Sleep"]
 	if (theThermostat) {
@@ -252,7 +253,6 @@ def getProgramsList() {
     }
     return programs.sort(false)
 }
-
 def getThermostatModesList() {
     def statModes = ["heat","cool","auto","auxHeatOnly"]
     if (settings.theThermostat) {
@@ -261,13 +261,13 @@ def getThermostatModesList() {
     }
     return statModes.sort(false)
 }
-
 def initialize() {
-	LOG("${getVersionLabel()}\nInitializing...", 2, "", 'info')
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	updateMyLabel()
 	
-	if(settings.tempDisable) {
-    	LOG("Temporarily Paused", 2, null, "warn")
+	if (settings.tempDisable) {
+    	LOG("Temporarily Paused", 3, null, 'info')
+    	return true
     }
 
     subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
@@ -275,7 +275,7 @@ def initialize() {
     // if (thePrograms) subscribe(settings.theThermostat, "currentProgram", modeOrProgramHandler)
     if (statModes) subscribe(settings.theThermostat, "thermostatMode", ModeChangeHandler)
 
-    def h = isST ? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
+    def h = atomicState.isST ? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
     atomicState.humidity = h
 	atomicState.because = " because ${app.label} was (re)initialized"
     runIn(2, atomicHumidityUpdater, [overwrite: true])
@@ -344,17 +344,18 @@ void humidityUpdate( Integer humidity ) {
     	LOG("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
         return
     }
+	def ST = atomicState.ST
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
-	String statHold = isST ? settings.theThermostat.currentValue('thermostatHold') : settings.theThermostat.currentValue('thermostatHold', true)
+	String statHold = ST ? settings.theThermostat.currentValue('thermostatHold') : settings.theThermostat.currentValue('thermostatHold', true)
 	if (statHold == 'vacation') {
 		LOG("${settings.theThermostat.displayName} is in Vacation Mode, not adjusting setpoints", 3, null, 'warn')
 		return
 	}
 	
 	
-    def currentProgram 	= isST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
-    def currentMode 	= isST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)
+    def currentProgram 	= ST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
+    def currentMode 	= ST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)
 
 	def andOr = (settings.enable != null) ? settings.enable : 'or'
 	if ((settings.thePrograms == null) || (settings.statModes == null)) andOr = 'or'		// if they only provided one of them, ignore 'and'
@@ -378,8 +379,8 @@ void humidityUpdate( Integer humidity ) {
         return
     }
 
-    def heatSetpoint = roundIt(((isST ? settings.theThermostat.currentValue('heatingSetpoint') : settings.theThermostat.currentValue('heatingSetpoint', true)) as BigDecimal), 2)
-    def coolSetpoint = roundIt(((isST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)) as BigDecimal), 2)
+    def heatSetpoint = roundIt(((ST ? settings.theThermostat.currentValue('heatingSetpoint') : settings.theThermostat.currentValue('heatingSetpoint', true)) as BigDecimal), 2)
+    def coolSetpoint = roundIt(((ST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)) as BigDecimal), 2)
 	def curHeat = heatSetpoint
 	def curCool = coolSetpoint
     if (settings.heatPmv != null) {
@@ -399,7 +400,9 @@ void humidityUpdate( Integer humidity ) {
 
 void changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
-	def delta = isST ? settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal : settings.theThermostat.currentValue('heatCoolMinDelta', true) as BigDecimal
+	boolean ST = atomicState.isST
+	
+	def delta = ST ? settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal : settings.theThermostat.currentValue('heatCoolMinDelta', true) as BigDecimal
 	def fixed
 	def ht = heatTemp.toBigDecimal()
 	def ct = coolTemp.toBigDecimal()
@@ -431,7 +434,7 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
 		}
 		if (!fixed) {
 			// Hmmm...looks like we're adjusting both, and so we don't know which to fix
-			def lastMode = isST ? settings.theThermostat.currentValue('lastOpState') : settings.theThermostat.currentValue('lastOpState', true)	// what did the thermostat most recently do?
+			def lastMode = ST ? settings.theThermostat.currentValue('lastOpState') : settings.theThermostat.currentValue('lastOpState', true)	// what did the thermostat most recently do?
 			if (lastMode != null) {
 				if (lastMode.contains('cool')) {
 					ht = ct - delta							// move the other one
@@ -451,7 +454,7 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
 			heatTemp = ht
 		}
 	}
-	def currentProgram 	= isST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
+	def currentProgram 	= ST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
 	theThermostat.setProgramSetpoints( program, heatTemp.toString(), coolTemp.toString() )
 	
 	// Only send the notification if we are changing the CURRENT program - program could have changed under us...
@@ -600,30 +603,32 @@ def calculateCoolSetpoint() {
 }
 
 def getHeatRange() {
-    def low  = isST ? settings.theThermostat.currentValue('heatRangeLow')  : settings.theThermostat.currentValue('heatRangeLow', true)
-    def high = isST ? settings.theThermostat.currentValue('heatRangeHigh') : settings.theThermostat.currentValue('heatRangeHigh', true)
+	boolean ST = atomicState.isST
+    def low  = ST ? settings.theThermostat.currentValue('heatRangeLow')  : settings.theThermostat.currentValue('heatRangeLow', true)
+    def high = ST ? settings.theThermostat.currentValue('heatRangeHigh') : settings.theThermostat.currentValue('heatRangeHigh', true)
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
 def getCoolRange() {
-    def low  = isST ? settings.theThermostat.currentValue('coolRangeLow')  : settings.theThermostat.currentValue('coolRangeLow', true)
-    def high = isST ? settings.theThermostat.currentValue('coolRangeHigh') : settings.theThermostat.currentValue('coolRangeHigh', true)
+	boolean ST = atomicState.isST
+    def low  = ST ? settings.theThermostat.currentValue('coolRangeLow')  : settings.theThermostat.currentValue('coolRangeLow', true)
+    def high = ST ? settings.theThermostat.currentValue('coolRangeHigh') : settings.theThermostat.currentValue('coolRangeHigh', true)
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
 // Helper Functions
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	def msg = app.label + ': ' + message
-	if (logType == null) logType = 'debug'
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+	String msg = "${atomicState.appDisplayName} ${message}"
+    if (logType == null) logType = 'debug'
     log."${logType}" message
+	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${settings.notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-		if (isST) {
+		if (atomicState.isST) {
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -690,7 +695,7 @@ void sendMessage(notificationMessage) {
 		}
     }
 	// Always send to Hello Home / Location Event log
-	if (isST) { 
+	if (atomicState.isST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
@@ -698,7 +703,9 @@ void sendMessage(notificationMessage) {
 }
 
 void updateMyLabel() {
-	String flag = isST ? ' (paused)' : '<span '
+	boolean ST = atomicState.isST
+	
+	String flag = ST ? ' (paused)' : '<span '
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
@@ -712,13 +719,41 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-
+def pauseOn() {
+	// Pause this Helper
+	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	if (!settings.tempDisable) {
+		LOG("performing Global Pause",2,null,'info')
+		app.updateSetting("tempDisable", true)
+		atomicState.globalPause = true
+		runIn(2, updated, [overwrite: true])
+	} else {
+		LOG("was already paused, ignoring Global Pause",3,null,'info')
+	}
+}
+def pauseOff() {
+	// Un-pause this Helper
+	if (settings.tempDisable) {
+		def wasAlreadyPaused = atomicState.wasAlreadyPaused
+		if (!wasAlreadyPaused) { // && settings.tempDisable) {
+			LOG("performing Global Unpause",2,null,'info')
+			app.updateSetting("tempDisable", false)
+			runIn(2, updated, [overwrite: true])
+		} else {
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+		}
+	} else {
+		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		atomicState.wasAlreadyPaused = false
+	}
+	atomicState.globalPause = false
+}
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
