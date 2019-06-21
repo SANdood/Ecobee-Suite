@@ -22,23 +22,24 @@
  *	1.7.07 - Fixing private method issue caused by grails
  *  1.7.08 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.09 - Optimized isST/isHE, formatting, added Global Pause
+ *	1.7.10 - Fixed isST/isHE Optimization bugs
  */
-String getVersionNum() { return "1.7.09b" }
+String getVersionNum() { return "1.7.10" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
 
 definition(
-	name: "ecobee Suite Thermal Comfort",
-	namespace: "sandood",
-	author: "Barry A. Burke and Richard Peng",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets Ecobee Temperature based on relative humidity using PMV.",
-	category: "Convenience",
-	parent: "sandood:Ecobee Suite Manager",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-	singleInstance: false,
-    pausable: true
+	name: 			"ecobee Suite Thermal Comfort",
+	namespace: 		"sandood",
+	author: 		"Barry A. Burke and Richard Peng",
+	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets Ecobee Temperature based on relative humidity using PMV.",
+	category: 		"Convenience",
+	parent: 		"sandood:Ecobee Suite Manager",
+	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	singleInstance:	false,
+    pausable: 		true
 )
 
 preferences {
@@ -231,7 +232,7 @@ def mainPage() {
 }
 
 void installed() {
-	LOG("Installed with settings ${settings}", 4, null, 'trace')
+	LOG("Installed with settings: ${settings}", 4, null, 'trace')
     atomicState.humidity = null
 	initialize()
 }
@@ -263,6 +264,7 @@ def getThermostatModesList() {
 }
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+    getHubPlatform()
 	updateMyLabel()
 	
 	if (settings.tempDisable) {
