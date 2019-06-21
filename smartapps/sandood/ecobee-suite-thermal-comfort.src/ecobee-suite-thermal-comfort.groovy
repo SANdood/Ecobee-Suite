@@ -23,7 +23,7 @@
  *  1.7.08 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.09 - Optimized isST/isHE, formatting, added Global Pause
  */
-String getVersionNum() { return "1.7.09a" }
+String getVersionNum() { return "1.7.09b" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
@@ -344,7 +344,7 @@ void humidityUpdate( Integer humidity ) {
     	LOG("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
         return
     }
-	def ST = atomicState.ST
+	def ST = atomicState.isST
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
 	String statHold = ST ? settings.theThermostat.currentValue('thermostatHold') : settings.theThermostat.currentValue('thermostatHold', true)
