@@ -58,8 +58,9 @@
  *  1.7.18 - Added current/scheduledProgramOwner and ProgramType attributes, fixed some typos
  *	1.7.19 - Run update() if the (HE only?) hub reboots, Fixed reservations, Read Only attributes cleanup
  *	1.7.20 - Optimized isST/isHE, fixed getChildName(), added Global Pause
+ *	1.7.21 - Fix Global Pause on ST
  */
-String getVersionNum() 		{ return "1.7.20a" }
+String getVersionNum() 		{ return "1.7.21" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -105,16 +106,16 @@ def getHelperSmartApps() {
 }
  
 definition(
-	name:        "Ecobee Suite Manager",
-	namespace:     myNamespace,
-	author:      "Barry A. Burke (storageanarchy@gmail.com)",
-	description: "Connect your Ecobee thermostats and sensors to ${isST?'SmartThings':'Hubitat'}, along with a Suite of Helper ${isST?'Smart':''}Apps.",
-	category:    "My Apps",
-	iconUrl:     "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url:   "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	name:        	"Ecobee Suite Manager",
+	namespace:     	myNamespace,
+	author:      	"Barry A. Burke (storageanarchy@gmail.com)",
+	description: 	"Connect your Ecobee thermostats and sensors to ${isST?'SmartThings':'Hubitat'}, along with a Suite of Helper ${isST?'Smart':''}Apps.",
+	category:    	"My Apps",
+	iconUrl:     	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url:   	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
 	singleInstance: true,
-	oauth:       true,
-    pausable:    false
+	oauth:       	true,
+    pausable:    	false
 ) {
 	appSetting "clientId"
 }
@@ -147,6 +148,7 @@ def mainPage() {
     def readyToInstall
 	boolean ST = isST
 	boolean HE = !ST
+    atomicState.appsArePaused = settings.pauseHelpers?:false
     
     // Request the Ask Alexa Message Queue list as early as possible (isn't a problem if Ask Alexa isn't installed)
 	if (ST) {
@@ -590,26 +592,25 @@ def helperSmartAppsPage() {
 	LOG("helperSmartAppsPage() entered", 5)
 	boolean ST = isST
 	boolean HE = !ST
-	boolean appsArePaused = settings.pauseHelpers
 
 	LOG("The available Helper ${ST?'Smart':''}Apps are ${getHelperSmartApps()}", 5, null, "info")
 	
  	dynamicPage(name: "helperSmartAppsPage", title: (HE?'<b>':'') + "Ecobee Suite Helper ${ST?'Smart':''}Apps" + (HE?'</b>':''), install: true, uninstall: false, submitOnChange: true) { 
-//		section((HE?'<b>':'') + "Global Pause: ${HE?'<span style=color:red>':''}${appsArePaused?'ON':'OFF'}${HE?'</span>':''}" + (HE?'</b>':'')) {
-//			input(name: "pauseHelpers", type: "bool", title: "Pause all Helpers?", defaultValue: false, submitOnChange: true)
-//			if (settings.pauseHelpers) {
-//				childAppsPauser( true )
-//				appsArePaused = true
-//				//helperSmartAppsPage()
-//			} else {
-//				childAppsPauser( false )
-//				appsArePaused = false
-//				//helperSmartAppsPage()
-//			}
-//			paragraph "Global Pause will pause all Helpers that are not already paused; un-pausing will restore only the Helpers that weren't already paused. " +
-//					  "NOTE: the '(paused)' status for the installed Helpers displayed below may not change until you refresh this page, and new Helpers you add " +
-//					  "while Global Pause is ON will not be paused."
-//		}		
+		section((HE?'<b>':'') + "Global Pause: ${HE?'<span style=color:red>':''}${settings.pauseHelpers?'ON':'OFF'}${HE?'</span>':''}" + (HE?'</b>':'')) {
+        	paragraph "Global Pause will pause all Helpers that are not already paused; un-pausing will restore only the Helpers that weren't already paused. "
+			input(name: "pauseHelpers", type: "bool", title: "Global Pause all Helpers?", defaultValue: false, submitOnChange: true)
+			if (settings.pauseHelpers != atomicState.appsArePaused) {
+            	if (settings.pauseHelpers) {
+					childAppsPauser( true )
+					atomicState.appsArePaused = true
+				} else {
+					childAppsPauser( false )
+					atomicState.appsArePaused = false
+				}
+            }
+			if (HE)  paragraph "NOTE: the '(paused)' status for the installed Helpers displayed below may not change until you refresh this page."
+		}
+        // if (ST) section("Installed Helper SmartApps") {}
     	section((HE?'<b>':'') + "Avalable Helper ${ST?'Smart':''}Apps" + (HE?'</b>':'')) {
 			getHelperSmartApps().each { oneApp ->
 				LOG("Processing the app: ${oneApp}", 4, null, "trace")            
@@ -682,7 +683,7 @@ void removeChildDevices(devices, dummyOnly = false) {
     try {
     	devices?.each {
         	devName = it.displayName
-            LOG("Child: ${it.deviceNetworkId} - ${devName}",2,null,'trace')
+            LOG("Child: ${it.deviceNetworkId} - ${devName}",4,null,'trace')
     		if (!dummyOnly || it?.deviceNetworkId?.startsWith('dummy')) deleteChildDevice(it.deviceNetworkId)
     	}
     } catch (Exception e) {
@@ -1077,7 +1078,7 @@ String getThermostatTypeName(stat) {
 }
 
 void installed() {
-	LOG("Installed with settings: ${settings}",2,null,'warn')	
+	LOG("Installed with settings: ${settings}",2,null,'trace')	
 	initialize()
 }
 
@@ -1090,7 +1091,7 @@ void uninstalled() {
 }
 
 void updated() {	
-    LOG("Updated with settings: ${settings}",2,null,'warn')	
+    LOG("Updated with settings: ${settings}",2,null,'trace')	
     
     if (!atomicState?.atomicMigrate) {
     	LOG("updated() - Migrating state to atomicState...", 2, null, "warn")        
@@ -1116,41 +1117,7 @@ void updated() {
     initialize()
 }
 
-void updateMyLabel() {
-	if (isST) return								// ST doesn't support the colored label approach
-	
-	// Display Ecobee connection status as part of the label...
-	String myLabel = atomicState.appDisplayName
-	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
-		myLabel = app.label
-		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
-	} 
-	if (myLabel.contains('<span')) {
-		// strip off any connection status tag
-		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
-		atomicState.appDisplayName = myLabel
-	}
-	String newLabel
-	String key = atomicState.wifiAlert ? 'wifi' : atomicState.connected?.toString()
-	switch (key) {
-		case 'full':
-			newLabel = myLabel + "<span style=\"color:green\"> Online</span>"
-			break;
-		case 'warn':
-			newLabel = myLabel + "<span style=\"color:orange\"> Warning</span>"
-			break;
-		case 'lost':
-			newLabel = myLabel + "<span style=\"color:red\"> Offline</span>"
-			break;
-		case 'wifi':
-			newLabel = myLabel +  "<span style=\"color:orange\"> Check Wifi</span>"
-			break;
-		default:
-			newLabel = myLabel
-			break;
-	}
-	if (newLabel && (app.label != newLabel)) app.updateLabel(newLabel)
-}
+
 
 def rebooted(evt) {
 	LOG("Hub rebooted, re-initializing", 1, null, 'debug')
@@ -5898,7 +5865,41 @@ void runEvery3Minutes(handler) {
 @Field final List RuntimeValueNames =	['actualHumidity','actualTemperature','connected','desiredCool','desiredDehumidity','desiredFanMode','desiredHeat','desiredHumidity','disconnectDateTime']
 									  // ,'desiredHeatRange','desiredCoolRange','rawTemperature','showIconMode'
 
-
+void updateMyLabel() {
+	if (isST) return								// ST doesn't support the colored label approach
+	
+	// Display Ecobee connection status as part of the label...
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+		myLabel = app.label
+		if (!myLabel.contains('<span')) atomicState.appDisplayName = myLabel
+	} 
+	if (myLabel.contains('<span')) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf('<span'))
+		atomicState.appDisplayName = myLabel
+	}
+	String newLabel
+	String key = atomicState.wifiAlert ? 'wifi' : atomicState.connected?.toString()
+	switch (key) {
+		case 'full':
+			newLabel = myLabel + "<span style=\"color:green\"> Online</span>"
+			break;
+		case 'warn':
+			newLabel = myLabel + "<span style=\"color:orange\"> Warning</span>"
+			break;
+		case 'lost':
+			newLabel = myLabel + "<span style=\"color:red\"> Offline</span>"
+			break;
+		case 'wifi':
+			newLabel = myLabel +  "<span style=\"color:orange\"> Check Wifi</span>"
+			break;
+		default:
+			newLabel = myLabel
+			break;
+	}
+	if (newLabel && (app.label != newLabel)) app.updateLabel(newLabel)
+}
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
