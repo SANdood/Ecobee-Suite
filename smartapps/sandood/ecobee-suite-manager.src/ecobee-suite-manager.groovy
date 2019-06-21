@@ -59,7 +59,7 @@
  *	1.7.19 - Run update() if the (HE only?) hub reboots, Fixed reservations, Read Only attributes cleanup
  *	1.7.20 - Optimized isST/isHE, fixed getChildName(), added Global Pause
  */
-String getVersionNum() 		{ return "1.7.20" }
+String getVersionNum() 		{ return "1.7.20a" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -595,21 +595,21 @@ def helperSmartAppsPage() {
 	LOG("The available Helper ${ST?'Smart':''}Apps are ${getHelperSmartApps()}", 5, null, "info")
 	
  	dynamicPage(name: "helperSmartAppsPage", title: (HE?'<b>':'') + "Ecobee Suite Helper ${ST?'Smart':''}Apps" + (HE?'</b>':''), install: true, uninstall: false, submitOnChange: true) { 
-		section((HE?'<b>':'') + "Global Pause: ${HE?'<span style=color:red>':''}${appsArePaused?'ON':'OFF'}${HE?'</span>':''}" + (HE?'</b>':'')) {
-			input(name: "pauseHelpers", type: "bool", title: "Pause all Helpers?", defaultValue: false, submitOnChange: true)
-			if (settings.pauseHelpers) {
-				childAppsPauser( true )
-				appsArePaused = true
-				//helperSmartAppsPage()
-			} else {
-				childAppsPauser( false )
-				appsArePaused = false
-				//helperSmartAppsPage()
-			}
-			paragraph "Global Pause will pause all Helpers that are not already paused; un-pausing will restore only the Helpers that weren't already paused. " +
-					  "NOTE: the '(paused)' status for the installed Helpers displayed below may not change until you refresh this page, and new Helpers you add " +
-					  "while Global Pause is ON will not be paused."
-		}		
+//		section((HE?'<b>':'') + "Global Pause: ${HE?'<span style=color:red>':''}${appsArePaused?'ON':'OFF'}${HE?'</span>':''}" + (HE?'</b>':'')) {
+//			input(name: "pauseHelpers", type: "bool", title: "Pause all Helpers?", defaultValue: false, submitOnChange: true)
+//			if (settings.pauseHelpers) {
+//				childAppsPauser( true )
+//				appsArePaused = true
+//				//helperSmartAppsPage()
+//			} else {
+//				childAppsPauser( false )
+//				appsArePaused = false
+//				//helperSmartAppsPage()
+//			}
+//			paragraph "Global Pause will pause all Helpers that are not already paused; un-pausing will restore only the Helpers that weren't already paused. " +
+//					  "NOTE: the '(paused)' status for the installed Helpers displayed below may not change until you refresh this page, and new Helpers you add " +
+//					  "while Global Pause is ON will not be paused."
+//		}		
     	section((HE?'<b>':'') + "Avalable Helper ${ST?'Smart':''}Apps" + (HE?'</b>':'')) {
 			getHelperSmartApps().each { oneApp ->
 				LOG("Processing the app: ${oneApp}", 4, null, "trace")            
