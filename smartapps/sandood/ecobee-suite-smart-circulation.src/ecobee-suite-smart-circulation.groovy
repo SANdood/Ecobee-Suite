@@ -44,8 +44,9 @@
  *	1.7.08 - Fixed typos and formatting
  *	1.7.09 - Optimized isST/isHE, added Global Pause, misc optimizations
  *	1.7.10 - More optimizations, auto-update new versions, fixed another typo
+ *	1.7.11 - LOG when calcTemps() is Done!
  */
-String getVersionNum() { return "1.7.10" }
+String getVersionNum() { return "1.7.11" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -647,6 +648,7 @@ def calcTemps() {
 				}
 				atomicState.fanSinceLastAdjustment = false
 				atomicState.lastAdjustmentTime = now()
+                LOG("calcTemps() - Done!",3,null,'info')
 				return
 			} else {
 				LOG("calcTemps() - Looks like we're maxed out - cur: ${currentOnTime}, new: ${newOnTime}, max: ${settings.maxFanOnTime}",3,null,'trace')
@@ -676,6 +678,7 @@ def calcTemps() {
 					}
 					atomicState.fanSinceLastAdjustment = false
 					atomicState.lastAdjustmentTime = now()
+                    LOG("calcTemps() - Done!",3,null,'info')
 					return
 				} else {
 					LOG("calcTemps() - Looks like we are as close as we can be - curr: ${currentOnTime}, new: ${newOnTime}, min: ${settings.minFanOnTime}",3,null,'trace')
