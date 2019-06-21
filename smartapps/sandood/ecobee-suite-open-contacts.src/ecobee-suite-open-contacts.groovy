@@ -46,8 +46,9 @@
  *	1.7.15 - And fixed it some more
  *	1.7.16 - And still more
  *	1.7.17 - Optimized isST/isHE, more multi-stat/multi-contact work, Global Pause
+ *	1.7.18 - Fixed therm.currentValue typo
  */
-String getVersionNum() 		{ return "1.7.17" }
+String getVersionNum() 		{ return "1.7.18" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -448,7 +449,7 @@ void sensorOpened(evt=null) {
 				theStats.each { therm ->
 					def tid = getDeviceId(therm.deviceNetworkId)
 					if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-					def statMode = ST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
+					def statMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
 					tmpThermSavedState[tid].wasAlreadyOff = (statMode == 'off') 
 				}
 			}
@@ -507,7 +508,7 @@ void sensorClosed(evt=null) {
 				j++
 				def tid = getDeviceId(therm.deviceNetworkId)
 				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-				def statMode = ST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
+				def statMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
 				if (tmpThermSavedState[tid].containsKey('wasAlreadyOff') && (tmpThermSavedState[tid].wasAlreadyOff == true)) i++
 			}
 			if (i == j) {
