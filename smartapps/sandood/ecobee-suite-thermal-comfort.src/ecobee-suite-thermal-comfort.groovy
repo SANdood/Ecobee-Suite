@@ -23,8 +23,8 @@
  *  1.7.08 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.09 - Optimized isST/isHE, formatting, added Global Pause
  */
-String getVersionNum() { return "1.7.09" }
-String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getPlatform()}" }
+String getVersionNum() { return "1.7.09a" }
+String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
 
