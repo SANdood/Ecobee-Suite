@@ -43,8 +43,9 @@
  *	1.7.07 - Added option to require ALL or ANY of the Modes/Programs restrictions
  *	1.7.08 - Fixed typos and formatting
  *	1.7.09 - Optimized isST/isHE, added Global Pause, misc optimizations
+ *	1.7.10 - More optimizations, auto-update new versions, fixed another typo
  */
-String getVersionNum() { return "1.7.09" }
+String getVersionNum() { return "1.7.10" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -194,19 +195,15 @@ def installed() {
 	LOG("Installed with settings ${settings}", 4, null, 'trace')
     
     // initialize the min/max trackers...plan to use these to optimize the decrease cycles
-    atomicState.maxMax = 0.0
-    atomicState.minMin = 100.0
-    atomicState.maxDelta = 0.0
-    atomicState.minDelta = 100.0    
+    // Disabled 06/2/2019 BAB - too much overhead for something we aren't using.
+    //atomicState.maxMax = 0.0
+    //atomicState.minMin = 100.0
+    //atomicState.maxDelta = 0.0
+    //atomicState.minDelta = 100.0    
 	initialize()  
 }
-
 def uninstalled() {
 	clearReservations()
-}
-def clearReservations() {
-	cancelReservation( getDeviceId(theThermostat?.deviceNetworkId), 'circOff' )
-    cancelReservation( getDeviceId(theThermostat?.deviceNetworkId), 'vacaCircOff' )
 }
 def updated() {
 	LOG("Updated with settings ${settings}", 4, null, 'trace')
@@ -214,26 +211,10 @@ def updated() {
     unschedule()
     initialize()
 }
-def getProgramsList() {
-	def programs = ["Away","Home","Sleep"]
-	if (theThermostat) {
-    	def pl = theThermostat.currentValue('programsList')
-        if (pl) programs = new JsonSlurper().parseText(pl)
-    }
-    return programs.sort(false)
-}
-
-def getThermostatModesList() {
-	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
-    if (settings.theThermostat) {
-    	def tempModes = theThermostat.currentValue('supportedThermostatModes')
-        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
-    }
-    return statModes.sort(false)
-}
-
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 3, "", 'info')
+	String version = getVersionLabel()
+	LOG("${version} Initializing...", 3, "", 'info')
+    atomicState.versionLabel = getVersionLabel()
 	boolean ST = atomicState.isST
 	atomicState.amIRunning = null // Now using runIn to collapse multiple calls into single calcTemps()
     def mode = location.mode
@@ -406,6 +387,15 @@ def modeOrProgramHandler(evt=null) {
     	LOG("${app.name} temporarily disabled as per request.", 2, null, "warn")
     	return true
     }
+    // Just in case we need to re-initialize anything
+    def version = getVersionLabel()
+    if (atomicState.versionLabel != version) {
+    	LOG("Code updated: ${version}",1,null,'debug')
+        atomicState.versionLabel = version
+        runIn(2, updated, [overwrite: true])
+        return
+    }
+    
     boolean ST = atomicState.isST
 	
 	// Allow adjustments if Location Mode and/or Thermostat Program and/or Thermostat Mode is currently as configured
@@ -451,13 +441,21 @@ def modeOrProgramHandler(evt=null) {
 }
 
 def deltaHandler(evt=null) {
+	// Just in case we need to re-initialize anything
+    def version = getVersionLabel()
+    if (atomicState.versionLabel != version) {
+    	LOG("Code updated: ${version}",1,null,'debug')
+        atomicState.versionLabel = version
+        runIn(2, updated, [overwrite: true])
+        return
+    }
 	// Just exit if we are disabled...
 	if(settings.tempDisable == true) {
-    	LOG("temporarily disabled as per request.", 2, null, "warn")
+    	LOG("deltaHandler() - Temporarily disabled as per request.", 2, null, "warn")
     	return true
     }
 
-    // Make sure it is OK for us to e changing circulation times
+    // Make sure it is OK for us to be changing circulation times
 	if (!atomicState.isOK) return
     // boolean ST = atomicState.isST
 	
@@ -465,7 +463,7 @@ def deltaHandler(evt=null) {
 	String currentProgramName = theThermostat.currentValue('currentProgramName')
     boolean vacationHold = (currentProgramName && (currentProgramName == 'Vacation'))
 	if (vacationHold && !settings.vacationOverride) {
-    	LOG("${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
+    	LOG("deltaHandler() - ${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
         return
     }
     def tid = getDeviceId(theThermostat.deviceNetworkId)
@@ -493,18 +491,18 @@ def deltaHandler(evt=null) {
 
 	if (evt) {
     	if (evt.name == 'currentProgram') {
-        	LOG("Thermostat Program changed to my Program (${evt.value})",3,null,'info')
+        	LOG("deltaHandler() - thermostat Program changed to my Program (${evt.value})",3,null,'info')
         } else if (evt.name == 'mode') {
-        	LOG("Location Mode changed to my Mode (${evt.value})",3,null,'info')
+        	LOG("deltaHandler() - location Mode changed to my Mode (${evt.value})",3,null,'info')
         } else {
-        	LOG("Called with ${evt.device} ${evt.name} ${evt.value}",3,null,'trace')
+        	LOG("deltaHandler() - called with ${evt.device} ${evt.name} ${evt.value}",3,null,'trace')
         }
         if (settings.minFanOnTime == settings.maxFanOnTime) {
         	if (fanMinOnTime == settings.minFanOnTime.toInteger()) {
-    			LOG('Configured min==max==fanMinOnTime, nothing to do, skipping...',2,null,'info')
+    			LOG('deltaHandler() - configured min==max==fanMinOnTime, nothing to do, skipping...',2,null,'info')
         		return // nothing to do
             } else {
-                LOG("Configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
+                LOG("deltaHandler() - configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
                 if (vacationHold && settings.vacationOverride) {
                 	cancelReservation( tid, 'vacaCircOff')
         			theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
@@ -516,9 +514,10 @@ def deltaHandler(evt=null) {
             }
     	}
     } else {
-    	LOG("Called directly", 4, "", 'trace')
+    	LOG("deltaHandler() - called directly", 4, null, 'trace')
     }
-	runIn(2,'calcTemps',[overwrite: true])
+    LOG("deltaHandler() - scheduling calcTemps() in 5 seconds", 3, null, 'info')
+	runIn(5,'calcTemps',[overwrite: true])
 }
 
 def calcTemps() {
@@ -529,21 +528,19 @@ def calcTemps() {
     // def statState = ST ? theThermostat.currentValue("thermostatOperatingState") : theThermostat.currentValue("thermostatOperatingState", true)
 	def statState = theThermostat.currentValue("thermostatOperatingState")
     if (statState && (statState.contains('ea') || statState.contains('oo'))) {
-    	LOG("${theThermostat} is ${statState}, no adjustments made", 4, "", 'info' )
+    	LOG("calcTemps() - ${theThermostat} is ${statState}, no adjustments made", 4, "", 'info' )
         return
     }
     
   	// Check if it has been long enough since the last change to make another...
     if (atomicState.lastAdjustmentTime) {
-        def timeNow = now()
-        def minutesLeft = fanAdjustMinutes - ((timeNow - atomicState.lastAdjustmentTime) / 60000).toInteger()
+        def minutesLeft = fanAdjustMinutes - ((now() - atomicState.lastAdjustmentTime) / 60000).toInteger()
         if (minutesLeft >0) {
-            LOG("Not time to adjust yet - ${minutesLeft} minutes left",4,'','info')
+            LOG("calcTemps() - Not time to adjust yet - ${minutesLeft} minutes left",4,'','info')
             return
 		}
 	}
     // atomicState.lastCheckTime = now() 
-    
     // parse temps - ecobee sensors can return "unknown", others may return
     def temps = []
     def total = 0.0G
@@ -561,32 +558,31 @@ def calcTemps() {
     def avg = 0.0G
     if (i > 1) {
     	avg = roundIt((total / i), 2) 
-	    LOG("Current temperature readings: ${temps}, average is ${String.format("%.2f",avg)}°", 4, "", 'trace')
+	    LOG("calcTemps() - Current temperature readings: ${temps}, average is ${String.format("%.2f",avg)}°", 4, "", 'info')
     } else {
-    	LOG("Only recieved ${temps.size()} valid temperature readings, skipping...",3,"",'warn')
+    	LOG("calcTemps() - Only recieved ${temps.size()} valid temperature readings, skipping...",3,"",'warn')
         return 
     }
-    
     // Skip if the in/out delta doesn't match our settings
     if (outdoorSensor) {
     	def outTemp = null
         if (outdoorSensor.id == theThermostat.id) {
         	// outTemp = ST ? theThermostat.currentValue("weatherTemperature") : theThermostat.currentValue("weatherTemperature", true)
 			outTemp = roundIt(theThermostat.currentValue("weatherTemperature"), 2)
-            LOG("Using ${theThermostat.displayName}'s weatherTemperature (${outTemp}°)",4,null,"info")
+            LOG("calcTemps() - Using ${theThermostat.displayName}'s weatherTemperature (${outTemp}°)",4,null,"info")
         } else {
         	outTemp = roundIt(outdoorSensor.currentValue("temperature"), 2)
-            LOG("Using ${outdoorSensor.displayName}'s temperature (${outTemp}°)",4,null,"info")
+            LOG("calcTemps() - Using ${outdoorSensor.displayName}'s temperature (${outTemp}°)",4,null,"info")
         }
         def inoutDelta = null
         if (outTemp != null) {
         	inoutDelta = roundIt((outTemp - avg), 2)
         }
         if (inoutDelta == null) {
-        	LOG("Invalid outdoor temperature, skipping...",1,"","warn")
+        	LOG("calcTemps() - Invalid outdoor temperature, skipping...",1,"","warn")
         	return
         }
-        LOG("Outside temperature is currently ${outTemp}°, inside temperature average is ${avg}°",4,null,'trace')
+        LOG("calcTemps() - Outside temperature is currently ${outTemp}°, inside temperature average is ${avg}°",4,null,'info')
         // More than 10 degrees warmer", "5 to 10 degrees warmer", "0 to 4.9 degrees warmer", "-4.9 to -0.1 degrees cooler", -10 to -5 degrees cooler", "More than 10 degrees cooler"
     	def inRange = false
         if (adjRange.endsWith('mer')) {
@@ -607,22 +603,21 @@ def calcTemps() {
             }
         }
         if (!inRange) {
-        	LOG("In/Out temperature delta (${inoutDelta}°) not in range (${adjRange}), skipping...", 4, null, "trace")
+        	LOG("calcTemps() - In/Out temperature delta (${inoutDelta}°) not in range (${adjRange}), skipping...", 4, null, "info")
             return
         } else {
-        	LOG("In/Out temperature delta (${inoutDelta}°) is in range (${adjRange}), adjusting...", 4, null, "trace")
+        	LOG("calcTemps() - In/Out temperature delta (${inoutDelta}°) is in range (${adjRange}), adjusting...", 4, null, "info")
         }
     }
-    
     def min = 	roundIt(temps.min(), 2)
 	def max = 	roundIt(temps.max(), 2)
 	def delta = roundIt((max - min), 2)
     
-    atomicState.maxMax = 	atomicState.maxMax   > max   ? roundIt(atomicState.maxMax, 2)   : max 
-    atomicState.minMin = 	atomicState.minMin 	 < min   ? roundIt(atomicState.minMin, 2)   : min
-    atomicState.maxDelta = 	atomicState.maxDelta > delta ? roundIt(atomicState.maxDelta, 2) : delta 
-    atomicState.minDelta = 	atomicState.minDelta < delta ? roundIt(atomicState.minDelta, 2) : delta
-    
+    // Disabled 06/21/2019 BAB - too much overhead for something that is never used.
+    // atomicState.maxMax = 	atomicState.maxMax   > max   ? roundIt(atomicState.maxMax, 2)   : max 
+    // atomicState.minMin = 	atomicState.minMin 	 < min   ? roundIt(atomicState.minMin, 2)   : min
+    // atomicState.maxDelta = 	atomicState.maxDelta > delta ? roundIt(atomicState.maxDelta, 2) : delta 
+    // atomicState.minDelta = 	atomicState.minDelta < delta ? roundIt(atomicState.minDelta, 2) : delta
     Integer currentOnTime
     if (atomicState.quietOnTime) {
     	// pick up where we left off at the start of Quiet Time
@@ -635,14 +630,14 @@ def calcTemps() {
 	}
     Integer newOnTime = currentOnTime
 	String tid = getDeviceId(theThermostat.deviceNetworkId)
-	
+    
 	if (delta >= (settings.deltaTemp as BigDecimal)) {			// need to increase recirculation (fanMinOnTime)
-    	LOG("Can we increase fanMinOnTime, it is currently ${currentOnTime} (delta = ${delta})", 4, null, 'trace')
-		if (currentOnTime < (settings.maxFanOnTIme as Integer)) {
-			newOnTime = currentOnTime + (settings.fanOnTimeDelta as Integer)
-			if (newOnTime > (settings.maxFanOnTime as Integer)) newOnTime = settings.maxFanOnTime as Integer
+    	LOG("calcTemps() - Can we increase fanMinOnTime, it is currently ${currentOnTime}/${settings.maxFanOnTime} (delta = ${delta})", 4, null, 'info')
+		if (currentOnTime < settings.maxFanOnTime) {
+			newOnTime = currentOnTime + settings.fanOnTimeDelta
+			if (newOnTime > settings.maxFanOnTime) newOnTime = settings.maxFanOnTime
 			if (currentOnTime != newOnTime) {
-				LOG("Temperature delta is ${delta}°/${settings.deltaTemp}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
+				LOG("calcTemps() - Temperature delta is ${delta}°/${settings.deltaTemp}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
 				if (vacationHold) {
 					cancelReservation( tid, 'vacaCircOff')
 					theThermostat.setVacationFanMinOnTime(newOnTime)
@@ -654,28 +649,28 @@ def calcTemps() {
 				atomicState.lastAdjustmentTime = now()
 				return
 			} else {
-				LOG("Looks like we're maxed out - cur: ${currentOnTime}, new: ${newOnTime}, max: ${settings.maxFanOnTime}",3,null,'info')
+				LOG("calcTemps() - Looks like we're maxed out - cur: ${currentOnTime}, new: ${newOnTime}, max: ${settings.maxFanOnTime}",3,null,'trace')
 				return
 			}
 		} else {
-			LOG("Curr (${currentOnTime}) >= max (${settings.maxFanOnTime}), no adjustment made",3,null,'info')
+			LOG("calcTemps() - Curr (${currentOnTime}) >= max (${settings.maxFanOnTime}), no adjustment made",3,null,'trace')
 			return
 		}
 	} else {
-    	LOG("Can we decrease fanMinOnTime, it is currently ${currentOnTime} (delta = ${delta})", 4, null, 'trace')
-		if (currentOnTime > (settings.minFanOnTime as Integer)) {
+    	LOG("calcTemps() - Can we decrease fanMinOnTime, it is currently ${currentOnTime} (delta = ${delta})", 4, null, 'info')
+		if (currentOnTime > settings.minFanOnTime) {
 			def target = settings.deltaTemp as BigDecimal
 			if (delta <= target) {			// start adjusting back downwards once we get within 1F or .5556C of the target delta
-				newOnTime = currentOnTime - (settings.fanOnTimeDelta as Integer)
-				if (newOnTime < (settings.minFanOnTime as Integer)) newOnTime = settings.minFanOnTime as Integer
+				newOnTime = currentOnTime - settings.fanOnTimeDelta
+				if (newOnTime < settings.minFanOnTime) newOnTime = settings.minFanOnTime
 				if (currentOnTime != newOnTime) {
-					LOG("Temperature delta is ${delta}°/${target}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,null,'info')
+					LOG("calcTemps() - Temperature delta is ${delta}°/${target}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,null,'info')
 					if (vacationHold) {
-						LOG("Calling setVacationFanMinOnTime(${newOnTime})",3,null,'info')
+						LOG("calcTemps() - Calling setVacationFanMinOnTime(${newOnTime})",3,null,'info')
 						cancelReservation( tid, 'vacaCircOff')
 						theThermostat.setVacationFanMinOnTime(newOnTime)
 					} else {
-						LOG("Calling setFanMinOnTime(${newOnTime})",3,null,'info')
+						LOG("calcTemps() - Calling setFanMinOnTime(${newOnTime})",3,null,'info')
 						cancelReservation( tid, 'circOff')
 						theThermostat.setFanMinOnTime(newOnTime)
 					}
@@ -683,21 +678,23 @@ def calcTemps() {
 					atomicState.lastAdjustmentTime = now()
 					return
 				} else {
-					LOG("Looks like we are as close as we can be - curr: ${currentOnTime}, new: ${newOnTime}, min: ${settings.minFanOnTime}",3,null,'info')
+					LOG("calcTemps() - Looks like we are as close as we can be - curr: ${currentOnTime}, new: ${newOnTime}, min: ${settings.minFanOnTime}",3,null,'trace')
 					return
 				}
 			} else {
-				LOG("Looks like we just need to wait - delta: ${delta}, targetDelta: ${target}, curr: ${currentOnTime}",3,null,'info')
+				LOG("calcTemps() - Looks like we just need to wait - delta: ${delta}, targetDelta: ${target}, curr: ${currentOnTime}",3,null,'trace')
 				return
 			}
 		} else {
-			LOG("Curr (${currentOnTime}) <= min (${settings.minFanOnTime}), no adjustment made",3,null,'info')
+			LOG("calcTemps() - Curr (${currentOnTime}) <= min (${settings.minFanOnTime}), no adjustment made",3,null,'trace')
 			return
 		}
 	}
 }
-
+// HELPER FUNCTIONS
+// Temporary/Global Pause functions
 void updateMyLabel() {
+	// Add (paused) to the label when paused
 	boolean ST = atomicState.isST
 	String flag = ST ? ' (paused)' : '<span '
 	
@@ -748,6 +745,23 @@ def pauseOff() {
 	}
 	atomicState.globalPause = false
 }
+// Thermostat Programs & Modes
+def getProgramsList() {
+	def programs = ["Away","Home","Sleep"]
+	if (theThermostat) {
+    	def pl = theThermostat.currentValue('programsList')
+        if (pl) programs = new JsonSlurper().parseText(pl)
+    }
+    return programs.sort(false)
+}
+def getThermostatModesList() {
+	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
+    if (settings.theThermostat) {
+    	def tempModes = theThermostat.currentValue('supportedThermostatModes')
+        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
+    }
+    return statModes.sort(false)
+}
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
 void makeReservation(String tid, String type='modeOff' ) {
 	parent.makeReservation( tid, app.id as String, type )
@@ -777,12 +791,14 @@ List getReservations(String tid, String type='modeOff') {
 List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
-
-// Helper Functions
+def clearReservations() {
+	cancelReservation( getDeviceId(theThermostat?.deviceNetworkId), 'circOff' )
+    cancelReservation( getDeviceId(theThermostat?.deviceNetworkId), 'vacaCircOff' )
+}
+// Miscellaneous Helpers
 String getDeviceId(networkId) {
     return networkId.split(/\./).last()
 }
-
 def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
@@ -795,29 +811,14 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
     log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
-
-// **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
-// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//    Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use atomicState so that it is universal
-//
+// The following 3 calls are available EVERYWHERE, but they incure a high overhead, so best used only in the Metadata definitions
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//  - "if (state.isST)" is more efficient than "if (isSTHub)"
-//
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }
+// The following 3 calls are ONLY for use within the Application runtime  - they will throw an error at compile time if used within metadata
 String getHubPlatform() {
+	// This MUST be called at least once in the application runtime space
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -825,13 +826,10 @@ String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
+// THese work, but using the atomicState.is** directly is more efficient
 boolean getIsSTHub() { return atomicState.isST as boolean}					// if (isSTHub) ...
 boolean getIsHEHub() { return atomicState.isHE as boolean}					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
-//
-// **************************************************************************************************************************
