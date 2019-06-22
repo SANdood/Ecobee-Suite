@@ -48,8 +48,10 @@
  *	1.7.18 - Fixed therm.currentValue typo
  *	1.7.19 - Fixed optimization typo
  *	1.7.20 - Fixed accidental double-paste into GitHub
+ *	1.7.21 - Yet another type...
+ *	1.7.22 - Double check everything is still open before turning off
  */
-String getVersionNum() 		{ return "1.7.20" }
+String getVersionNum() 		{ return "1.7.22" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -497,6 +499,7 @@ void sensorClosed(evt=null) {
 	// Turn HVAC Off action has occured
     LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 3,null,'trace')
 	def HVACModeState = atomicState.HVACModeStat
+    boolean ST = atomicState.isST
     
     if (allClosed() == true) {
     	if (HVACModeState == 'on_pending') return
@@ -563,6 +566,13 @@ void turnOffHVAC(quietly = false) {
     LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'trace')
 	boolean ST = atomicState.isST
 	
+    if (allClosed() && (atomicState.HVACModeState == 'off_pending')) {
+    	// Nothing is open, maybe got closed while we were waiting, abort the "off"
+        LOG("turnOffHVAC() called, but everything is closed/off, ignoring request & leaving HVAC on",3,null,warn)
+        atomicState.HVACModeState = 'on'
+        return
+    }
+    
     atomicState.HVACModeState = 'off'
     def action = settings.whichAction ? settings.whichAction :'Notify Only'
     def tmpThermSavedState = atomicState.thermSavedState ?: [:]
@@ -675,7 +685,13 @@ void turnOnHVAC(quietly = false) {
 	// Restore previous state
     LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'trace')
 	boolean ST = atomicState.isST
-	
+    
+	if (!allClosed() && (atomicState.HVACModeState == 'on_pending')) {
+    	LOG("turnOnHVAC() called, but somethings is still open/on, ignoring request & leaving HVAC off",3,null,warn)
+    	atomicState.HVACModeState = 'off'
+    	return
+    }
+    
     atomicState.HVACModeState = 'on'
     def action = settings.whichAction ? settings.whichAction : 'Notify Only'
     boolean doHVAC = action.contains('HVAC')
