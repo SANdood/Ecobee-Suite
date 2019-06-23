@@ -2,7 +2,7 @@
  *  ecobee Suite Open Contacts
  *
  *  Copyright 2016 Sean Kendall Schneyer
- *	Copyright 2017-19 Barry A. Burke *
+ *	Copyright 2017-19 Barry A. Burke * 
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you/**
  *  ecobee Suite Open Contacts
