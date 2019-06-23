@@ -50,8 +50,9 @@
  *	1.7.20 - Fixed accidental double-paste into GitHub
  *	1.7.21 - Yet another type...
  *	1.7.22 - Double check everything is still open before turning off
+ *	1.7.23 - Cleaned up unschedule()
  */
-String getVersionNum() 		{ return "1.7.22" }
+String getVersionNum() 		{ return "1.7.23" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -353,8 +354,10 @@ def initialize() {
     }
     
 	if (!settings.quietTime) {
-    	if ((settings.hvacOff == null) || settings.hvacOff) subscribe(theThermostats, 'thermostatMode', statModeChange)
-        else if (settings.adjustSetpoints) {
+    	//if ((settings.hvacOff == null) || settings.hvacOff) 
+		subscribe(theThermostats, 'thermostatMode', statModeChange)
+        //else 
+		if (settings.adjustSetpoints) {
     		subscribe(theStats, 'heatingSetpoint', heatSPHandler)
             subscribe(theStats, 'coolingSetpoint', coolSPHandler)
         }
@@ -373,14 +376,16 @@ def statModeChange(evt) {
 	if (evt.value == 'off') {
     	if (atomicState.HVACModeState != 'off') atomicState.HVACModeState = 'off'
         tmpThermSavedState[tid].HVACModeState = 'off'
+		tmpThermSavedState[tid].wasAlreadyOff = null
     } else {
     	// somebody has overridden us..
         cancelReservation( tid, 'modeOff' )		// might as well give up our reservation
     	if (atomicState.HVACModeState != 'on') atomicState.HVACModeState = 'on'
         tmpThermSavedState[tid].HVACModeState = 'on'
+		tmpThermSavedState[tid].wasALreadyOff = null
     }
     // def tmpThermSavedState = atomicState.thermSavedState
-    // tmpThermSavedState[tid].mode = evt.value	// update the saved mode
+    tmpThermSavedState[tid].mode = evt.value	// update the saved mode
     atomicState.thermSavedState = tmpThermSavedState
 }
     
@@ -436,12 +441,12 @@ def coolSPHandler( evt ) {
 // "sensorOpened" called when state change should turn HVAC off - routine name preserved for backwards compatibility with prior implementations
 void sensorOpened(evt=null) {
 	LOG("sensorOpened() - ${evt?.device} ${evt?.name} ${evt?.value}", 3,null,'trace')
+    def HVACModeState = atomicState.HVACModeState
+    if (HVACModeState == 'off_pending') return		// already in process of turning off
+
 	boolean ST = atomicState.isST
 	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
 	
-    def HVACModeState = atomicState.HVACModeState
-    if (HVACModeState == 'off_pending') return		// already in process of turning off
-    
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
     if (HVACModeState == 'off') { // || (HVACModeState == 'off_pending')) {
     	// HVAC is already off
@@ -466,7 +471,7 @@ void sensorOpened(evt=null) {
 			theStats.each { therm ->
 				def tid = getDeviceId(therm.deviceNetworkId)
 				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-				tmpThermSavedState[tid].wasAlreadyOff = false
+				tmpThermSavedState[tid].wasAlreadyOff = null
 			}
 			atomicState.thermSavedState = tmpThermSavedState
 		}
@@ -474,7 +479,8 @@ void sensorOpened(evt=null) {
     Integer delay = (settings.onDelay ?: 0) as Integer
     if (HVACModeState == 'on_pending') {
 		// HVAC is already/still off
-        if (delay > 0) unschedule('turnOnHVAC')
+        // if (delay > 0) 
+		unschedule(turnOnHVAC)
 		atomicState.HVACModeState = 'off'
 		turnOffHVAC(true)			// Make sure they are really off
         return
@@ -489,10 +495,10 @@ void sensorOpened(evt=null) {
 	} else { turnOffHVAC(false) }  
 }
 
-void openedScheduledActions() {		// preserved only for backwards compatibility
-	LOG("openedScheduledActions entered", 5)
-    turnOffHVAC(false)
-}
+//void openedScheduledActions() {		// preserved only for backwards compatibility
+//	LOG("openedScheduledActions entered", 5)
+//    turnOffHVAC(false)
+//}
 
 // "sensorClosed" called when state change should turn HVAC On (routine name preserved for backwards compatibility with prior implementations)
 void sensorClosed(evt=null) {
@@ -533,7 +539,7 @@ void sensorClosed(evt=null) {
 		}
         Integer delay = (settings.offDelay?: 5) as Integer
 		if (HVACModeState == 'off_pending' ) {
-			if (delay != 0) unschedule('turnOffHVAC')
+			unschedule(turnOffHVAC)
 			atomicState.HVACModeState = 'on'
 			LOG("All sensors & switches are reset, off_pending was cancelled", 3, null, 'info')
             // still on
@@ -544,7 +550,8 @@ void sensorClosed(evt=null) {
         LOG("All Contact Sensors & Switches are reset, initiating actions.", 4,null,'trace')		
         
         atomicState.HVACModeState = 'on_pending'
-		unschedule(openedScheduledActions)
+		// unschedule(openedScheduledActions)
+		unschedule(turnOffHVAC)
 	    delay = (settings.onDelay?: 0) as Integer
     	//LOG("The on delay is ${delay}",5,null,'info')
 		if (delay > 0) { 
@@ -556,10 +563,10 @@ void sensorClosed(evt=null) {
     }
 }
 
-void closedScheduledActions() {
-	LOG("closedScheduledActions entered", 5)
-	turnOnHVAC(false)
-}
+// void closedScheduledActions() {
+//	LOG("closedScheduledActions entered", 5)
+//	turnOnHVAC(false)
+//}
 
 void turnOffHVAC(quietly = false) {
 	// Save current states
@@ -732,6 +739,7 @@ void turnOnHVAC(quietly = false) {
                             cancelReservation(tid, 'modeOff')
 							if (tmpThermSavedState[tid].containsKey('wasAlreadyOff') && (tmpThermSavedState[tid].wasAlreadyOff == false)) {
 								tmpThermSavedState[tid].HVACModeState = 'on'
+								tmpThermSavedState[tid].mode = newMode
                         		therm.setThermostatMode( newMode )                            
                 				tstatNames << therm.displayName		// only report the ones that aren't off already
                 				LOG("${therm.displayName} ${newMode.capitalize()} Mode restored (was ${oldMode.capitalize()})",2,null,'info')
@@ -857,7 +865,6 @@ def numOpen() {
 String getDeviceId(networkId) {
     return networkId.split(/\./).last()
 }
-
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
 void makeReservation(String tid, String type='modeOff' ) {
 	parent.makeReservation( tid, app.id as String, type )
@@ -887,7 +894,6 @@ List getReservations(String tid, String type='modeOff') {
 List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
-
 void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "info")
     String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
@@ -956,7 +962,6 @@ void sendMessage(notificationMessage) {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
 }
-
 void updateMyLabel() {
 	String flag = atomicState.isST ? ' (paused)' : '<span '
 	
