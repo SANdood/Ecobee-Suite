@@ -62,8 +62,9 @@
  *	1.7.15 - Fixed currrentThermostat typo (x2)
  *	1.7.16 - Fixed nagging command error & preferences{}
  *	1.7.17 - Optimized isST/isHE calls, fixed set*fanMinOnTime()
+ *	1.7.18 - Fixed sendHoldType conversion error
  */
-String getVersionNum() 		{ return "1.7.17" }
+String getVersionNum() 		{ return "1.7.18" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2884,15 +2885,15 @@ void setFanMinOnTime(Integer minutes=20) {
 		return
 	}
 	LOG("setFanMinOnTime(${minutes})", 4, null, "trace")
-	Integer howLong = 20	// default to 10 minutes, if no value supplied
-	if (minutes.toString().isNumber()) howLong = minutes as Integer
+	//Integer howLong = 20	// default to 10 minutes, if no value supplied
+	//if (minutes) howLong = minutes
 	def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
 	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested ${minutes}/${howLong}",3,null,'info')
-	if (fanMinOnTime && (fanMinOnTime.toInteger() == howLong)) return // allready there - all done!
+	if (fanMinOnTime && (fanMinOnTime.toInteger() == minutes)) return // allready there - all done!
 
 	def deviceId = getDeviceId()
 	if ((howLong >=0) && (howLong <=  55)) {
-		if (parent.setFanMinOnTime(this, deviceId, howLong)) {
+		if (parent.setFanMinOnTime(this, deviceId, minutes)) {
 			def updates = [fanMinOnTime:howLong]
 			def currentFanMode = ST ? device.currentValue('thermostatFanMode') : device.currentValue('thermostatFanMode', true)
 			if ((howLong == 0) && ((currentFanMode == 'circulate') || currentFanMode == 'auto')) {
@@ -3290,7 +3291,7 @@ def whatHoldType() {
 			}
 	}
 	if (sendHoldType) {
-		LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
+		LOG("Using holdType ${(sendHoldType?.toString()?.isNumber())?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
 		return sendHoldType
 	} else {
 		LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
