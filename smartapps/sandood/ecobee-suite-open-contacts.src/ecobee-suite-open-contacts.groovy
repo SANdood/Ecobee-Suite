@@ -2,7 +2,7 @@
  *  ecobee Suite Open Contacts
  *
  *  Copyright 2016 Sean Kendall Schneyer
- *	Copyright 2017-19 Barry A. Burke * 
+ *	Copyright 2017-19 Barry A. Burke *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you/**
  *  ecobee Suite Open Contacts
@@ -51,8 +51,9 @@
  *	1.7.21 - Yet another type...
  *	1.7.22 - Double check everything is still open before turning off
  *	1.7.23 - Cleaned up unschedule()
+ *	1.7.24 - Fixed ADT (another damned typo)
  */
-String getVersionNum() 		{ return "1.7.23" }
+String getVersionNum() 		{ return "1.7.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -376,13 +377,13 @@ def statModeChange(evt) {
 	if (evt.value == 'off') {
     	if (atomicState.HVACModeState != 'off') atomicState.HVACModeState = 'off'
         tmpThermSavedState[tid].HVACModeState = 'off'
-		tmpThermSavedState[tid].wasAlreadyOff = null
+		tmpThermSavedState[tid].wasAlreadyOff = false
     } else {
     	// somebody has overridden us..
         cancelReservation( tid, 'modeOff' )		// might as well give up our reservation
     	if (atomicState.HVACModeState != 'on') atomicState.HVACModeState = 'on'
         tmpThermSavedState[tid].HVACModeState = 'on'
-		tmpThermSavedState[tid].wasALreadyOff = null
+		tmpThermSavedState[tid].wasAlreadyOff = false
     }
     // def tmpThermSavedState = atomicState.thermSavedState
     tmpThermSavedState[tid].mode = evt.value	// update the saved mode
@@ -471,7 +472,7 @@ void sensorOpened(evt=null) {
 			theStats.each { therm ->
 				def tid = getDeviceId(therm.deviceNetworkId)
 				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-				tmpThermSavedState[tid].wasAlreadyOff = null
+				tmpThermSavedState[tid].wasAlreadyOff = false
 			}
 			atomicState.thermSavedState = tmpThermSavedState
 		}
