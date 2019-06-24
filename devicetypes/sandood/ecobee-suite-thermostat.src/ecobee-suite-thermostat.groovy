@@ -63,8 +63,9 @@
  *	1.7.16 - Fixed nagging command error & preferences{}
  *	1.7.17 - Optimized isST/isHE calls, fixed set*fanMinOnTime()
  *	1.7.18 - Fixed sendHoldType conversion error
+ *	1.7.19 - Fixed incorrect importUrl
  */
-String getVersionNum() 		{ return "1.7.18" }
+String getVersionNum() 		{ return "1.7.19" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -76,7 +77,7 @@ metadata {
         author:      "Barry A. Burke (storageanarchy@gmail.com)",		
         mnmn:        "SmartThings", 
         vid:         "SmartThings-smartthings-Z-Wave_Thermostat",
-		importUrl:   "https://github.com/SANdood/Ecobee-Suite/raw/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
+		importUrl:   "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
 	)
     {		
 		capability "Thermostat"
