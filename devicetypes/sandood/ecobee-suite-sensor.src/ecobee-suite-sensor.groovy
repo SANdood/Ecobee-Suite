@@ -39,8 +39,9 @@
  *  1.7.03 - Register new health check; auto reload new versions, avoid Health Check for test device install
  *  1.7.04 - Added importUrl for HE IDE
  *	1.7.05 - Optimized isST
+ *	1.7.06 - Fixed importUrl for HE
  */
-String getVersionNum() 		{ return "1.7.04" }
+String getVersionNum() 		{ return "1.7.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 import groovy.json.*
@@ -52,7 +53,7 @@ metadata {
         author:       "Barry A. Burke (storageanarchy@gmail.com)",
         mnmn:         "SmartThings",          // for the new Samsung (Connect) app
         vid:          "generic-motion",        // for the new Samsung (Connect) app
-        importUrl:    "https://github.com/SANdood/Ecobee-Suite/raw/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy"
+        importUrl:    "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy"
     ) 
     {		
 		capability "Temperature Measurement"
