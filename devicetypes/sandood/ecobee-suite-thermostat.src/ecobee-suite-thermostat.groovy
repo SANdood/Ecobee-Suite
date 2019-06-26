@@ -64,8 +64,9 @@
  *	1.7.17 - Optimized isST/isHE calls, fixed set*fanMinOnTime()
  *	1.7.18 - Fixed sendHoldType conversion error
  *	1.7.19 - Fixed incorrect importUrl
+ *	1.7.20 - Added economizer, ventilator, compHotWater, & auxHotWater for equipmentOperatingState/thermostatOperatingStateDisplay
  */
-String getVersionNum() 		{ return "1.7.19" }
+String getVersionNum() 		{ return "1.7.20" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -613,6 +614,13 @@ metadata {
 			state "heating (smart recovery)",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat.png"
 			state "cooling (smart recovery)",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool.png"
 			state 'cooling (overcool)',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool.png"
+			state 'idle (hot water)',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png"
+			state 'heating (hot water)',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png"
+			state 'fan only (hot water)',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png" 
+			state 'idle (economizer)',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_eco.png"
+			state 'idle (ventilator)',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_vent_blue.png"
+			state 'fan only (economizer)',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_eco.png"
+			state 'fan only (ventilator)',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_vent_blue.png"
 			state "offline",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/black_dot_only.png"
 			state "off",						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_purple.png"
 			state "default",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", label: '${currentValue}', defaultState: true
@@ -646,6 +654,10 @@ metadata {
 			state "cooling deh",				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool-humid.png"
 			state "humidifier",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_humidifier_only.png"
 			state "dehumidifier",				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_dehumidifier_only.png"
+			state "economizer",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_eco.png"
+			state "ventilator",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_vent_blue.png"
+			state "compHotWater",				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png"
+			state "auxHotWater",				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png"
 			state "offline",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/black_dot_only.png"
 			state "off",						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_purple.png"
 			state "default",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", action:"noOp", label: '${currentValue}', defaultState: true
@@ -1073,9 +1085,23 @@ def generateEvent(Map results) {
 					String realValue
 					if (sendValue.contains('(')) {
 						displayDesc = true				// only show this update ThermOpStateDisplay if we are in Smart Recovery
-						if (sendValue.contains('mart')) descText = 'in Smart Recovery'	// equipmentOperatingState will show what is actually running
-						else if (sendValue.contains('ver')) descText = 'Overcooling to dehumidify'
-						realValue = sendValue.take(7)	// this gets us to back to just heating/cooling
+						if (sendValue.contains('mart')) {
+							descText = 'in Smart Recovery'	// equipmentOperatingState will show what is actually running
+							realValue = sendValue.take(7)
+						} else if (sendValue.contains('ver')) {
+							descText = 'Overcooling to Dehumidify'
+							realValue = 'cooling'	// this gets us to back to just heating/cooling
+						} else if (sendValue.startsWith('fan')) {
+							if 		(sendValue.contains('deh')) descText = 'Dehumidifying'
+							else if (sendValue.contains('hum')) descText = 'Humidifying'
+							else if (sendValue.contains('eco')) descText = 'Economizing'
+							else if (sendValue.contains('ven')) descText = 'Ventilating'
+							else if (sendValue.contains('hot w')) descText = 'Heating Water'
+							realValue = 'fan only'
+						} else if (sendValue.contains('hot w')) {
+							descText = 'Heating Water'
+							realValue = sendValue.contains('heating') ? 'heating' : 'idle'
+						}
 					} else {
 						displayDesc = false				// hide this message - is redundant with EquipOpState
 						descText = sendValue.capitalize()
