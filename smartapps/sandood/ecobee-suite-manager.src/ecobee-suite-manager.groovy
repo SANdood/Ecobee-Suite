@@ -59,8 +59,9 @@
  *	1.7.19 - Run update() if the (HE only?) hub reboots, Fixed reservations, Read Only attributes cleanup
  *	1.7.20 - Optimized isST/isHE, fixed getChildName(), added Global Pause
  *	1.7.21 - Fix Global Pause on ST
+ *	1.7.22 - Fixed thermOpStat 'idle' transition, added 'ventilator', 'economizer', 'compHotWater' & 'auxHotWater' equipOpStats
  */
-String getVersionNum() 		{ return "1.7.21" }
+String getVersionNum() 		{ return "1.7.22" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -3199,7 +3200,7 @@ void updateThermostatData() {
             // NOTE: The thermostat always present Fahrenheit temps with 1 digit of decimal precision. We want to maintain that precision for inside temperature so that apps like vents and Smart Circulation
             // 		 can operate efficiently. So, while the user can specify a display precision of 0, 1 or 2 decimal digits, we ALWAYS keep and send max decimal digits and let the device handler adjust for display
             //		 For Fahrenheit, we keep the 1 decimal digit the API provides, for Celsius we allow for 2 decimal digits as a result of the mathematical calculation       
-			tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature.toBigDecimal() / 10.0), 'F', apiPrecision)
+			tempTemperature = myConvertTemperatureIfNeeded( (runtime?.actualTemperature?.toBigDecimal() / 10.0), 'F', apiPrecision)
 			tempHeatingSetpoint = myConvertTemperatureIfNeeded( (runtime?.desiredHeat / 10.0), 'F', apiPrecision)
         	tempCoolingSetpoint = myConvertTemperatureIfNeeded( (runtime?.desiredCool / 10.0), 'F', apiPrecision)
 			if (timers) log.debug "TIMER: Finished updating Sensors for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
@@ -3500,8 +3501,8 @@ void updateThermostatData() {
  
 		def heatStages = statSettings.heatStages
 		def coolStages = statSettings.coolStages 
-		String equipOpStat = 'idle'	// assume we're idle - this gets fixed below if different
-        String thermOpStat = 'idle'
+		String equipOpStat // = 'idle'	// assume we're idle - this gets fixed below if different
+        String thermOpStat // = 'idle'
         Boolean isHeating = false
         Boolean isCooling = false
         Boolean smartRecovery = false
@@ -3549,9 +3550,11 @@ void updateThermostatData() {
             }
         }
         if (equipUpdated || forcePoll) {
+			equipOpStat = 'idle'
+			thermOpStat = 'idle'
 			if (equipStatus == 'fan') {
 				equipOpStat = 'fan only'
-            	thermOpStat = equipOpStat
+            	thermOpStat = 'fan only'
             } else if (equipStatus == 'off') {
             	thermOpStat = 'idle'
                 equipOpStat = 'off'
@@ -3561,6 +3564,8 @@ void updateThermostatData() {
             	//if (smartRecovery) thermOpStat = 'heating (smart recovery)'
 				// Figure out which stage we are running now
                 if 		(equipStatus.contains('t1')) 	{ equipOpStat = ((auxHeatMode) ? 'emergency' : ((heatStages > 1) ? 'heat 1' : 'heating')) }
+				else if (equipStatus.contains('mpHo'))	{ equipOpStat = 'compHotWater'; thermOpStat = 'heating (hot water)'; }
+				else if (equipStatus.contains('uxHo'))	{ equipOpStat = 'auxHotWater'; thermOpStat = 'heating (hot water)'; }
 				else if (equipStatus.contains('t2')) 	{ equipOpStat = 'heat 2' }
 				else if (equipStatus.contains('t3')) 	{ equipOpStat = 'heat 3' }
 				else if (equipStatus.contains('p2')) 	{ equipOpStat = 'heat pump 2' }
@@ -3568,6 +3573,7 @@ void updateThermostatData() {
 				else if (equipStatus.contains('mp')) 	{ equipOpStat = 'heat pump' }
                 // We now have icons that depict when we are humidifying or dehumidifying...
 				if (equipStatus.contains('hu')) 		{ equipOpStat += ' hum' }	// humidifying if heat
+				// need to check if dehumidifying with heat (recent new option)
                 
 			} else if (isCooling) {				// cooling
         		thermOpStat = smartRecovery ? 'cooling (smart recovery)' : (overCool ? 'cooling (overcool)' : 'cooling')
@@ -3578,13 +3584,30 @@ void updateThermostatData() {
 				else if (equipStatus.contains('l2')) { equipOpStat = 'cool 2' }
                 
 				if (equipStatus.contains('de') || overCool || dehumidifying) { equipOpStat += ' deh' }	// dehumidifying if cool
+				// need to check if vent or eco are on with cooling
                 
 			} else if (equipStatus.contains('de')) { // These can also run independent of heat/cool
         		equipOpStat = 'dehumidifier' 
-              
+				thermOpStat = equipStats.contains('fan') ? 'fan only (dehumidifier)' : 'idle (dehumidifier)'
+              	// SHOULD thermOpStat BE FAN ONLY????
         	} else if (equipStatus.contains('hu')) { 
         		equipOpStat = 'humidifier' 
-        	} // also: economizer, ventilator, compHotWater, auxHotWater
+				thermOpStat = equipStatus.contains('fan') ? 'fan only (humidifier)' : 'idle (humidifier)'
+			} else if (equipStatus.contains('econ')) {
+				equipOpStat = 'economizer'
+				thermOpStat = equipStatus.contains('fan') ? 'fan only (economizer)' : 'idle (economizer)'
+			} else if (equipStatus.contains('vent')) {
+				equipOpStat = 'ventilator'
+				thermOpStat = equipStatus.contains('fan') ? 'fan only (ventilator)' : 'idle (ventilator)'
+			} else if (equipStatus.contains('Hot')) {
+				if (equipStatus.contains('comp')) {
+					equipOpStat = 'compHotWater'
+					thermOpStat = equipStatus.contains('fan') ? 'fan only (hot water)' : 'idle (hot water)'
+				} else if (equipStatus.contains('aux')) {
+					equipOpStat = 'auxHotWater'
+					thermOpStat = equipStatus.contains('fan') ? 'fan only (hot water)' : 'idle (hot water)'
+				}
+			}
 		}
         
 		// Update the API link state and the lastPoll data. If we aren't running at a high debugLevel >= 4, then supply simple
@@ -3618,11 +3641,11 @@ void updateThermostatData() {
         	atomicState.wasConnected = isConnected
             boolean eqpChanged = false
             if ((changeEquip == [:]) || !changeEquip.containsKey(tid) || (changeEquip[tid] == null)) changeEquip[tid] = ['null','null','null','null']
-        	if (forcePoll || (changeEquip[tid][3] != statMode) || (changeEquip[tid][0] != equipStatus) || (changeEquip[tid][1] != thermOpStat) || (changeEquip[tid][2] != equipOpStat)) {
-            	data += [equipmentStatus: equipStatus]; 			changeEquip[tid][0] = equipStatus; eqpChanged = true; 
-        		data += [thermostatOperatingState: thermOpStat]; 	changeEquip[tid][1] = thermOpStat; 
-        		data += [equipmentOperatingState: equipOpStat];		changeEquip[tid][2] = equipOpStat; 
-                changeEquip[tid][3] = statMode
+			if (equipStatus && (changeEquip[tid][0] != equipStatus)) { data += [equipmentStatus: equipStatus]; 			changeEquip[tid][0] = equipStatus; eqpChanged = true; }
+			if (thermOpStat && (changeEquip[tid][1] != thermOpStat)) { data += [thermostatOperatingState: thermOpStat];	changeEquip[tid][1] = thermOpStat; eqpChanged = true; }
+			if (equipOpStat && (changeEquip[tid][2] != equipOpStat)) { data += [equipmentOperatingState: equipOpStat];	changeEquip[tid][2] = equipOpStat; eqpChanged = true; }
+            // changeEquip[tid][3] = statMode
+			if (eqpChanged) {
             	atomicState.changeEquip = changeEquip
             }
         }       
