@@ -65,8 +65,9 @@
  *	1.7.18 - Fixed sendHoldType conversion error
  *	1.7.19 - Fixed incorrect importUrl
  *	1.7.20 - Added economizer, ventilator, compHotWater, & auxHotWater for equipmentOperatingState/thermostatOperatingStateDisplay
+ *	1.7.21 - Fixed set*fanMinOnTime() again
  */
-String getVersionNum() 		{ return "1.7.20" }
+String getVersionNum() 		{ return "1.7.21" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2912,20 +2913,18 @@ void setFanMinOnTime(Integer minutes=20) {
 		return
 	}
 	LOG("setFanMinOnTime(${minutes})", 4, null, "trace")
-	//Integer howLong = 20	// default to 10 minutes, if no value supplied
-	//if (minutes) howLong = minutes
 	def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
-	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested ${minutes}/${howLong}",3,null,'info')
-	if (fanMinOnTime && (fanMinOnTime.toInteger() == minutes)) return // allready there - all done!
+	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested: ${minutes}",3,null,'info')
+	if (fanMinOnTime?.toInteger() == minutes) return // allready there - all done!
 
 	def deviceId = getDeviceId()
-	if ((howLong >=0) && (howLong <=  55)) {
+	if ((minutes >=0) && (minutes <=  55)) {
 		if (parent.setFanMinOnTime(this, deviceId, minutes)) {
-			def updates = [fanMinOnTime:howLong]
+			def updates = [fanMinOnTime: minutes]
 			def currentFanMode = ST ? device.currentValue('thermostatFanMode') : device.currentValue('thermostatFanMode', true)
-			if ((howLong == 0) && ((currentFanMode == 'circulate') || currentFanMode == 'auto')) {
+			if ((minutes == 0) && ((currentFanMode == 'circulate') || currentFanMode == 'auto')) {
 				updates = updates + [thermostatFanMode: 'auto', thermostatFanModeDisplay: 'auto']
-			} else if ((howLong > 0) && (currentFanMode != 'circulate')) {
+			} else if ((minutes > 0) && (currentFanMode != 'circulate')) {
 				updates = updates + [thermostatFanMode: 'circulate', thermostatFanModeDisplay: 'circulate']
 			}
 			generateEvent(updates)
@@ -3082,16 +3081,13 @@ void setVacationFanMinOnTime(Integer minutes=0) {
 		return
 	}
 	LOG("setVacationFanMinOnTime(${minutes})", 5, null, "trace")
-	Integer howLong = 0	// default to 0 minutes for vacations, if no value supplied
-	// if (minutes.isNumber()) howLong = minutes.toInteger()
-	howLong = minutes as Integer
 	def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
-	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested ${minutes}/${howLong}",3,null,'info')
-	if (fanMinOnTime && (fanMinOnTime.toInteger() == howLong)) return // allready there - all done!
+	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested: ${minutes}",3,null,'info')
+	if (fanMinOnTime?.toInteger() == minutes) return // allready there - all done!
 	def deviceId = getDeviceId()
-	if ((howLong >=0) && (howLong <=  55)) {
-		if (parent.setVacationFanMinOnTime(this, deviceId, howLong)) {
-			def updates = [fanMinOnTime: howLong]
+	if ((minutes >=0) && (minutes <=  55)) {
+		if (parent.setVacationFanMinOnTime(this, deviceId, minutes)) {
+			def updates = [fanMinOnTime: minutes]
 			generateEvent(updates)
 		}
 	} else {
