@@ -43,7 +43,7 @@
  *	1.7.10 - Optimized isHE/isST, added Global Pause
  *	1.7.11 - Extended external temperature range, add Program change support
  */
-String getVersionNum() { return "1.7.11" }
+String getVersionNum() { return "1.7.11a" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
