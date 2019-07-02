@@ -33,22 +33,23 @@
  *	1.7.10 - Fixing private method issue caused by grails, "Vacation" from currentProgramName
  *  1.7.11 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.12 - Optimized isST/isHE, formatting, Global Pause
+ *	1.7.13 - Fixed holdType == ES Manager setting, & getEcobeePrograms()
  */
-String getVersionNum() { return "1.7.12" }
+String getVersionNum() { return "1.7.13" }
 String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
-	name: "ecobee Suite Routines",
-	namespace: "sandood",
-	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nChange Ecobee Programs based on ${isST?'SmartThings Routine execution or':'Hubitat'} Mode changes, Switch(es) state change, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
-	category: "Convenience",
-	parent: "sandood:Ecobee Suite Manager",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-	singleInstance: false,
-    pausable: true
+	name: 			"ecobee Suite Routines",
+	namespace: 		"sandood",
+	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nChange Ecobee Programs based on ${isST?'SmartThings Routine execution or':'Hubitat'} Mode changes, Switch(es) state change, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
+	category: 		"Convenience",
+	parent: 		"sandood:Ecobee Suite Manager",
+	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	singleInstance:	false,
+    pausable: 		true
 )
 
 preferences {
@@ -181,7 +182,7 @@ def mainPage() {
                         }
         	       		if (settings.whichProgram != "Resume Program") {
                         	input(name: "holdType", title: "Hold Type (optional)", type: "enum", required: false, 
-								  multiple: false, submitOnChange: true, defaultValue: "Parent Ecobee Manager Setting",
+								  multiple: false, submitOnChange: true, defaultValue: "Ecobee Manager Setting",
 								  options:["Until I Change", "Until Next Program", "2 Hours", "4 Hours", "Specified Hours", "Thermostat Setting", 
                                							"Ecobee Manager Setting"]) //, "Parent Ecobee (Connect) Setting"])
                         	if (settings.holdType=="Specified Hours") {
@@ -755,8 +756,9 @@ def getEcobeePrograms() {
 			}
         }
 	} 
-    LOG("getEcobeePrograms: returning ${programs}", 4)
-    return programs ? programs.sort(false) : ['Away', 'Home', 'Sleep']
+	if (!programs) programs =  ['Away', 'Home', 'Sleep']
+    LOG("getEcobeePrograms: returning ${programs}", 4, null, 'info')
+    return programs.sort(false)
 }
 
 // return all the modes that ALL thermostats support
