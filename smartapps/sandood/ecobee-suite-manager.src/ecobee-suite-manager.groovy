@@ -60,8 +60,9 @@
  *	1.7.20 - Optimized isST/isHE, fixed getChildName(), added Global Pause
  *	1.7.21 - Fix Global Pause on ST
  *	1.7.22 - Fixed thermOpStat 'idle' transition, added 'ventilator', 'economizer', 'compHotWater' & 'auxHotWater' equipOpStats
+ *	1.7.23 - More code optimizations
  */
-String getVersionNum() 		{ return "1.7.22" }
+String getVersionNum() 		{ return "1.7.23" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -2252,6 +2253,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		def tempLocation = [:]
 		def tempStatTime = atomicState.statTime
 		def tempStatInfo = [:]
+		def tempAlerts = [:]
 		boolean programUpdated = false
 		boolean settingsUpdated = false
 		boolean eventsUpdated = false
@@ -2264,7 +2266,6 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		boolean rtReallyUpdated = false
 		
 		// def tempOemCfg = [:]
-		def tempAlerts = [:]
 		if (timers) log.debug "TIMER: pollEcobeeAPICallback() initialized @ (${now() - pollEcobeeAPIStart}ms)"
 
 		// collect the returned data into temporary individual caches (because we can't update individual Map items in an atomicState Map)	
@@ -2343,8 +2344,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		if (timers) log.debug "TIMER: Loading complete @ (${now() - pollEcobeeAPIStart}ms)"
 		def tempAtomic = [:]
 		if (result && (tempEquipStat != [:])) {
-			if (atomicState.equipmentStatus) {
-				tempAtomic = atomicState.equipmentStatus
+			tempAtomic = atomicState.equipmentStatus
+			if (tempAtomic) {
 				tidList.each { eqpTid ->
 					if (tempAtomic[eqpTid] != tempEquipStat[eqpTid]) {
 						equipUpdated = true
@@ -2365,8 +2366,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		// OK, Only copy the thermostat stuff (program, events, settings or location) that has changed
 		if (result && (thermostatUpdated || forcePoll)) {
 			if (tempProgram != [:]) {
-				if (atomicState.program) {
-					tempAtomic = atomicState.program
+				tempAtomic = atomicState.program
+				if (tempAtomic) {
 					tidList.each { prgTid ->
 						if (!tempAtomic[prgTid] || (tempAtomic[prgTid] != tempProgram[prgTid])) {
 							programUpdated = true
@@ -2382,8 +2383,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				}
 			}
 			if (tempStatInfo != [:]) {
-				if (atomicState.statInfo) {
-					tempAtomic = atomicState.statInfo
+				tempAtomic = atomicState.statInfo
+				if (tempAtomic) {
 					tidList.each { sfoTid ->
 						if (!tempAtomic[sfoTid] || (tempAtomic[sfoTid] != tempStatInfo[sfoTid])) {
 							statInfoUpdated = true
@@ -2399,8 +2400,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				}
 			}
 			if (tempEvents != [:]) {
-				if (atomicState.events) {
-					tempAtomic = atomicState.events
+				tempAtomic = atomicState.events
+				if (tempAtomic) {
 					tidList.each { evtTid ->
 						if (!tempAtomic[evtTid] || (tempAtomic[evtTid] != tempEvents[evtTid])) {
 							eventsUpdated = true
@@ -2416,8 +2417,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				}
 			}
 			if (tempLocation != [:]) {
-				if (atomicState.statLocation) {
-					tempAtomic = atomicState.statLocation
+				tempAtomic = atomicState.statLocation
+				if (tempAtomic) {
 					tidList.each { locTid ->
 						if (!tempAtomic[locTid] || (tempAtomic[locTid] != tempLocation[locTid])) {
 							locationUpdated = true
@@ -2438,8 +2439,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 			// }
 			boolean needExtRT = atomicState.needExtendedRuntime
 			if (tempSettings != [:]) {
-				if (atomicState.settings) {
-					tempAtomic = atomicState.settings
+				tempAtomic = atomicState.settings
+				if (tempAtomic) {
 					tidList.each { setTid ->
 						if (!tempAtomic[setTid] || (tempAtomic[setTid] != tempSettings[setTid])) {
 							settingsUpdated = true
@@ -2487,8 +2488,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 			if (tempRuntime != [:]) {
 				atomicState.holdMe = tempRuntime			// I don't know why, but the two won't 
 				tempRuntime = atomicState.holdMe			// compare properly if I don't do thi first
-				if (atomicState.runtime) {
-					tempAtomic = atomicState.runtime
+				tempAtomic = atomicState.runtime
+				if (tempAtomic) {
 					tidList.each { runTid ->
 						if (!tempAtomic[runTid] || (tempAtomic[runTid] != tempRuntime[runTid])) {
 							rtReallyUpdated = true
@@ -2504,8 +2505,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				}
 			}
 			if (tempExtendedRuntime != [:]) {
-				if (atomicState.extendedRuntime) {
-					tempAtomic = atomicState.extendedRuntime
+				tempAtomic = atomicState.extendedRuntime
+				if (tempAtomic) {
 					tidList.each { ertTid ->
 						if (!tempAtomic[ertTid] || (tempAtomic[ertTid] != tempExtendedRuntime[ertTid])) {
 							extendRTUpdated = true
@@ -2521,8 +2522,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				}
 			}
 			if (tempSensors != [:]) {
-				if (atomicState.remoteSensors) {
-					tempAtomic = atomicState.remoteSensors
+				tempAtomic = atomicState.remoteSensors
+				if (tempAtomic) {
 					tidList.each { snrTid ->
 						if (!tempAtomic[snrTid] || (tempAtomic[snrTid] != tempSensors[snrTid])) {
 							sensorsUpdated = true
@@ -2537,13 +2538,12 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 					atomicState.remoteSensors = tempSensors
 				}
 			}
-
 			if (timers) log.debug "TIMER: runtimeUpdated complete @ (${now() - pollEcobeeAPIStart}ms)"
 		}
 		if (result && (getWeather || forcePoll)) {
 			if (tempWeather != [:]) {
-				if (atomicState.weather) {
-					tempAtomic = atomicState.weather
+				tempAtomic = atomicState.weather
+				if (tempAtomic) {
 					tidList.each { wetTid ->
 						if (!tempAtomic[wetTid] || (tempAtomic[wetTid] != tempWeather[wetTid])) {
 							weatherUpdated = true
@@ -2552,20 +2552,33 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 					}
 					if (weatherUpdated) {
 						atomicState.weather = tempAtomic
-					} else {
-						// log.debug "Location didn't change!!!"
-					}
+					} 
 				} else {
 					weatherUpdated = true
 					atomicState.weather = tempWeather
 				}
 			}
+			if (timers) log.debug "TIMER: Weather complete @ (${now() - pollEcobeeAPIStart}ms)"
 		}
         // ** Alerts Status **
 		if (result && (alertsUpdated || forcePoll)) {
 			if (tempAlerts != [:]) {
-				if (atomicState.alerts) tempAlerts = atomicState.alerts + tempAlerts
-				atomicState.alerts = tempAlerts
+				alertsUpdated = false
+				tempAtomic = atomicState.alerts
+				if (tempAtomic) {
+					tidList.each { lrtTid ->
+						if (!tempAtomic[lrtTid] || (tempAtomic[lrtTid] != tempAlerts[lrtTid])) {
+							alertsUpdated = true
+							tempAtomic[lrtTid] = tempAlerts[lrtTid]
+						}
+					}
+					if (alertsUpdated) {
+						atomicState.alerts = tempAtomic
+					}
+				} else {
+					alertsUpdated = true
+					atomicState.alerts = tempAlerts
+				}
 			}
 			if (timers) log.debug "TIMER: Alerts complete @ (${now() - pollEcobeeAPIStart}ms)"
 		}
@@ -3200,9 +3213,9 @@ void updateThermostatData() {
             // NOTE: The thermostat always present Fahrenheit temps with 1 digit of decimal precision. We want to maintain that precision for inside temperature so that apps like vents and Smart Circulation
             // 		 can operate efficiently. So, while the user can specify a display precision of 0, 1 or 2 decimal digits, we ALWAYS keep and send max decimal digits and let the device handler adjust for display
             //		 For Fahrenheit, we keep the 1 decimal digit the API provides, for Celsius we allow for 2 decimal digits as a result of the mathematical calculation       
-			tempTemperature = myConvertTemperatureIfNeeded( (runtime?.actualTemperature?.toBigDecimal() / 10.0), 'F', apiPrecision)
-			tempHeatingSetpoint = myConvertTemperatureIfNeeded( (runtime?.desiredHeat / 10.0), 'F', apiPrecision)
-        	tempCoolingSetpoint = myConvertTemperatureIfNeeded( (runtime?.desiredCool / 10.0), 'F', apiPrecision)
+			if (runtime?.actualTemperature != null) tempTemperature = myConvertTemperatureIfNeeded((runtime.actualTemperature/ 10.0), 'F', apiPrecision)
+			if (runtime?.desiredHeat != null)   tempHeatingSetpoint = myConvertTemperatureIfNeeded((runtime.desiredHeat / 10.0), 'F', apiPrecision)
+        	if (runtime?.desiredCool != null)   tempCoolingSetpoint = myConvertTemperatureIfNeeded((runtime.desiredCool / 10.0), 'F', apiPrecision)
 			if (timers) log.debug "TIMER: Finished updating Sensors for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
 		}
 		
@@ -3211,12 +3224,12 @@ void updateThermostatData() {
             // log.debug atomicState.weather[tid]
 			def weather = atomicState.weather ? atomicState.weather[tid] : [:]  
             // log.debug weather
-            if (weather?.temperature?.isNumber()) {
-            	tempWeatherTemperature = myConvertTemperatureIfNeeded( ((weather.temperature.toBigDecimal() / 10.0)), "F", apiPrecision)
+            if (weather?.temperature != null) {
+            	tempWeatherTemperature = myConvertTemperatureIfNeeded((weather.temperature.toBigDecimal() / 10.0), "F", apiPrecision)
         	} else {tempWeatherTemperature = 451.0} // will happen only once, when weather object changes to shortWeather
-            if (weather?.dewpoint != null) tempWeatherDewpoint = myConvertTemperatureIfNeeded( ((weather.dewpoint / 10.0)), "F", apiPrecision)
+            if (weather?.dewpoint != null) tempWeatherDewpoint = myConvertTemperatureIfNeeded((weather.dewpoint.toBigDecimal() / 10.0), "F", apiPrecision)
             if (weather?.humidity != null) tempWeatherHumidity = weather.humidity
-            if (weather?.pressure != null) tempWeatherPressure = usingMetric ? weather.pressure : roundIt((weather.pressure * 0.02953),2) //milliBars to inHg
+            if (weather?.pressure != null) tempWeatherPressure = usingMetric ? weather.pressure : roundIt((weather.pressure.toBigDecimal() * 0.02953),2) //milliBars to inHg
 			if (timers) log.debug "TIMER: Finished updating Weather for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
         }
         
@@ -3234,17 +3247,17 @@ void updateThermostatData() {
 
 		if (settingsUpdated || forcePoll) {
 			auxHeatMode =  (statSettings?.hasHeatPump) && (statSettings?.hasForcedAir || statSettings?.hasElectric || statSettings?.hasBoiler) // 'auxHeat1' == 'emergency' if using a heatPump
-            tempHeatDiff = usingMetric ? roundIt((statSettings.stage1HeatingDifferentialTemp / 1.8), 0) / 10.0 : statSettings.stage1HeatingDifferentialTemp / 10.0
-            tempCoolDiff = usingMetric ? roundIt((statSettings.stage1CoolingDifferentialTemp / 1.8), 0) / 10.0 : statSettings.stage1CoolingDifferentialTemp / 10.0
-            tempHeatCoolMinDelta = usingMetric ? roundIt((statSettings.heatCoolMinDelta / 1.8), 0) / 10.0 : statSettings.heatCoolMinDelta / 10.0
+			tempHeatDiff = myConvertTemperatureIfNeeded(statSettings.stage1HeatingDifferentialTemp / 10.0, "F", apiPrecision)
+			tempCoolDiff = myConvertTemperatureIfNeeded(statSettings.stage1CoolingDifferentialTemp / 10.0, "F", apiPrecision) 
+			tempHeatCoolMinDelta = myConvertTemperatureIfNeeded(statSettings.heatCoolMinDelta / 10.0 , 'F', apiPrecision)
             
 			// RANGES
 			// UI works better with the same ranges for both heat and cool...
 			// but the device handler isn't using these values for the UI right now (can't dynamically define the range)			
-			heatHigh = myConvertTemperatureIfNeeded((statSettings.heatRangeHigh / 10.0), 'F', 1)
-			heatLow =  myConvertTemperatureIfNeeded((statSettings.heatRangeLow  / 10.0), 'F', 1)
-			coolHigh = myConvertTemperatureIfNeeded((statSettings.coolRangeHigh / 10.0), 'F', 1)
-			coolLow =  myConvertTemperatureIfNeeded((statSettings.coolRangeLow  / 10.0), 'F', 1)
+			heatHigh = myConvertTemperatureIfNeeded((statSettings.heatRangeHigh / 10.0), 'F', apiPrecision)
+			heatLow =  myConvertTemperatureIfNeeded((statSettings.heatRangeLow  / 10.0), 'F', apiPrecision)
+			coolHigh = myConvertTemperatureIfNeeded((statSettings.coolRangeHigh / 10.0), 'F', apiPrecision)
+			coolLow =  myConvertTemperatureIfNeeded((statSettings.coolRangeLow  / 10.0), 'F', apiPrecision)
 			// calculate these anyway (for now) - it's easier to read the range while debugging
 			heatRange = (heatLow && heatHigh) ? "(${roundIt(heatLow,0)}..${roundIt(heatHigh,0)})" : (usingMetric ? '(5..35)' : '(45..95)')
 			coolRange = (coolLow && coolHigh) ? "(${roundIt(coolLow,0)}..${roundIt(coolHigh,0)})" : (usingMetric ? '(5..35)' : '(45..95)')
@@ -3514,10 +3527,10 @@ void updateThermostatData() {
         	isHeating = true
             if (!forcePoll && !rtReallyUpdated) {
             	// these weren't calculated above, so we do them here
-            	tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature / 10.0), "F", apiPrecision)
-        		tempHeatingSetpoint = myConvertTemperatureIfNeeded( (runtime.desiredHeat / 10.0), 'F', apiPrecision)
+            	if (runtime?.actualTemperature != null) tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature / 10.0), "F", apiPrecision)
+        		if (runtime?.desiredHeat != null) tempHeatingSetpoint = myConvertTemperatureIfNeeded( (runtime.desiredHeat / 10.0), 'F', apiPrecision)
             }
-            if ((statSettings?.disablePreHeating == false) && (tempTemperature > (tempHeatingSetpoint /* + 0.1 */))) {
+            if ((tempTemperature != null) && (tempHeatingSetpoint != null) && (statSettings?.disablePreHeating == false) && (tempTemperature > (tempHeatingSetpoint /* + 0.1 */))) {
             	smartRecovery = true
 				equipUpdated = true
             	equipStatus = equipStatus + ',smartRecovery'
@@ -3527,13 +3540,13 @@ void updateThermostatData() {
         	isCooling = true
             if (!forcePoll && !rtReallyUpdated) {
             	// these weren't calculated above, so we do them here
-            	tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature / 10.0), "F", apiPrecision)
-                tempCoolingSetpoint = myConvertTemperatureIfNeeded( (runtime.desiredCool / 10.0), 'F', apiPrecision)
+            	if (runtime?.actualTemperature != null) tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature / 10.0), "F", apiPrecision)
+                if (runtime?.desiredCool != null) tempCoolingSetpoint = myConvertTemperatureIfNeeded( (runtime.desiredCool / 10.0), 'F', apiPrecision)
             }
             // Check if humidity > humidity setPoint, and tempTemperature > (coolingSetpoint - 0.1)
             if (hasDehumidifier) {
-            	if (runtime.actualHumidity > dehumiditySetpoint) {
-                	if ((tempTemperature < tempCoolingSetpoint) && (tempTemperature >= (tempCoolingSetpoint - (statSettings?.dehumidifyOvercoolOffset?.toBigDecimal() / 10.0)))) {
+            	if (runtime?.actualHumidity > dehumiditySetpoint) {
+                	if ((tempTemperature != null) && (tempCoolingSetpoint != null) && (tempTemperature < tempCoolingSetpoint) && (tempTemperature >= (tempCoolingSetpoint - (statSettings?.dehumidifyOvercoolOffset?.toBigDecimal() / 10.0)))) {
                     	overCool = true
 						equipUpdated = true
                         LOG("${tstatName} is Over Cooling (${tid}), temp: ${tempTemperature}, setpoint: ${tempCoolingSetpoint}",3,null,'info')
@@ -3542,7 +3555,7 @@ void updateThermostatData() {
                     }
                 }         	
             }
-			if (!overCool && ((statSettings?.disablePreCooling == false) && (tempTemperature < (tempCoolingSetpoint /* - 0.1 */)))) {
+			if (!overCool && (tempTemperature != null) && (tempCoolingSetpoint != null) && ((statSettings?.disablePreCooling == false) && (tempTemperature < (tempCoolingSetpoint /* - 0.1 */)))) {
             	smartRecovery = true
 				equipUpdated = true
             	equipStatus = equipStatus + ',smartRecovery'
@@ -3627,7 +3640,7 @@ void updateThermostatData() {
 		if (timers) log.debug "TIMER: Finished updating Equipment & Connection status for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
 		
         def data = [:]
-		if (forcePoll) data += [forced: true,]				// Tell the DTH to force-update all attributes, states and tiles
+		if (forcePoll) data += [forced: true]				// Tell the DTH to force-update all attributes, states and tiles
 		def dataStart = data
  
 		// As of 1.7.10, forcePoll only forces updates to: heating/coolingSetpoint, currentClimate*, temperature, and humidity.
@@ -3759,7 +3772,9 @@ void updateThermostatData() {
             boolean tempsChanged = false
             int i = 0
             tempSettingsList.each { temp ->
-            	def tempVal = String.format("%.${apiPrecision}f", roundIt((usingMetric ? roundIt((statSettings."${temp}" / 1.8), 0) / 10.0 : statSettings."${temp}" / 10.0),apiPrecision))
+            	// def tempVal = String.format("%.${apiPrecision}f", roundIt((usingMetric ? roundIt((statSettings."${temp}" / 1.8), 0) / 10.0 : statSettings."${temp}" / 10.0),apiPrecision))
+				// def tempVal = roundIt((usingMetric ? roundIt((statSettings."${temp}" / 1.8), 0) / 10.0 : statSettings."${temp}" / 10.0),apiPrecision)
+				def tempVal = myConvertTemperatureIfNeeded( statSettings."${temp}" / 10.0, 'F', apiPrecision)
                 tempValues <<  tempVal 
                 if (changeTemps[tid]?.getAt(i) != tempVal) {
                     data += [ "${temp}": tempVal, ]
@@ -3820,14 +3835,17 @@ void updateThermostatData() {
 				if (changeNever[tid][6] != coolRange) 		{ data += [coolRange: coolRange,
 																		coolRangeHigh: coolHigh,
 																		coolRangeLow: coolLow]; 			changeNever[tid][6] = coolRange; nvrChanged = true; }
-				if (changeNever[tid][11] != tempHeatDiff)	{ data += [heatDifferential: 
-																		String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision))]; 	
+				if (changeNever[tid][11] != tempHeatDiff)	{ data += [heatDifferential: tempHeatDiff];
+																	   // roundIt(tempHeatDiff, apiPrecision)];
+																	   // String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision))]; 	
 																											changeNever[tid][11] = tempHeatDiff; nvrChanged = true; }
-				if (changeNever[tid][12] != tempCoolDiff) 	{ data += [coolDifferential: 
-																		String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision)),]; 
+				if (changeNever[tid][12] != tempCoolDiff) 	{ data += [coolDifferential: tempCoolDiff];
+																	   // roundIt(tempCoolDiff, apiPrecision)];
+																	   // String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision))]; 
 																											changeNever[tid][12] = tempCoolDiff; nvrChanged = true; }
-				if (changeNever[tid][13] != tempHeatCoolMinDelta){ data += [heatCoolMinDelta: 
-																		String.format("%.${apiPrecision}f", roundIt(tempHeatCoolMinDelta, apiPrecision))]; 
+				if (changeNever[tid][13] != tempHeatCoolMinDelta){ data += [heatCoolMinDelta: tempHeatCoolMinDelta];
+																			// roundIt(tempHeatCoolMinDelta, apiPrecision)];
+																		    // String.format("%.${apiPrecision}f", roundIt(tempHeatCoolMinDelta, apiPrecision))]; 
 																											changeNever[tid][13] = tempHeatCoolMinDelta; nvrChanged = true; }
 				if (changeNever[tid][8] != auxHeatMode) 	{ data += [auxHeatMode: auxHeatMode]; 			changeNever[tid][8] = auxHeatMode; nvrChanged = true; }
 				if (changeNever[tid][9] != hasHumidifier) 	{ data += [hasHumidifier: hasHumidifier]; 		changeNever[tid][9] = hasHumidifier; nvrChanged = true; }
@@ -3860,18 +3878,18 @@ void updateThermostatData() {
 		boolean needPrograms = false
 		def changeRarely = atomicState.changeRarely ? atomicState.changeRarely : [:]
 		if (thermostatUpdated || runtimeUpdated ||  equipUpdated || forcePoll || settingsUpdated || eventsUpdated || programUpdated || rtReallyUpdated || extendRTUpdated || (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {  
-			if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+			if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
 			// The order of these is IMPORTANT - Do setpoints and all equipment changes before notifying of the hold and program change...
-			if (tempHeatingSetpoint && (forcePoll || (changeRarely[tid][15] != tempHeatingSetpoint) || userPChanged))	{ 
+			if ((tempHeatingSetpoint != null) && (forcePoll || (changeRarely[tid][19] != tempHeatingSetpoint) || userPChanged))	{ 
 				needPrograms = true
-                changeRarely[tid][15] = tempHeatingSetpoint
-                data += [heatingSetpoint: String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),]
+                changeRarely[tid][19] = tempHeatingSetpoint
+                data += [heatingSetpoint: roundIt(tempHeatingSetpoint, userPrecision)] // String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision))]
                 rareChanged = true
 			}
-            if (tempCoolingSetpoint && (forcePoll || (changeRarely[tid][16] != tempCoolingSetpoint) || userPChanged))	{ 
+            if ((tempCoolingSetpoint != null) && (forcePoll || (changeRarely[tid][20] != tempCoolingSetpoint) || userPChanged))	{ 
 				needPrograms = true
-                changeRarely[tid][16] = tempCoolingSetpoint
-                data += [coolingSetpoint: String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),] 
+                changeRarely[tid][20] = tempCoolingSetpoint
+                data += [coolingSetpoint: roundIt(tempCoolingSetpoint, userPrecision)] //String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision))] 
                 rareChanged = true
 			}
             if (changeRarely[tid][4]  != statMode) 				{ data += [thermostatMode: statMode]; 					    changeRarely[tid][4]  = statMode; 				rareChanged = true; }
@@ -3920,23 +3938,23 @@ void updateThermostatData() {
 		def changeOften =  atomicState.changeOften ? atomicState.changeOften : [:]
         lastOList = changeOften[tid]
         if ( !lastOList || (lastOList.size() < 14)) lastOList = [999,'null',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1,-1,-1]
-		if (sensorsUpdated && (lastOList[1] != occupancy)) data += [motion: occupancy,]
+		if (sensorsUpdated && (lastOList[1] != occupancy)) data += [motion: occupancy]
 		if (rtReallyUpdated || forcePoll || weatherUpdated || extendRTUpdated) { // || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
         	String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
-            def oftenList = [tempTemperature,occupancy,runtime?.actualHumidity,tempHeatingSetpoint,tempCoolingSetpoint,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
+            def oftenList = [tempTemperature,occupancy,runtime?.actualHumidity,null,null,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
             					tempWeatherPressure,humiditySetpoint,dehumiditySetpoint,humiditySetpointDisplay,userPrecision]
             
-			if (tempTemperature && ((lastOList[0] != tempTemperature) || forcePoll)) data += [temperature: String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision)),]
-			if (forcePoll || (lastOList[2] != runtime.actualHumidity)) data += [humidity: runtime.actualHumidity,]
-			if (humiditySetpointDisplay && (lastOList[12] != humiditySetpointDisplay)) data += [humiditySetpointDisplay: humiditySetpointDisplay,]
-			if (lastOList[10] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint,]
-			if (lastOList[11] != dehumiditySetpoint) data += [dehumiditySetpoint: dehumiditySetpoint,]		// dehumidityLevel: dehumiditySetpoint, dehumidifierLevel: dehumiditySetpoint]
+			if ((tempTemperature != null) && ((lastOList[0] != tempTemperature) || forcePoll)) data += [temperature: tempTemperature] // roundIt(tempTemperature, apiPrecision)] // String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision))]
+			if (forcePoll || (lastOList[2] != runtime.actualHumidity)) data += [humidity: runtime.actualHumidity]
+			if (humiditySetpointDisplay && (lastOList[12] != humiditySetpointDisplay)) data += [humiditySetpointDisplay: humiditySetpointDisplay]
+			if (lastOList[10] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint]
+			if (lastOList[11] != dehumiditySetpoint) data += [dehumiditySetpoint: dehumiditySetpoint]		// dehumidityLevel: dehumiditySetpoint, dehumidifierLevel: dehumiditySetpoint]
 			if (weatherUpdated) {
-				if (wSymbol && (lastOList[5] != wSymbol)) data += [weatherSymbol: wSymbol,]
-				if (tempWeatherTemperature && ((lastOList[6] != tempWeatherTemperature) || userPChanged)) data += [weatherTemperature: String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision)),]
-				if (tempWeatherHumidity && (lastOList[7] != tempWeatherHumidity)) data += [weatherHumidity: tempWeatherHumidity,]
-				if (tempWeatherDewpoint && ((lastOList[8] != tempWeatherDewpoint) || userPChanged)) data += [weatherDewpoint: String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision)),]
-				if (tempWeatherPressure && (lastOList[9] != tempWeatherPressure)) data += [weatherPressure: tempWeatherPressure,]
+				if (wSymbol && (lastOList[5] != wSymbol)) data += [weatherSymbol: wSymbol]
+				if ((tempWeatherTemperature != null) && ((lastOList[6] != tempWeatherTemperature) || userPChanged)) data += [weatherTemperature: roundIt(tempWeatherTemperature, userPrecision)] //String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision))]
+				if ((tempWeatherHumidity != null) && (lastOList[7] != tempWeatherHumidity)) data += [weatherHumidity: tempWeatherHumidity]
+				if ((tempWeatherDewpoint != null) && ((lastOList[8] != tempWeatherDewpoint) || userPChanged)) data += [weatherDewpoint: roundIt(tempWeatherDewpoint, userPrecision)] // String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision))]
+				if ((tempWeatherPressure != null) && (lastOList[9] != tempWeatherPressure)) data += [weatherPressure: tempWeatherPressure]
 			}
             if (changeOften[tid] != oftenList) {
             	changeOften[tid] = oftenList
@@ -3951,7 +3969,7 @@ void updateThermostatData() {
 		// so don't send ANYTHING if we only have the initial forcePoll status for this tid
 		if (data != dataStart) {
         	data += [ thermostatTime:statTime[tid], ]
-            if (forcePoll) data += [forced: false,]			// end of forced update
+            if (forcePoll) data += [forced: false]			// end of forced update
         	tstatNames += [tstatName]
 			if (debugLevelFour) LOG("${tstatName} data: ${data}",1,null,'info')
 			int ds = data.size()
@@ -4091,11 +4109,11 @@ boolean refreshAuthToken(child=null) {
         	boolean result = false
         	//LOG("refreshAuthToken() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode}  response? data: ${e.getResponse()?.getData()}", 1, null, "error")
             LOG("refreshAuthToken() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode}", 1, child, "error")
-            if (e.statusCode != 401) {
+            if ((e.statusCode != 401) && (e.statusCode != 400)) {
             	runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true])
-            } else if (e.statusCode == 401) {            
+            } else if ((e.statusCode == 401) || (e.statusCode == 400)) {            
 				atomicState.reAttempt = atomicState.reAttempt + 1
-		        if (atomicState.reAttempt > 3) {                       	
+		        if (atomicState.reAttempt > 5) {                       	
     		    	apiLost("Too many retries (${atomicState.reAttempt - 1}) for token refresh.")        	    
             	    result = false
 		        } else {
@@ -4285,11 +4303,11 @@ boolean resumeProgram(child, String deviceId, resumeAll=true) {
         	def tempCoolAt = climate.coolTemp
         	def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (tempHeatAt / 10.0), 'F', apiPrecision)
        		def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (tempCoolAt / 10.0), 'F', apiPrecision)
-    		def updates = [	'heatingSetpoint':String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),
-        					'coolingSetpoint':String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),
-                            'currentProgramName': climateName,
-                            'currentProgram': climateName,
-                       		'currentProgramId':climateId ]
+    		def updates = [	heatingSetpoint:	tempHeatingSetpoint, // String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),
+        					coolingSetpoint:	tempCoolingSetpoint, // String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),
+                            currentProgramName: climateName,
+                            currentProgram: 	climateName,
+                       		currentProgramId:	climateId ]
         	LOG("resumeProgram(${statName}) ${updates}",2,null,'info')
         	child.generateEvent(updates)			// force-update the calling device attributes that it can't see
         }
@@ -4643,10 +4661,10 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 	if (theHoldType == 'nextTransition') {
     	// Check if setpoints are the same as currentClimateRef, if so, don't set a new hold
         // ResumeProgram above already sent the setpoint display values for the currentClimate to the DTH
-		def ncHsp = ST ? child.device.currentValue('heatingSetpoint') : child.device.currentValue('heatingSetpoint', true)
-		def ncCsp = ST ? child.device.currentValue('coolingSetpoint') : child.device.currentValue('coolingSetpoint', true)
-        def currHeatAt = roundIt((isMetric ? (cToF(ncHsp.toBigDecimal()) * 10.0) : (ncHsp.toBigDecimal() * 10.0)), 0)		// better precision using BigDecimal round-half-up
-		def currCoolAt = roundIt((isMetric ? (cToF(ncCsp.toBigDecimal()) * 10.0) : (ncCsp.toBigDecimal() * 10.0)), 0)
+		def ncHsp = (ST ? child.device.currentValue('heatingSetpoint') : child.device.currentValue('heatingSetpoint', true)) as BigDecimal
+		def ncCsp = (ST ? child.device.currentValue('coolingSetpoint') : child.device.currentValue('coolingSetpoint', true)) as BigDecimal
+        def currHeatAt = roundIt((isMetric ? (cToF(ncHsp) * 10.0) : (ncHsp * 10.0)), 0)		// better precision using BigDecimal round-half-up
+		def currCoolAt = roundIt((isMetric ? (cToF(ncCsp) * 10.0) : (ncCsp * 10.0)), 0)
         LOG("setHold() - currHeat: ${currHeatAt}, currCool: ${currCoolAt}",2, child, 'trace')
         // if ((c==currCoolAt) && (h==currHeatAt)) {
         if ((cooling==currCoolAt) && (heating==currHeatAt)) {
@@ -4671,9 +4689,9 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
         def tempCoolAt = c //.toBigDecimal()
         def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (tempHeatAt / 10.0), 'F', apiPrecision)
        	def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (tempCoolAt / 10.0), 'F', apiPrecision)
-    	def updates = ['heatingSetpoint':String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),
-        			   'coolingSetpoint':String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),
-                       'currentProgramName': 'Hold: Temp'
+    	def updates = [heatingSetpoint: tempHeatingSetpoint,	// String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),
+        			   coolingSetpoint: tempCoolingSetpoint,		// String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),
+                       currentProgramName: 'Hold: Temp'
                       ]
         LOG("setHold() for ${child} (${deviceId}) - ${updates}",3,null,'info')
         child.generateEvent(updates)			// force-update the calling device attributes that it can't see
@@ -4716,10 +4734,10 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
     // And then these values are ignored when setting only the fan
     // use the device's values, not the ones from our last API refresh
     // BUT- IF changing Fan Mode while in a Hold, maybe we should be overloading the hold instead of cancelling it?
-	def ncHsp = ST ? child.device.currentValue('heatingSetpoint') : child.device.currentValue('heatingSetpoint', true)
-	def ncCsp = ST ? child.device.currentValue('coolingSetpoint') : child.device.currentValue('coolingSetpoint', true)
-   	def h = roundIt((isMetric ? (cToF(ncHsp.toBigDecimal()) * 10.0) : (ncHsp.toBigDecimal() * 10.0)), 0)		// better precision using BigDecimal round-half-up
-	def c = roundIt((isMetric ? (cToF(ncCsp.toBigDecimal()) * 10.0) : (ncCsp.toBigDecimal() * 10.0)), 0)
+	def ncHsp = (ST ? child.device.currentValue('heatingSetpoint') : child.device.currentValue('heatingSetpoint', true)) as BigDecimal
+	def ncCsp = (ST ? child.device.currentValue('coolingSetpoint') : child.device.currentValue('coolingSetpoint', true)) as BigDecimal
+   	def h = roundIt((isMetric ? (cToF(ncHsp) * 10.0) : (ncHsp * 10.0)), 0)		// better precision using BigDecimal round-half-up
+	def c = roundIt((isMetric ? (cToF(ncCsp) * 10.0) : (ncCsp * 10.0)), 0)
     
     def theHoldType = sendHoldType // ? sendHoldType : whatHoldType(child)
     if (theHoldType == 'holdHours') {
@@ -4822,10 +4840,10 @@ boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', s
         def tempCoolAt = climate.coolTemp
         def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (tempHeatAt / 10.0), 'F', apiPrecision)
        	def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (tempCoolAt / 10.0), 'F', apiPrecision)
-    	def updates = ['heatingSetpoint':String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),
-        			   'coolingSetpoint':String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),
-                       'currentProgram': program,
-                       'currentProgramId':climateRef]
+    	def updates = [heatingSetpoint:	tempHeatingSetpoint,	// String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision)),
+        			   coolingSetpoint: tempCoolingSetpoint,	// String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),
+                       currentProgram: 	program,
+                       currentProgramId:climateRef]
         LOG("setProgram() for ${child} (${deviceId}): ${updates}",3,null,'info')
         child.generateEvent(updates)			// force-update the calling device attributes that it can't see
         // atomicState.forcePoll = true 		// force next poll to get updated data
@@ -5415,10 +5433,10 @@ def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
     	LOG("Illegal sensorValue (null)", 2, null, "error")
         return null
     }
-	if ( (cmdScale != "C") && (cmdScale != "F") && (cmdScale != "dC") && (cmdScale != "dF") ) {
+	if ( (cmdScale != "F") && (cmdScale != "C") && (cmdScale != "dC") && (cmdScale != "dF") ) {
     	// We do not have a valid Scale input, throw a debug error into the logs and just return the passed in value
         LOG("Invalid temp scale used: ${cmdScale}", 2, null, "error")
-        return scaledSensorValue
+        return roundIt(scaledSensorValue, precision)
     }
 
 	def returnSensorValue 
