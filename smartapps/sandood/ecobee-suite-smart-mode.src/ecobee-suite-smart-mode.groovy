@@ -41,8 +41,9 @@
  *  1.7.08 - Added settings option to allow internal temp/setpoint to override 'off' (but only if we hold the only 'off' Reservation)
  *	1.7.09 - When mode changes away, release reservations and set stats Mode to doneMode (if any)
  *	1.7.10 - Optimized isHE/isST, added Global Pause
+ *	1.7.11 - Fixed yet another typo
  */
-String getVersionNum() { return "1.7.10" }
+String getVersionNum() { return "1.7.11" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -841,7 +842,7 @@ def temperatureUpdate( BigDecimal temp ) {
                     }
                 } else {
                     // already running the mode we want
-                    (desireMode == 'off') ? makeReservation(tid, 'modeOff') : cancelReservation(tid, 'modeOff')
+                    (desiredMode == 'off') ? makeReservation(tid, 'modeOff') : cancelReservation(tid, 'modeOff')
                     sameNames += sameNames ? ", ${it.displayName}" : it.displayName
                 }
             } else {
