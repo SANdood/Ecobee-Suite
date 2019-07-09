@@ -42,8 +42,9 @@
  *	1.7.09 - When mode changes away, release reservations and set stats Mode to doneMode (if any)
  *	1.7.10 - Optimized isHE/isST, added Global Pause
  *	1.7.11 - Fixed yet another typo
+ *	1.7.12 - Extended external temperature range, add Program change support
  */
-String getVersionNum() { return "1.7.11" }
+String getVersionNum() { return "1.7.12" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -51,7 +52,7 @@ definition(
 	name: 			"ecobee Suite Smart Mode",
 	namespace: 		"sandood",
 	author: 		"Justin J. Leonard & Barry A. Burke",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets Ecobee Heat/Cool/Auto mode and/or Program Setpoints based on (outside) temperature & dewpoint.",
+	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSet Ecobee Mode, Program and/or Program Setpoints based on temperature & dewpoint.",
 	category: 		"Convenience",
 	parent: 		"sandood:Ecobee Suite Manager",
 	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -166,11 +167,14 @@ def mainPage() {
                 input(name: "dewAboveTemp", title: "Or, (optionally) when the outdoor dewpoint is at or above...", type: 'decimal', description: "Enter decimal dewpoint", 
                 		required: false, submitOnChange: true)
 				if (settings.aboveTemp || settings.dewAboveTemp) {
-					input(name: 'aboveMode', title: 'Set thermostat mode to', type: 'enum', required: (!settings.aboveSetpoints), multiple: false, options:getThermostatModes(), submitOnChange: true)
+					input(name: 'aboveMode', title: 'Set thermostat Mode to', type: 'enum', required: (!settings.aboveSetpoints && !settings.aboveSchedule), multiple: false, 
+						  options:getThermostatModes(), submitOnChange: true)
                     if (settings.aboveMode == 'off') {
                     	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
                     }
-                    input(name: 'aboveSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.aboveMode), defaultValue: false, submitOnChange: true) 
+					input(name: 'aboveSchedule', title: 'Set thermostat Program to', type: 'enum', required: (!settings.aboveSetpoints && ! settings.aboveMode), multiple: false, 
+						  submitOnChange: true, options:getEcobeePrograms())
+                    input(name: 'aboveSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.aboveMode && !settings.aboveSchedule), defaultValue: false, submitOnChange: true) 
                     if (settings.aboveSetpoints) {
                     	if (!settings.aboveProgram && (!settings.aboveHeatTemp || !settings.aboveCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
                     	input(name: 'aboveProgram', title: 'Change Setpoints for Program', type: 'enum', required: true, submitOnChange: true, multiple: false, 
@@ -186,12 +190,14 @@ def mainPage() {
             	input(name: "belowTemp", title: 'When the outdoor temperature is at or below...', type: 'decimal', description: "Enter decimal temperature (${settings.aboveTemp?'optional':'required'})", 
                 		range: getThermostatRange(), required: !settings.aboveTemp, submitOnChange: true)
 				if (settings.belowTemp) {
-					input(name: 'belowMode', title: 'Set thermostat mode to', type: 'enum', required: (!settings.belowSetpoints), multiple: false, 
+					input(name: 'belowMode', title: 'Set thermostat Mode to', type: 'enum', required: (!settings.belowSetpoints && !settings.belowSchedule), multiple: false, 
                     		options:getThermostatModes(), submitOnChange: true)
-                    if (!(settings.aboveMode == 'off') && (settings.belowMode == 'off')) {
+                    if (settings.belowMode == 'off') {
                     	paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
                     }
-                    input(name: 'belowSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.belowMode), defaultValue: false, submitOnChange: true) 
+					input(name: 'belowSchedule', title: 'Set thermostat Program to', type: 'enum', required: (!settings.belowSetpoints && !settings.belowMode), multiple: false,
+						  submitOnChange: true, options:getEcobeePrograms())
+                    input(name: 'belowSetpoints', title: 'Change Program Setpoints', type: 'bool', required: (!settings.belowMode && !settings.belowSchedule), defaultValue: false, submitOnChange: true) 
                     if (settings.belowSetpoints) {
                     	if (!settings.belowProgram && (!settings.belowHeatTemp || !settings.belowCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
                     	input(name: 'belowProgram', title: 'Change Setpoints for Program', type: 'enum', required: true, submitOnChange: true, multiple: false, 
@@ -212,8 +218,9 @@ def mainPage() {
             }
 			if ((settings.belowTemp && settings.aboveTemp) && (settings.belowTemp != settings.aboveTemp)) {
             	section(title: (HE?'<b>':'') + "Outdoor Temperature 'Between' Settings" + (HE?'</b>':'')) {
-					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat mode to (optional)", type: 'enum', 
+					input(name: 'betweenMode', title: "When the outdoor temperature is between ${belowTemp}° and ${aboveTemp}°, set thermostat Mode to (optional)", type: 'enum', 
                     		required: false, multiple: false, options:getThermostatModes(), submitOnChange: true)
+					input(name: 'betweenSchedule', title: 'Set thermostat Program to (optional)', type: 'enum', required: false, multiple: false, options:getEcobeePrograms())
             		input(name: 'betweenSetpoints', title: 'Change Program Setpoints', type: 'bool', required: false, defaultValue: false, submitOnChange: true) 
                     if (settings.betweenSetpoints) {
                     	if (!settings.betweenProgram && (!settings.betweenHeatTemp || !settings.betweenCoolTemp)) paragraph "You must select the program to modify and at least one setpoint to change"
@@ -226,6 +233,21 @@ def mainPage() {
                     }
 				}
             }
+			if (settings.aboveSchedule || settings.belowSchedule || settings.betweenSchedule) {
+				section(title: (HE?'<b>':'') + "Program Change Hold Type" + (HE?'</b>':'')) {
+					input(name: "holdType", title: "Hold Type for Program changes (optional)", type: "enum", required: false, 
+						  multiple: false, submitOnChange: true, defaultValue: "Ecobee Manager Setting",
+						  options:["Until I Change", "Until Next Program", "2 Hours", "4 Hours", "Specified Hours", "Thermostat Setting", 
+												"Ecobee Manager Setting"]) //, "Parent Ecobee (Connect) Setting"])
+					if (settings.holdType=="Specified Hours") {
+						input(name: 'holdHours', title:'How many hours (1-48)?', type: 'number', range:"1..48", required: true, description: '2', defaultValue: 2)
+					} else if (settings.holdType=='Thermostat Setting') {
+						paragraph("Thermostat Setting at the time of hold request will be applied.")
+					} else if ((settings.holdType == null) || (settings.holdType == 'Ecobee Manager Setting') || (settings.holdType == 'Parent Ecobee (Connect) Setting')) {
+						paragraph("Ecobee Manager Setting at the time of hold request will be applied")
+					}
+				}
+			}
             section(title: (HE?'<b>':'') + 'Indoor Temperature Settings (Optional)' + (HE?'</b>':'')) {
             	if (getThermostatModes().contains('cool') && !settings.insideAuto) {
             		input(name: 'aboveCool', title: 'Set thermostat Mode to Cool if its indoor temperature is above its Cooling Setpoint (optional)?', type: 'bool', defaultValue: false, 
@@ -734,9 +756,11 @@ def temperatureUpdate( BigDecimal temp ) {
     }
     
     def desiredMode = null
-	if ( (settings.aboveTemp && (temp >= settings.aboveTemp)) || (settings.dewAboveTemp && (atomicState.dewpoint >= settings.dewAboveTemp))) {
+	def desiredProgram = null
+	if ((settings.aboveTemp && (temp >= settings.aboveTemp)) || (settings.dewAboveTemp && (atomicState.dewpoint >= settings.dewAboveTemp))) {
     	if (!atomicState.aboveChanged) {
-			desiredMode = settings.aboveMode
+			desiredMode = 		settings.aboveMode
+			desiredProgram = 	settings.aboveSchedule
             if (settings.aboveSetpoints) {
             	changeSetpoints(settings.aboveProgram, settings.aboveHeatTemp, settings.aboveCoolTemp)
             }
@@ -746,56 +770,81 @@ def temperatureUpdate( BigDecimal temp ) {
         }
 	} else if (settings.belowTemp && (temp <= settings.belowTemp)) {
     	if (!atomicState.belowChanged) {
-        	// We haven't already changed to belowMode
-        	if ( settings.belowSetpoints || (settings.belowMode && (settings.belowMode != 'off')) || !settings.dewBelowOverride || (settings.dewBelowTemp > atomicState.dewpoint)) {
-            	// not turning HVAC off or aren't overriding off at this time
-                desiredMode = settings.belowMode
-                // TBD: Should we save the prior mode so we have something to return to???
+        	// We haven't already changed to belowMode/belowSchedule
+			if (settings.belowMode && (settings.belowMode != 'off')) {
+				// not turning off
+				desiredMode = settings.belowMode
+				desiredProgram = settings.belowSchedule
                 if (settings.belowSetpoints) {
             		changeSetpoints(settings.belowProgram, settings.belowHeatTemp, settings.belowCoolTemp)
             	}
-                atomicState.aboveChanged = false
-                atomicState.betweenChanged = false
-                atomicState.belowChanged = true
-            } else {
-            	// not supposed to change the mode right now
-                // belowMode is 'off', and dewBelowOverride is true, and current dewpoint is >= dewBelowTemp setting.
-                // reset everything
-                desiredMode = null
-				atomicState.aboveChanged = false
-                atomicState.betweenChanged = false
-                atomicState.belowChanged = false
-            }
+			} else if ((settings.belowMode && (settings.belowMode == 'off')) && (!settings.dewBelowOverride || (settings.dewBelowTemp > atomicState.dewpoint))) {
+				// belowMode is 'off', but we don't need to do dewpointOverride just adjust the Program and/or Setpoints
+				desiredMode = null
+				desiredProgram = settings.belowSchedule
+                if (settings.belowSetpoints) {
+            		changeSetpoints(settings.belowProgram, settings.belowHeatTemp, settings.belowCoolTemp)
+            	}
+			} else if (!settings.belowMode) {
+            	// belowMode changes aren't configured, just do schedule and setpoints
+				desiredMode = null
+				desiredProgram = settings.belowSchedule
+				if (settings.belowSetpoints) {
+            		changeSetpoints(settings.belowProgram, settings.belowHeatTemp, settings.belowCoolTemp)
+            	}
+			} else {
+				// assert ((settings.belowMode == 'off') && (settings.dewBelowOverride && (settings.dewBelowTemp < atomicState.dewpoint))) // don't turn off
+				desiredMode = null
+				desiredProgram = settings.belowSchedule
+				if (settings.belowSetpoints) {
+            		changeSetpoints(settings.belowProgram, settings.belowHeatTemp, settings.belowCoolTemp)
+            	}
+				
+			}
+			atomicState.aboveChanged = false
+            atomicState.betweenChanged = false
+            atomicState.belowChanged = true
         } else {
-        	// We have prior changed to the belowMode - now we have to check if dewpoint is still below the limit
+        	// We have prior changed to the belowMode/belowSchedule - now we have to check if dewpoint is still below the limit
             if ((settings.belowMode == 'off') && settings.dewBelowOverride && (settings.dewBelowTemp <= atomicState.dewpoint)) {
-            	// Uh-oh, the dewpoint has risen into the bad land
-            	if (settings.betweenMode || settings.betweenSetpoints) {
+            	// Uh-oh, the dewpoint has risen into the bad land, and we are supposedly off at the moment
+            	if (settings.betweenMode || settings.betweenSetpoints || settings.betweenSchedule) {
                 	// We have a between mode - let's change back to that
-                	desiredMode = settings.betweenMode
+                	desiredMode = 		settings.betweenMode
+					desiredProgram = 	settings.betweenSchedule
                     if (settings.betweenSetpoints) {
             			changeSetpoints(settings.betweenProgram, settings.betweenHeatTemp, setting.betweenCoolTemp)
             		}
             		atomicState.aboveChanged = false
             		atomicState.betweenChanged = true
-            		atomicState.belowChanged = false
+            		atomicState.belowChanged = true		// so we don't change it again
                 } else if (settings.aboveMode || settings.aboveSetpoints) {
                 	// OK, no between mode. But we have an above mode - switch to that
-                	desiredMode = settings.aboveMode
+                	desiredMode = 		settings.aboveMode
+					desiredProgram = 	settings.aboveProgram
                     if (settings.aboveSetpoints) {
             			changeSetpoints(settings.aboveProgram, settings.aboveHeatTemp, setting.aboveCoolTemp)
             		}
                     atomicState.aboveChanged = true
                     atomicState.betweeChanged = false
-                    atomicState.belowChanged = false
+                    atomicState.belowChanged = true		// so we don't change it again...
                 }
-            } else {
-            	// No reason to change anything - 
-            }
+            } else if (!settings.belowMode || (!settings.dewBelowTemp || (settings.dewBelowTemp > atomicState.dewpoint))) {
+				// No belowMode, or not doing dewpointOverride - return to belowMode settings
+				desiredMode = settings.belowMode
+				desiredProgram = settings.belowSchedule
+				if (settings.belowSetpoints) {
+            		changeSetpoints(settings.belowProgram, settings.belowHeatTemp, settings.belowCoolTemp)
+            	}
+				atomicState.aboveChanged = false
+            	atomicState.betweenChanged = false
+            	atomicState.belowChanged = true
+			}
         }
 	} else if ((settings.aboveTemp || (settings.dewAboveTemp && (atomicState.dewpoint < settings.dewAboveTemp))) && settings.belowTemp && settings.betweenMode) {
     	if (!atomicState.betweenChanged) {
-			desiredMode = settings.betweenMode
+			desiredMode = 		settings.betweenMode
+			desiredProgram = 	settings.betweenSchedule
             if (settings.betweenSetpoints) {
             	changeSetpoints(settings.betweenProgram, settings.betweenHeatTemp, setting.betweenCoolTemp)
             }
@@ -804,16 +853,18 @@ def temperatureUpdate( BigDecimal temp ) {
             atomicState.belowChanged = false
         }
 	}
-	if (desiredMode != null) {
+	
+	if ((desiredMode != null) || (desiredProgram != null)) {
     	String changeNames = ""
         String sameNames = ""
         def insideOverride = atomicState.insideOverride
 		settings.thermostats.each { 
         	String cMode = atomicState.isST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
+			String cProgram = atomicState.isST ? it.currentValue('currentProgramName') : it.currentValue('currentProgramName', true)
             String tid = getDeviceId(it.deviceNetworkId)
             if (!insideOverride || !insideOverride.containsKey(tid) || !insideOverride[tid]) {
-                if (cMode != desiredMode) {
-                    if (desiredMode == 'off') {
+                if ((cMode && (cMode != desiredMode)) || (cProgram && (cProgram != desiredProgram))) {
+                    if ((desiredMode == 'off') && (cMode != 'off')) {
                         makeReservation(tid, 'modeOff')
                         it.setThermostatMode( 'off' )
                     } else {
@@ -822,7 +873,17 @@ def temperatureUpdate( BigDecimal temp ) {
                             cancelReservation(tid,'modeOff')
                             if (countReservations(tid, 'modeOff') == 0) {
                                 // nobody else has a reservation on modeOff
-                                it.setThermostatMode(desiredMode)
+                                if (desiredMode && (cMode != desiredMode)) it.setThermostatMode(desiredMode)
+								if (desiredProgram && (cProgram != desiredProgram)) {
+									def sendHoldType = whatHoldType(stat)
+									def sendHoldHours = null
+									if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
+										sendHoldHours = sendHoldType
+										sendHoldType = 'holdHours'
+									}
+									LOG("sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
+									it.setThermostatProgram(desiredProgram, sendHoldType, sendHoldHours)
+								}
                                 changeNames += changeNames ? ", ${it.displayName}" : it.displayName
                             } else {
                                 // somebody else still has a 'modeOff' reservation so we can't turn it on
@@ -837,7 +898,17 @@ def temperatureUpdate( BigDecimal temp ) {
                         } else {
                             // Not off currently, so we can change freely
                             cancelReservation(tid, 'modeOff')	// just in case
-                            it.setThermostatMode(desiredMode)
+                            if (desiredMode && (cMode != desiredMode)) it.setThermostatMode(desiredMode)
+							if (desiredProgram && (cProgram != desiredProgram)) {
+								def sendHoldType = whatHoldType(stat)
+								def sendHoldHours = null
+								if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
+									sendHoldHours = sendHoldType
+									sendHoldType = 'holdHours'
+								}
+								LOG("sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
+								it.setThermostatProgram(desiredProgram, sendHoldType, sendHoldHours)
+							}
                         }
                     }
                 } else {
@@ -1005,15 +1076,19 @@ def getThermostatModes() {
 
 // get the combined set of Ecobee Programs applicable for these thermostats
 def getEcobeePrograms() {
-	def programs = ['Away', 'Home', 'Sleep'] 
-
-	if (settings.thermostats?.size() > 0) {
-		settings.thermostats.each { stat ->
+	def programs
+	if (thermostats?.size() > 0) {
+		thermostats.each { stat ->
 			def pl = stat.currentValue('programsList')
-            if (pl) programs = programs.intersect(new JsonSlurper().parseText(pl))
+			if (!programs) {
+				if (pl) programs = new JsonSlurper().parseText(pl)
+			} else {
+				if (pl) programs = programs.intersect(new JsonSlurper().parseText(pl))
+			}
         }
 	} 
-    LOG("getEcobeePrograms: returning ${programs}", 4)
+	if (!programs) programs =  ['Away', 'Home', 'Sleep']
+    LOG("getEcobeePrograms: returning ${programs}", 4, null, 'info')
     return programs.sort(false)
 }
 
@@ -1023,13 +1098,86 @@ def getThermostatRange() {
     def high
 	if (getTemperatureScale() == "C") {
     	low = -20.0
-        high = 40.0
+        high = 65.0
     } else {
     	low = -5.0
-		high = 105.0
+		high = 150.0
     }
 	return "${low}..${high}"
 }
+
+// returns the holdType keyword, OR the number of hours to hold
+// precedence: 1. this SmartApp's preferences, 2. Parent settings.holdType, 3. indefinite (must specify to use the thermostat setting)
+String whatHoldType(statDevice) {
+    def theHoldType = settings.holdType
+    def sendHoldType = null
+    def parentHoldType = getParentSetting('holdType')
+    if ((settings.holdType == null) || (settings.holdType == "Ecobee Manager Setting") || (settings.holdType == 'Parent Ecobee (Connect) Setting')) {
+        if ((parentHoldType == null) || (parentHoldType == '')) {	// default for Ecobee (Connect) is permanent hold (legacy)
+        	LOG('Using holdType indefinite',2,null,'info')
+        	return 'indefinite'
+        } else if (parentHoldType != 'Thermostat Setting') {
+        	theHoldType = parentHoldType
+        }
+    }
+    
+    def parentHoldHours = getParentSetting('holdHours')
+    switch (theHoldType) {
+      	case 'Until I Change':
+            sendHoldType = 'indefinite'
+            break;   
+        case 'Until Next Program':
+           	sendHoldType = 'nextTransition'
+            break;               
+        case '2 Hours':
+        	sendHoldType = 2
+            break;
+        case '4 Hours':
+        	sendHoldType = 4
+        case 'Specified Hours':
+            if (settings.holdHours && settings.holdHours.isNumber()) {
+            	sendHoldType = settings.holdHours
+            } else if ((parentHoldType == 'Specified Hours') && (parentHoldHours != null)) {
+            	sendHoldType = parentHoldHours
+            } else if ( parentHoldType == '2 Hours') {
+            	sendHoldType = 2
+            } else if ( parentHoldType == '4 Hours') {
+            	sendHoldType = 4            
+            } else {
+            	sendHoldType = 2
+            }
+            break;
+        case 'Thermostat Setting':
+       		String statHoldType = atomicState.isST ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
+            switch(statHoldType) {
+            	case 'useEndTime4hour':
+                	sendHoldType = 4
+                    break;
+                case 'useEndTime2hour':
+                	sendHoldType = 2
+                    break;
+                case 'nextPeriod':
+                case 'nextTransition':
+                	sendHoldType = 'nextTransition'
+                    break;
+                case 'indefinite':
+                case 'askMe':
+                case null :
+				case '':
+                default :
+                	sendHoldType = 'indefinite'
+                    break;
+           }
+    }
+    if (sendHoldType) {
+    	LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
+        return sendHoldType
+    } else {
+    	LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
+        return 'indefinite'
+    }
+}
+
 
 def getHeatRange() {
 	def low
