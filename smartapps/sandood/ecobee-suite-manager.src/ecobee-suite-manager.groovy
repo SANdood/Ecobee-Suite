@@ -61,8 +61,9 @@
  *	1.7.21 - Fix Global Pause on ST
  *	1.7.22 - Fixed thermOpStat 'idle' transition, added 'ventilator', 'economizer', 'compHotWater' & 'auxHotWater' equipOpStats
  *	1.7.23 - More code optimizations
+ *  1.7.24 - Handle DNS name resolution timeouts, changed displayName for Smart Vents & Switches, added external Global Pause switch
  */
-String getVersionNum() 		{ return "1.7.23" }
+String getVersionNum() 		{ return "1.7.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -92,7 +93,7 @@ def getHelperSmartApps() {
         [name: "ecobeeSwitchesChild", appName: "ecobee Suite Smart Switches",
         	namespace: myNamespace, multiple: true,
             title: "New Smart Switch/Dimmer/Vent Helper..."],
-        [name: "ecobeeVentsChild", appName: "ecobee Suite Smart Vents",
+        [name: "ecobeeVentsChild", appName: "ecobee Suite Smart Vents & Switches",
         	namespace: myNamespace, multiple: true,
             title: "New Smart Vents Helper..."],
 		[name: "ecobeeZonesChild", appName: "ecobee Suite Smart Zones",
@@ -599,14 +600,17 @@ def helperSmartAppsPage() {
 	
  	dynamicPage(name: "helperSmartAppsPage", title: (HE?'<b>':'') + "Ecobee Suite Helper ${ST?'Smart':''}Apps" + (HE?'</b>':''), install: true, uninstall: false, submitOnChange: true) { 
 		section((HE?'<b>':'') + "Global Pause: ${HE?'<span style=color:red>':''}${settings.pauseHelpers?'ON':'OFF'}${HE?'</span>':''}" + (HE?'</b>':'')) {
-        	paragraph "Global Pause will pause all Helpers that are not already paused; un-pausing will restore only the Helpers that weren't already paused. "
-			input(name: "pauseHelpers", type: "bool", title: "Global Pause all Helpers?", defaultValue: false, submitOnChange: true)
+        	// paragraph "Global Pause will pause all Helpers that are not already paused; un-pausing will restore only the Helpers that weren't already paused. "
+			input(name: "pauseHelpers", type: "bool", title: "Global Pause all Helpers?", defaultValue: ((atomicState.appsArePaused == null) ? false : atomicState.appsArePaused), submitOnChange: true)
+			input(name: 'pauseSwitch', type: 'capability.switch', title: 'Synchronize Global Pause with this Switch (optional)', multiple: false, required: false, submitOnChange: true) 
 			if (settings.pauseHelpers != atomicState.appsArePaused) {
             	if (settings.pauseHelpers) {
 					childAppsPauser( true )
+					settings.pauseSwitch.on()
 					atomicState.appsArePaused = true
 				} else {
 					childAppsPauser( false )
+					settings.pauseSwitch.off()
 					atomicState.appsArePaused = false
 				}
             }
@@ -1150,6 +1154,9 @@ def initialize() {
     subscribe(app, appHandler)
     if (ST) subscribe(location, "AskAlexaMQ", askAlexaMQHandler) // HE version doesn't support Ask Alexa yet
 	// if (!askAlexa) atomicState.askAlexaAlerts = null
+	if (settings.pauseSwitch) {
+		subscribe(settings.pauseSwitch, 'switch', pauseSwitchHandler)
+	}
     
     def nowTime = now()
     def nowDate = getTimestamp()
@@ -1301,6 +1308,17 @@ def initialize() {
     LOG("${getVersionLabel()} - initialization complete",1,null,'debug')
     atomicState.versionLabel = getVersionLabel()
     return aOK
+}
+def pauseSwitchHandler(evt) {
+	if (evt.value == 'on') {
+		childAppsPauser( true )
+		atomicState.appsArePaused = true
+		app.updateSetting("pauseHelpers", true)
+	} else {
+		childAppsPauser( false )
+		atomicState.appsArePaused = false
+		app.updateSetting("pauseHelpers", false)
+	}
 }
 
 def createChildrenThermostats() {
@@ -1999,8 +2017,9 @@ boolean checkThermostatSummary(String thermostatIdsString) {
     //
     // These appear to be transient errors, treat them all as if a Timeout... 
     } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | 
-    			javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | 
-    			java.net.SocketTimeoutException | java.net.NoRouteToHostException e) {
+    		javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | 
+    		java.net.SocketTimeoutException | java.net.NoRouteToHostException | java.net.UnknownHostException |
+			java.net.UnknownHostException e) {
     	LOG("checkThermostatSummary() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
         if (apiConnected != 'warn') {
         	atomicState.connected = 'warn'
@@ -4133,7 +4152,8 @@ boolean refreshAuthToken(child=null) {
 			// Likely bad luck and network overload, move on and let it try again
             if ( atomicState.isHE || canSchedule() ) { runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) } else { refreshAuthToken(child) }            
             return false
-        } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+        } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException |
+				 javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException | java.net.UnknownHostException | java.net.UnknownHostException e) {
     		LOG("refreshAuthToken() - ${e}.",1,child,'warn')  // Just log it, and hope for better next time...
         	if (apiConnected != 'warn') {
         		atomicState.connected = 'warn'
@@ -5199,7 +5219,8 @@ boolean sendJson(child=null, String jsonBody) {
         	LOG("sendJson() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} || ${e.response?.data?.status?.code}", 1, null, "error")
         }
     // These appear to be transient errors, treat them all as if a Timeout...
-    } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException e) {
+    } catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | 
+			 javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException | java.net.UnknownHostException | java.net.UnknownHostException e) {
     	LOG("sendJson() - ${e}.",1,null,'warn')  // Just log it, and hope for better next time...
         if (apiConnected != 'warn') {
         	atomicState.connected = 'warn'
