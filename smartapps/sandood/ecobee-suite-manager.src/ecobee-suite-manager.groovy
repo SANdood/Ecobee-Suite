@@ -62,8 +62,9 @@
  *	1.7.22 - Fixed thermOpStat 'idle' transition, added 'ventilator', 'economizer', 'compHotWater' & 'auxHotWater' equipOpStats
  *	1.7.23 - More code optimizations
  *  1.7.24 - Handle DNS name resolution timeouts, changed displayName for Smart Vents & Switches, added external Global Pause switch
+ *  1.7.25 - Changed displayName for Smart Modes & Programs 
  */
-String getVersionNum() 		{ return "1.7.24" }
+String getVersionNum() 		{ return "1.7.25" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -84,7 +85,7 @@ def getHelperSmartApps() {
         [name: "ecobeeCirculationChild", appName: "ecobee Suite Smart Circulation",
 			 namespace: myNamespace, multiple: true,
 			 title: "New Smart Circulation Helper..."],
-		[name: "ecobeeModeChild", appName: "ecobee Suite Smart Mode",
+		[name: "ecobeeModeChild", appName: "ecobee Suite Smart Mode & Programs",
         	namespace: myNamespace, multiple: true,
             title: "New Smart Mode & Setpoints Helper..."],
         [name: "ecobeeRoomChild", appName: "ecobee Suite Smart Room",
