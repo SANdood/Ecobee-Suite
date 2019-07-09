@@ -26,9 +26,10 @@
  *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.04 - Optimized isST/isHE, formatting, added Global Pause
  *	1.7.05 - More code optimizations
+ *	1.7.06 - Added generic switch control (e.g., to control a fan)
  */
-String getVersionNum() { return "1.7.05" }
-String getVersionLabel() { return "Ecobee Suite Smart Vents Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() 		{ return "1.7.06" }
+String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
 definition(
@@ -55,7 +56,7 @@ def mainPage() {
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
-        	String defaultLabel = "Smart Vents"
+        	String defaultLabel = "Smart Vents & Switches"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
             if (!app.label) {
 				app.updateLabel(defaultLabel)
@@ -90,27 +91,32 @@ def mainPage() {
 		}
         
         if (!settings.tempDisable && settings?.theSensors) {
-       		section(title: (HE?'<b>':'') + "Smart Vents: Windows (optional)" + (HE?'</b>':'')) {
+       		section(title: (HE?'<b>':'') + "Smart Vents & Switches: Windows (optional)" + (HE?'</b>':'')) {
         		paragraph("Windows will temporarily deactivate Smart Vents while they are open")
-            	input(name: "theWindows", type: "capability.contactSensor", title: "Which Window contact sensor(s)? (optional)", description: 'Tap to choose...', required: false, multiple: true)
+            	input(name: "theWindows", type: "capability.contactSensor", title: "Which Window contact sensor(s)? (optional)", required: false, multiple: true)
 				if (HE) paragraph ''
         	}
        
-        	section(title: (HE?'<b>':'') + "Smart Vents: Automated Vents" + (HE?'</b>':'')) {
-        		paragraph("Specified Econet, Keen and/or 'generic' vents will be opened until target temperature is achieved, and then closed")
-				input(name: "theEconetVents", type: "${ST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
-					  input(name: "theKeenVents", type: "${ST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", description: 'Tap to choose...', required: false, multiple:true, submitOnChange: true)
-                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", description: 'Tap to choose...', required: false, multiple: true, submitOnChange: true)
-            	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
+        	section(title: (HE?'<b>':'') + "Smart Vents & Switches: Automated Vents" + (HE?'</b>':'')) {
+        		paragraph("Specified Econet, Keen and/or 'generic' dimmer/switch-controlled vents will be opened until target temperature is achieved, and then closed")
+				input(name: "theEconetVents", type: "${ST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, 
+					  submitOnChange: true)
+				input(name: "theKeenVents", type: "${ST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", required: false, 
+					  multiple:true, submitOnChange: true)
+                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", required: false, multiple: true, 
+					  submitOnChange: true)
+				input(name: "theGenericSwitches", type: 'capability.switch', title: "Control which Switch(es)?", required: false, multiple: true, submitOnChange: true)
+            	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents ) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage.")
             		input(name: "minimumVentLevel", type: "number", title: "Minimum vent level when closed?", required: true, defaultValue:10, description: '10', range: "0..100")
             	}
 				if (HE) paragraph ''
         	}
         
-			section(title: (HE?'<b>':'') + "Smart Vents: Thermostat" + (HE?'</b>':'')) {
+			section(title: (HE?'<b>':'') + "Smart Vents & Switches: Thermostat" + (HE?'</b>':'')) {
 				paragraph("Specify which thermostat to monitor for heating/cooling events")
-				input(name: "theThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select thermostat", description: 'Tap to choose...', multiple: false, required: true, submitOnChange: true)
+				input(name: "theThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select thermostat", description: 'Tap to choose...', 
+					  multiple: false, required: true, submitOnChange: true)
 				if (HE) paragraph ''
 			}
 		
@@ -119,7 +125,8 @@ def mainPage() {
 					def ncTsp = ST ? settings.theThermostat.currentValue('thermostatSetpoint') : settings.theThermostat.currentValue('thermostatSetpoint', true)
                 	paragraph("Current setpoint of ${settings.theThermostat} is ${ncTsp}°.")
                 }
-				input(name: "useThermostat", type: "bool", title: "Follow setpoints on thermostat${settings.theThermostat?' '+settings.theThermostat.displayName:''}?", required: true, defaultValue: true, submitOnChange: true)
+				input(name: "useThermostat", type: "bool", title: "Follow setpoints on thermostat${settings.theThermostat?' '+settings.theThermostat.displayName:''}?", required: true, 
+					  defaultValue: true, submitOnChange: true)
 				if (!settings.useThermostat) {
 					input(name: "heatingSetpoint", type: "decimal", title: "Target heating setpoint?", description: 'Tap to choose...', required: true)
 					input(name: "coolingSetpoint", type: "decimal", title: "Target cooling setpoint?", description: 'Tap to choose...', required: true)
@@ -130,9 +137,10 @@ def mainPage() {
 				if (HE) paragraph ''
 			}
         } else { 
-        	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents) {
+        	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents || settings.theGenericSwitches) {
             	section( title: (HE?'<b>':'') + "Disabled Vent State" + (HE?'</b>':'')) {
-            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:['open','closed','unchanged'], required: true, multiple: false, defaultValue: 'closed')
+            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:['open/on','closed/off','unchanged'], 
+						  required: true, multiple: false, defaultValue: 'closed')
                 }
       		}
 			if (HE) paragraph ''
@@ -213,13 +221,14 @@ String checkTemperature() {
     	if (cOpState == 'heating') {
         	offset = settings.heatOffset ? settings.heatOffset : 0.0
     		def heatTarget = useThermostat ? ((smarter && (theThermostat.currentTemperature != null))? theThermostat.currentTemperature + offset 
-            																							: theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
+											  : theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
         	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
 			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
     	} else if (cOpState == 'cooling') {
         	offset = settings.coolOffset ? settings.coolOffset : 0.0
-    		def coolTarget = useThermostat? ((smarter && (theThermostat.currentTemperature != null))? theThermostat.currentTemperature + offset : theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
+    		def coolTarget = useThermostat? ((smarter && (theThermostat.currentTemperature != null))? theThermostat.currentTemperature + offset 
+											 : theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
         	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
 			vents = (coolTarget >= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
@@ -273,7 +282,7 @@ void setTheVents(ventState) {
 }
 
 void updateTheVents() {
-	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
+	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
     theVents.each {
 		if (it.hasCapability('Refresh')) {
     		it.refresh()
@@ -286,13 +295,13 @@ void updateTheVents() {
 }
 
 void allVentsOpen() {
-	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
+	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
     //LOG("Opening the vent${theVents.size()>1?'s':''}",3,null,'info')
 	theVents?.each { ventOn(it) }
 }
 
 void allVentsClosed() {
-	def theVents = (theEconetVents ? theEconetVents : []) + (theKeenVents ? theKeenVents : []) + (theGenericVents ? theGenericVents: [])
+	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
     //LOG("Closing the vent${theVents.size()>1?'s':''}",3,null,'info')
 	theVents?.each { ventOff(it) } 
 }
@@ -300,19 +309,32 @@ void allVentsClosed() {
 void ventOff( theVent ) {
     if (minimumVentLevel.toInteger() == 0) {
       	if (theVent?.currentSwitch == 'on') {
-        	theVent.setLevel(0)
-        	theVent.off()
-            LOG("Closing ${theVent.displayName}",3,null,'info')
+			if (theVent.hasCapability('switchLevel')) theVent.setLevel(0) {
+        		theVent.off()
+            	LOG("Closing ${theVent.displayName}",3,null,'info')
+			} else {
+				theVent.off()
+				LOG("Turning off ${theVent.displayName}",3,null,'info')
+			}
         } else {
-        	LOG("${theVent.displayName} is already closed",3,null,'info')
+        	LOG("${theVent.displayName} is already closed/off",3,null,'info')
         }
     } else {
-    	if (theVent?.currentLevel.toInteger() != minimumVentLevel.toInteger()) {
-        	theVent.setLevel(minimumVentLevel.toInteger())	// make sure none of the vents are less than the specified minimum
-            LOG("Closing ${theVent.displayName} to ${minimumVentLevel}%",3,null,'info')
-        } else {
-        	LOG("${theVent.displayName} is already closed",3,null,'info')
-        }
+		if (theVent.hasCapability('switchLevel')) {
+			if (theVent?.currentLevel.toInteger() != minimumVentLevel.toInteger()) {
+        		theVent.setLevel(minimumVentLevel.toInteger())	// make sure none of the vents are less than the specified minimum
+            	LOG("Closing ${theVent.displayName} to ${minimumVentLevel}%",3,null,'info')
+        	} else {
+        		LOG("${theVent.displayName} is already closed",3,null,'info')
+        	}
+		} else {
+			if (theVent?.currentSwitch == 'on') {
+				theVent.off()
+				LOG("Turning off ${theVent.displayName}",3,null,'info')
+			} else {
+				LOG("${theVent.displayName} is already off",3,null,'info')
+			}
+		}
     }
 }
 
@@ -322,14 +344,14 @@ void ventOn( theVent ) {
     	theVent.on()
         changed = true
     }
-    if (theVent?.currentLevel.toInteger() < 99) {
-    	theVent.setLevel(99)
+	if (theVent.hasCapability('switchLevel')) {
+    	if (theVent?.currentLevel.toInteger() < 99) { theVent.setLevel(99); theVent.setLevel(100); } //some vents don't handle '100'
         changed = true
     }
     if (changed) {
-    	LOG("Opening ${theVent.displayName}",3,null,'info')
+		LOG("${theVent.hasCapability('switchLevel')?'Opening':'Turning off'} ${theVent.displayName}",3,null,'info')
     } else {
-    	LOG("${theVent.displayName} is already open",3,null,'info')
+		LOG("${theVent.displayName} is already ${theVent.hasCapability('switchLevel')?'open':'off'}",3,null,'info')
     }
 }
 // Helper Functions
