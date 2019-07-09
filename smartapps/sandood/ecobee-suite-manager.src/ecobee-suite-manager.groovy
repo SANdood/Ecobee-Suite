@@ -62,7 +62,7 @@
  *	1.7.22 - Fixed thermOpStat 'idle' transition, added 'ventilator', 'economizer', 'compHotWater' & 'auxHotWater' equipOpStats
  *	1.7.23 - More code optimizations
  *  1.7.24 - Handle DNS name resolution timeouts, changed displayName for Smart Vents & Switches, added external Global Pause switch
- *  1.7.25 - Changed displayName for Smart Modes & Programs 
+ *  1.7.25 - Changed displayName for Smart Mode,Programs & Setpoints Helper 
  */
 String getVersionNum() 		{ return "1.7.25" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
@@ -85,18 +85,18 @@ def getHelperSmartApps() {
         [name: "ecobeeCirculationChild", appName: "ecobee Suite Smart Circulation",
 			 namespace: myNamespace, multiple: true,
 			 title: "New Smart Circulation Helper..."],
-		[name: "ecobeeModeChild", appName: "ecobee Suite Smart Mode & Programs",
+		[name: "ecobeeModeChild", appName: "ecobee Suite Smart Mode",
         	namespace: myNamespace, multiple: true,
-            title: "New Smart Mode & Setpoints Helper..."],
+            title: "New Smart Mode, Programs & Setpoints Helper..."],
         [name: "ecobeeRoomChild", appName: "ecobee Suite Smart Room",
         	namespace: myNamespace, multiple: true,
             title: "New Smart Room Helper..."],
         [name: "ecobeeSwitchesChild", appName: "ecobee Suite Smart Switches",
         	namespace: myNamespace, multiple: true,
             title: "New Smart Switch/Dimmer/Vent Helper..."],
-        [name: "ecobeeVentsChild", appName: "ecobee Suite Smart Vents & Switches",
+        [name: "ecobeeVentsChild", appName: "ecobee Suite Smart Vents",
         	namespace: myNamespace, multiple: true,
-            title: "New Smart Vents Helper..."],
+            title: "New Smart Vents & Switches Helper..."],
 		[name: "ecobeeZonesChild", appName: "ecobee Suite Smart Zones",
 			namespace: myNamespace, multiple: true,
 			title: "New Smart Zones Helper..."],
