@@ -34,7 +34,7 @@
  * 	1.7.04 - Fix myThermostats (should have been theThermostats)
  *	1.7.05 - More nonCached cleanup
  *	1.7.06 - Fixed multi-contact/multi-switch initialization
- *	1.7.07 - Fixed SMS text entry
+ *	1.7.07 - Fixed SMS text entry 
  *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
  *  1.7.10 - Fixed statModeChange() event handler
