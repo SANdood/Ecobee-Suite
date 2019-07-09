@@ -52,8 +52,9 @@
  *	1.7.22 - Double check everything is still open before turning off
  *	1.7.23 - Cleaned up unschedule()
  *	1.7.24 - Fixed ADT (another damned typo)
+ *	1.7.25 - Don't notify if contacts are closed while "off_pending" delay
  */
-String getVersionNum() 		{ return "1.7.24" }
+String getVersionNum() 		{ return "1.7.25" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -505,7 +506,7 @@ void sensorOpened(evt=null) {
 void sensorClosed(evt=null) {
 	// Turn HVAC Off action has occured
     LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 3,null,'trace')
-	def HVACModeState = atomicState.HVACModeStat
+	def HVACModeState = atomicState.HVACModeState
     boolean ST = atomicState.isST
     
     if (allClosed() == true) {
@@ -544,7 +545,7 @@ void sensorClosed(evt=null) {
 			atomicState.HVACModeState = 'on'
 			LOG("All sensors & switches are reset, off_pending was cancelled", 3, null, 'info')
             // still on
-			turnOnHVAC(true)	// Just in case
+			turnOnHVAC(false)	// Just in case
             return
         }
 	    
