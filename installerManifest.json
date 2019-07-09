@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.7.23",
+			"version": 	"1.7.24",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -33,7 +33,7 @@
 				"name": 	"ecobee Suite Open Contacts",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.24",
+				"version": 	"1.7.25",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
 				"optional": 	false
@@ -69,7 +69,7 @@
 				"name": 	"ecobee Suite Smart Mode",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.11",
+				"version": 	"1.7.12",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-mode.groovy",
 				"optional": 	false
@@ -78,7 +78,7 @@
 				"name": 	"ecobee Suite Smart Room",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.05",
+				"version": 	"1.7.06",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy",
 				"optional": 	false
@@ -96,7 +96,7 @@
 				"name": 	"ecobee Suite Smart Vents",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.05",
+				"version": 	"1.7.06",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 				"optional": 	false
@@ -114,7 +114,7 @@
 				"name": 	"ecobee Suite Thermal Comfort",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.10",
+				"version": 	"1.7.11",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
 				"optional": 	false
