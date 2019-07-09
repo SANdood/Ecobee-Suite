@@ -23,8 +23,9 @@
  *  1.7.08 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.09 - Optimized isST/isHE, formatting, added Global Pause
  *	1.7.10 - Fixed isST/isHE Optimization bugs
+ *	1.7.11 - Added multi-humidistat support
  */
-String getVersionNum() { return "1.7.10" }
+String getVersionNum() { return "1.7.11" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
@@ -123,21 +124,32 @@ def mainPage() {
         	if (settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
-        		input ("theThermostat", "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", 
-                	   required: true, multiple: false, submitOnChange: true)
-				paragraph ''
-				input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
-				paragraph HE ? "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
+        		input(name: 'theThermostat', type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", 
+                	  required: true, multiple: false, submitOnChange: true)
 			}
+			paragraph ''
         }
         if (!settings?.tempDisable && settings?.theThermostat) {
             section(title: (HE?'<b>':'') + "Sensors" + (HE?'</b>':'')) {
-                input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", 
-                	  required: true, multiple: false, submitOnChange: true)
-                if (settings?.humidistat) {
+				if (settings?.humidistat) {
+                	input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", 
+                	  	  required: true, multiple: false, submitOnChange: true)
                     atomicState.humidity = settings.humidistat.currentHumidity
-					paragraph "The current temperature is ${theThermostat.currentTemperature}°${unit} and the relative humidity is ${atomicState.humidity}%"
-                }
+					paragraph "The current temperature at ${theThermostat.displayName} is ${theThermostat.currentTemperature}°${unit} and the relative humidity is ${atomicState.humidity}%"
+				} else {
+					input(name: 'humidistats', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensors?", 
+                		  required: true, multiple: true, submitOnChange: true)
+					boolean multiHumid = false
+					if (settings.humidistats && (settings.humidistats.size() == 1)) {
+						atomicState.humidity = settings.humidistats[0].currentHumidity
+					} else {
+						multiHumid = true
+						input(name: 'multiHumidType', type: 'enum', options: ['average', 'highest', 'lowest'], title: 'Multiple Humidity Sensors, use:',
+							  required: true, multiple: false, defaultValue: 'average', submitOnChange: true)
+						atomicState.humidity = getMultiHumidistats()
+					}
+					paragraph "The current temperature at ${theThermostat.displayName} is ${theThermostat.currentTemperature}°${unit} and the ${multiHumid?(settings.multiHumidType+' '):''}relative humidity reading is ${atomicState.humidity}%" 
+				}
 				paragraph ''
             }
 			
@@ -189,6 +201,9 @@ def mainPage() {
         	}
 
 			if (settings.notify) {
+				input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
+				paragraph HE ? "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" 
+							 : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
 				if (ST) {
 					section("Notifications") {
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
@@ -224,7 +239,7 @@ def mainPage() {
 				}
 			}
         }
-        section(title: (HE?'<b>':'') + "Temporarily Pause" + (HE?'</b>':'')) {
+        section(title: (HE?'<b>':'') + "Temporarily Paused" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)
 		}
     	section (getVersionLabel()) {}
@@ -277,8 +292,8 @@ def initialize() {
     // if (thePrograms) subscribe(settings.theThermostat, "currentProgram", modeOrProgramHandler)
     if (statModes) subscribe(settings.theThermostat, "thermostatMode", ModeChangeHandler)
 
-    def h = atomicState.isST ? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
-    atomicState.humidity = h
+    //def h = atomicState.isST ? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
+    atomicState.humidity = getMultiHumidistats()
 	atomicState.because = " because ${app.label} was (re)initialized"
     runIn(2, atomicHumidityUpdater, [overwrite: true])
 	
@@ -291,7 +306,7 @@ def initialize() {
 }
 
 boolean configured() {
-    return ((atomicState.humidity != null) && (settings.theThermostat != null))
+    return ((atomicState.humidity != null) && (atomicState.temperature != null))
 }
 
 boolean coolConfigured() {
@@ -322,8 +337,9 @@ def modeChangeHandler(evt) {
 
 def humidityChangeHandler(evt) {
 	if (evt.numberValue != null) {
-        atomicState.humidity = evt.numberValue
-		atomicState.because = " because the humidity changed to ${evt.value}%"
+        // atomicState.humidity = evt.numberValue
+		atomicState.humidity = getMultiHumidistats()
+		atomicState.because = " because the ${settings.multiHumidistats?(settings.multiHumidistats + ' '):''}humidity changed to ${atomicState.humidity}%"
         runIn(2, atomicHumidityUpdater, [overwrite: true])			// Humidity changes are independent of thermostat settings, no need to wait long
     }
 }
@@ -354,7 +370,6 @@ void humidityUpdate( Integer humidity ) {
 		LOG("${settings.theThermostat.displayName} is in Vacation Mode, not adjusting setpoints", 3, null, 'warn')
 		return
 	}
-	
 	
     def currentProgram 	= ST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
     def currentMode 	= ST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)
@@ -560,7 +575,7 @@ def calculateHeatSetpoint() {
     def range = getHeatRange()
     def min = range[0] as BigDecimal
     def max = range[1] as BigDecimal
-    def preferred = max as BigDecimal
+    def preferred = max
     def goodSP = preferred as BigDecimal
     def pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     def goodPMV = pmv 
@@ -587,7 +602,7 @@ def calculateCoolSetpoint() {
     def range = getCoolRange()
     def min = range[0] as BigDecimal
     def max = range[1] as BigDecimal
-    def preferred = min as BigDecimal
+    def preferred = min
     def goodSP = preferred as BigDecimal
     def pmv = calculatePmv(preferred, units, atomicState.humidity, met, clo)
     def goodPMV = pmv
@@ -617,6 +632,44 @@ def getCoolRange() {
     def high = ST ? settings.theThermostat.currentValue('coolRangeHigh') : settings.theThermostat.currentValue('coolRangeHigh', true)
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
+
+def getMultiHumidistats() {
+	if (!settings.humidistats) 				return settings.humidistat.currentHumidity
+	if (settings.humidistats.size() == 1) 	return settings.humidistats[0].currentHumidity
+	
+	def tempList = settings.humidistats.currentHumidity
+	switch(settings.multiHumidType) {
+		case 'average':
+			return roundIt( (tempList.sum() / tempList.size()), 0)
+			break;
+		case 'lowest':
+			return tempList.min()
+			break;
+		case 'highest':
+			return tempList.max()
+			break;
+	}
+}
+/*					
+def getMultiThermometers() {
+	if (!settings.thermometers) 			return settings.theThermostat.currentTemperature
+	if (settings.thermometers.size() == 1) 	return settings.thermostats[0].currentTemperature
+	
+	def tempList = settings.thermometers.currentTemperature
+	def result
+	switch(settings.multiTempType) {
+		case 'average':
+			return roundIt( (tempList.sum() / tempList.size()), (getTemperatureScale()=='C'?2:1))
+			break;
+		case 'lowest':
+			return tempList.min()
+			break;
+		case 'highest':
+			return tempList.max()
+			break;
+	}
+}
+*/
 
 // Helper Functions
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
