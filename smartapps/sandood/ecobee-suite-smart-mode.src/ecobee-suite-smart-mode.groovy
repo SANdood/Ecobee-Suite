@@ -43,9 +43,10 @@
  *	1.7.10 - Optimized isHE/isST, added Global Pause
  *	1.7.11 - Fixed yet another typo
  *	1.7.12 - Extended external temperature range, add Program change support
+ *	1.7.13 - Changed displayName to Smart Mode, Programs & Setpoints
  */
-String getVersionNum() { return "1.7.12" }
-String getVersionLabel() { return "Ecobee Suite Smart Mode & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum() { return "1.7.13" }
+String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -71,7 +72,7 @@ def mainPage() {
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
-			String defaultLabel = "Smart Mode & Setpoints"
+			String defaultLabel = "Smart Mode, Programs & Setpoints"
         	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
             if (!app.label) {
 				app.updateLabel(defaultLabel)
