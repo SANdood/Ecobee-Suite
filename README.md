@@ -1,6 +1,6 @@
 Free Universal Ecobee Suite, version: 1.7.** 
 ======================================================
-***Latest Updates were posted on 4 July 2019 at 6:45am EDT***
+***Latest Updates were posted on 9 July 2019 at 7:00pm EDT***
 
 Hubitat users now can utilize the comprehensive functionality of my Ecobee Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
@@ -59,10 +59,10 @@ On both platforms, the Ecobee Suite offers nearly a dozen curated Helper applica
 	  - [Using a Virtual Switch with Quiet Time](#qt-virtual-switch)
   - [ecobee Suite Mode(/Routine)/Switches/Program Helper](#features-routines-sa) ***Updated!***
   - [ecobee Suite Smart Circulation Helper](#features-smart-circ-sa)
-  - [ecobee Suite Smart Mode Helper](#smart-mode-sa)
+  - [ecobee Suite Smart Mode, Program & Setpoints Helper](#smart-mode-sa)
   - [ecobee Suite Smart Room Helper](#features-smart-room-sa)
   - [ecobee Suite Smart Switches Helper](#features-smart-switches-sa)
-  - [ecobee Suite Smart Vents Helper](#features-smart-vents-sa)
+  - [ecobee Suite Smart Vents & Switches Helper](#features-smart-vents-sa)
   - [ecobee Suite Smart Zones Helper](#features-smart-zone-sa)
   - [ecobee Suite Thermal Comfort Helper](#features-thermal-comfort) ***New!***
   - [ecobee Suite Working From Home Helper](#features-working-home) ***New!***
@@ -837,9 +837,9 @@ Beginning with Ecobee Suite release 1.5.*, Smart Circulation can be configured t
 - Enable during specific Location Modes or when thermostat is in specific Program
 - Temporarily Disable app without having to delete and recreate!
 
-### <a name="smart-mode-sa">Smart Mode Helper</a>
+### <a name="smart-mode-sa">Smart Mode, Program & Setpoints Helper</a>
 
-This Helper will automatically change Ecobee Thermostats' Mode based on external temperature and/or dewpoint changes. Generally, the intention is to run Cool or Heat only modes when the outside temperatures might otherwise cause cycling between Heat/Cool if "Auto" were selected. Can also be used to turn the HVAC off when outdoor temperatures warrant leaving the windows open.
+This Helper will automatically change Ecobee Thermostats' Mode based on external temperature and/or dewpoint changes. Generally, the intention is to run Cool or Heat only modes when the outside temperatures might otherwise cause cycling between Heat/Cool if "Auto" were selected. Can also be used to turn the HVAC off when outdoor temperatures warrant leaving the windows open. Version 1.7.12 adds ability to change the Program/Climate/Schedule as well.
 
 #### Features
 
@@ -849,6 +849,7 @@ This Helper will automatically change Ecobee Thermostats' Mode based on external
   * Any Hubitat or  SmartThings Temperature Sensor
   * The Ecobee-supplied outdoor Weather Temperature (note, this is notoriously bad data for most people, unless you live within a couple of miles of the weather sources Ecobee uses)
   * A Hubitat/SmartThings-supported weather station including the author's MeteoWeather driver for the MeteoBridge/WeatherBridge weather gateway.
+* Optionally change the thermostat program/schedule/climate when changing modes
 * Optionally delivers Notifications whenever the thermostat(s) mode is changed
 * Use a single instance (below, above and between temperatures), or create multiple instances
 
@@ -894,9 +895,9 @@ The `ecobee Suite Smart Room` Helper will automate a normally unused room, Activ
 
 > **NOTE:** the response time of this Helper is dependent upon the Polling Frequency set for Ecobee Suite Manager. If your Polling Frequency is 3 (for example), it can take as long as 6 minutes AFTER your HVAC starts heating/cooling before this app realizes that the HVAC has been turned on. Thus, it is best that you use this Helper with a Polling Frequency of 1 minute.
 
-### <a name="features-smart-vents-sa">Smart Vents Helper</a>
+### <a name="features-smart-vents-sa">Smart Vents & Switches Helper</a>
 
-`ecobee Suite Smart Vents` automates one or more vents to reach/maintain a target temperature that you specify or from a specified thermostat. It uses one or more temperature devices, and opens/closes vents based upon current temperature, target temperature and thermostat operating state.
+`ecobee Suite Smart Vents` automates one or more vents to reach/maintain a target temperature that you specify or from a specified thermostat. It uses one or more temperature devices, and opens/closes vents based upon current temperature, target temperature and thermostat operating state. Version 1.7.06 adds the option to turn on/off a switch when trying to meet the setpoint, useful for turning on a fan or a vent blower.
 
 ### <a name="features-smart-zone-sa">`Smart Zones` Helper</a>
 
