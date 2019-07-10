@@ -62,9 +62,10 @@
  *	1.7.22 - Fixed thermOpStat 'idle' transition, added 'ventilator', 'economizer', 'compHotWater' & 'auxHotWater' equipOpStats
  *	1.7.23 - More code optimizations
  *  1.7.24 - Handle DNS name resolution timeouts, changed displayName for Smart Vents & Switches, added external Global Pause switch
- *  1.7.25 - Changed displayName for Smart Mode,Programs & Setpoints Helper 
+ *  1.7.25 - Changed displayName for Smart Mode,Programs & Setpoints Helper
+ *	1.7.26 - Fixed pauseSwitch initialization error
  */
-String getVersionNum() 		{ return "1.7.25" }
+String getVersionNum() 		{ return "1.7.26" }
 String getVersionLabel() 	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace() 	{ return "sandood" }
 import groovy.json.*
@@ -604,14 +605,14 @@ def helperSmartAppsPage() {
         	// paragraph "Global Pause will pause all Helpers that are not already paused; un-pausing will restore only the Helpers that weren't already paused. "
 			input(name: "pauseHelpers", type: "bool", title: "Global Pause all Helpers?", defaultValue: ((atomicState.appsArePaused == null) ? false : atomicState.appsArePaused), submitOnChange: true)
 			input(name: 'pauseSwitch', type: 'capability.switch', title: 'Synchronize Global Pause with this Switch (optional)', multiple: false, required: false, submitOnChange: true) 
-			if (settings.pauseHelpers != atomicState.appsArePaused) {
-            	if (settings.pauseHelpers) {
+			if (settings?.pauseHelpers != atomicState.appsArePaused) {
+            	if (settings?.pauseHelpers) {
 					childAppsPauser( true )
-					settings.pauseSwitch.on()
+					if (settings?.pauseSwitch) settings.pauseSwitch.on()
 					atomicState.appsArePaused = true
 				} else {
 					childAppsPauser( false )
-					settings.pauseSwitch.off()
+					if (settings?.pauseSwitch) settings.pauseSwitch.off()
 					atomicState.appsArePaused = false
 				}
             }
