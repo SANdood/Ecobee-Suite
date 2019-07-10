@@ -34,7 +34,7 @@
  * 	1.7.04 - Fix myThermostats (should have been theThermostats)
  *	1.7.05 - More nonCached cleanup
  *	1.7.06 - Fixed multi-contact/multi-switch initialization
- *	1.7.07 - Fixed SMS text entry 
+ *	1.7.07 - Fixed SMS text entry
  *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
  *  1.7.10 - Fixed statModeChange() event handler
@@ -53,8 +53,9 @@
  *	1.7.23 - Cleaned up unschedule()
  *	1.7.24 - Fixed ADT (another damned typo)
  *	1.7.25 - Don't notify if contacts are closed while "off_pending" delay
+ *	1.7.26 - Fixed 'off_pending' (again)
  */
-String getVersionNum() 		{ return "1.7.25" }
+String getVersionNum() 		{ return "1.7.26" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -545,7 +546,7 @@ void sensorClosed(evt=null) {
 			atomicState.HVACModeState = 'on'
 			LOG("All sensors & switches are reset, off_pending was cancelled", 3, null, 'info')
             // still on
-			turnOnHVAC(false)	// Just in case
+			turnOnHVAC(true)	// Just in case
             return
         }
 	    
