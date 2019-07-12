@@ -3366,7 +3366,7 @@ void updateThermostatData() {
             // (Note that each thermostat could actually be in a different time zone)
             def myTimeZone = statLocation?.timeZone ? TimeZone.getTimeZone(statLocation.timeZone) : (location.timeZone?: TimeZone.getTimeZone('UTC'))
             def disconnectedMS = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.getTime()
-            String disconnectedAt = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime).format('yyyy-MM-dd HH:mm:ss', myTimeZone)
+            String disconnectedAt = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.format('yyyy-MM-dd HH:mm:ss', myTimeZone)
             // In this case, holdEndsAt is actually the date & time of the last valid update from the thermostat...
             holdEndsAt = fixDateTimeString( disconnectedAt.take(10), disconnectedAt.drop(11), statTime[tid] )
             if (forcePoll && settings.askAlexa) {
@@ -3468,9 +3468,12 @@ void updateThermostatData() {
                     currentClimateType = currentClimateRef?.type
                     break;
                 case 'demandResponse':
-                	currentClimateName = 'Hold: Eco'
+                if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false))
+                	// Oddly, the *RelativeTemp values are always POSITIVE to reduce the load, and NEGATIVE to increase it (ie., pre-cool/pre-heat)
+                    // Per: https://getsatisfaction.com/api/topics/dr-event-with-negative-relative-heat-temp-increases-the-setpoint-instead-of-decreasing-it 
+                	currentClimateName = ((runningEvent.coolRelativeTemp < 0) || (runningEvent.heatRelativeTemp < 0)) ? 'Hold: Eco Prep' : 'Hold: Eco'
                     currentClimateOwner = 'demandResponse'
-                    currentClimate = 'Eco'
+                    currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco' : 'Eco!'		// Tag mandatory DR events
                     currentClimateId = runningEvent.name as String
                     currentClimateType = 'program'
                     break;
@@ -3553,6 +3556,7 @@ void updateThermostatData() {
         Boolean smartRecovery = false
         Boolean overCool = false
         Boolean dehumidifying = false
+        Boolean ecoPreCool = false
 
         // Let's deduce if we are in Smart Recovery mode
         if (equipStatus.contains('ea')) {
@@ -4680,6 +4684,30 @@ boolean deleteVacation(child, deviceId, vacationName=null ) {
     }
 	// if (result) atomicState.forcePoll = true 		// force next poll to get updated data
 	runIn(5, pollChildren, [overwrite: true]) 	// Pick up the changes
+    return result
+}
+
+// The calling child device should have verified that the current Event is demandResponse, and that it isn't mandatory
+boolean cancelDemandResponse(child, String deviceId) {
+    if (child == null) {
+       	child = getChildDevice(getThermostatDNI(deviceId))
+    }
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to cancelDemandResponse(${child}, ${deviceId})", 2, child, 'warn')
+        queueFailedCall('cancelDemandResponse', child.device.deviceNetworkId, 1, deviceId)
+        return false
+    }
+    boolean debugLevelFour = debugLevel(4)
+    boolean debugLevelThree = debugLevelFour ?: debugLevel(3)
+    String statName = getThermostatName(deviceId)
+    if (debugLevelThree) LOG("Entered cancelDemandResponse for thermostat ${statName} (${deviceId}) with child: ${child.device?.displayName}", 1, child, 'trace')
+
+	// this is probably the ONLY time we just want to pop the stacked Hold events...
+    def jsonRequestBody = '{"functions":[{"type":"resumeProgram","params":{"resumeAll":"false"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
+	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 1, child, 'debug')
+    
+	boolean result = sendJson(child, jsonRequestBody)
+    if (debugLevelThree) LOG("cancelDemandResponse() for ${child.device?.displayName} (${deviceId}) returned ${result}", 1, child, result?'info':'warn')
     return result
 }
 
