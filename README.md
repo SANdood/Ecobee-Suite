@@ -1,6 +1,6 @@
 Free Universal Ecobee Suite, version: 1.7.** 
 ======================================================
-***Latest Updates were posted on 9 July 2019 at 7:00pm EDT***
+***Latest Updates were posted on 14 July 2019 at 8:20am EDT***
 
 Hubitat users now can utilize the comprehensive functionality of my Ecobee Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
@@ -79,6 +79,7 @@ On both platforms, the Ecobee Suite offers nearly a dozen curated Helper applica
 	  - [Changing Thermostat Fan Modes](#changingfan)
 	  - [Complex Commands Requiring Arguments](#complex)
   - [Reservations](#reservations)
+  - [Demand Response](#demandResponse)
 
 -----------------------------
 
@@ -1574,3 +1575,29 @@ Where:
 - `stat.id` is the Ecobee Thermostat ID number (getDeviceId(device.deviceNetworkId))
 - `child.Id` is the SmartThings application ID (app.Id)
 - `type` is any arbitrary identity for the class/type of reservation. Used by the code so far are **`modeOff`**, **`fanOff`**, **`circOff`**, **`vacaCircOff`**.
+
+### <a name="demandResponse">Demand Response</a>
+
+In cooperation with power companies in some countries (including the USA), Ecobee thermostats can be requested to perform energy-saving `demandResponse` actions by the power companies (usually only if you register/subscribe to the program, often with a cash incentive). This version of Ecobee Suite adds support for recognizing, reporting and displaying (on SmartThings Classic) these `demandResponse` activities.
+
+These activities can take many forms, and so far I have only added support for the ones that I have experienced recently. First, there is a "pre-cool" request sent by the power company, usually to drop the `coolingSetpoint` (or increase the `heatingSetpoint`) between 3-5°F for 1.5 hours prior to sending the reduced power request. This latter `demandRequest` event will raise the current `coolingSetpoint` (or lower the `heatingSetpoint` by 4-5°F for a period of time (typ. 3-5 hours). These two events are reported slightly differently so that you can tell the difference:
+* Precool will be denoted as the attribute `currentProgramName` being set to **"Hold: Eco Prep"**. On SmartThings Classic, the program icon will change to the [green half-leaf icon](https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response_bg.png) that also appears on the thermostat itself;
+
+* The `demandResponse` event itself will be denoted as `currentProgramName` being simply **"Hold: Eco"**; the SmartThings Classic program icon will be the [green flower icon](https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response.png) that appears on the thermostat;
+* In both cases, the following attributes are also updated to reflect the DR event:
+  - `currentProgram` will be set to **"Eco"** if the event is optional (i.e., you can cancel it), or as **"Eco!"** (with an exclamation point) if it is a mandatory event that cannot be overridden 
+
+  - `thermostatHold` will be set to **"demandResponse"**
+  - `holdEndsAt` will describe the time the hold will end, as in **"today at 6:30pm"** (time is local thermostat time)
+  - `holdStatus` will describe the event as **"Demand Response Event ends today at 6:30pm"** 
+* Additionally, a new command entry point has been created, **`cancelDemandResponse()`**. This command will cancel the current event IFF it is not a mandatory DR event. The "Resume/Cancel" button on the SmartThings Classic thermostat device will also change to enable cancelling the DR event.
+
+It is important to understand that DR events CAN be overridden by another user-generated hold, but the end time of such a hold will be forced by Ecobee to match the end-time of the DR event. DR events are also created *on top of* any current hold, and the existing hold will be returned to after the DR event completes, or if it is cancelled. Also, you can turn off the HVAC altogether while a DR event is running, but it will not be automatically turned back on when the event finishes.
+
+Developers should note that if they call `resumeProgram()` instead of `cancelDemandResponse()`, both the DR event *AND* any prior-existing Hold will be cancelled, and the regularly scheduled program will run. Also, it is not possible for end-users to create their own DR events (but you can create a Hold or a program that does the equivalent).
+
+Hopefully the above provides enough info for WebCoRE users and Groovy programmers can interact with these DR events. If not, let me know.
+
+This feature was added at user request. One person asked to be able to automatically cancel such events if they are at home; another wanted to take other energy-savings actions during a DR event (which often are scheduled when power rates are at their daily highest).
+
+Finally, note that this is my first implementation - their undoubtedly will arise situations that I don't handle properly. If you find one, please let me know so I can increase the robustness of the implementation.
