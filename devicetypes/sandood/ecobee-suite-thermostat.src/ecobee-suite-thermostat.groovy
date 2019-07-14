@@ -26,25 +26,6 @@
  *	See Github Changelog for complete change history
  *
  * <snip>
- *	1.6.00 - Release number synchronization
- *	1.6.02 - Fix reservations initialization error
- *	1.6.03 - Automatically re-run updated() if VersionLabel changes
- *	1.6.04 - Deprecated make/cancelReservation - moved to parent
- *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
- *	1.6.11 - Deleted 'reservations' attribute - no longer used
- *	1.6.12 - Fixed type conversion error on Auto mode temp display
- *	1.6.13 - Clean up setpoint/setpointDisplay stuff (new isIOS & isAndroid)\
- *	1.6.14 - Another Android setpoint tweak
- *	1.6.15 - Missed one
- *	1.6.16 - Fixed initialization errors & priorities
- *	1.6.17 - Added a modicom of compatibility with the "new" Samsung (Connect)
- *	1.6.18 - Fixed coolingSetpoint error
- *	1.6.19 - Shortcut 'TestingForInstall' in installed()
- *	1.6.20 - Log uninstall also
- *	1.6.21 - Added setProgramSetpoints()
- *	1.6.22 - Expanded to include ALL settings as attributes
- *	1.6.23 - Changed equipment operating state to 'de/humidifying'
- *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Improved thermostatHold testing
  *  1.7.03 - More thermostatHold optimizations
@@ -67,8 +48,9 @@
  *	1.7.20 - Added economizer, ventilator, compHotWater, & auxHotWater for equipmentOperatingState/thermostatOperatingStateDisplay
  *	1.7.21 - Fixed set*fanMinOnTime() again
  *	1.7.22 - Enabled "Demand Response" program
+ *	1.7.23 - Fixed typo in setDehumiditySetpoint()
  */
-String getVersionNum() 		{ return "1.7.22" }
+String getVersionNum() 		{ return "1.7.23" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -3086,7 +3068,7 @@ void setDehumiditySetpointDelay(setpoint) {
 	// verify that the stat hasDehumidifer
 	def hasDehumidifier = device.currentValue('hasDehumidifier')
 	if (!hasDehumidifier || (hasDehumidifier == 'false')) {
-		LOG("${deviceId.displayName} is not controlling a dehumidifier nor is it overcooling", 1, child, 'warn')
+		LOG("${device.displayName} is not controlling a dehumidifier nor is it overcooling", 1, child, 'warn')
 		return
 	}
 	def currentSetpoint = state.isST ? device.currentValue('dehumiditySetpoint') : device.currentValue('dehumiditySetpoint', true)
