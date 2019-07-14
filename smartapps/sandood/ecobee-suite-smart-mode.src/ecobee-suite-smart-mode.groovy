@@ -44,8 +44,9 @@
  *	1.7.11 - Fixed yet another typo
  *	1.7.12 - Extended external temperature range, add Program change support
  *	1.7.13 - Changed displayName to Smart Mode, Programs & Setpoints
+ *	1.7.14 - Rerun temperature checks when location.mode becomes valid again
  */
-String getVersionNum() { return "1.7.13" }
+String getVersionNum() { return "1.7.14" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -532,15 +533,28 @@ boolean initialize() {
             if (t != null) tempNow = t as BigDecimal
 			break;
 	}
-    atomicState.locModeEnabled = theModes ? theModes.contains(location.mode) : true
+    atomicState.locModeEnabled = settings.theModes ? settings.theModes : true
+	if (settings.theModes) {
+		subscribe(location, locationModeChangeHandler)
+		atomicState.locModeEnabled = settings.theModes.contains(location.mode)
+	} else { atomicState.locModeEnabled = true }
+	
     if (tempNow) {
     	atomicState.temperature = tempNow
-    	LOG("Initialization complete...current Outside Temperature is ${tempNow}°${gu}",2,null,'info')
+    	LOG("Initialization complete...current Outside Temperature is ${tempNow}°${gu} - checking...",2,null,'info')
+		atomicTempUpdater()
         return true
     } else {
     	LOG("Initialization error...invalid temperature: ${tempNow}°${gu} - please check settings and retry", 2, null, 'error')
         return false
     }
+}
+
+def locationModeChangeHandler(evt) {
+	if (!settings.theModes) return	// not using Location Mode filter
+	if (settings.theModes.contains(evt.value)) {
+		if (atomicState.temperature) atomicTempUpdater()
+	}
 }
 
 def insideChangeHandler(evt) {
@@ -1411,27 +1425,13 @@ def pauseOff() {
 	}
 	atomicState.globalPause = false
 }
-// **************************************************************************************************************************
+
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//    Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use atomicState so that it is universal
-//
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
 boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//  - "if (state.isST)" is more efficient than "if (isSTHub)"
-//
+
 String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
@@ -1444,9 +1444,5 @@ boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
 boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
-//
-// **************************************************************************************************************************
