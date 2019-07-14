@@ -94,7 +94,7 @@ def getHelperSmartApps() {
 			title: "New Working From Home Helper..."]
 	]
 }
- 
+  
 definition(
 	name:			"Ecobee Suite Manager",
 	namespace:		myNamespace,
