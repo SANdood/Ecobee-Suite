@@ -363,11 +363,11 @@ void ventOn( theVent ) {
 // Helper Functions
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	def opts = [' (open)', ' (closed)', ' (paused)']
-	String flag
+	def opts = [' (open)', ' (closed)']
+	String flag = ' (paused)'
 	if (ST) {
-		opts.each {
-			if (!flag && app.label.contains(it)) flag = it
+		if (!app.label.contains(flag)) opts.each {
+			if (app.label.contains(it)) flag = it
 		}
 	} else {
 		flag = '<span '
