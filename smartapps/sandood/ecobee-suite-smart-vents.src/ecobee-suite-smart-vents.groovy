@@ -363,7 +363,15 @@ void ventOn( theVent ) {
 // Helper Functions
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	String flag = ST ? ' (paused)' : '<span '
+	def opts = [' (open)', ' (closed)', ' (paused)']
+	String flag
+	if (ST) {
+		opts.each {
+			if (!flag && app.label.contains(it)) flag = it
+		}
+	} else {
+		flag = '<span '
+	}
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
