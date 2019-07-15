@@ -27,8 +27,9 @@
  *	1.7.04 - Optimized isST/isHE, formatting, added Global Pause
  *	1.7.05 - More code optimizations
  *	1.7.06 - Added generic switch control (e.g., to control a fan)
+ *	1.7.07 - Update vent status (refresh) before & after taking actions, display status in label
  */
-String getVersionNum() 		{ return "1.7.06" }
+String getVersionNum() 		{ return "1.7.07" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -141,9 +142,9 @@ def mainPage() {
             	section( title: (HE?'<b>':'') + "Disabled Vent State" + (HE?'</b>':'')) {
             		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:['open/on','closed/off','unchanged'], 
 						  required: true, multiple: false, defaultValue: 'closed')
+					if (HE) paragraph ''
                 }
       		}
-			if (HE) paragraph ''
         }        	
 		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", description: "", defaultValue: false, submitOnChange: true)
@@ -198,6 +199,7 @@ def initialize() {
 }
 
 void changeHandler(evt) {
+	updateTheVents()
 	runIn( 2, checkAndSet, [overwrite: true])
 }
 
@@ -279,6 +281,9 @@ void setTheVents(ventState) {
     } else if (ventState == 'closed') {
         allVentsClosed()
 	}
+	atomicState.ventState = ventState
+	updateMyLabel()
+	runIn(2, updateTheVents, [overwrite: true])
 }
 
 void updateTheVents() {
@@ -309,8 +314,9 @@ void allVentsClosed() {
 void ventOff( theVent ) {
     if (minimumVentLevel.toInteger() == 0) {
       	if (theVent?.currentSwitch == 'on') {
-			if (theVent.hasCapability('switchLevel')) theVent.setLevel(0) {
+			if (theVent.hasCapability('switchLevel')) {
         		theVent.off()
+				if (theVent.currentValue('switchLevel') != 0) theVent.setLevel(0)
             	LOG("Closing ${theVent.displayName}",3,null,'info')
 			} else {
 				theVent.off()
@@ -345,7 +351,7 @@ void ventOn( theVent ) {
         changed = true
     }
 	if (theVent.hasCapability('switchLevel')) {
-    	if (theVent?.currentLevel.toInteger() < 99) { theVent.setLevel(99); theVent.setLevel(100); } //some vents don't handle '100'
+    	if (theVent?.currentLevel.toInteger() < 99) { theVent.setLevel(99) } //some vents don't handle '100'
         changed = true
     }
     if (changed) {
@@ -372,6 +378,12 @@ void updateMyLabel() {
 	}
 	if (settings.tempDisable) {
 		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else if (atomicState.ventState == 'open') {
+		def newLabel = myLabel + (!ST ? '<span style="color:blue"> (open)</span>' : ' (open)')
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else if (atomicState.ventState == 'closed') { 
+		def newLabel = myLabel + (!ST ? '<span style="color:green"> (closed)</span>' : ' (closed)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
