@@ -24,8 +24,9 @@
  *	1.7.09 - Optimized isST/isHE, formatting, added Global Pause
  *	1.7.10 - Fixed isST/isHE Optimization bugs
  *	1.7.11 - Added multi-humidistat support
+ *	1.7.12 - Fixed multi-humidistat initialization error
  */
-String getVersionNum() { return "1.7.11" }
+String getVersionNum() { return "1.7.12" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
@@ -140,15 +141,17 @@ def mainPage() {
 					input(name: 'humidistats', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensors?", 
                 		  required: true, multiple: true, submitOnChange: true)
 					boolean multiHumid = false
-					if (settings.humidistats && (settings.humidistats.size() == 1)) {
-						atomicState.humidity = settings.humidistats[0].currentHumidity
-					} else {
-						multiHumid = true
-						input(name: 'multiHumidType', type: 'enum', options: ['average', 'highest', 'lowest'], title: 'Multiple Humidity Sensors, use:',
-							  required: true, multiple: false, defaultValue: 'average', submitOnChange: true)
-						atomicState.humidity = getMultiHumidistats()
+					if (settings.humidistats) {
+						if (settings.humidistats.size() == 1) {
+							atomicState.humidity = settings.humidistats[0].currentHumidity
+						} else {
+							multiHumid = true
+							input(name: 'multiHumidType', type: 'enum', options: ['average', 'highest', 'lowest'], title: 'Multiple Humidity Sensors, use:',
+								  required: true, multiple: false, defaultValue: 'average', submitOnChange: true)
+							atomicState.humidity = getMultiHumidistats()
+						}
 					}
-					paragraph "The current temperature at ${theThermostat.displayName} is ${theThermostat.currentTemperature}°${unit} and the ${multiHumid?(settings.multiHumidType+' '):''}relative humidity reading is ${atomicState.humidity}%" 
+					if (atomicState.humidity != null) paragraph "The current temperature at ${theThermostat.displayName} is ${theThermostat.currentTemperature}°${unit} and the ${multiHumid?(settings.multiHumidType+' '):''}relative humidity reading is ${atomicState.humidity}%" 
 				}
 				paragraph ''
             }
