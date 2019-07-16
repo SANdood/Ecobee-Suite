@@ -45,8 +45,9 @@
  *	1.7.12 - Extended external temperature range, add Program change support
  *	1.7.13 - Changed displayName to Smart Mode, Programs & Setpoints
  *	1.7.14 - Rerun temperature checks when location.mode becomes valid again
+ *	1.7.15 - Display current Mode & Program in appLabel
  */
-String getVersionNum() { return "1.7.14" }
+String getVersionNum() { return "1.7.15" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -372,7 +373,9 @@ boolean initialize() {
     
     if (settings.aboveCool || settings.belowHeat || settings.insideAuto) {
     	subscribe(thermostats, 'temperature', insideChangeHandler)
-    }
+	} else {
+		atomicState.insideOverride = [:]
+	}
     
     if (settings.aboveTemp || settings.belowTemp) {
     	subscribe(thermostats, 'thermostatMode', thermostatModeHandler)
@@ -647,6 +650,7 @@ def insideChangeHandler(evt) {
         }
     }
     atomicState.insideOverride = insideOverride
+	updateMyLabel()
 }
 
 def thermostatModeHandler(evt) {
@@ -664,6 +668,7 @@ def thermostatModeHandler(evt) {
         atomicState.belowChanged = false
     }
     if (evt.value != 'off') cancelReservation( getDeviceId(evt.device.deviceNetworkId), 'modeOff' ) // we're not off anymore, give up the reservation
+	updateMyLabel()
 }
 
 def tempChangeHandler(evt) {
@@ -942,6 +947,7 @@ def temperatureUpdate( BigDecimal temp ) {
         }
         if (sameNames) LOG("Temp is ${temp}°${unit}, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
+	updateMyLabel()
 }
 
 void changeSetpoints( program, heatTemp, coolTemp ) {
@@ -1376,7 +1382,16 @@ void sendMessage(notificationMessage) {
 }
 
 void updateMyLabel() {
-	String flag = atomicState.isST ? ' (paused)' : '<span '
+	boolean ST = atomicState.isST
+	def opts = [' (Cool', ' (Heat', ' (Auto', ' (Off', ' (Aux', ' (Emer']
+	String flag = ' (paused)'
+	if (ST) {
+		if (!app.label.contains(flag)) opts.each {
+			if (!flag && app.label.contains(it)) flag = it
+		}
+	} else {
+		flag = '<span '
+	}
 	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
@@ -1390,10 +1405,12 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (atomicState.isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		String  newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
-		if (app.label != myLabel) app.updateLabel(myLabel)
+		String modeProgStr = ' (' + thermostats[0].currentValue('thermostatMode').capitalize() + ' - ' + thermostats[0].currentValue('currentProgramName') + ')'
+		String newLabel = myLabel + (!ST ? '<span style="color:green">' + modeProgStr : modeProgStr)					 
+		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
 }
 def pauseOn() {
