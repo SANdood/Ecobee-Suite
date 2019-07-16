@@ -49,8 +49,9 @@
  *	1.7.25 - Changed displayName for Smart Mode,Programs & Setpoints Helper
  *	1.7.26 - Fixed pauseSwitch initialization error
  *	1.7.27 - Enabled "Demand Response" program
+ *	1.7.28 - Fixed weatherIcon change at sunrise/sunset & demandResponse currentProgramName/Id
  */
-String getVersionNum()		{ return "1.7.27" }
+String getVersionNum()		{ return "1.7.28" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -94,7 +95,7 @@ def getHelperSmartApps() {
 			title: "New Working From Home Helper..."]
 	]
 }
-  
+ 
 definition(
 	name:			"Ecobee Suite Manager",
 	namespace:		myNamespace,
@@ -3454,7 +3455,7 @@ void updateThermostatData() {
 					currentClimateType = currentClimateRef?.type
 					break;
 				case 'demandResponse':
-				if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false))
+					// if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false))
 					// Oddly, the *RelativeTemp values are always POSITIVE to reduce the load, and NEGATIVE to increase it (ie., pre-cool/pre-heat)
 					// Per: https://getsatisfaction.com/api/topics/dr-event-with-negative-relative-heat-temp-increases-the-setpoint-instead-of-decreasing-it 
 					currentClimateName = ((runningEvent.coolRelativeTemp < 0) || (runningEvent.heatRelativeTemp < 0)) ? 'Hold: Eco Prep' : 'Hold: Eco'
@@ -3463,7 +3464,8 @@ void updateThermostatData() {
 					currentClimateId = runningEvent.name as String
 					currentClimateType = 'program'
 					break;
-				default:				
+				default:		
+					LOG("Unexpected runningEvent.type: (${runningEvent.type}) - please notify Barry",1,null,'warn')
 					currentClimateName = (runningEvent.type != null) ? runningEvent.type : 'null'
 					break;
 			}
@@ -3982,7 +3984,7 @@ void updateThermostatData() {
 		if (sensorsUpdated && (lastOList[1] != occupancy)) data += [motion: occupancy]
 		if (rtReallyUpdated || forcePoll || weatherUpdated || extendRTUpdated) { // || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
 			String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
-			def oftenList = [tempTemperature,occupancy,runtime?.actualHumidity,null,null,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
+			def oftenList = [tempTemperature,occupancy,runtime?.actualHumidity,null,timeOfDay,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
 								tempWeatherPressure,humiditySetpoint,dehumiditySetpoint,humiditySetpointDisplay,userPrecision]
 			
 			if ((tempTemperature != null) && ((lastOList[0] != tempTemperature) || forcePoll)) data += [temperature: tempTemperature] // roundIt(tempTemperature, apiPrecision)] // String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision))]
@@ -3991,7 +3993,7 @@ void updateThermostatData() {
 			if (lastOList[10] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint]
 			if (lastOList[11] != dehumiditySetpoint) data += [dehumiditySetpoint: dehumiditySetpoint]		// dehumidityLevel: dehumiditySetpoint, dehumidifierLevel: dehumiditySetpoint]
 			if (weatherUpdated) {
-				if (wSymbol && (lastOList[5] != wSymbol)) data += [weatherSymbol: wSymbol]
+				if (wSymbol && ((lastOList[5] != wSymbol) || (timeOfDay != lastOList[4]))) data += [timeOfDay: timeOfDay, weatherSymbol: wSymbol]
 				if ((tempWeatherTemperature != null) && ((lastOList[6] != tempWeatherTemperature) || userPChanged)) data += [weatherTemperature: roundIt(tempWeatherTemperature, userPrecision)] //String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision))]
 				if ((tempWeatherHumidity != null) && (lastOList[7] != tempWeatherHumidity)) data += [weatherHumidity: tempWeatherHumidity]
 				if ((tempWeatherDewpoint != null) && ((lastOList[8] != tempWeatherDewpoint) || userPChanged)) data += [weatherDewpoint: roundIt(tempWeatherDewpoint, userPrecision)] // String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision))]
