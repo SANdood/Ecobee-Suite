@@ -49,8 +49,9 @@
  *	1.7.21 - Fixed set*fanMinOnTime() again
  *	1.7.22 - Enabled "Demand Response" program
  *	1.7.23 - Fixed typo in setDehumiditySetpoint()
+ *	1.7.24 - Fixed type conversion error in setFanMinOnTime
  */
-String getVersionNum() 		{ return "1.7.23" }
+String getVersionNum() 		{ return "1.7.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2911,16 +2912,16 @@ void fanOff() {
 	}
 }
 
-void setFanMinOnTimeDelay(Integer minutes) {
+void setFanMinOnTimeDelay(minutes) {
 	LOG("Slider requested Minutes: ${minutes}",4,null,'trace')
 	def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
 	runIn( runWhen, 'sFMOT', [data: [mins:minutes]] )
 }
 void sFMOT(data) {
 	LOG("Setting fan minutes to: ${data.mins}",4,null,'trace')
-	setFanMinOnTime(data.mins as Integer)
+	setFanMinOnTime(data.mins)
 }
-void setFanMinOnTime(Integer minutes=20) {
+void setFanMinOnTime(minutes=20) {
 	boolean ST = state.isST
 	
 	def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
@@ -2928,6 +2929,7 @@ void setFanMinOnTime(Integer minutes=20) {
 		LOG("setFanMinOnTime() requested but thermostat is in Vacation mode, ignoring request",2,null,'warn')
 		return
 	}
+	minutes = minutes as Integer
 	LOG("setFanMinOnTime(${minutes})", 4, null, "trace")
 	def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
 	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested: ${minutes}",3,null,'info')
@@ -3088,14 +3090,15 @@ void setDehumiditySetpointDelay(setpoint) {
 }
 
 // Vacation commands
-void setVacationFanMinOnTime(Integer minutes=0) {
+void setVacationFanMinOnTime(minutes=0) {
 	boolean ST = state.isST
 	
 	def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
-	if ( thermostatHold == 'vacation') {
+	if ( thermostatHold != 'vacation') {
 		LOG("setVacationFanMinOnTime() requested but thermostat is not in Vacation mode, ignoring request",2,null,'warn')
 		return
 	}
+	minutes = minutes as Integer
 	LOG("setVacationFanMinOnTime(${minutes})", 5, null, "trace")
 	def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
 	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested: ${minutes}",3,null,'info')
