@@ -50,8 +50,9 @@
  *	1.7.26 - Fixed pauseSwitch initialization error
  *	1.7.27 - Enabled "Demand Response" program
  *	1.7.28 - Fixed weatherIcon change at sunrise/sunset & demandResponse currentProgramName/Id
+ *	1.7.29 - Fixed null owner & type references for Auto Home/Away programs
  */
-String getVersionNum()		{ return "1.7.28" }
+String getVersionNum()		{ return "1.7.29" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -3412,7 +3413,7 @@ void updateThermostatData() {
 			holdEndsAt = fixDateTimeString( runningEvent.endDate, runningEvent.endTime, statTime[tid])
 			thermostatHold = runningEvent.type
 			String tempClimateRef = runningEvent.holdClimateRef ? runningEvent.holdClimateRef : ''
-			def currentClimateRef = (tempClimateRef != '') ? program.climates.find { it.climateRef == tempClimateRef } : 'null'
+			def currentClimateRef = (tempClimateRef != '') ? program.climates.find { it.climateRef == tempClimateRef } : [:]
 			// log.debug "runningEvent.type: ${runningEvent.type}"
 			switch (runningEvent.type) {
 				case 'hold':
