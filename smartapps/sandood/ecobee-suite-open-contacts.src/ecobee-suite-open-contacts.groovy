@@ -13,20 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.6.00 - Release number synchronization
- *	1.6.01 - Fixed sendMessage()
- *	1.6.02 - Fix reservation initialization error
- *	1.6.03 - REALLY fix reservation initialization error
- *	1.6.04 - Really, REALLY fix reservation initialization error
- *	1.6.05 - Fixed getDeviceId()
- *	1.6.10 - Converted to parent-based reservations
- *	1.6.11 - Clear reservations when disabled
- *	1.6.12 - Cancel modeOff reservation if we get overridden
- *	1.6.13 - Removed location.contactBook support - deprecated by SmartThings
- *	1.6.14 - Removed use of *SetpointDisplay
- *	1.6.15 - Fixed(?) adjust temperature to adjust only when HVACMode is !Off
- *	1.6.16 - Fixed initialization logic WRT HVAC on/off state
- *	1.6.17 - Minor text edits
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixed initialization error
@@ -56,8 +42,9 @@
  *	1.7.26 - Fixed 'off_pending' (again)
  *	1.7.27 - Changed minimum LOG level to 3
  *	1.7.28 - Fixed unintended overwrite of thermostat's mode in statModeChange()
+ *	1.7.29 - Clean up appLabel in sendMessage()
  */
-String getVersionNum() 		{ return "1.7.28" }
+String getVersionNum() 		{ return "1.7.29" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -913,7 +900,7 @@ List getGuestList(String tid, String type='modeOff') {
 }
 void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 3, null, "info")
-    String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 	if (atomicState.isST) {
 		if (phone) { // check that the user did select a phone number
 			if ( phone.indexOf(";") > 0){
