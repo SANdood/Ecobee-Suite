@@ -13,23 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.6.00 - Release number synchronization
- *	1.6.01 - Fixed sendMessage()
- *	1.6.02 - Fix reservation initialization error
- *	1.6.03 - REALLY fix reservation initialization error
- *	1.6.04 - Really, REALLY fix reservation initialization error
- *	1.6.10 - Converted to parent-based reservations
- *	1.6.11 - Clear reservations when disabled
- *	1.6.12 - Logic tuning, clear reservations when externally overridden
- *	1.6.13 - Removed location.contactBook - unexpectedly deprecated by SmartThings
- *	1.6.14 - Updated to remove use of *SetpointDisplay
- *  1.6.15 - Fixed external temp range limiter; should now work with either F/C temperature scales
- *	1.6.16 - Fixed initialization error when using SmartThings Sensors
- *	1.6.17 - Added more logging for PWS, calculate dewpoint if not provided by WU
- *	1.6.18 - Switched Zip/GPS external temp source to new getTwcConditions
- *	1.6.19 - Changes Reverted
- *	1.6.20 - Handle null list of Climates
- *	1.6.21 - Added option to change heat/cool setpoints instead of/in addition to changing the mode
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Fixed thermostats*.auto()
  *  1.7.02 - Fixed SMS text entry
@@ -46,8 +29,9 @@
  *	1.7.13 - Changed displayName to Smart Mode, Programs & Setpoints
  *	1.7.14 - Rerun temperature checks when location.mode becomes valid again
  *	1.7.15 - Display current Mode & Program in appLabel
+ *	1.7.16 - Clean up app label in sendMessage()
  */
-String getVersionNum() { return "1.7.15" }
+String getVersionNum() { return "1.7.16" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -1308,7 +1292,7 @@ void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
 	boolean ST = atomicState.isST
     if (settings.notify) {
-        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+		String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (ST) {
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
