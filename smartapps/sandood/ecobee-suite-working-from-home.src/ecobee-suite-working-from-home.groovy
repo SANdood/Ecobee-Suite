@@ -21,8 +21,9 @@
  *	1.7.06 - Fixing private method issue caused by grails
  *  1.7.07 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.08 - Optimized isST/isHE, formatting
+ *	1.7.09 - Clean up app label in sendMessage()
  */
-String getVersionNum() { return "1.7.08" }
+String getVersionNum() { return "1.7.09" }
 String getVersionLabel() { return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -353,7 +354,7 @@ boolean getDaysOk() {
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
-        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
