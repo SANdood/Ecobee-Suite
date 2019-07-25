@@ -25,8 +25,9 @@
  *	1.7.10 - Fixed isST/isHE Optimization bugs
  *	1.7.11 - Added multi-humidistat support
  *	1.7.12 - Fixed multi-humidistat initialization error
+ *	1.7.13 - Clean up app label in sendMessage()
  */
-String getVersionNum() { return "1.7.12" }
+String getVersionNum() { return "1.7.13" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
@@ -685,7 +686,7 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${settings.notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
-        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
