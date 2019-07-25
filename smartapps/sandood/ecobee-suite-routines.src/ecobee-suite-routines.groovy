@@ -15,13 +15,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.6.00 - Release number synchronization
- *	1.6.01 - Fixed sendMessage()
- *	1.6.10 - Resync for parent-based reservations
- *	1.6.11 - Removed location.contactBook support - deprecated by SmartThings
- *	1.6.12 - Fixed location Mode changing action
- *	1.6.13 - Use 'fanAuto' if fanMinutes is explicitly set to 0
- *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.02 - Fixing Mode change event handling
  *  1.7.03 - Fix programList bug
  *	1.7.04 - noncached currentValue() on HE
@@ -34,8 +27,9 @@
  *  1.7.11 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.12 - Optimized isST/isHE, formatting, Global Pause
  *	1.7.13 - Fixed holdType == ES Manager setting, & getEcobeePrograms()
+ *	1.7.14 - Clean up appLabel in sendMessage(), eliminate duplicate currentProgram/currentProgramName subscriptions
  */
-String getVersionNum() { return "1.7.13" }
+String getVersionNum() { return "1.7.14" }
 String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -275,13 +269,14 @@ def installed() {
 	initialize()  
 }
 def updated() {
-	LOG("Updatedwith settings ${settings}", 4, null, 'trace')
+	LOG("Updated with settings ${settings}", 4, null, 'trace')
 	unsubscribe()
     unschedule()
     initialize()
 }
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+	atomicState.versionLabel = getVersionLabel()
+	LOG("${atomicState.versionLabel} - Initializing...", 2, "", 'info')
 	updateMyLabel()
 	
     if (settings.tempDisable) {
@@ -297,7 +292,7 @@ def initialize() {
 		subscribe(startSwitches, "switch.${startOn}", changeSwitchHandler)
     } else { // has to be "Ecobee Program"
     	subscribe(myThermostats, "currentProgram", changeSTHandler)
-		subscribe(myThermostats, "currentProgramName", changeSTHandler)
+		// subscribe(myThermostats, "currentProgramName", changeSTHandler)
     }
     
 //    if(useSunriseSunset?.size() > 0) {
@@ -308,7 +303,7 @@ def initialize() {
     
 	// Normalize settings data
     normalizeSettings()
-    LOG("initialize() exiting")
+    LOG("...initialization complete")
 }
 
 void normalizeSettings() {
@@ -384,7 +379,8 @@ void normalizeSettings() {
 }
 
 def changeSwitchHandler(evt) {
-	LOG("changeSwitchHandler() entered with evt: ${evt.device.displayName} ${evt.name} turned ${evt.value}", 5)
+	LOG("changeSwitchHandler() entered with evt: ${evt.device.displayName} ${evt.name} turned ${evt.value}", 4, null, 'trace')
+
 	atomicState.theSwitch = evt.device.displayName
 	
 	if (settings.modeOrRoutine && (settings.modeOrRoutine != 'Ecobee Program')) {
@@ -427,7 +423,14 @@ void turnOffStartSwitches() {
 }
 
 def changeSTHandler(evt) {
-	LOG("changeSTHandler() entered with evt: ${evt.name}: ${evt.value}", 5)
+	LOG("changeSTHandler() - entered with evt: ${evt.name}: ${evt.value}", 4, null, 'trace')
+	if (evt.name.endsWith('e')) {
+		LOG('Cleaning up duplicate subscriptions to both currentOProgram & currentProgramName',1,null,'trace')
+		unsubscribe(myThermostats)
+		subscribe(myThermostats, 'currentProgram', changeSTHandler)
+		return	// ignore this 'duplicate' event
+	}
+	
     if (settings.ctrlProgram.contains(evt.value)) {
     	if (!atomicState.ecobeeThatChanged) {
         	atomicState.ecobeeThatChanged = evt.displayName
@@ -508,7 +511,7 @@ void changeSwitches() {
 }
 
 def changeProgramHandler(evt) {
-	LOG("changeProgramHander() entered with evt: ${evt.name}: ${evt.value}", 5)
+	LOG("changeProgramHander() entered with evt: ${evt.name}: ${evt.value}", 4, null, 'trace')
 	boolean ST = atomicState.isST
 	boolean HE = !ST
 	
@@ -778,7 +781,7 @@ def getThermostatModes() {
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
-        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
@@ -927,24 +930,10 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//    Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use atomicState so that it is universal
-//
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
 boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//  - "if (state.isST)" is more efficient than "if (isSTHub)"
-//
+
 String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
@@ -957,9 +946,6 @@ boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
 boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
-//
 // **************************************************************************************************************************
