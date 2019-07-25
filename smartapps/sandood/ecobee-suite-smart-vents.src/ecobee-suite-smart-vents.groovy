@@ -29,8 +29,9 @@
  *	1.7.06 - Added generic switch control (e.g., to control a fan)
  *	1.7.07 - Update vent status (refresh) before & after taking actions, display vent status in appLabel
  *	1.7.08 - Optimized checks when nothing changes; added vent open/close option for 'fan only'
+ *	1.7.09 - Removed redundant log.debug text, fixed new fan only vent option
  */
-String getVersionNum() 		{ return "1.7.08" }
+String getVersionNum() 		{ return "1.7.09" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -117,15 +118,18 @@ def mainPage() {
         
 			section(title: (HE?'<b>':'') + "Smart Vents & Switches: Thermostat" + (HE?'</b>':'')) {
 				paragraph("Specify which thermostat to monitor for heating/cooling events")
-				input(name: "theThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select thermostat", description: 'Tap to choose...', 
+				input(name: "theThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select thermostat",
 					  multiple: false, required: true, submitOnChange: true)
 				if (HE) paragraph ''
 			}
 		
 			section(title: (HE?'<b>':'') + "Smart Vents: Target Temperature" + (HE?'</b>':'')) {
             	if (settings.useThermostat && settings.theThermostat) {
-					def ncTsp = ST ? settings.theThermostat.currentValue('thermostatSetpoint') : settings.theThermostat.currentValue('thermostatSetpoint', true)
-                	paragraph("Current setpoint of ${settings.theThermostat} is ${ncTsp}°.")
+					def cSetpoint = 	ST ? settings.theThermostat.currentValue('thermostatSetpoint') : settings.theThermostat.currentValue('thermostatSetpoint', true)
+					def cHeatSetpoint = ST ? settings.theThermostat.currentValue('heatingSetpoint') : settings.theThermostat.currentValue('heatingSetpoint', true)
+					def cCoolSetpoint = ST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)
+					def cMode = 		ST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)
+					paragraph("${settings.theThermostat} is in '${cMode}' mode, heatingSetpoint: ${cHeatSetpoint}°, coolingSetpoint: ${cCoolSetpoint}°, thermostatSetpoint: ${cSetpoint}°.")
                 }
 				input(name: "useThermostat", type: "bool", title: "Follow setpoints on thermostat${settings.theThermostat?' '+settings.theThermostat.displayName:''}?", required: true, 
 					  defaultValue: true, submitOnChange: true)
@@ -142,7 +146,7 @@ def mainPage() {
         } else { 
         	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents || settings.theGenericSwitches) {
             	section( title: (HE?'<b>':'') + "Disabled Vent State" + (HE?'</b>':'')) {
-            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:['open/on','closed/off','unchanged'], 
+            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:[open: 'open/on',closed: 'closed/off',unchanged: 'unchanged'], 
 						  required: true, multiple: false, defaultValue: 'closed')
 					if (HE) paragraph ''
                 }
@@ -173,32 +177,34 @@ void uninstalled() {
 }
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
-	updateMyLabel()
 	
     atomicState.scheduled = false
     // Now, just exit if we are disabled...
 	if (settings.tempDisable) {
         if (disabledVents && (disabledVents != 'unchanged')) {
-        	setTheVents(disabledVents)
+			(disabledVents.startsWith('open')) ? setTheVents('open') : setTheVents('closed') 
             LOG("Temporarily Paused, setting vents to ${disabledVents}.", 3, null, 'info')
         } else {
         	LOG("Temporarily Paused, vents unchanged", 3, null, 'info')
         }
+		updateMyLabel()
         return true
     }
 	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
 
-    subscribe(theSensors, 		'temperature', changeHandler)	
+    subscribe(theSensors, 		'temperature', 				changeHandler)	
 	subscribe(theThermostat, 	'thermostatOperatingState', changeHandler)
-    subscribe(theThermostat, 	'temperature', changeHandler)
-    subscribe(theVents, 		'level', changeHandler)
-	if (theWindows) subscribe(theWindows, "contact", changeHandler)
+    subscribe(theThermostat, 	'temperature', 				changeHandler)
+	subscribe(theThermostat,	'thermostatMode', 			changeHandler)
+    subscribe(theVents, 		'level', 					changeHandler)
+	if (theWindows) subscribe(theWindows, "contact",		changeHandler)
     if (useThermostat) {
-    	subscribe(theThermostat, 'heatingSetpoint', changeHandler)
-        subscribe(theThermostat, 'coolingSetpoint', changeHandler)
+    	subscribe(theThermostat, 'heatingSetpoint', 		changeHandler)
+        subscribe(theThermostat, 'coolingSetpoint', 		changeHandler)
     }
 	atomicState.currentStatus = [:]
 	setTheVents(checkTemperature())
+	updateMyLabel()
     return true
 }
 
@@ -222,27 +228,26 @@ String checkTemperature() {
 	def cTemperature = theThermostat.currentTemperature
 	def coolSP = theThermostat.currentValue('coolingSetpoint')
 	def heatSP = theThermostat.currentValue('heatingSetpoint')
+	String cMode = theThermostat.currentValue('thermostatMode')
 	def cTemp = getAverageTemperature()
-	def currentStatus = [smarter: smarter, opState: cOpState, temperature: cTemp, coolSP: coolSP, heatSP: heatSP]
-	if (atomicState.currentStatus && (atomicState.currentStatus == currentStatus)) { LOG("Status unchanged... ${currentStatus}",3,null,'trace'); return; }	// ignore - identical to last time
+	def currentStatus = [smarter: smarter, opState: cOpState, mode: cMode, temperature: cTemp, coolSP: coolSP, heatSP: heatSP]
+	if (atomicState.currentStatus && (atomicState.currentStatus == currentStatus)) { LOG("Status unchanged...",3,null,'info'); return; }	// ignore - identical to last time
 	atomicState.currentStatus = currentStatus
-	log.debug "currentStatus: ${currentStatus}"
+	LOG("currentStatus: ${currentStatus}",3,null,'info')
 	
 	// LOG("Current Operating State ${cOpState}",3,null,'info')
     def offset 
 	def vents = ''			// if not heating/cooling/fan, then no change to current vents
     if (cTemp != null) {	// only if valid temperature readings (Ecosensors can return "unknown")
-    	if (cOpState == 'heating') {
+    	if ((cOpState == 'heating') || (cMode == 'heat')) {
         	offset = settings.heatOffset ? settings.heatOffset : 0.0
-    		def heatTarget = useThermostat ? ((smarter && (cTemperature != null))? cTemperature + offset 
-											  : theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
+    		def heatTarget = useThermostat ? ((smarter && (cTemperature != null))? cTemperature + offset : theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
         	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
 			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
-    	} else if (cOpState == 'cooling') {
+    	} else if ((cOpState == 'cooling') || (cMode == 'cool')) {
         	offset = settings.coolOffset ? settings.coolOffset : 0.0
-    		def coolTarget = useThermostat? ((smarter && (cTemperature != null))? cTemperature + offset 
-											 : theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
+    		def coolTarget = useThermostat ? ((smarter && (cTemperature != null)) ? cTemperature + offset : theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
         	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
 			vents = (coolTarget >= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
@@ -255,8 +260,8 @@ String checkTemperature() {
         	} 
 		} else if (vents == '' && (cOpState == 'fan only')) {
 			if (!settings.closedFanOnly) {
-    			vents = 'open'
-        		LOG("${theThermostat.displayName} is running fan only, room temperature is ${cTemp}°, vents-->open",3,null,'info')
+    			vents = 'unchanged'
+        		LOG("${theThermostat.displayName} is running fan only, room temperature is ${cTemp}°, vents-->unchanged",3,null,'info')
 			} else {
 				vents = 'closed'
         		LOG("${theThermostat.displayName} is running fan only, room temperature is ${cTemp}°, vents-->closed",3,null,'info')
