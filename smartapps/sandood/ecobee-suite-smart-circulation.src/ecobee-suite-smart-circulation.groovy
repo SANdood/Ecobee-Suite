@@ -13,26 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.4.0  - Renamed parent Ecobee Suite Manager
- *	1.4.01 - Tweaked supportedThermostatModes handling
- *	1.4.02 - Added install warning to description
- *	1.4.03 - Optimizations for multiple simultaneous updates
- *	1.4.04 - Minor tweaks
- *	1.4.05 - Added Quiet Time Helper integration
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Allow Ecobee Suite Thermostats only
- *	1.5.02 - Converted all math to BigDecimal
- *	1.5.03 - Miscellaneous bug fixes
- *	1.5.04 - Added 'circOff' and 'vacaCircOff' reservation handling (applies to quiet time only)
- *	1.6.00 - Release number synchronization
- *	1.6.01 - Fix reservation initialization error
- *	1.6.02 - REALLY fix reservations initialization error
- *	1.6.03 - Really, REALLY fix reservations initialization error
- *	1.6.10 - Converted to parent-based reservations
- *	1.6.11 - Clear reservations when disabled
- *	1.6.12 - Minor optimizations
- *	1.6.13 - Added humidity restrictor
- *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *  1.7.01 - nonCached currentValue() for HE
  *  1.7.02 - more nonCached cases for HE
@@ -584,7 +564,7 @@ def calcTemps() {
         	return
         }
         LOG("calcTemps() - Outside temperature is currently ${outTemp}°, inside temperature average is ${avg}°",4,null,'info')
-        // More than 10 degrees warmer", "5 to 10 degrees warmer", "0 to 4.9 degrees warmer", "-4.9 to -0.1 degrees cooler", -10 to -5 degrees cooler", "More than 10 degrees cooler"
+        // "More than 10 degrees warmer", "5 to 10 degrees warmer", "0 to 4.9 degrees warmer", "-4.9 to -0.1 degrees cooler", -10 to -5 degrees cooler", "More than 10 degrees cooler"
     	def inRange = false
         if (adjRange.endsWith('mer')) {
         	if (adjRange.startsWith('M')) {
