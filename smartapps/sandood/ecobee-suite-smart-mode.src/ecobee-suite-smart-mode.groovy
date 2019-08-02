@@ -30,8 +30,9 @@
  *	1.7.14 - Rerun temperature checks when location.mode becomes valid again
  *	1.7.15 - Display current Mode & Program in appLabel
  *	1.7.16 - Clean up app label in sendMessage()
+ *	1.7.17 - Fixed appLabel on ST
  */
-String getVersionNum() { return "1.7.16" }
+String getVersionNum() { return "1.7.17" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -348,6 +349,7 @@ void updated() {
 boolean initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	updateMyLabel()
+	runEvery15Minutes(updateMyLabel)
 	
 	if (settings.tempDisable) {
     	clearReservations()
@@ -538,6 +540,7 @@ boolean initialize() {
 }
 
 def locationModeChangeHandler(evt) {
+	updateMyLabel()
 	if (!settings.theModes) return	// not using Location Mode filter
 	if (settings.theModes.contains(evt.value)) {
 		if (atomicState.temperature) atomicTempUpdater()
@@ -1367,10 +1370,10 @@ void sendMessage(notificationMessage) {
 
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	def opts = [' (Cool', ' (Heat', ' (Auto', ' (Off', ' (Aux', ' (Emer']
-	String flag = ' (paused)'
+	def opts = [' (paus', '(Cool', ' (Heat', ' (Auto', ' (Off', ' (Aux', ' (Emer']
+	String flag
 	if (ST) {
-		if (!app.label.contains(flag)) opts.each {
+		opts.each {
 			if (!flag && app.label.contains(it)) flag = it
 		}
 	} else {
