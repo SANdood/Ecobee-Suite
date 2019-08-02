@@ -26,8 +26,9 @@
  *	1.7.11 - Added multi-humidistat support
  *	1.7.12 - Fixed multi-humidistat initialization error
  *	1.7.13 - Clean up app label in sendMessage()
+ *	1.7.14 - Fixed Notifications setup
  */
-String getVersionNum() { return "1.7.13" }
+String getVersionNum() { return "1.7.14" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
@@ -203,42 +204,43 @@ def mainPage() {
                 }
 				paragraph ''
         	}
-
-			if (settings.notify) {
+			section (title: (HE?'<b>':'') + "Notifications" + (HE?'</b>':'')) {
 				input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
 				paragraph HE ? "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" 
 							 : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
-				if (ST) {
-					section("Notifications") {
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
-						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-						}
-						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
-					}
-				} else {		// HE
-					section("<b>Notification Device(s)</b>") {
-						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
-							  description: "Select notification devices", submitOnChange: true)
-						paragraph ''
-					}
-					section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
-							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
-						paragraph ''
-					}
-					section("<b>Use Speech Device(s)</b>") {
-						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-						}
-						paragraph ''
+				if (settings.notify) {
+					if (ST) {
+						//section("Notifications") {
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
+							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+						//}
+					} else {		// HE
+						//section("<b>Notification Device(s)</b>") {
+							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+								  description: "Select notification devices", submitOnChange: true)
+							paragraph ''
+						//}
+						//section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
+								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+							paragraph ''
+						//}
+						//section("<b>Use Speech Device(s)</b>") {
+							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+							paragraph ''
+						//}
 					}
 				}
 			}
