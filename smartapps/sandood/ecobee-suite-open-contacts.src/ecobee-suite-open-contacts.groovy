@@ -43,8 +43,9 @@
  *	1.7.27 - Changed minimum LOG level to 3
  *	1.7.28 - Fixed unintended overwrite of thermostat's mode in statModeChange()
  *	1.7.29 - Clean up appLabel in sendMessage()
+ *	1.7.30 - Corrected (user reported) tmpThermSaveState typo
  */
-String getVersionNum() 		{ return "1.7.29" }
+String getVersionNum() 		{ return "1.7.30" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -424,7 +425,7 @@ def coolSPHandler( evt ) {
         if (tmpThermSavedState[tid].HVACModeState != 'off') {
             // adjust and change the actual heating setpoints
             def c = evt.numberValue + settings.coolAdjust
-            tmpThermSaveState[tid].coolAdj = c
+            tmpThermSavedState[tid].coolAdj = c
             evt.device.setCoolingSetpoint( c, 'nextTransition')
             // Notify?
         } else {
