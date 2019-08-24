@@ -21,22 +21,6 @@
  *
  *	See Github Changelog for complete change history
  *	<snip>
- *	1.6.00 - Release number synchronization
- *	1.6.10 - Re-implemented reservations 
- *	1.6.11 - Removed location.contactBook support - deprecated by SmartThings
- *	1.6.12 - Cleaned up null values during climate changes
- *	1.6.13 - Cleaned up setpoint/setpointDisplay stuff (added iOS/Android preference setting)
- *	1.6.14 - Fixed Sensor temp 'unknown' --> null
- *	1.6.15 - Cleaned up initialization process
- *	1.6.16 - Fixed case of Home/Away when Auto Home/Away
- *	1.6.17 - Fixed sensor off-line error handling
- *	1.6.18 - Ensure test/dummy children are always deleted
- *	1.6.19 - Add hubId to device creation; cleanup removeChildDevice 
- *	1.6.20 - Fixed unintended recursion
- *	1.6.21 - Improve error logging
- *	1.6.22 - SmartThings started throwing errors on some Canadian zipcodes - we now catch these and use geographic coordinates instead...
- *	1.6.23 - Added setProgramSetpoint, fixed typo & null-checking that was breaking some error handling
- *	1.6.24 - Added more null-handling in http error handlers
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - changed setProgram() Hold: warning to info, fixed another resp.data==null error
  *	1.7.02 - Forcepoll 3 minutes after install/update
@@ -65,8 +49,12 @@
  *	1.7.25 - Changed displayName for Smart Mode,Programs & Setpoints Helper
  *	1.7.26 - Fixed pauseSwitch initialization error
  *	1.7.27 - Enabled "Demand Response" program
+ *	1.7.28 - Fixed weatherIcon change at sunrise/sunset & demandResponse currentProgramName/Id
+ *	1.7.29 - Fixed null owner & type references for Auto Home/Away programs
+ *	1.7.30 - Fixed null values during Hub reboot recovery
+ *	1.7.31 - Optimized LOG() handling, fanMode/fanMinOnTime tweaks
  */
-String getVersionNum()		{ return "1.7.27" }
+String getVersionNum()		{ return "1.7.31" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -133,9 +121,8 @@ preferences {
 	page(name: "sensorsPage")
 	page(name: "preferencesPage")
 	page(name: "askAlexaPage")
-	// page(name: "addWatchdogDevicesPage")
 	page(name: "helperSmartAppsPage")	 
-	// Part of debug Dashboard
+	// Parts of debug Dashboard
 	page(name: "debugDashboardPage")
 	page(name: "pollChildrenPage")
 	page(name: "updatedPage")
@@ -1183,7 +1170,9 @@ def initialize() {
 	atomicState.thermostatUpdated = null
 	atomicState.sendJsonRetry = false
 	atomicState.forcePoll = null				// make sure we get ALL the data after initialization
-	def updatesLog = [thermostatUpdated:true, runtimeUpdated:true, forcePoll:true, getWeather:true, alertsUpdated:true, settingsUpdated:false, programUpdated:false, locationUpdated:false, eventsUpdated:false, sensorsUpdated:false, extendRTUpdated:false]
+    atomicState.vacationTemplate = null
+	def updatesLog = [thermostatUpdated:true, runtimeUpdated:true, forcePoll:true, getWeather:true, alertsUpdated:true, settingsUpdated:false, programUpdated:false, locationUpdated:false, 
+    				  eventsUpdated:false, sensorsUpdated:false, extendRTUpdated:false]
 	atomicState.updatesLog = updatesLog
 	atomicState.hourlyForcedUpdate = 0
 	atomicState.needExtendedRuntime = true		// we'll stop getting it once we decide we don't need it
@@ -3323,13 +3312,14 @@ void updateThermostatData() {
 		
 		// check which program is actually running now
 		// log.debug "events: ${events}"
-		def vacationTemplate = false
+		def vacationTemplate = atomicState.vacationTemplate
 		if (events?.size()) {
 			events.each {
 				if (it.running == true) {
 					if (runningEvent == [:]) runningEvent = it						// We want the FIRST one...
 				} else if ( it.type == 'template' ) {	// templates never run...
 					vacationTemplate = true
+                    atomicState.vacationTemplate = true
 				}
 			}
 		}
@@ -3365,8 +3355,15 @@ void updateThermostatData() {
 			// Oddly, the runtime.lastModified is returned in UTC, so we have to convert it to the time zone of the thermostat
 			// (Note that each thermostat could actually be in a different time zone)
 			def myTimeZone = statLocation?.timeZone ? TimeZone.getTimeZone(statLocation.timeZone) : (location.timeZone?: TimeZone.getTimeZone('UTC'))
-			def disconnectedMS = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.getTime()
-			String disconnectedAt = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.format('yyyy-MM-dd HH:mm:ss', myTimeZone)
+			def disconnectedMS
+			String disconnectedAt
+			if (runtime && runtime?.disconnectedDateTime) {
+				disconnectedMS = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.getTime()
+				disconnectedAt = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.format('yyyy-MM-dd HH:mm:ss', myTimeZone)
+			} else {
+				disconnectedMS = now()
+				disconnectedAt = new Date(disconnectedMS).format('yyy-MM-dd HH:mm:ss', myTimeZone)
+			}
 			// In this case, holdEndsAt is actually the date & time of the last valid update from the thermostat...
 			holdEndsAt = fixDateTimeString( disconnectedAt.take(10), disconnectedAt.drop(11), statTime[tid] )
 			if (forcePoll && settings.askAlexa) {
@@ -3425,7 +3422,7 @@ void updateThermostatData() {
 			holdEndsAt = fixDateTimeString( runningEvent.endDate, runningEvent.endTime, statTime[tid])
 			thermostatHold = runningEvent.type
 			String tempClimateRef = runningEvent.holdClimateRef ? runningEvent.holdClimateRef : ''
-			def currentClimateRef = (tempClimateRef != '') ? program.climates.find { it.climateRef == tempClimateRef } : 'null'
+			def currentClimateRef = (tempClimateRef != '') ? program.climates.find { it.climateRef == tempClimateRef } : [:]
 			// log.debug "runningEvent.type: ${runningEvent.type}"
 			switch (runningEvent.type) {
 				case 'hold':
@@ -3468,7 +3465,7 @@ void updateThermostatData() {
 					currentClimateType = currentClimateRef?.type
 					break;
 				case 'demandResponse':
-				if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false))
+					// if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false))
 					// Oddly, the *RelativeTemp values are always POSITIVE to reduce the load, and NEGATIVE to increase it (ie., pre-cool/pre-heat)
 					// Per: https://getsatisfaction.com/api/topics/dr-event-with-negative-relative-heat-temp-increases-the-setpoint-instead-of-decreasing-it 
 					currentClimateName = ((runningEvent.coolRelativeTemp < 0) || (runningEvent.heatRelativeTemp < 0)) ? 'Hold: Eco Prep' : 'Hold: Eco'
@@ -3477,7 +3474,8 @@ void updateThermostatData() {
 					currentClimateId = runningEvent.name as String
 					currentClimateType = 'program'
 					break;
-				default:				
+				default:		
+					LOG("Unexpected runningEvent.type: (${runningEvent.type}) - please notify Barry",1,null,'warn')
 					currentClimateName = (runningEvent.type != null) ? runningEvent.type : 'null'
 					break;
 			}
@@ -3996,7 +3994,7 @@ void updateThermostatData() {
 		if (sensorsUpdated && (lastOList[1] != occupancy)) data += [motion: occupancy]
 		if (rtReallyUpdated || forcePoll || weatherUpdated || extendRTUpdated) { // || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
 			String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
-			def oftenList = [tempTemperature,occupancy,runtime?.actualHumidity,null,null,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
+			def oftenList = [tempTemperature,occupancy,runtime?.actualHumidity,null,timeOfDay,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
 								tempWeatherPressure,humiditySetpoint,dehumiditySetpoint,humiditySetpointDisplay,userPrecision]
 			
 			if ((tempTemperature != null) && ((lastOList[0] != tempTemperature) || forcePoll)) data += [temperature: tempTemperature] // roundIt(tempTemperature, apiPrecision)] // String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision))]
@@ -4005,7 +4003,7 @@ void updateThermostatData() {
 			if (lastOList[10] != humiditySetpoint) data += [humiditySetpoint: humiditySetpoint]
 			if (lastOList[11] != dehumiditySetpoint) data += [dehumiditySetpoint: dehumiditySetpoint]		// dehumidityLevel: dehumiditySetpoint, dehumidifierLevel: dehumiditySetpoint]
 			if (weatherUpdated) {
-				if (wSymbol && (lastOList[5] != wSymbol)) data += [weatherSymbol: wSymbol]
+				if (wSymbol && ((lastOList[5] != wSymbol) || (timeOfDay != lastOList[4]))) data += [timeOfDay: timeOfDay, weatherSymbol: wSymbol]
 				if ((tempWeatherTemperature != null) && ((lastOList[6] != tempWeatherTemperature) || userPChanged)) data += [weatherTemperature: roundIt(tempWeatherTemperature, userPrecision)] //String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision))]
 				if ((tempWeatherHumidity != null) && (lastOList[7] != tempWeatherHumidity)) data += [weatherHumidity: tempWeatherHumidity]
 				if ((tempWeatherDewpoint != null) && ((lastOList[8] != tempWeatherDewpoint) || userPChanged)) data += [weatherDewpoint: roundIt(tempWeatherDewpoint, userPrecision)] // String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision))]
@@ -4845,7 +4843,8 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
 		fanMode = "auto"   
 		// thermostatSettings = ',"thermostat":{"settings":{"hvacMode":"off","fanMinOnTime":"0"}}'		// now requires thermsotatMode to already be off, instead of overwriting it here
 		thermostatSettings = ',"thermostat":{"settings":{"fanMinOnTime":"0"}}'
-		thermostatFunctions = ''
+		thermostatFunctions = '{"type":"setHold","params":{"coolHoldTemp":"'+c+'","heatHoldTemp":"'+h+'","holdType":"'+theHoldType+
+									'","fan":"'+fanMode+'","isTemperatureAbsolute":false,"isTemperatureRelative":false}}'
 	// AUTO or ON
 	} else {
 		if (fanMinOnTime == null) fanMinOnTime = 0 // this maybe should be the fanTime of the current/scheduledProgram
@@ -5379,15 +5378,15 @@ String getThermostatDNI(String tid) {
 }
 
 void LOG(message, level=3, child=null, String logType='debug', event=false, displayEvent=true) {
-	def dbgLevel = debugLevel(level)
-	if (!dbgLevel) return		// let's not waste CPU cycles if we don't have to...
+	// boolean dbgLevel = debugLevel(level)
+	if (!debugLevel(level)) return		// let's not waste CPU cycles if we don't have to...
 	
 	if (logType == null) logType = 'debug'
-	def prefix = ""
-	def logTypes = ['error', 'debug', 'info', 'trace', 'warn']
+	String prefix = ""
+	// is now a Field def logTypes = ['error', 'debug', 'info', 'trace', 'warn']
 	
-	if(!logTypes.contains(logType)) {
-		log.error "LOG() - Received logType (${logType}) which is not in the list of allowed types ${logTypes}, message: ${message}, level: ${level}"
+	if(!LogTypes.contains(logType)) {
+		log.error "LOG() - Received logType (${logType}) which is not in the list of allowed types ${LogTypes}, message: ${message}, level: ${level}"
 		if (event && child) { debugEventFromParent(child, "LOG() - Invalid logType ${logType}") }
 		logType = 'debug'
 	}
@@ -5398,11 +5397,9 @@ void LOG(message, level=3, child=null, String logType='debug', event=false, disp
 	}
 	// if ( debugLevel(0) ) { return }
 	if ( debugLevel(5) ) { prefix = 'LOG: ' }
-	//if ( dbgLevel ) { 
-		log."${logType}" "${prefix}${message}"		  
-		if (event) { debugEvent(message, displayEvent) }
-		if (child) { debugEventFromParent(child, message) }
-	//}	   
+	log."${logType}" "${prefix}${message}"		  
+	if (event) { debugEvent(message, displayEvent) }
+	if (child) { debugEventFromParent(child, message) }  
 }
 
 void debugEvent(message, displayEvent = false) {
@@ -5986,6 +5983,8 @@ void runEvery3Minutes(handler) {
 
 @Field final List RuntimeValueNames =	['actualHumidity','actualTemperature','connected','desiredCool','desiredDehumidity','desiredFanMode','desiredHeat','desiredHumidity','disconnectDateTime']
 									  // ,'desiredHeatRange','desiredCoolRange','rawTemperature','showIconMode'
+
+@Field final List LogTypes = 			['error', 'debug', 'info', 'trace', 'warn']
 
 void updateMyLabel() {
 	if (isST) return								// ST doesn't support the colored label approach
