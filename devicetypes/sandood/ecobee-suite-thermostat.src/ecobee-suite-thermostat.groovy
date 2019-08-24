@@ -26,25 +26,6 @@
  *	See Github Changelog for complete change history
  *
  * <snip>
- *	1.6.00 - Release number synchronization
- *	1.6.02 - Fix reservations initialization error
- *	1.6.03 - Automatically re-run updated() if VersionLabel changes
- *	1.6.04 - Deprecated make/cancelReservation - moved to parent
- *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
- *	1.6.11 - Deleted 'reservations' attribute - no longer used
- *	1.6.12 - Fixed type conversion error on Auto mode temp display
- *	1.6.13 - Clean up setpoint/setpointDisplay stuff (new isIOS & isAndroid)\
- *	1.6.14 - Another Android setpoint tweak
- *	1.6.15 - Missed one
- *	1.6.16 - Fixed initialization errors & priorities
- *	1.6.17 - Added a modicom of compatibility with the "new" Samsung (Connect)
- *	1.6.18 - Fixed coolingSetpoint error
- *	1.6.19 - Shortcut 'TestingForInstall' in installed()
- *	1.6.20 - Log uninstall also
- *	1.6.21 - Added setProgramSetpoints()
- *	1.6.22 - Expanded to include ALL settings as attributes
- *	1.6.23 - Changed equipment operating state to 'de/humidifying'
- *	1.6.24 - Added support for schedule/setSchedule (new Capability definition)
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Improved thermostatHold testing
  *  1.7.03 - More thermostatHold optimizations
@@ -62,8 +43,16 @@
  *	1.7.15 - Fixed currrentThermostat typo (x2)
  *	1.7.16 - Fixed nagging command error & preferences{}
  *	1.7.17 - Optimized isST/isHE calls, fixed set*fanMinOnTime()
+ *	1.7.18 - Fixed sendHoldType conversion error
+ *	1.7.19 - Fixed incorrect importUrl
+ *	1.7.20 - Added economizer, ventilator, compHotWater, & auxHotWater for equipmentOperatingState/thermostatOperatingStateDisplay
+ *	1.7.21 - Fixed set*fanMinOnTime() again
+ *	1.7.22 - Enabled "Demand Response" program
+ *	1.7.23 - Fixed typo in setDehumiditySetpoint()
+ *	1.7.24 - Fixed type conversion error in setFanMinOnTime
+ *	1.7.25 - Added arg typing for Hubitat, some more fanMinOnTime cleanup
  */
-String getVersionNum() 		{ return "1.7.17a" }
+String getVersionNum() 		{ return "1.7.25" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -75,7 +64,7 @@ metadata {
         author:      "Barry A. Burke (storageanarchy@gmail.com)",		
         mnmn:        "SmartThings", 
         vid:         "SmartThings-smartthings-Z-Wave_Thermostat",
-		importUrl:   "https://github.com/SANdood/Ecobee-Suite/raw/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
+		importUrl:   "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
 	)
     {		
 		capability "Thermostat"
@@ -100,10 +89,11 @@ metadata {
 		command "auxHeatOnly", 				[]
 		command "awake", 					[]
 		command "away", 					[]
-		command "cancelReservation", 		['string', 'string']
+        command "cancelDemandResponse",		[]
+		command "cancelReservation", 		[]
 		command "cancelVacation", 			[]
 		// command "cool", 					[]
-		command "deleteVacation", 			['string']
+		command "deleteVacation", 			[]
 		command "doRefresh", 				[]						// internal use by the refresh button
 		command "emergency", 				[]	
 		// command "emergencyHeat", 		[]
@@ -123,15 +113,27 @@ metadata {
 		command "present", 					[]	
 		command "raiseSetpoint", 			[]	
 		command "resumeProgram", 			['string']
-		command "setCoolingSetpointDelay",	['number']
+		command "setCoolingSetpointDelay",	[]
 		command "setDehumidifierMode", 		['string']
-		command "setDehumiditySetpoint", 	['number']
+		if (isST) {
+        	command "setDehumiditySetpoint", ['number']
+        } else {
+        	command "setDehumiditySetpoint", [[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
+        }
 		command "setEcobeeSetting", 		['string', 'string']	// Allows changes to (most) Ecobee Settings
-		command "setFanMinOnTime", 			['number']
-		command "setFanMinOnTimeDelay", 	['number']
-		command "setHeatingSetpointDelay",	['number']
+        if (isST) {
+        	command "setFanMinOnTime",		['number']
+        } else {
+			command "setFanMinOnTime", 		[[name:'Fan Min On Time*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
+        }
+		command "setFanMinOnTimeDelay", 	[]
+		command "setHeatingSetpointDelay",	[]
 		command	"setHumidifierMode", 		['string']
-		command "setHumiditySetpoint", 		['number']
+		if (isST) {
+			command "setHumiditySetpoint",	['number']
+		} else {
+			command "setHumiditySetpoint", 	[[name:'Humidity Setpoint*', type:'NUMBER', description:'Humidifier RH% setpoint (0-100)']]
+		}
 		command "setProgramSetpoints", 		['string', 'number', 'number']
 		// command "setSchedule"			['JSON_OBJECT']
 		// command "setThermostatFanMode"	['string']
@@ -545,35 +547,39 @@ metadata {
 			state "updating", label:"Working", icon: "st.motion.motion.inactive"
 		}
 		standardTile("resumeProgram", "device.resumeProgram", width: 2, height: 2, decoration: "flat") {
-			state "resume",				action:"resumeProgram",		nextState: "updating",		label:'Resume',		icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/action_resume_program.png"
-			state "resume dis",			action: 'noOp',				nextState: 'resume dis',	label: 'Resume',	icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/action_resume_program_grey.png"
-			state "cancel",				action:"cancelVacation",	nextState: "updating",		label:'Cancel',		icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_vacation_airplane_yellow.png"
-			state "updating",																	label:"Working",	icon: "st.motion.motion.inactive"
+			state "resume",				action: 'resumeProgram',		nextState: "updating",		label: 'Resume',	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/action_resume_program.png"
+			state "resume dis",			action: 'noOp',					nextState: 'resume dis',	label: 'Resume',	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/action_resume_program_grey.png"
+			state "cancel",				action: 'cancelVacation',		nextState: "updating",		label: 'Cancel',	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_vacation_airplane_yellow.png"
+            state 'cancel eco',			action: 'cancelDemandResponse',	nextState: 'updating',		label: 'Cancel',	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response.png"
+            state 'cancel ecoPrep',		action: 'cancelDemandResponse',	nextState: 'updating',		label: 'Cancel',	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response_bg.png"
+			state "updating",																		label: 'Working',	icon: "st.motion.motion.inactive"
 		}
 		standardTile("currentProgramIcon", "device.currentProgramName", height: 2, width: 2, decoration: "flat") {
-			state "Home",				action:"noOp", nextState:'Home',				label: 'Home',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue.png"
-			state "Away",				action:"noOp", nextState:'Away',				label: 'Away',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue.png"
-			state "Sleep",				action:"noOp", nextState:'Sleep',				label: 'Sleep',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue.png"
-			state "Awake",				action:"noOp", nextState:'Awake',				label: 'Awake',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake.png"
-			state "Wakeup",				action:"noOp", nextState:'Wakeup',				label: 'Wakeup',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake.png"
-			state "Awake",				action:"noOp", nextState:'Awake',				label: 'Awake',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake.png"
-			state "Auto",				action:"noOp", nextState:'Auto',				label: 'Auto',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png"
-			state "Auto Away",			action:"noOp", nextState:'Auto Away',			label: 'Auto Away',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_auto_away.png" // Fix to auto version
-			state "Auto Home",			action:"noOp", nextState:'Auto Home',			label: 'Auto Home',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_auto_home.png" // Fix to auto
-			state "Hold",				action:"noOp", nextState:'Hold',				label: 'Hold',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png"
-			state "Hold: Fan",			action:"noOp", nextState:'Hold: Fan',			label: "Hold: Fan",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid_blue.png"
-			state "Hold: Fan On",		action:"noOp", nextState:'Hold: Fan on',		label: "Hold: Fan On",		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid_blue.png"
-			state "Hold: Fan Auto",		action:"noOp", nextState:'Hold: Fan Auto',		label: "Hold: Fan Auto",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_blue.png"
-			state "Hold: Circulate",	action:"noOp", nextState:'Hold: Circulate',		label: "Hold: Circulate",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on-1_blue..png"
-			state "Hold: Home",			action:"noOp", nextState:'Hold: Home',			label: 'Hold: Home',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue_solid.png"
-			state "Hold: Away",			action:"noOp", nextState:'Hold: Away',			label: 'Hold: Away',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue_solid.png"
-			state "Hold: Sleep",		action:"noOp", nextState:'Hold: Sleep',			label: 'Hold: Sleep',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue_solid.png"
-			state "Vacation",			action:"noOp", nextState:'Vacation',			label: 'Vacation',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_vacation_blue_solid.png"
-			state "Offline",			action:"noOp", nextState:'Offline',				label: 'Offline',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_black_dot.png"
-			state "Hold: Temp",			action:'noOp', nextState: 'Hold: Temp',			label: 'Hold: Temp',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_hold.png"
-			state "Hold: Wakeup",		action:"noOp", nextState:'Hold: Wakeup',		label: 'Hold: Wakeup',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake_blue.png"
-			state "Hold: Awake",		action:"noOp", nextState:'Hold: Awake',			label: 'Hold: Awake',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake_blue.png"
-			state "default",			action:"noOp", nextState: 'default',			label: '${currentValue}',	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png", defaultState: true
+			state "Home",				action: "noOp", nextState: 'Home',				label: 'Home',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue.png"
+			state "Away",				action: "noOp", nextState: 'Away',				label: 'Away',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue.png"
+			state "Sleep",				action: "noOp", nextState: 'Sleep',				label: 'Sleep',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue.png"
+			state "Awake",				action: "noOp", nextState: 'Awake',				label: 'Awake',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake.png"
+			state "Wakeup",				action: "noOp", nextState: 'Wakeup',			label: 'Wakeup',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake.png"
+			state "Awake",				action: "noOp", nextState: 'Awake',				label: 'Awake',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake.png"
+			state "Auto",				action: "noOp", nextState: 'Auto',				label: 'Auto',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png"
+			state "Auto Away",			action: "noOp", nextState: 'Auto Away',			label: 'Auto Away',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_auto_away.png" // Fix to auto version
+			state "Auto Home",			action: "noOp", nextState: 'Auto Home',			label: 'Auto Home',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_auto_home.png" // Fix to auto
+			state "Hold",				action: "noOp", nextState: 'Hold',				label: 'Hold',				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png"
+			state "Hold: Fan",			action: "noOp", nextState: 'Hold: Fan',			label: "Hold: Fan",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid_blue.png"
+			state "Hold: Fan On",		action: "noOp", nextState: 'Hold: Fan on',		label: "Hold: Fan On",		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid_blue.png"
+			state "Hold: Fan Auto",		action: "noOp", nextState: 'Hold: Fan Auto',	label: "Hold: Fan Auto",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_blue.png"
+			state "Hold: Circulate",	action: "noOp", nextState: 'Hold: Circulate',	label: "Hold: Circulate",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on-1_blue..png"
+            state "Hold: Eco Prep",		action: "noOp", nextState: 'Hold: Eco Prep',	label: "Hold: Eco Prep",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response_bg.png"
+            state "Hold: Eco",			action: "noOp", nextState: 'Hold: Eco',			label: "Hold: Eco",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response.png"
+			state "Hold: Home",			action: "noOp", nextState: 'Hold: Home',		label: 'Hold: Home',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue_solid.png"
+			state "Hold: Away",			action: "noOp", nextState: 'Hold: Away',		label: 'Hold: Away',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue_solid.png"
+			state "Hold: Sleep",		action: "noOp", nextState: 'Hold: Sleep',		label: 'Hold: Sleep',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue_solid.png"
+			state "Vacation",			action: "noOp", nextState: 'Vacation',			label: 'Vacation',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_vacation_blue_solid.png"
+			state "Offline",			action: "noOp", nextState: 'Offline',			label: 'Offline',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_black_dot.png"
+			state "Hold: Temp",			action: 'noOp', nextState: 'Hold: Temp',		label: 'Hold: Temp',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_hold.png"
+			state "Hold: Wakeup",		action: "noOp", nextState: 'Hold: Wakeup',		label: 'Hold: Wakeup',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake_blue.png"
+			state "Hold: Awake",		action: "noOp", nextState: 'Hold: Awake',		label: 'Hold: Awake',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake_blue.png"
+			state "default",			action: "noOp", nextState: 'default',			label: '${currentValue}',	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png", defaultState: true
 		}
 		valueTile("currentProgram", "device.currentProgramName", height: 2, width: 4, decoration: "flat") {
 			state "default", label:'Comfort Setting:\n${currentValue}', defaultState: true
@@ -611,6 +617,13 @@ metadata {
 			state "heating (smart recovery)",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat.png"
 			state "cooling (smart recovery)",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool.png"
 			state 'cooling (overcool)',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool.png"
+			state 'idle (hot water)',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png"
+			state 'heating (hot water)',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png"
+			state 'fan only (hot water)',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png" 
+			state 'idle (economizer)',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_eco.png"
+			state 'idle (ventilator)',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_vent_blue.png"
+			state 'fan only (economizer)',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_eco.png"
+			state 'fan only (ventilator)',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_vent_blue.png"
 			state "offline",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/black_dot_only.png"
 			state "off",						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_purple.png"
 			state "default",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", label: '${currentValue}', defaultState: true
@@ -644,6 +657,10 @@ metadata {
 			state "cooling deh",				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool-humid.png"
 			state "humidifier",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_humidifier_only.png"
 			state "dehumidifier",				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_dehumidifier_only.png"
+			state "economizer",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_eco.png"
+			state "ventilator",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_vent_blue.png"
+			state "compHotWater",				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png"
+			state "auxHotWater",				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_waterheat_blue.png"
 			state "offline",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/black_dot_only.png"
 			state "off",						icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_off_purple.png"
 			state "default",					icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", action:"noOp", label: '${currentValue}', defaultState: true
@@ -1071,9 +1088,23 @@ def generateEvent(Map results) {
 					String realValue
 					if (sendValue.contains('(')) {
 						displayDesc = true				// only show this update ThermOpStateDisplay if we are in Smart Recovery
-						if (sendValue.contains('mart')) descText = 'in Smart Recovery'	// equipmentOperatingState will show what is actually running
-						else if (sendValue.contains('ver')) descText = 'Overcooling to dehumidify'
-						realValue = sendValue.take(7)	// this gets us to back to just heating/cooling
+						if (sendValue.contains('mart')) {
+							descText = 'in Smart Recovery'	// equipmentOperatingState will show what is actually running
+							realValue = sendValue.take(7)
+						} else if (sendValue.contains('ver')) {
+							descText = 'Overcooling to Dehumidify'
+							realValue = 'cooling'	// this gets us to back to just heating/cooling
+						} else if (sendValue.startsWith('fan')) {
+							if 		(sendValue.contains('deh')) descText = 'Dehumidifying'
+							else if (sendValue.contains('hum')) descText = 'Humidifying'
+							else if (sendValue.contains('eco')) descText = 'Economizing'
+							else if (sendValue.contains('ven')) descText = 'Ventilating'
+							else if (sendValue.contains('hot w')) descText = 'Heating Water'
+							realValue = 'fan only'
+						} else if (sendValue.contains('hot w')) {
+							descText = 'Heating Water'
+							realValue = sendValue.contains('heating') ? 'heating' : 'idle'
+						}
 					} else {
 						displayDesc = false				// hide this message - is redundant with EquipOpState
 						descText = sendValue.capitalize()
@@ -1212,14 +1243,33 @@ def generateEvent(Map results) {
 					if (sendValue == 'Vacation') {
 						if (priorProgramName == 'Offline') disableVacationButtons() // not offline any more
 						progText = 'Climate is Vacation'
-						sendEvent(name: 'resumeProgram', value: 'cancel', displayed: false, isStateChange: true)	// change the button to Cancel Vacation
-					} else if (sendValue == 'Offline') {
+						if (ST) sendEvent(name: 'resumeProgram', value: 'cancel', displayed: false, isStateChange: true)	// change the button to Cancel Vacation
+					} else if (sendValue.startsWith('Hold: Ec')) {
+                    	progText = sendValue.endsWith('ep') ? 'Climate is Demand Response Prep' : 'Climate is Demand Response'
+                    	// Handle the cancel button, but only if on ST
+                        if (ST) {
+                            def currentProg = device.currentValue('currentProgram')
+                            if (currentProg != 'Eco!') {
+                                // Not a mandatory DR event - we CAN cancel it
+                                if (sendValue.endsWith('ep')) {
+                                    sendEvent(name: 'resumeProgram', value: 'cancel ecoPrep', displayed: false, isStateChange: true)	// change the button to Cancel Eco Prep (leaf)
+                                } else {
+                                    sendEvent(name: 'resumeProgram', value: 'cancel eco', displayed: false, isStateChange: true)		// change the button to Cancel Eco (flower)
+                                }
+                            } else {
+                                // Mandatory DR - can't cancel
+                                sendEvent(name: 'resumeProgram', value: 'resume dis', displayed: false, isStateChange: true)
+                            }
+                        }
+                    } else if (sendValue == 'Offline') {
 						progText = 'Thermostat is Offline'
 						if (priorProgramName != 'Offline') disableAllButtons() // just went offline
 					} else {
 						progText = 'Climate is '+sendValue.trim().replaceAll(":","")
-						String buttonValue = (sendValue.startsWith('Hold') || sendValue.startsWith('Auto ')) ? 'resume' : 'resume dis'
-						sendEvent(name: 'resumeProgram', value: buttonValue, displayed: false, isStateChange: true)	// change the button to Resume Program
+                        if (ST) {
+							String buttonValue = (sendValue.startsWith('Hold') || sendValue.startsWith('Auto ')) ? 'resume' : 'resume dis'
+							sendEvent(name: 'resumeProgram', value: buttonValue, displayed: false, isStateChange: true)	// change the button to Resume Program
+                        }
 						def previousProgramName = priorProgramName
 						if (previousProgramName) {
 							// update the button states
@@ -1248,6 +1298,15 @@ def generateEvent(Map results) {
 							case 'Sleep':
 								disableSleepButton()
 								break;
+                            case 'Eco':
+                            	enableAllProgramButtons()	// Yes, you can change programs and set Holds while in Demand Response
+                                // But we will let the 'currentProgramName' code above handle which version of 'cancel eco/eco prep' is displayed
+                                // (It should be the next attribute updated)
+                            	break;
+                            case 'Eco!':
+                            	// Mandatory Demand Response Event - can't cancel it...
+                            	sendEvent(name: 'resumeProgram', value: 'resume dis', displayed: false, isStateChange: true)
+                            	break;
 							default:
 								if ((device.currentValue('currentProgramName') != 'Vacation') && (device.currentValue('thermostatHold') != 'vacation')) {
 									enableAllProgramButtons()
@@ -1368,10 +1427,10 @@ def generateEvent(Map results) {
 							if ((currentFanMode != 'off') && (currentFanMode != 'on')) { // auto or circulate
 								def ncFmot = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
 								if (ncFmot == 0) {
-									sendEvent(name: 'thermostatFanModeDisplay', value: 'off dis', displayed: false, isStateChange: true)
+									if (ST) sendEvent(name: 'thermostatFanModeDisplay', value: 'off dis', displayed: false, isStateChange: true)
 									disableFanOffButton()
 								} else {
-									sendEvent(name: 'thermostatFanModeDisplay', value: 'circulate dis', displayed: false, isStateChange: true)
+									if (ST) sendEvent(name: 'thermostatFanModeDisplay', value: 'circulate dis', displayed: false, isStateChange: true)
 									enableFanOffButton()
 								}
 							} else {
@@ -1431,7 +1490,7 @@ def generateEvent(Map results) {
 						switch(sendValue) {
 							case 'off':
 								// Assume (for now) that thermostatMode is also 'off' - this should be enforced by setThermostatFanMode() (who is also only one	 who will send us 'off')
-								sendEvent(name: 'thermostatFanModeDisplay', value: "off dis", isStateChange: true, displayed: false) // have to force it to update for some reason
+								if (ST) sendEvent(name: 'thermostatFanModeDisplay', value: "off dis", isStateChange: true, displayed: false) // have to force it to update for some reason
 								disableFanOffButton()
 								break;
 
@@ -1450,15 +1509,15 @@ def generateEvent(Map results) {
 									disableFanOffButton()		// can't turn off the fan if the Thermostat isn't off
 									if (fanMinOnTime != 0) { sendValue = 'circulate' } else { sendValue = 'auto' }
 								}
-								sendEvent(name: 'thermostatFanModeDisplay', value: sendValue, isStateChange: true, displayed: false)	// have to force it to update for some reason
+								if (ST) sendEvent(name: 'thermostatFanModeDisplay', value: sendValue, isStateChange: true, displayed: false)	// have to force it to update for some reason
 								break;
 
 							case 'on':
-								sendEvent(name: 'thermostatFanModeDisplay', value: 'on', isStateChange: true, displayed: false)			// have to force it to update for some reason
+								if (ST) sendEvent(name: 'thermostatFanModeDisplay', value: 'on', isStateChange: true, displayed: false)			// have to force it to update for some reason
 								break;
 						}
 					} else {
-						sendEvent(name: 'thermostatFanModeDisplay', value: sendValue+" dis", isStateChange: true, displayed: false)	// have to force it to update for some reason
+						if (ST) sendEvent(name: 'thermostatFanModeDisplay', value: sendValue+" dis", isStateChange: true, displayed: false)	// have to force it to update for some reason
 						disableFanOffButton()
 					}
 					break;
@@ -1900,7 +1959,7 @@ void updateProgramButtons() {
 void updateModeButtons() {
 	if (state.isHE) return	// No need on Hubitat, at least not until we get a mobile UI
     
-	def currentMode = device.currentValue('thermmoostatMode')
+	def currentMode = device.currentValue('thermostatMode')
 	// if (currentMode=='off') {sendEvent(name:'setModeOff', value:'off dis', displayed:false)} else {sendEvent(name:'setModeOff', value:'off', displayed:false)}
 	sendEvent(name:'setModeOff', value:('off'+((currentMode=='off') || !statModes().contains('off'))?' dis':''), displayed:false)
 	sendEvent(name:'setModeAuto', value:('auto'+((currentMode=='auto') || !statModes().contains('auto'))?' dis':''), displayed:false)
@@ -2336,7 +2395,7 @@ void generateQuickEvent(String name, String value, Integer pollIn=0) {
 // ***************************************************************************
 void setThermostatMode(String value) {
 	//	Uses Ecobee Modes: "auxHeatOnly" "heat" "cool" "off" "auto"
-	boolan ST = state.isST
+	boolean ST = state.isST
 	
 	if (value.startsWith('emergency')) { value = 'auxHeatOnly' }
 	LOG("setThermostatMode(${value})", 5)
@@ -2812,7 +2871,7 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 			// For this implementation, we will use 'circulate' whenever fanMinOnTime != 0, and 'off' when fanMinOnTime == 0 && thermostatMode == 'off'
 			def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
 			def fanTime = fanMinOnTime
-			if (!fanMinOnTime || (fanMinOnTime.toInteger() == 0)) {
+			if ((fanMinOnTime == null) || (fanMinOnTime.toInteger() == 0)) {
 				// 20 minutes/hour is roughly the default for HoneyWell thermostats (35%), upon which ST has modeled their thermostat implementation
 				fanTime = 20
 			}
@@ -2866,16 +2925,16 @@ void fanOff() {
 	}
 }
 
-void setFanMinOnTimeDelay(Integer minutes) {
+void setFanMinOnTimeDelay(minutes) {
 	LOG("Slider requested Minutes: ${minutes}",4,null,'trace')
 	def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer
 	runIn( runWhen, 'sFMOT', [data: [mins:minutes]] )
 }
 void sFMOT(data) {
 	LOG("Setting fan minutes to: ${data.mins}",4,null,'trace')
-	setFanMinOnTime(data.mins as Integer)
+	setFanMinOnTime(data.mins)
 }
-void setFanMinOnTime(Integer minutes=20) {
+void setFanMinOnTime(minutes=20) {
 	boolean ST = state.isST
 	
 	def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
@@ -2883,21 +2942,20 @@ void setFanMinOnTime(Integer minutes=20) {
 		LOG("setFanMinOnTime() requested but thermostat is in Vacation mode, ignoring request",2,null,'warn')
 		return
 	}
+	minutes = minutes as Integer
 	LOG("setFanMinOnTime(${minutes})", 4, null, "trace")
-	Integer howLong = 20	// default to 10 minutes, if no value supplied
-	if (minutes.toString().isNumber()) howLong = minutes as Integer
 	def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
-	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested ${minutes}/${howLong}",3,null,'info')
-	if (fanMinOnTime && (fanMinOnTime.toInteger() == howLong)) return // allready there - all done!
+	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested: ${minutes}",3,null,'info')
+	if (fanMinOnTime?.toInteger() == minutes) return // allready there - all done!
 
 	def deviceId = getDeviceId()
-	if ((howLong >=0) && (howLong <=  55)) {
-		if (parent.setFanMinOnTime(this, deviceId, howLong)) {
-			def updates = [fanMinOnTime:howLong]
+	if ((minutes >=0) && (minutes <=  55)) {
+		if (parent.setFanMinOnTime(this, deviceId, minutes)) {
+			def updates = [fanMinOnTime: minutes]
 			def currentFanMode = ST ? device.currentValue('thermostatFanMode') : device.currentValue('thermostatFanMode', true)
-			if ((howLong == 0) && ((currentFanMode == 'circulate') || currentFanMode == 'auto')) {
+			if ((minutes == 0) && ((currentFanMode == 'circulate') || (currentFanMode == 'auto'))) {
 				updates = updates + [thermostatFanMode: 'auto', thermostatFanModeDisplay: 'auto']
-			} else if ((howLong > 0) && (currentFanMode != 'circulate')) {
+			} else if ((minutes > 0) && (currentFanMode != 'circulate')) {
 				updates = updates + [thermostatFanMode: 'circulate', thermostatFanModeDisplay: 'circulate']
 			}
 			generateEvent(updates)
@@ -3025,7 +3083,7 @@ void setDehumiditySetpointDelay(setpoint) {
 	// verify that the stat hasDehumidifer
 	def hasDehumidifier = device.currentValue('hasDehumidifier')
 	if (!hasDehumidifier || (hasDehumidifier == 'false')) {
-		LOG("${deviceId.displayName} is not controlling a dehumidifier nor is it overcooling", 1, child, 'warn')
+		LOG("${device.displayName} is not controlling a dehumidifier nor is it overcooling", 1, child, 'warn')
 		return
 	}
 	def currentSetpoint = state.isST ? device.currentValue('dehumiditySetpoint') : device.currentValue('dehumiditySetpoint', true)
@@ -3045,25 +3103,23 @@ void setDehumiditySetpointDelay(setpoint) {
 }
 
 // Vacation commands
-void setVacationFanMinOnTime(Integer minutes=0) {
+void setVacationFanMinOnTime(minutes=0) {
 	boolean ST = state.isST
 	
 	def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
-	if ( thermostatHold == 'vacation') {
+	if ( thermostatHold != 'vacation') {
 		LOG("setVacationFanMinOnTime() requested but thermostat is not in Vacation mode, ignoring request",2,null,'warn')
 		return
 	}
+	minutes = minutes as Integer
 	LOG("setVacationFanMinOnTime(${minutes})", 5, null, "trace")
-	Integer howLong = 0	// default to 0 minutes for vacations, if no value supplied
-	// if (minutes.isNumber()) howLong = minutes.toInteger()
-	howLong = minutes as Integer
 	def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
-	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested ${minutes}/${howLong}",3,null,'info')
-	if (fanMinOnTime && (fanMinOnTime.toInteger() == howLong)) return // allready there - all done!
+	LOG("Current fanMinOnTime: ${fanMinOnTime}, requested: ${minutes}",3,null,'info')
+	if (fanMinOnTime?.toInteger() == minutes) return // allready there - all done!
 	def deviceId = getDeviceId()
-	if ((howLong >=0) && (howLong <=  55)) {
-		if (parent.setVacationFanMinOnTime(this, deviceId, howLong)) {
-			def updates = [fanMinOnTime: howLong]
+	if ((minutes >=0) && (minutes <=  55)) {
+		if (parent.setVacationFanMinOnTime(this, deviceId, minutes)) {
+			def updates = [fanMinOnTime: minutes]
 			generateEvent(updates)
 		}
 	} else {
@@ -3084,7 +3140,7 @@ void deleteVacation(vacationName = null) {
 
 // cancelVacation will only cancel the currently running vacation
 void cancelVacation() {
-	LOG("cancelVacation()", 2, null, 'info')
+	LOG("cancelVacation()", 3, null, 'trace')
 	boolean ST = state.isST
 	
 	def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
@@ -3106,8 +3162,33 @@ void cancelVacation() {
         generateEvent(updates)
 		updateModeButtons()
     } else {
-        log.debug "parent.deleteVacation failed"
+        LOG("cancelVacation failed", 1, null, 'warn')
     }
+}
+// Cancel a demandResponse Event
+void cancelDemandResponse() {
+	LOG('cancelDemandResponse()', 3, null, 'trace')
+    boolean ST = state.isST
+	def result = false
+    def currentProgram = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
+    if (currentProgram) {
+    	if (currentProgram == 'Eco!') {
+        	// Mandatory DR, can't cancel it
+            LOG('Invalid request to Cancel Demand Response - current DR Event is MANDATORY', 1, null, 'warn')
+            return
+        }
+    	if (currentProgram == 'Eco') result = parent.cancelDemandResponse(this, getDeviceId())
+    }
+    if (result) {
+    	if (ST)  {
+    		def updates = [resumeProgram: 'resume dis']			// turn off the cancel button - it should get reset to whatever state is correct on the next few updates
+        	generateEvent(updates)
+        }
+        LOG('Cancel Demand Response Event succeeded.', 3, null, 'info')
+    } else {
+    	LOG("Cancel Demand Response Event FAILED${(currentProgram != 'Eco') ? ' - not currently in a Demand Response Event' : ''}.", 1, null, 'warn')
+    }
+    return
 }
 
 // Climate change commands
@@ -3290,7 +3371,7 @@ def whatHoldType() {
 			}
 	}
 	if (sendHoldType) {
-		LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
+		LOG("Using holdType ${(sendHoldType?.toString()?.isNumber())?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
 		return sendHoldType
 	} else {
 		LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
@@ -3438,9 +3519,12 @@ def getStockTempColors() {
 //	1.0.0	Initial Release
 //	1.0.1	Use state so that it is universal
 //
-String	getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()	  { return (state?.isST != null) ? state.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()	  { return (state?.isHE != null) ? state.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+//String	getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+//boolean getIsST()	  { return (state?.isST != null) ? state.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+//boolean getIsHE()	  { return (state?.isHE != null) ? state.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String getPlatform() { (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 //
 // The following 3 calls are ONLY for use within the Device Handler or Application runtime
 //	- they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
