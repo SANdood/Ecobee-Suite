@@ -162,19 +162,19 @@ def mainPage() {
                         		// input(name: "fanMode", title: "Fan Mode (optional)", type: "enum", required: false, multiple: false, options: getThermostatFanModes(), submitOnChange: true)
 							} else 
                         } */
-                        if (settings.fanMode == 'Auto') {
+                        /*if (settings.fanMode == 'Auto') {
                         	paragraph("Note that the fan circulation time will also be set to 0 because you selected Fan Mode 'Auto'")
 						} else if (settings.fanMode == 'On') {
 							paragraph("Note that the fan circulation time will be set to 0 because you selected Fan Mode 'On'")
 						} else if (settings.fanMode == 'Off') {
                         	// this can never happen, because 'off' is not a value fanMode
                         	input(name: 'statOff', title: 'Do you want to turn off the HVAC entirely?', type: 'bool', defaultValue: false)
-                        } else if ((settings.fanMode == null) || (settings.fanMode == 'Circulate')) {
+                        } else if ((settings.fanMode == null) || (settings.fanMode == 'Circulate')) { */
                         	input(name: "fanMinutes", title: "Fan Minimum Minutes per Hour (optional)", type: "number", 
-								  required: false, multiple: false, range:"0..55", submitOnChange: true, 
-								  defaultValue: (settings.fanMode==null?settings.fanMinutes:20))
+								  required: false, multiple: false, range:"0..55", submitOnChange: true)
+								  // defaultValue: (settings.fanMode==null?settings.fanMinutes:20))
 							// defaultValue: (settings.fanMode==null?(settings.fanMinutes!=null?settings.fanMinutes:0):20))
-                        }
+                        //}
 						if (settings?.fanMinutes != null) {
 							if (settings.fanMinutes == 0) {
                             	paragraph("Note than the Fan Mode will be set to 'Auto' because you specified 0 Fan Minimum Minutes")
