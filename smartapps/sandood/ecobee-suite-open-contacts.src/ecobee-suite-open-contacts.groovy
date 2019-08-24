@@ -44,8 +44,9 @@
  *	1.7.28 - Fixed unintended overwrite of thermostat's mode in statModeChange()
  *	1.7.29 - Clean up appLabel in sendMessage()
  *	1.7.30 - Corrected (user reported) tmpThermSaveState typo
+ *	1.7.31 - Added noDebug option
  */
-String getVersionNum() 		{ return "1.7.30" }
+String getVersionNum() 		{ return "1.7.31" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -215,6 +216,9 @@ def mainPage() {
 		section(title: (HE?'<b>':'') + "Temporary Pause" + (HE?'</b>':'')) {
 			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
+		section(title: "") {
+			input(name: "debugOff", title: "Disable debug messages? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+		}
         
         section (getVersionLabel()) {}
     }
@@ -249,6 +253,7 @@ def initialize() {
 		LOG("Temporarily Paused", 4, null, 'info')
 		return true
 	}
+	if (settings.debugOff) log.info "log.debug() messages disabled"
     // subscribe(app, appTouch)
 	
 	boolean contactOffState = false
@@ -1032,7 +1037,7 @@ void clearReservations() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+    if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
