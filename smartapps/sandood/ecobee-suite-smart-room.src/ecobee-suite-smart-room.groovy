@@ -24,8 +24,9 @@
  *	1.7.03 - Fixing private method issue caused by grails
  *  1.7.04 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.05 - Optimized isST/isHE, added Global Pause
+ *	1.7.06 - Added option to disable local display of log.debug() logs, support Notification devices on ST
  */
-String getVersionNum() { return "1.7.05" }
+String getVersionNum() { return "1.7.06" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -130,16 +131,18 @@ def mainPage() {
 			
             if (settings.notify) {
 				if (ST) {
-					section((HE?'<b>':'') + "Notifications" + (HE?'</b>':'')) {
+					section("Notifications") {
+						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
+							  multiple: true, description: "Select notification devices", submitOnChange: true)
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 						if (settings.speak) {
 							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
 							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
 							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 						}
-						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+						if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
 					}
 				} else {		// HE
 					section((HE?'<b>':'') + "Use Notification Device(s)" + (HE?'</b>':'')) {
@@ -168,7 +171,9 @@ def mainPage() {
 		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
-        
+		section(title: "") {
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+		}        
 		section (getVersionLabel()) {}
     }
 }
@@ -191,7 +196,7 @@ def getProgramsList() { return /* theThermostat ? new JsonSlurper().parseText(th
 def getEcobeeSensorsList() { return parent.getEcobeeSensors().sort { it.value } }    
 
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 3, "", 'info')
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
 	updateMyLabel()
     
     atomicState.isSmartRoomActive = false
@@ -204,7 +209,8 @@ def initialize() {
     	LOG("Temporarily Paused", 3, null, 'info')
     	return true
     }
-    
+	if (settings.debugOff) log.info "log.debug() logging disabled"
+	
     def sensorData = [:]
     def startTime = now()
     
@@ -565,6 +571,11 @@ void sendMessage(notificationMessage) {
     if (settings.notify) {
         String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
+			if (settings.notifiers != null) {
+				settings.notifiers.each {									// Use notification devices 
+					it.deviceNotification(msg)
+				}
+			}
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -574,12 +585,12 @@ void sendMessage(notificationMessage) {
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)				// Only to SMS contact
 				}
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPushMessage(msg)										// Push to everyone
 			}
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
@@ -691,7 +702,7 @@ def pauseOff() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+	if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
