@@ -30,8 +30,9 @@
  *	1.7.07 - Update vent status (refresh) before & after taking actions, display vent status in appLabel
  *	1.7.08 - Optimized checks when nothing changes; added vent open/close option for 'fan only'
  *	1.7.09 - Removed redundant log.debug text, fixed new fan only vent option
+ *	1.7.10 - Added option to disable local display of log.debug() logs, tweaked myLabel handling
  */
-String getVersionNum() 		{ return "1.7.09" }
+String getVersionNum() 		{ return "1.7.10" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -154,9 +155,10 @@ def mainPage() {
         }        	
 		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", description: "", defaultValue: false, submitOnChange: true)
-			if (HE) paragraph ''
         }
-        
+		section(title: "") {
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+		}         
         section (getVersionLabel()) {}
     }
 }
@@ -190,6 +192,8 @@ def initialize() {
 		updateMyLabel()
         return true
     }
+	if (settings.debugOff) log.info "log.debug() logging disabled"
+	
 	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
 
     subscribe(theSensors, 		'temperature', 				changeHandler)	
@@ -384,11 +388,11 @@ void ventOn( theVent ) {
 // Helper Functions
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	def opts = [' (open)', ' (closed)']
-	String flag = ' (paused)'
+	def opts = [' (pa', ' (op', ' (cl']
+	String flag
 	if (ST) {
-		if (!app.label.contains(flag)) opts.each {
-			if (app.label.contains(it)) flag = it
+		opts.each {
+			if (!flag && app.label.contains(it)) flag = it
 		}
 	} else {
 		flag = '<span '
@@ -400,7 +404,7 @@ void updateMyLabel() {
 		myLabel = app.label
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains(flag)) {
+	if (flag && myLabel.contains(flag)) {
 		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
