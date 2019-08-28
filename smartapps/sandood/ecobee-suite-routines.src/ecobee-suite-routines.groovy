@@ -28,8 +28,10 @@
  *	1.7.12 - Optimized isST/isHE, formatting, Global Pause
  *	1.7.13 - Fixed holdType == ES Manager setting, & getEcobeePrograms()
  *	1.7.14 - Clean up appLabel in sendMessage(), eliminate duplicate currentProgram/currentProgramName subscriptions
+ *	1.7.15 - Remove fanMode setting, fix fanMinOnTime to not break the hold
+ *	1.7.16 - Added option to disable local display of log.debug() logs, support Notification devices on ST
  */
-String getVersionNum() { return "1.7.14" }
+String getVersionNum() { return "1.7.16" }
 String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -156,23 +158,30 @@ def mainPage() {
                     
                     	input(name: "cancelVacation", title: "Cancel Vacation hold if active?", type: "bool", required: true, defaultValue: false)
 	               		input(name: "whichProgram", title: "Switch to this Ecobee Program:", type: "enum", required: true, multiple:false, options: programs, submitOnChange: true)
-    	       	    	if (settings?.whichProgram != 'Resume Program') {
-                        	if ((settings?.fanMinutes == null) || ((settings.fanMinutes != null) && (settings.fanMinutes != 0))) {
-                        		input(name: "fanMode", title: "Fan Mode (optional)", type: "enum", required: false, multiple: false, options: getThermostatFanModes(), submitOnChange: true)
-                        	} else if ((settings?.fanMinutes != null) && (settings.fanMinutes == 0)) {
-                            	paragraph("Note than the Fan Mode will be set to 'Auto' because you specified 0 Fan Minimum Minutes")
-                            }
-                        }
-                        if (settings.fanMode == 'Auto') {
+    	       	    	/* if (settings?.whichProgram != 'Resume Program') {
+							if (settings?.fanMinutes == null) { // || ((settings.fanMinutes != null) && (settings.fanMinutes != 0))) {
+                        		// input(name: "fanMode", title: "Fan Mode (optional)", type: "enum", required: false, multiple: false, options: getThermostatFanModes(), submitOnChange: true)
+							} else 
+                        } */
+                        /*if (settings.fanMode == 'Auto') {
                         	paragraph("Note that the fan circulation time will also be set to 0 because you selected Fan Mode 'Auto'")
-                        } else if (settings.fanMode == 'Off') {
+						} else if (settings.fanMode == 'On') {
+							paragraph("Note that the fan circulation time will be set to 0 because you selected Fan Mode 'On'")
+						} else if (settings.fanMode == 'Off') {
                         	// this can never happen, because 'off' is not a value fanMode
                         	input(name: 'statOff', title: 'Do you want to turn off the HVAC entirely?', type: 'bool', defaultValue: false)
-                        } else if ((settings.fanMode == null) || (settings.fanMode == 'Circulate')) {
+                        } else if ((settings.fanMode == null) || (settings.fanMode == 'Circulate')) { */
                         	input(name: "fanMinutes", title: "Fan Minimum Minutes per Hour (optional)", type: "number", 
-								  required: false, multiple: false, range:"0..55", submitOnChange: true, 
-								  defaultValue: (settings.fanMode==null?settings.fanMinutes:20))
+								  required: false, multiple: false, range:"0..55", submitOnChange: true)
+								  // defaultValue: (settings.fanMode==null?settings.fanMinutes:20))
 							// defaultValue: (settings.fanMode==null?(settings.fanMinutes!=null?settings.fanMinutes:0):20))
+                        //}
+						if (settings?.fanMinutes != null) {
+							if (settings.fanMinutes == 0) {
+                            	paragraph("Note than the Fan Mode will be set to 'Auto' because you specified 0 Fan Minimum Minutes")
+							} else {
+								paragraph("Note than the Fan Mode will be set to 'Circulate' because you specified non-0 Fan Minimum Minutes")
+							}
                         }
         	       		if (settings.whichProgram != "Resume Program") {
                         	input(name: "holdType", title: "Hold Type (optional)", type: "enum", required: false, 
@@ -220,16 +229,18 @@ def mainPage() {
 				
 				if (settings.notify) {
 					if (ST) {
-						section((HE?'<b>':'') + "Notifications" + (HE?'</b>':'')) {
+						section("Notifications") {
+							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
+								  multiple: true, description: "Select notification devices", submitOnChange: true)
 							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-							input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
 								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
 								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
 								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
-							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+							if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
 						}
 					} else {		// HE
 						section((HE?'<b>':'') + "Use Notification Device(s)" + (HE?'</b>':'')) {
@@ -258,7 +269,9 @@ def mainPage() {
         section(title: (HE?'<b>':'') + "Temporary Pause" + (HE?'</b>':'')) {
            	input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
-        
+        section(title: "") {
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+		}
 		section (getVersionLabel()) {}
     }
 }
@@ -283,6 +296,7 @@ def initialize() {
     	LOG("Temporarily Paused", 3, null, 'info')
     	return true
     }
+	if (settings.debugOff) log.info "log.debug() logging disabled"
 	
 	if (settings.modeOrRoutine == "Routine") {
     	subscribe(location, "routineExecuted", changeProgramHandler)
@@ -326,12 +340,13 @@ void normalizeSettings() {
     // fanMode
     atomicState.fanCommand = null
     atomicState.fanMinutes = null
-    switch (fanMode) {
+    /* switch (fanMode) {
         case 'On': 
         	atomicState.fanCommand = 'fanOn'
-            if (settings.fanMinutes != null) {
-    			atomicState.fanMinutes = settings.fanMinutes.toInteger()
-   			}
+            //if (settings.fanMinutes != null) {
+    		//	atomicState.fanMinutes = settings.fanMinutes.toInteger()
+   			//}
+			atomicState.fanMinutes = 0
             break;
         case 'Auto':
         	atomicState.fanCommand = 'fanAuto'
@@ -352,11 +367,12 @@ void normalizeSettings() {
             break;
         default : 
         	atomicState.fanCommand = null		// default
-            if (settings.fanMinutes != null) {
-    			atomicState.fanMinutes = settings.fanMinutes.toInteger()
-                if (settings.fanMode == null) atomicState.fanCommand = (atomicState.fanMinutes == 0) ? 'fanAuto' : 'fanCirculate'	// for backwards compatibility
-   			}
-   }
+		*/
+	if (settings.fanMinutes != null) {
+		atomicState.fanMinutes = settings.fanMinutes.toInteger()
+		// if (settings.fanMode == null) */ atomicState.fanCommand = (atomicState.fanMinutes == 0) ? 'fanAuto' : 'fanCirculate'	// for backwards compatibility
+	}
+//   }
     
     // holdType is now calculated at the time of the hold request
     atomicState.holdTypeParam = null
@@ -528,7 +544,7 @@ def changeProgramHandler(evt) {
     settings.myThermostats.each { stat ->
     	LOG("In each loop: Working on stat: ${stat}", 4, null, 'trace')
         String thermostatHold = ST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true)
-		log.debug "thermostatHold: ${thermostatHold}"
+		LOG("thermostatHold: ${thermostatHold}", 3, null, 'debug')
         boolean vacationHold = (thermostatHold == 'vacation')
         // Can't change the program while in Vacation mode
         if (vacationHold) {
@@ -569,13 +585,12 @@ def changeProgramHandler(evt) {
         			String currentProgramName = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)	// cancelProgram() will reset the currentProgramName to the scheduledProgramName
         			if (((thermostatHold == null) || (thermostatHold == '') || (thermostatHold == 'null')) && (currentProgramName == atomicState.programParam)) {
                     	// not in a hold, currentProgram is the desiredProgram
-                		def fanSet = false
+                		boolean fanSet = false
                 		if (atomicState.fanMinutes != null) {
-                    		stat.setFanMinOnTime(atomicState.fanMinutes)			// set fanMinOnTime
+                    		stat.setFanMinOnTime(atomicState.fanMinutes)		// set fanMinOnTime (setFanMinOnTime will handle auto/circulate)
                         	fanSet = true
-                    	}
-               			if (atomicState.fanCommand != null) {
-                    		stat."${atomicState.fanCommand}"()					// set fan on/auto
+                    	} else if (atomicState.fanCommand != null) {
+                    		stat."${atomicState.fanCommand}"()					// set fan on or off
                         	fanSet = true
                     	}
                         if (settings.statOff) {
@@ -588,17 +603,16 @@ def changeProgramHandler(evt) {
                 		done = true
                     } else if ((thermostatHold == 'hold') || currentProgramName.startsWith('Hold')) { // (In case the Vacation hasn't cleared yet)
                     	// In a hold
-						String ncSp = ST ? stat.currentValue('scheduledProgram') : stat.currentValue('scheduledProgram', true)
-            			if ( ncSp == atomicState.programParam) {
+						String scheduledProgram = ST ? stat.currentValue('scheduledProgram') : stat.currentValue('scheduledProgram', true)
+            			if ( scheduledProgram == atomicState.programParam) {
                         	// the scheduledProgram is the desiredProgram
                 			stat.resumeProgram(true)	// resumeAll to get back to the originally scheduled program
                 			def fanSet = false
                 			if (atomicState.fanMinutes != null) {
-                    			stat.setFanMinOnTime(atomicState.fanMinutes)		// set fanMinOnTime
+                    			stat.setFanMinOnTime(atomicState.fanMinutes)	// set fanMinOnTime (setFanMinOnTime will handle auto/circulate)
                         		fanSet = true
-                    		}
-               				if (atomicState.fanCommand != null) {
-                    			stat."${atomicState.fanCommand}"()				// set fan on/auto
+                    		} else if (atomicState.fanCommand != null) {
+                    			stat."${atomicState.fanCommand}"()				// set fan on/off
                         		fanSet = true
                     		}
                             if (whatHoldType(stat) == 'nextTransition') {
@@ -612,8 +626,8 @@ def changeProgramHandler(evt) {
                 				done = true
                             }
 						} else {
-							String ncCp = ST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
-							if (ncCp == atomicState.programParam) {
+							String currentProgram = ST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+							if (currentProgram == atomicState.programParam) {
 								// we are in a hold already, and the program is the one we want...
 								// Assume (for now) that the fan settings are also what we want (because another instance set them when they set the Hold)
 								sendMessage("${stat.displayName} is already in the specified Hold: ${atomicState.programParam}")
@@ -628,19 +642,19 @@ def changeProgramHandler(evt) {
             		if (!done) {
            				// Looks like we are setting a Hold: 
                 		def fanSet = false
-                		if (atomicState.fanMinutes != null) {
-                   			stat.setFanMinOnTime(atomicState.fanMinutes)		// set fanMinOnTime before setting the Hold:, becuase you can't change it after the Hold:
-                    		fanSet = true
-                		}
+
                         def sendHoldType = whatHoldType(stat)
     					def sendHoldHours = null
     					if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
     						sendHoldHours = sendHoldType
     						sendHoldType = 'holdHours'
 						}
-                        log.debug "sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}"
+                        LOG("sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}", 3, null, 'debug')
             			stat.setThermostatProgram(atomicState.programParam, sendHoldType, sendHoldHours)
-                		if (atomicState.fanCommand != null) {
+						if (atomicState.fanMinutes != null) {
+                   			stat.setFanMinOnTime(atomicState.fanMinutes)		// set fanMinOnTime
+                    		fanSet = true
+                		} else if (atomicState.fanCommand != null) {
                    			stat."${atomicState.fanCommand}"()				// set fan on/auto AFTER changing the program, because we are overriding the program's setting
                     		fanSet = true
                 		}
@@ -783,6 +797,11 @@ void sendMessage(notificationMessage) {
     if (settings.notify) {
         String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
+			if (settings.notifiers != null) {
+				settings.notifiers.each {									// Use notification devices (if any)
+					it.deviceNotification(msg)
+				}
+			}
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -792,12 +811,12 @@ void sendMessage(notificationMessage) {
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)				// Only to SMS contact
 				}
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPushMessage(msg)										// Push to everyone
 			}
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
@@ -923,7 +942,7 @@ def getThermostatFanModes() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+	if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
@@ -948,4 +967,3 @@ boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 def getParentSetting(String settingName) {
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
-// **************************************************************************************************************************
