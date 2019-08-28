@@ -40,10 +40,11 @@
  *  1.7.04 - Added importUrl for HE IDE
  *	1.7.05 - Optimized isST
  *	1.7.06 - Fixed importUrl for HE
+ *	1.7.07 - Added ability to add/delete sensor from ANY Named program/schedule/climate
  */
-String getVersionNum() 		{ return "1.7.06" }
+String getVersionNum() 		{ return "1.7.07" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
-def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
+def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 import groovy.json.*
 
 metadata {
@@ -66,6 +67,8 @@ metadata {
 		attribute "Away", "string"
 		attribute "Home", "string"
 		attribute "Sleep", "string"
+		attribute "Fan Only", "string"
+		attribute "programsList", "string"
 		attribute "SmartRoom", "string"
 		attribute "Wakeup", "string"	   
 		attribute "currentProgramName", "string"
@@ -76,6 +79,14 @@ metadata {
 		attribute "thermostatId", "string"
 		attribute "vents", "string"
 		attribute "windows", "string"
+		
+		if (isST) {
+			command "addSensorToProgram",	['string']
+			command "deleteSensorFromProgram", ['string']
+		} else {
+			command "addSensorToProgram", 		[[name:'Program Name*', type:'STRING', description:'Add sensor to this Program Name']]
+			command "deleteSensorFromProgram", 	[[name:'Program Name*', type:'STRING', description:'Delete sensor from this Program Name']]
+		}
 		
 	// These commands are all really internal-use only
 		command "addSensorToAway", []
@@ -269,7 +280,7 @@ void updated() {
 	if (!device.displayName.contains('TestingForInstall')) {
 		// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
 		sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
-		if (isST) {
+		if (state.isST) {
 			sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
 			updateDataValue("EnrolledUTDH", "true")
 		}
@@ -301,54 +312,81 @@ def generateEvent(Map results) {
 			def event = [:]  // [name: name, linkText: linkText, handlerName: name]
            
 			String sendValue = value as String
-			if (name=='temperature')  {
-                if ((sendValue == null) || (sendValue == 'unknown') || !isConnected) {
-                	// We are OFFLINE
-                    LOG( "Warning: Remote Sensor (${device.displayName}:${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
-                    sendEvent( name: 'temperatureDisplay', linkText: linkText, value: '451°', handlerName: "temperatureDisplay", descriptionText: 'Sensor ifs offline', /* isStateChange: true, */ displayed: true)
-					// don't actually chhange the temperature - leave the old value
-                    // event = [name: name, linkText: linkText, descriptionText: "Sensor is Offline", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
-                } else {
-                	// must be online  
-					// isChange = isStateChange(device, name, sendValue)
-                    isChange = true // always send the temperature, else HealthCheck will think we are OFFLINE
-                    
-                    // Generate the display value that will preserve decimal positions ending in 0
-                    if (isChange) {
-                    	def dValue = value.toBigDecimal()
-                    	if (precision == 0) {
-                    		tempDisplay = roundIt(dValue, 0).toString() + '°'
-                            sendValue = roundIt(dValue, 0).toInteger()								// Remove decimals in device lists also
-                    	} else {
-							tempDisplay = String.format( "%.${precision.toInteger()}f", roundIt(dValue, precision.toInteger())) + '°'
-                    	}
-                        sendEvent( name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
-						event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+			switch(name) {
+				case 'temperature':
+					if ((sendValue == null) || (sendValue == 'unknown') || !isConnected) {
+						// We are OFFLINE
+						LOG("Warning: Remote Sensor (${device.displayName}:${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 
+							2, null, 'warn')
+						sendEvent( name: 'temperatureDisplay', linkText: linkText, value: '451°', handlerName: "temperatureDisplay", 
+								  descriptionText: 'Sensor is offline', /* isStateChange: true, */ displayed: true)
+						// don't actually chhange the temperature - leave the old value
+						// event = [name: name, linkText: linkText, descriptionText: "Sensor is Offline", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+					} else {
+						// must be online  
+						// isChange = isStateChange(device, name, sendValue)
+						isChange = true // always send the temperature, else HealthCheck will think we are OFFLINE
+
+						// Generate the display value that will preserve decimal positions ending in 0
+						if (isChange) {
+							def dValue = value.toBigDecimal()
+							if (precision == 0) {
+								tempDisplay = roundIt(dValue, 0).toString() + '°'
+								sendValue = roundIt(dValue, 0).toInteger()								// Remove decimals in device lists also
+							} else {
+								tempDisplay = String.format( "%.${precision.toInteger()}f", roundIt(dValue, precision.toInteger())) + '°'
+							}
+							sendEvent(name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', 
+									  descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
+							event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, 
+									 value: sendValue, isStateChange: true, displayed: true]
+							objectsUpdated++
+						}
+					}
+					break;
+				case 'motion':     
+					if ( (sendValue == 'unknown') || !isConnected) {
+						// We are OFFLINE
+						LOG( "Warning: Remote Sensor (${device.displayName}:${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
+						sendValue = 'unknown'
+					}
+
+					isChange = isStateChange(device, name, sendValue.toString())
+					if (isChange) event = [name: name, linkText: linkText, descriptionText: "Motion is ${sendValue}", handlerName: name, value: sendValue, 
+										   isStateChange: true, displayed: true]
+				    break;
+				case 'currentProgramName':
+					isChange = isStateChange(device, name, sendValue)
+					if (isChange) {
+						isConnected = (sendValue != 'Offline')		// update if it changes
 						objectsUpdated++
-                    }
-                }
-			} else if (name=='motion') {        
-            	if ( (sendValue == 'unknown') || !isConnected) {
-                	// We are OFFLINE
-                    LOG( "Warning: Remote Sensor (${device.displayName}:${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
-                    sendValue = 'unknown'
-                }
-                
-				isChange = isStateChange(device, name, sendValue.toString())
-				if (isChange) event = [name: name, linkText: linkText, descriptionText: "Motion is ${sendValue}", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
-			} else if (name=='currentProgramName') {
-            	isChange = isStateChange(device, name, sendValue)
-                if (isChange) {
-                	isConnected = (sendValue != 'Offline')		// update if it changes
-					objectsUpdated++
-					event = [name: name, linkText: linkText, value: sendValue, descriptionText: 'Program is '+sendValue.replaceAll(':',''), isStateChange: true, displayed: true]
-                }
-            } else if (name=='checkInterval') {
+						event = [name: name, linkText: linkText, value: sendValue, descriptionText: 'Program is '+sendValue.replaceAll(':',''), isStateChange: true, displayed: true]
+					}
+					break;
+            case 'checkInterval':
             	event = [name: name, value: sendValue, /*isStateChange: true,*/ displayed: false]
-            } else { // must be one of Home, Away, Sleep, vents, doors, windows, SmartRoom, decimalPrecision or thermostatId
+				break;
+			case 'Home':
+			case 'Away':
+			case 'Sleep':
+			case 'vents':
+			case 'doors':
+			case 'windows':
+			case 'SmartRoom':
+			case 'decimalPrecision':
+			case 'programsList':
+			case 'thermostatId':
 				isChange = isStateChange(device, name, sendValue)
 				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: false]
-            }
+				break;
+			default:
+				// Must be a non-standard program name
+				isChange = isStateChange(device, name, sendValue)
+				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: false]
+				// Save non-standard Programs in a state variable
+				if (state?."${name}" != sendValue) state."${name}" = sendValue // avoid unnecessary writes to state
+				break;
+            }			
 			if (event != [:]) sendEvent(event)
 		}
 		//if (tempDisplay) {
@@ -371,12 +409,25 @@ void addSensorToSleep() { addSensorToProgram('sleep') }
 def addSensorToProgram(programId) {
 	LOG("addSensorToProgram(${programId}) - entry",3,this,'trace')
 	def result = false
-	if (programIdList().contains(programId.toLowerCase())) {
+	def programsList = state.isST ? device.currentValue('programsList') : device.currentValue('programsList', true)
+	if (programsList?.contains(programId)) {
+		// Handle add by Name
+		result = parent.addSensorToProgram(this, device.currentValue('thermostatId'), getSensorId(), programId)
+		if (result) {
+    		sendEvent(name: "${programId}", value: 'on', descriptionText: "Sensor added to ${programId} program", isStateChange: true, displayed: true)
+            //runIn(5, refresh, [overwrite: true])
+			if (!programIdList().contains(programId.toLowerCase())) state?."$programId" = 'on'
+        } else {
+           	sendEvent(name: "${programId}", value: 'off', isStateChange: true, displayed: false)
+			if (!programIdList().contains(programId.toLowerCase())) state?."$programId" = 'off'
+        }
+	} else if (programIdList().contains(programId.toLowerCase())) {
+		// Add by ID
     	if (device.currentValue(programId.capitalize()) != 'on') {
     		result = parent.addSensorToProgram(this, device.currentValue('thermostatId'), getSensorId(), programId.toLowerCase())
 			if (result) {
     			sendEvent(name: "${programId.capitalize()}", value: 'on', descriptionText: "Sensor added to ${programId.capitalize()} program", isStateChange: true, displayed: true)
-                runIn(5, refresh, [overwrite: true])
+                //runIn(5, refresh, [overwrite: true])
             } else {
             	sendEvent(name: "${programId.capitalize()}", value: 'off', isStateChange: true, displayed: false)
             }
@@ -384,7 +435,7 @@ def addSensorToProgram(programId) {
        		result = true
     	}
     } else {
-    	LOG("addSensorToProgram(${programId}) - Bad argument, must be one of ${programIdList}",1,null,'error')
+    	LOG("addSensorToProgram(${programId}) - Bad argument, must be member of Program Names (${programsList[1..-2]}) or IDs (${programIdList().toString()[1..-2]})",1,null,'error')
         result = false
     }
     
@@ -402,7 +453,20 @@ void removeSensorFromSleep() { deleteSensorFromProgram('sleep') }
 def deleteSensorFromProgram(programId) {
 	LOG("deleteSensorFromProgram(${programId}) - entry",3,this,'trace')
     def result = false
-	if (programIdList().contains(programId.toLowerCase())) {
+	def programsList = state.isST ? device.currentValue('programsList') : device.currentValue('programsList', true)
+	if (programsList?.contains(programId)) {
+		// Handle delete by Name
+		result = parent.deleteSensorFromProgram(this, device.currentValue('thermostatId'), getSensorId(), programId)
+		if (result) {
+    		sendEvent(name: "${programId}", value: 'off', descriptionText: "Sensor removed from ${programId} program", isStateChange: true, displayed: true)
+            //runIn(5, refresh, [overwrite: true])
+			if (!programIdList().contains(programId.toLowerCase())) state?."$programId" = 'off'
+        } else {
+           	sendEvent(name: "${programId}", value: 'on', isStateChange: true, displayed: false)
+			if (!programIdList().contains(programId.toLowerCase())) state?."$programId" = 'on'
+        }
+	} else if (programIdList().contains(programId.toLowerCase())) {
+		// Delete by ID
     	if (device.currentValue(programId.capitalize()) != 'off') {
     		result = parent.deleteSensorFromProgram(this, device.currentValue('thermostatId'), getSensorId(), programId.toLowerCase())
 			if (result) {	
@@ -410,12 +474,12 @@ def deleteSensorFromProgram(programId) {
             } else {
             	sendEvent(name: "${programId.capitalize()}", value: 'on', isStateChange: true, displayed: false)
             }
-        	runIn(5, refresh, [overwrite: true]) 
+        	//runIn(5, refresh, [overwrite: true]) 
        	} else {
         	result = true	// not in this Program anyway
         }
     } else {
-    	LOG("deleteSensorFromProgram(${programId}) - Bad argument, must be one of ${programIdList}",1,null,'error')
+		LOG("deleteSensorFromProgram(${programId}) - Bad argument, must be member of Program Names (${programsList[1..-2]}) or IDs (${programIdList().toString()[1..-2]})",1,null,'error')
         result = false
     }
     
@@ -533,38 +597,22 @@ def getStockTempColors() {
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//    Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use state so that it is universal
-//
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (state?.isST != null) ? state.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (state?.isHE != null) ? state.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//  - "if (state.isST)" is more efficient than "if (isSTHub)"
-//
+String getPlatform() { (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+
 String getHubPlatform() {
 	def pf = getPlatform()
-    state?.hubPlatform = pf			// if (state.hubPlatform == 'Hubitat') ... 
+	state?.hubPlatform = pf			// if (state.hubPlatform == 'Hubitat') ...
 											// or if (state.hubPlatform == 'SmartThings')...
-    state?.isST = pf.startsWith('S')	// if (state.isST) ...
-    state?.isHE = pf.startsWith('H')	// if (state.isHE) ...
-    return pf
+	state?.isST = pf.startsWith('S')	// if (state.isST) ...
+	state?.isHE = pf.startsWith('H')	// if (state.isHE) ...
+	return pf
 }
 boolean getIsSTHub() { return state.isST }					// if (isSTHub) ...
 boolean getIsHEHub() { return state.isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
 	// def ST = (state?.isST != null) ? state?.isST : isST
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
-//
-// **************************************************************************************************************************
