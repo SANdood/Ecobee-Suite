@@ -50,8 +50,9 @@
  *	1.7.22 - Enabled "Demand Response" program
  *	1.7.23 - Fixed typo in setDehumiditySetpoint()
  *	1.7.24 - Fixed type conversion error in setFanMinOnTime
+ *	1.7.25 - Added arg typing for Hubitat, some more fanMinOnTime cleanup
  */
-String getVersionNum() 		{ return "1.7.24" }
+String getVersionNum() 		{ return "1.7.25" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -89,10 +90,10 @@ metadata {
 		command "awake", 					[]
 		command "away", 					[]
         command "cancelDemandResponse",		[]
-		command "cancelReservation", 		['string', 'string']
+		command "cancelReservation", 		[]
 		command "cancelVacation", 			[]
 		// command "cool", 					[]
-		command "deleteVacation", 			['string']
+		command "deleteVacation", 			[]
 		command "doRefresh", 				[]						// internal use by the refresh button
 		command "emergency", 				[]	
 		// command "emergencyHeat", 		[]
@@ -112,15 +113,27 @@ metadata {
 		command "present", 					[]	
 		command "raiseSetpoint", 			[]	
 		command "resumeProgram", 			['string']
-		command "setCoolingSetpointDelay",	['number']
+		command "setCoolingSetpointDelay",	[]
 		command "setDehumidifierMode", 		['string']
-		command "setDehumiditySetpoint", 	['number']
+		if (isST) {
+        	command "setDehumiditySetpoint", ['number']
+        } else {
+        	command "setDehumiditySetpoint", [[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
+        }
 		command "setEcobeeSetting", 		['string', 'string']	// Allows changes to (most) Ecobee Settings
-		command "setFanMinOnTime", 			['number']
-		command "setFanMinOnTimeDelay", 	['number']
-		command "setHeatingSetpointDelay",	['number']
+        if (isST) {
+        	command "setFanMinOnTime",		['number']
+        } else {
+			command "setFanMinOnTime", 		[[name:'Fan Min On Time*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
+        }
+		command "setFanMinOnTimeDelay", 	[]
+		command "setHeatingSetpointDelay",	[]
 		command	"setHumidifierMode", 		['string']
-		command "setHumiditySetpoint", 		['number']
+		if (isST) {
+			command "setHumiditySetpoint",	['number']
+		} else {
+			command "setHumiditySetpoint", 	[[name:'Humidity Setpoint*', type:'NUMBER', description:'Humidifier RH% setpoint (0-100)']]
+		}
 		command "setProgramSetpoints", 		['string', 'number', 'number']
 		// command "setSchedule"			['JSON_OBJECT']
 		// command "setThermostatFanMode"	['string']
@@ -2858,7 +2871,7 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 			// For this implementation, we will use 'circulate' whenever fanMinOnTime != 0, and 'off' when fanMinOnTime == 0 && thermostatMode == 'off'
 			def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
 			def fanTime = fanMinOnTime
-			if (!fanMinOnTime || (fanMinOnTime.toInteger() == 0)) {
+			if ((fanMinOnTime == null) || (fanMinOnTime.toInteger() == 0)) {
 				// 20 minutes/hour is roughly the default for HoneyWell thermostats (35%), upon which ST has modeled their thermostat implementation
 				fanTime = 20
 			}
@@ -2940,7 +2953,7 @@ void setFanMinOnTime(minutes=20) {
 		if (parent.setFanMinOnTime(this, deviceId, minutes)) {
 			def updates = [fanMinOnTime: minutes]
 			def currentFanMode = ST ? device.currentValue('thermostatFanMode') : device.currentValue('thermostatFanMode', true)
-			if ((minutes == 0) && ((currentFanMode == 'circulate') || currentFanMode == 'auto')) {
+			if ((minutes == 0) && ((currentFanMode == 'circulate') || (currentFanMode == 'auto'))) {
 				updates = updates + [thermostatFanMode: 'auto', thermostatFanModeDisplay: 'auto']
 			} else if ((minutes > 0) && (currentFanMode != 'circulate')) {
 				updates = updates + [thermostatFanMode: 'circulate', thermostatFanModeDisplay: 'circulate']
@@ -3497,24 +3510,10 @@ def getStockTempColors() {
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//	- these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//	- performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//	  Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use state so that it is universal
-//
-String	getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()	  { return (state?.isST != null) ? state.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()	  { return (state?.isHE != null) ? state.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//	- they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//	- getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//	- "if (state.isST)" is more efficient than "if (isSTHub)"
-//
+String getPlatform() { (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST()     { (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+
 String getHubPlatform() {
 	def pf = getPlatform()
 	state?.hubPlatform = pf			// if (state.hubPlatform == 'Hubitat') ...
@@ -3530,5 +3529,3 @@ def getParentSetting(String settingName) {
 	// def ST = (state?.isST != null) ? state?.isST : isST
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
-//
-// **************************************************************************************************************************
