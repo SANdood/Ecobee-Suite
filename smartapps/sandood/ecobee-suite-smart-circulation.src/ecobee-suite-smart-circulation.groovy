@@ -25,8 +25,9 @@
  *	1.7.09 - Optimized isST/isHE, added Global Pause, misc optimizations
  *	1.7.10 - More optimizations, auto-update new versions, fixed another typo
  *	1.7.11 - LOG when calcTemps() is Done!
+ *	1.7.12 - Added option to disable local display of log.debug() logs
  */
-String getVersionNum() { return "1.7.11" }
+String getVersionNum() { return "1.7.12" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -166,7 +167,9 @@ def mainPage() {
 		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
-        
+        section(title: "") {
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+		}
 		section (getVersionLabel()) {}
     }
 }
@@ -194,7 +197,7 @@ def updated() {
 }
 def initialize() {
 	String version = getVersionLabel()
-	LOG("${version} Initializing...", 3, "", 'info')
+	LOG("${version} Initializing...", 2, "", 'info')
     atomicState.versionLabel = getVersionLabel()
 	boolean ST = atomicState.isST
 	atomicState.amIRunning = null // Now using runIn to collapse multiple calls into single calcTemps()
@@ -791,7 +794,7 @@ def roundIt( BigDecimal value, decimals=0 ) {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+	if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 // SmartThings/Hubitat Portability Library (SHPL)
