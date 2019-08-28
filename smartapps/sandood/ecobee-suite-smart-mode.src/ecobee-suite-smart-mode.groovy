@@ -31,8 +31,10 @@
  *	1.7.15 - Display current Mode & Program in appLabel
  *	1.7.16 - Clean up app label in sendMessage()
  *	1.7.17 - Fixed appLabel on ST
+ *	1.7.18 - Added option to disable local display of log.debug() logs, support Notification devices on ST
+ *	1.7.19 - Fixed appLabel yet again
  */
-String getVersionNum() { return "1.7.17" }
+String getVersionNum() { return "1.7.19" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -278,15 +280,17 @@ def mainPage() {
 			if (settings.notify) {
 				if (ST) {
 					section("Notifications") {
+						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
+							  multiple: true, description: "Select notification devices", submitOnChange: true)
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-						input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 						if (settings.speak) {
 							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
 							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
 							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 						}
-						if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
+						if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
 					}
 				} else {		// HE
 					section("<b>Use Notification Device(s)</b>") {
@@ -356,7 +360,8 @@ boolean initialize() {
     	LOG("Temporarily Paused", 3, null, 'info')
     	return true
     }
-    
+    if (settings.debugOff) log.info "log.debug() logging disabled"
+	
     if (settings.aboveCool || settings.belowHeat || settings.insideAuto) {
     	subscribe(thermostats, 'temperature', insideChangeHandler)
 	} else {
@@ -895,7 +900,7 @@ def temperatureUpdate( BigDecimal temp ) {
                             } else {
                                 // somebody else still has a 'modeOff' reservation so we can't turn it on
                                 def reservedBy = getGuestList(tid,'modeOff')
-                                log.debug "Reservations: ${reservedBy}"
+                                LOG("Reservations: ${reservedBy}", 3, null, 'debug')
 								if (reservedBy == []) reservedBy = ['somebody']
                                 def msg = "The Outside  Temperature is ${temp}°${unit}, but I can't change ${it.displayName} to ${desiredMode} Mode because ${reservedBy.toString()[1..-2]} hold 'modeOff' reservations"
                                 LOG(msg ,2,null,'warn')
@@ -1227,25 +1232,25 @@ String getZIPcode() {
 
 String getPWSID() {
 	String PWSID = location.zipCode
-	log.debug "Location ZIP Code ${PWSID}"
+	LOG("Location ZIP Code ${PWSID}", 3, null, 'debug')
 	// find the nearest PWS to the hub's geo location
 	String geoLocation = location.zipCode
 	// use coordinates, if available
 	if (location.latitude && location.longitude) geoLocation = "${location.latitude},${location.longitude}"
-    log.debug "Geolocation: ${geoLocation}"
+    LOG("Geolocation: ${geoLocation}", 3, null, 'debug')
     Map wdata = getWeatherFeature('geolookup', geoLocation)
     if (wdata && wdata.response && !wdata.response.containsKey('error')) {	// if we get good data
     	if (wdata.response.features.containsKey('geolookup') && (wdata.response.features.geolookup.toInteger() == 1) && wdata.location) {
         	//log.debug "wdata ${wdata.location.nearby_weather_stations.pws}"
-            log.debug "wdata ${wdata.location.nearby_weather_stations}"
+            LOG("wdata ${wdata.location.nearby_weather_stations}", 3, null, 'debug')
     		if (wdata.location.nearby_weather_stations?.pws?.station[0]?.id) PWSID = 'pws:' + wdata.location.nearby_weather_stations.pws.station[0].id
             else if (wdata.location.nearby_weather_stations?.airport?.station[0]?.icao) PWSID = wdata.location.nearby_weather_stations.airport.station[0].icao
     	}
-    	else log.debug "bad response"
+    	else LOG("bad response", 3, null, 'debug')
     }
-    else log.debug "null or error"
+    else LOG("null or error", 3, null, 'debug')
 
-	log.debug "Nearest PWS ${PWSID}"
+	LOG("Nearest PWS ${PWSID}", 3, null, 'info')
 	return PWSID
 }
 
@@ -1287,7 +1292,7 @@ List getGuestList(String tid, String type='modeOff') {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+	if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
@@ -1297,6 +1302,11 @@ void sendMessage(notificationMessage) {
     if (settings.notify) {
 		String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (ST) {
+			if (settings.notifiers != null) {
+				settings.notifiers.each {									// Use notification devices (if any)
+					it.deviceNotification(msg)
+				}
+			}
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -1306,12 +1316,12 @@ void sendMessage(notificationMessage) {
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)				// Only to SMS contact
 				}
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPushMessage(msg)										// Push to everyone
 			}
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
@@ -1370,7 +1380,7 @@ void sendMessage(notificationMessage) {
 
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	def opts = [' (paus', '(Cool', ' (Heat', ' (Auto', ' (Off', ' (Aux', ' (Emer']
+	def opts = [' (pa', '(Co', ' (He', ' (Au', ' (Of', ' (Au', ' (Em']
 	String flag
 	if (ST) {
 		opts.each {
@@ -1386,7 +1396,7 @@ void updateMyLabel() {
 		myLabel = app.label
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains(flag)) {
+	if (flag && myLabel.contains(flag)) {
 		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
