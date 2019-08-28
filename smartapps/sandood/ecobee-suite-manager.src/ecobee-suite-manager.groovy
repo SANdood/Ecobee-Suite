@@ -51,8 +51,12 @@
  *	1.7.27 - Enabled "Demand Response" program
  *	1.7.28 - Fixed weatherIcon change at sunrise/sunset & demandResponse currentProgramName/Id
  *	1.7.29 - Fixed null owner & type references for Auto Home/Away programs
+ *	1.7.30 - Fixed null values during Hub reboot recovery
+ *	1.7.31 - Optimized LOG() handling, fanMode/fanMinOnTime tweaks
+ *	1.7.32 - Send programsList to sensors, to support add/deleteSensorFromProgram
+ *	1.7.33 - Added notification device support on SmartThings
  */
-String getVersionNum()		{ return "1.7.29" }
+String getVersionNum()		{ return "1.7.33" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -429,16 +433,18 @@ def preferencesPage() {
 		if (ST) {
 			section("Notifications") {
 				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most once per hour."
+				input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+				input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
+					  multiple: true, description: "Select notification devices", submitOnChange: true)
 				input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-				input( name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
 				input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 				if (settings.speak) {
 					input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
 					input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
 					if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 				}
-				if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
-				paragraph("A notification is always sent to the Hello Home log whenever an action is taken")
+				if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+				paragraph("A notification is always sent to the Hello Home log")
 			}
 		} else {		// isHE
 			section("<b>Use Notification Device(s)</b>") {
@@ -3086,6 +3092,22 @@ void updateSensorData() {
 					sensorData << sensorClimates
 					sensorList += climatesList
 				}
+				// Give each sensor the complete list of valid Climates (as programsList) from its thermostat, to support add/deleteSensorToProgram()
+				def statClimates = atomicState.changeNever[tid][7] ?: '["Away", "Home", "Sleep"]'
+				def myStatsClimates = atomicState.myStatsClimates ?: [:]
+				if (myStatsClimates && myStatsClimates[sensorDNI]) {
+					if (statClimates != myStatsClimates[sensorDNI]) {
+						//  log.info "SENDING NEW programsList ${statClimates} to ${sensorDNI}"
+						sensorData << [ programsList: statClimates ]
+						myStatsClimates[sensorDNI] = statClimates
+						atomicState.myStatsClimates = myStatsClimates
+					}
+				} else {
+					// This initializes the programsList data the first time through
+					sensorData << [ programsList: statClimates ]
+					myStatsClimates[sensorDNI] = statClimates
+					atomicState.myStatsClimates = myStatsClimates
+				}
 				
 				// For Health Check, update the sensor's checkInterval	any time we get forcePolled - which should happen a MINIMUM of once per hour
 				// This because sensors don't necessarily update frequently, so this simple event should be enought to let the ST Health Checker know
@@ -3353,8 +3375,15 @@ void updateThermostatData() {
 			// Oddly, the runtime.lastModified is returned in UTC, so we have to convert it to the time zone of the thermostat
 			// (Note that each thermostat could actually be in a different time zone)
 			def myTimeZone = statLocation?.timeZone ? TimeZone.getTimeZone(statLocation.timeZone) : (location.timeZone?: TimeZone.getTimeZone('UTC'))
-			def disconnectedMS = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.getTime()
-			String disconnectedAt = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.format('yyyy-MM-dd HH:mm:ss', myTimeZone)
+			def disconnectedMS
+			String disconnectedAt
+			if (runtime && runtime?.disconnectedDateTime) {
+				disconnectedMS = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.getTime()
+				disconnectedAt = new Date().parse('yyyy-MM-dd HH:mm:ss',runtime?.disconnectDateTime)?.format('yyyy-MM-dd HH:mm:ss', myTimeZone)
+			} else {
+				disconnectedMS = now()
+				disconnectedAt = new Date(disconnectedMS).format('yyy-MM-dd HH:mm:ss', myTimeZone)
+			}
 			// In this case, holdEndsAt is actually the date & time of the last valid update from the thermostat...
 			holdEndsAt = fixDateTimeString( disconnectedAt.take(10), disconnectedAt.drop(11), statTime[tid] )
 			if (forcePoll && settings.askAlexa) {
@@ -3896,7 +3925,8 @@ void updateThermostatData() {
 				if (changeNever[tid][10] != hasDehumidifier){ data += [hasDehumidifier: hasDehumidifier];	changeNever[tid][10] = hasDehumidifier; nvrChanged = true;}
 			}
 			if (forcePoll || programUpdated) {
-				if (climatesList && (changeNever[tid][7] != climatesList))	{ data += [programsList: climatesList];			changeNever[tid][7] = climatesList; nvrChanged = true; }
+				// REMINDER: updateSensorData is using atomicState.changeNever[tid][7] to send the programsList to the Sensor devices
+				if (climatesList && (changeNever[tid][7] != climatesList))	{ data += [programsList: climatesList];	changeNever[tid][7] = climatesList; nvrChanged = true; }
 			}
 			if (nvrChanged) {
 				// log.trace "nvrChanged: true"
@@ -4231,7 +4261,7 @@ void queueCall(data) {
 		failedCallQueue = failedCallQueue + ["${queueSize}": data]
 	}
 	
-	log.debug "failedCallQueue: ${failedCallQueue}"
+	LOG("failedCallQueue: ${failedCallQueue}", 3, null, 'trace')
 	//atomicState.callQueue = toJson(failedCallQueue)
 	atomicState.callQueue = failedCallQueue
 	
@@ -4254,7 +4284,7 @@ void runCallQueue() {
 	for (i=0; i<queue.size(); i++) {
 		//log.debug queue."${i}"
 		def cmd = queue."${i}"
-		log.debug "${i}: ${cmd}"
+		LOG("${i}: ${cmd}", 3, null, 'debug')
 		if (cmd?.done?.toString() == 'false') {		
 			if (atomicState.connected == 'full') {
 				// execute the command
@@ -4834,7 +4864,8 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
 		fanMode = "auto"   
 		// thermostatSettings = ',"thermostat":{"settings":{"hvacMode":"off","fanMinOnTime":"0"}}'		// now requires thermsotatMode to already be off, instead of overwriting it here
 		thermostatSettings = ',"thermostat":{"settings":{"fanMinOnTime":"0"}}'
-		thermostatFunctions = ''
+		thermostatFunctions = '{"type":"setHold","params":{"coolHoldTemp":"'+c+'","heatHoldTemp":"'+h+'","holdType":"'+theHoldType+
+									'","fan":"'+fanMode+'","isTemperatureAbsolute":false,"isTemperatureRelative":false}}'
 	// AUTO or ON
 	} else {
 		if (fanMinOnTime == null) fanMinOnTime = 0 // this maybe should be the fanTime of the current/scheduledProgram
@@ -4951,6 +4982,7 @@ boolean addSensorToProgram(child, deviceId, sensorId, programId) {
 	int c = 0
 	int s = 0
 	while ( program.climates[c] ) {	
+		if (program.climates[c].name == programId) { programId = program.climates[c].climateRef }	// Allow add by program Name or id
 		if (program.climates[c].climateRef == programId) {
 			s = 0
 			while (program.climates[c].sensors[s]) {
@@ -4996,6 +5028,7 @@ boolean deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 	int c = 0
 	int s = 0
 	while ( program.climates[c] ) {	
+		if (program.climates[c].name == programId) { programId = program.climates[c].climateRef } // allow delete by Name or id
 		if (program.climates[c].climateRef == programId) { // found the program we want to delete from
 			def currentSensors = program.climates[c].sensors
 			s = 0
@@ -5368,15 +5401,15 @@ String getThermostatDNI(String tid) {
 }
 
 void LOG(message, level=3, child=null, String logType='debug', event=false, displayEvent=true) {
-	def dbgLevel = debugLevel(level)
-	if (!dbgLevel) return		// let's not waste CPU cycles if we don't have to...
+	// boolean dbgLevel = debugLevel(level)
+	if (!debugLevel(level)) return		// let's not waste CPU cycles if we don't have to...
 	
 	if (logType == null) logType = 'debug'
-	def prefix = ""
-	def logTypes = ['error', 'debug', 'info', 'trace', 'warn']
+	String prefix = ""
+	// is now a Field def logTypes = ['error', 'debug', 'info', 'trace', 'warn']
 	
-	if(!logTypes.contains(logType)) {
-		log.error "LOG() - Received logType (${logType}) which is not in the list of allowed types ${logTypes}, message: ${message}, level: ${level}"
+	if(!LogTypes.contains(logType)) {
+		log.error "LOG() - Received logType (${logType}) which is not in the list of allowed types ${LogTypes}, message: ${message}, level: ${level}"
 		if (event && child) { debugEventFromParent(child, "LOG() - Invalid logType ${logType}") }
 		logType = 'debug'
 	}
@@ -5387,11 +5420,9 @@ void LOG(message, level=3, child=null, String logType='debug', event=false, disp
 	}
 	// if ( debugLevel(0) ) { return }
 	if ( debugLevel(5) ) { prefix = 'LOG: ' }
-	//if ( dbgLevel ) { 
-		log."${logType}" "${prefix}${message}"		  
-		if (event) { debugEvent(message, displayEvent) }
-		if (child) { debugEventFromParent(child, message) }
-	//}	   
+	log."${logType}" "${prefix}${message}"		  
+	if (event) { debugEvent(message, displayEvent) }
+	if (child) { debugEventFromParent(child, message) }  
 }
 
 void debugEvent(message, displayEvent = false) {
@@ -5400,7 +5431,7 @@ void debugEvent(message, displayEvent = false) {
 		descriptionText: message,
 		displayed: displayEvent
 	]
-	if ( debugLevel(4) ) { log.debug "Generating AppDebug Event: ${results}" }
+	if ( debugLevel(4) ) { LOG("Generating AppDebug Event: ${results}", 3, null, 'debug') }
 	sendEvent (results)
 }
 
@@ -5422,6 +5453,11 @@ void sendPushAndFeeds(notificationMessage) {
 	if (sendNotification) {
 		String msg = "Your ${location.name} Ecobee${settings.thermostats.size()>1?'s':''} " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
+			if (settings.notifiers != null) {
+				settings.notifiers.each {									// Use notification devices (if any)
+					it.deviceNotification(msg)
+				}
+			}
 			if (phone) { // check that the user did select a phone number
 				if ( phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -5436,7 +5472,7 @@ void sendPushAndFeeds(notificationMessage) {
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPushMessage(msg)										// Push to everyone
 			}
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
@@ -5975,6 +6011,8 @@ void runEvery3Minutes(handler) {
 
 @Field final List RuntimeValueNames =	['actualHumidity','actualTemperature','connected','desiredCool','desiredDehumidity','desiredFanMode','desiredHeat','desiredHumidity','disconnectDateTime']
 									  // ,'desiredHeatRange','desiredCoolRange','rawTemperature','showIconMode'
+
+@Field final List LogTypes = 			['error', 'debug', 'info', 'trace', 'warn']
 
 void updateMyLabel() {
 	if (isST) return								// ST doesn't support the colored label approach
