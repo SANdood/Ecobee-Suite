@@ -32,8 +32,9 @@
  *	1.7.02 - Fixing private method issue caused by grails
  *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.04 - Optimized isST/isHE, formatting, added Global Pause
+ *	1.7.05 - Added option to disable local display of log.debug() logs
  */
-String getVersionNum() { return "1.7.04" }
+String getVersionNum() { return "1.7.05" }
 String getVersionLabel() { return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -113,7 +114,9 @@ def mainPage() {
 		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
         }
-        
+		section(title: "") {
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+		}        
         section (getVersionLabel()) {}
     }
 }
@@ -154,6 +157,7 @@ def initialize() {
     	LOG("Temporarily Paused", 3, null, 'info')
     	return true
     }
+    if (settings.debugOff) log.info "log.debug() logging disabled"
 	
 	// check the master, but give it a few seconds first
 	runIn (5, "theAdjuster", [overwrite: true])
@@ -436,28 +440,10 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
     log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
-
-// **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
-// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//    Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use atomicState so that it is universal
-//
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
 boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//  - "if (state.isST)" is more efficient than "if (isSTHub)"
-//
 String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
@@ -470,9 +456,5 @@ boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
 boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
-//
-// **************************************************************************************************************************
