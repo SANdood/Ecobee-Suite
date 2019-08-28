@@ -28,8 +28,9 @@
  *	1.7.02 - Fixing private method issue caused by grails
  *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.04 - Optimized isST/isHE, added Global Pause
+ *	1.7.05 - Added option to disable local display of log.debug() logs
  */
-String getVersionNum() { return "1.7.04" }
+String getVersionNum() { return "1.7.05" }
 String getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -198,7 +199,9 @@ def mainPage() {
 		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
 			input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
 		}
-
+		section(title: "") {
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+		}
 		section (getVersionLabel()) {}
     }
 }
@@ -227,8 +230,8 @@ void updated() {
 	initialize()
 }
 def initialize() {
-	LOG("${getVersionLabel()}\nInitializing...", 3, null, 'info')
-    log.debug "${app.name}, ${app.label}"
+	LOG("${getVersionLabel()}\nInitializing...", 2, null, 'info')
+    log.info "${app.name}, ${app.label}"
 	updateMyLabel()
 	
 	if(tempDisable == true) {
@@ -236,6 +239,8 @@ def initialize() {
 		LOG("Temporarily Paused", 3, null, 'info')
 		return true
 	}
+	if (settings.debugOff) log.info "log.debug() logging disabled"
+	
     // Initialize the saved states
     def statState = [:]
     settings.theThermostats.each() { stat ->
@@ -620,7 +625,7 @@ void makeReservation(String tid, String type='modeOff' ) {
 }
 // Cancel my reservation
 void cancelReservation(String tid, String type='modeOff') {
-	log.debug "cancel ${tid}, ${type}"
+	// log.debug "cancel ${tid}, ${type}"
 	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
@@ -654,7 +659,7 @@ String getDeviceId(networkId) {
 
 // return all the modes that ALL thermostats support
 def getThermostatModes() {
-log.debug "${app.name}, ${app.label}"
+	//log.debug "${app.name}, ${app.label}"
 	def theModes = []
     
     settings.theThermostats.each { stat ->
@@ -672,7 +677,7 @@ log.debug "${app.name}, ${app.label}"
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
-        String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (isST) {
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
@@ -780,7 +785,6 @@ void updateMyLabel() {
 	
 	String flag = ST ? ' (paused)' : '<span '
 	
-	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
@@ -802,7 +806,7 @@ void updateMyLabel() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+	if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
