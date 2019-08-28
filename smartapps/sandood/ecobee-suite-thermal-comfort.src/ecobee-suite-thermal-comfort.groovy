@@ -27,8 +27,9 @@
  *	1.7.12 - Fixed multi-humidistat initialization error
  *	1.7.13 - Clean up app label in sendMessage()
  *	1.7.14 - Fixed Notifications setup
+ *	1.7.15 - Added option to disable local display of log.debug() logs, support Notification devices on ST
  */
-String getVersionNum() { return "1.7.14" }
+String getVersionNum() { return "1.7.15" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
@@ -210,17 +211,19 @@ def mainPage() {
 							 : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
 				if (settings.notify) {
 					if (ST) {
-						//section("Notifications") {
-							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
+						section("Notifications") {
 							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
+								  multiple: true, description: "Select notification devices", submitOnChange: true)
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
 								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
 								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
 								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
-							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!"
-						//}
+							if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+						}
 					} else {		// HE
 						//section("<b>Notification Device(s)</b>") {
 							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
@@ -247,6 +250,9 @@ def mainPage() {
         }
         section(title: (HE?'<b>':'') + "Temporarily Paused" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)
+		}
+		section(title: "") {
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
 		}
     	section (getVersionLabel()) {}
     }
@@ -292,6 +298,7 @@ def initialize() {
     	LOG("Temporarily Paused", 3, null, 'info')
     	return true
     }
+    if (settings.debugOff) log.info "log.debug() logging disabled"
 
     subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
     subscribe(settings.theThermostat, 'currentProgram', ProgramChangeHandler)
@@ -429,7 +436,7 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
 	def fixed
 	def ht = heatTemp.toBigDecimal()
 	def ct = coolTemp.toBigDecimal()
-	log.debug "${ht} - ${ct}"
+	LOG("${ht} - ${ct}", 3, null, 'debug')
 	if ((ct - ht) < delta) {
 		fixed = null
 		// Uh-oh, the temps are too close together!
@@ -678,18 +685,16 @@ def getMultiThermometers() {
 */
 
 // Helper Functions
-void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-    log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
-}
-
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${settings.notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
         String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
+			if (settings.notifiers != null) {
+				settings.notifiers.each {								// Use notification devices
+					it.deviceNotification(msg)
+				}
+			}
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -815,27 +820,16 @@ def pauseOff() {
 	}
 	atomicState.globalPause = false
 }
-// **************************************************************************************************************************
+void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
+	String msg = "${atomicState.appDisplayName} ${message}"
+    if (logType == null) logType = 'debug'
+    log."${logType}" message
+	parent.LOG(msg, level, null, logType, event, displayEvent)
+}
 // SmartThings/Hubitat Portability Library (SHPL)
-// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//    Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use atomicState so that it is universal
-//
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
 boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//  - "if (state.isST)" is more efficient than "if (isSTHub)"
-//
 String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
@@ -848,9 +842,5 @@ boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
 boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
-//
-// **************************************************************************************************************************
