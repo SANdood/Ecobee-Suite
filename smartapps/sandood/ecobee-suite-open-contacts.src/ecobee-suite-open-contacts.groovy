@@ -45,8 +45,9 @@
  *	1.7.29 - Clean up appLabel in sendMessage()
  *	1.7.30 - Corrected (user reported) tmpThermSaveState typo
  *	1.7.31 - Added noDebug option
+ *	1.7.32 - Tweaked noDebug, add Notifications device support for ST
  */
-String getVersionNum() 		{ return "1.7.31" }
+String getVersionNum() 		{ return "1.7.32" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -174,17 +175,19 @@ def mainPage() {
                         
 				if (settings.whichAction != "HVAC Actions Only") {
 					if (ST) {
-						section((HE?'<b>':'') + "Notifications" + (HE?'</b>':'')) {
+						section("Notifications") {
 							paragraph "A notification will also be sent to the Hello Home log\n"
-							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
+								  multiple: true, description: "Select notification devices", submitOnChange: true)
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
 							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
 								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
 								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
 								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
-							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+							if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
                             if (HE) paragraph ""
 						}
 					} else {		// HE
@@ -217,7 +220,7 @@ def mainPage() {
 			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
 		section(title: "") {
-			input(name: "debugOff", title: "Disable debug messages? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
 		}
         
         section (getVersionLabel()) {}
@@ -244,7 +247,7 @@ void updated() {
 // TODO - if stat goes offline, then comes back online, then re-initialize states...
 //
 def initialize() {
-	LOG("${getVersionLabel()} - Initializing...", 4, "", 'info')
+	LOG("${getVersionLabel()} - Initializing...", 2, "", 'info')
 	updateMyLabel()
     //log.debug "settings: ${settings}"
 	
@@ -253,7 +256,7 @@ def initialize() {
 		LOG("Temporarily Paused", 4, null, 'info')
 		return true
 	}
-	if (settings.debugOff) log.info "log.debug() messages disabled"
+	if (settings.debugOff) log.info "log.debug() logging disabled"
     // subscribe(app, appTouch)
 	
 	boolean contactOffState = false
@@ -707,13 +710,13 @@ void turnOnHVAC(quietly = false) {
     atomicState.HVACModeState = 'on'
     String action = settings.whichAction ?: 'Notify Only'
     boolean doHVAC = action.contains('HVAC')
-	log.debug "turnOnHVAC() - action: ${action}, doHVAC: ${doHVAC}"
+	LOG("turnOnHVAC() - action: ${action}, doHVAC: ${doHVAC}", 3, null, 'info')
     boolean notReserved = true
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 	def tstatNames = []
-	log.debug "turnOnHVAC() - theStats: ${theStats}"
+	// log.debug "turnOnHVAC() - theStats: ${theStats}"
 	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
-	log.debug "turnOnHVAC() - thermSavedState = ${atomicState.thermSavedState}"
+	LOG("turnOnHVAC() - thermSavedState = ${atomicState.thermSavedState}", 3, null, 'debug')
     if (doHVAC) {
         theStats.each { therm ->
 			LOG("Working on thermostat: ${therm}", 3, null, 'info')
@@ -908,6 +911,11 @@ void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 3, null, "info")
     String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 	if (atomicState.isST) {
+		if (settings.notifiers != null) {
+			settings.notifiers.each {									// Use notification devices (if any)
+				it.deviceNotification(msg)
+			}
+		}
 		if (phone) { // check that the user did select a phone number
 			if ( phone.indexOf(";") > 0){
 				def phones = settings.phone.split(";")
@@ -922,7 +930,7 @@ void sendMessage(notificationMessage) {
 		} 
 		if (settings.pushNotify) {
 			LOG("Sending Push to everyone", 3, null, 'warn')
-			sendPushMessage(msg)								// Push to everyone
+			sendPushMessage(msg)										// Push to everyone
 		}
 		if (settings.speak) {
 			if (settings.speechDevices != null) {
@@ -937,10 +945,10 @@ void sendMessage(notificationMessage) {
 				}
 			}
 		}
-		sendNotificationEvent( notificationMessage )			// Always send to hello home
+		sendNotificationEvent( notificationMessage )					// Always send to hello home
 	} else {		// isHE
 		if (settings.notifiers != null) {
-			settings.notifiers.each {							// Use notification devices on Hubitat
+			settings.notifiers.each {									// Use notification devices on Hubitat
 				it.deviceNotification(msg)
 			}
 		}
