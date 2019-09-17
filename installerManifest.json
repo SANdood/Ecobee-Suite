@@ -123,7 +123,7 @@
 				"name": 	"ecobee Suite Working From Home",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.10",
+				"version": 	"1.7.11",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
 				"optional": 	false
