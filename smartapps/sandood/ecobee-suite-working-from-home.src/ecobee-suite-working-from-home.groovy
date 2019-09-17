@@ -23,8 +23,10 @@
  *	1.7.08 - Optimized isST/isHE, formatting
  *	1.7.09 - Clean up app label in sendMessage()
  *	1.7.10 - Added option to disable local display of log.debug() logs, support Notification devices on ST
+ *	1.7.11 - Parameterized Home/Away selections
  */
-String getVersionNum() { return "1.7.10" }
+import groovy.json.*
+String getVersionNum() { return "1.7.11" }
 String getVersionLabel() { return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -90,9 +92,16 @@ def mainPage() {
             section (title: (HE?'<b>':'') + "Conditions" + (HE?'</b>':'')) {
                 input(name: "people", type: "capability.presenceSensor", title: "When any of these are present...",  multiple: true, required: true, submitOnChange: true)
 				input(name: "identify", type: 'bool', title: 'Identify who is home for logs & notifications?', required: (settings.people != null), defaultValue: false)
-				input(name: "timeOfDay", type: "time", title: "At this time of day",  required: (settings.onAway == null), submitOnChange: true)
 				paragraph ''
-				input(name: "onAway", type: "bool", title: "When thermostat${settings?.myThermostats?.size()>1?'s change':'changes'} to 'Away'", defaultValue: false, required: (settings.timeOfDay == null), submitOnChange: true)
+				input(name: "timeOfDay", type: "time", title: "At this time of day",  required: !settings.onAway, submitOnChange: true)
+				input(name: "onAway", type: "bool", title: "When ${settings?.myThermostats?.size()>1?'any thermostats\'':'the thermostat\'s'} Program changes", defaultValue: false, 
+                	  required: (settings.timeOfDay == null), submitOnChange: true)
+                if (settings.onAway) {
+                	def programs = getEcobeePrograms()
+                    programs = programs - ["Resume"]
+                	input(name: 'awayPrograms', type: 'enum', title: "When Program changes to any of these: ", options: programs, required: true, defaultValue: 'Away', multiple: true, 
+                          submitOnChange: true)
+                }
 				paragraph ''
             }
             
@@ -105,7 +114,14 @@ def mainPage() {
                     }
             	}
                 input(name: "setMode", type: "mode", title: "Set Location Mode", required: false, multiple: false, submitOnChange: true)
-        		input(name: "setHome", type: "bool", title: "Set thermostat${settings?.myThermostats?.size()>1?'s':''} to the 'Home' program?", defaulValue: true, submitOnChange: true)
+        		input(name: "setHome", type: "bool", title: "Change thermostat${settings?.myThermostats?.size()>1?'\'s':'s\''} Program?", defaulValue: true, 
+                	  submitOnChange: true)
+                if (settings.setHome) {
+                	def programs = getEcobeePrograms()
+                    programs = programs - (settings.awayPrograms + ["Resume"])
+                	input(name: 'homeProgram', type: 'enum', title: "Change Program to: ", options: programs, required: true, defaultValue: 'Home', multiple: false, 
+                          submitOnChange: true)
+                }
 				paragraph ''
             }
                 
@@ -213,10 +229,12 @@ def checkPresence() {
         }
         if (settings.setHome) {
 			def verified = true
+            def homeTarget = settings.homeProgram ?: 'Home'
         	myThermostats.each { tstat ->
-				def ncCp = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
-				if (ncCp != "Home") {
-					tstat.home()
+				def currentProgram = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
+				if (currentProgram != homeTarget) {
+					// tstat.home()
+                    tstat.setThermostatProgram(homeTarget)
 					verified = false
 				}
         	}
@@ -238,10 +256,10 @@ def checkProgram(evt) {
     boolean ST = atomicState.isST
 	
     def multiple = false
-    if (settings.onAway && (evt.value == 'Away') && anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
+    if (settings.onAway && (settings.awayPrograms.contains(evt.value)) && anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
     	evt.device.home()
 		def who = whoIsHome()
-        sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because Thermostat ${evt.device.displayName} changed to 'Away' and ${who} ${who.contains(' and ')?'are':'is'} still home")
+        sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the '${settings.homeProgram}' program because Thermostat ${evt.device.displayName} changed to '${evt.value}' and ${who} ${who.contains(' and ')?'are':'is'} still home")
         runIn(300, checkHome, [overwrite: true])
         
     	if (ST && wfhPhrase) {
@@ -261,12 +279,14 @@ def checkHome() {
 	boolean ST = atomicState.isST
 	boolean allSet = true
 	if (settings.setHome) {
+    	def homeTarget = settings.homeProgram ?: 'Home'
     	myThermostats.each { tstat ->
 			def currentProgram = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
-        	if (currentProgram != "Home") { 	// Need to check if in Vacation Mode also...
+        	if (currentProgram != homeTarget) { 	// Need to check if in Vacation Mode also...
             	allSet = false
-            	tstat.home()
-                LOG("${app.label} at ${location.name} failed twice to set 'Home' program on ${tstat.displayName}",2,null,'warn')
+            	// tstat.home()
+                tstat.setThermostatProgram(homeTarget)
+                LOG("${app.label} at ${location.name} failed twice to set '${homeTarget}' program on ${tstat.displayName}",2,null,'warn')
             }
         }
     }
@@ -303,6 +323,24 @@ String whoIsHome() {
 	} else {
 		return "nobody"
 	}
+}
+
+// get the combined set of Ecobee Programs applicable for these thermostats
+def getEcobeePrograms() {
+	def programs
+	if (settings.myThermostats?.size() > 0) {
+		settings.myThermostats.each { stat ->
+			def pl = stat.currentValue('programsList')
+			if (!programs) {
+				if (pl) programs = new JsonSlurper().parseText(pl)
+			} else {
+				if (pl) programs = programs.intersect(new JsonSlurper().parseText(pl))
+			}
+        }
+	} 
+	if (!programs) programs =  ['Away', 'Home', 'Sleep']
+    LOG("getEcobeePrograms: returning ${programs}", 4, null, 'info')
+    return programs.sort(false)
 }
 
 // return all the modes that ALL thermostats support
