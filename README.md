@@ -1,6 +1,6 @@
 Free Universal Ecobee Suite, version: 1.7.** 
 ======================================================
-***Latest Updates were posted on 17 September 2019 at 3:40pm ADT***
+***Latest Updates were posted on 08 October 2019 at 8:50am EDT***
 
 Hubitat users now can utilize the comprehensive functionality of my Ecobee Suite, ***including significantly improved resiliency and recovery from Ecobee Server outages*** (such as those we have experienced over the past few days). The code will automatically recover from most outages (multi-hour outages MAY require you to re-authenticate, but generally you need do nothing except wait).
 
