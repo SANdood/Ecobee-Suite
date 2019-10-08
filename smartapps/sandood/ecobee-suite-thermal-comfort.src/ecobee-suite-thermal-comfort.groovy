@@ -28,8 +28,9 @@
  *	1.7.13 - Clean up app label in sendMessage()
  *	1.7.14 - Fixed Notifications setup
  *	1.7.15 - Added option to disable local display of log.debug() logs, support Notification devices on ST
+ *	1.7.16 - Fixed ST Notifications section, removed HE SMS option, fixed event handlers typo, fixed humidity initialization
  */
-String getVersionNum() { return "1.7.15" }
+String getVersionNum() { return "1.7.16" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
@@ -211,39 +212,28 @@ def mainPage() {
 							 : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
 				if (settings.notify) {
 					if (ST) {
-						section("Notifications") {
-							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
-							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
-								  multiple: true, description: "Select notification devices", submitOnChange: true)
-							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
-							if (settings.speak) {
-								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-							}
-							if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
-						}
+                        input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+                        input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify && !settings.notifiers),
+                              multiple: true, description: "Select notification devices", submitOnChange: true)
+                        input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
+                        input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+                        if (settings.speak) {
+                            input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+                            input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+                            if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+                        }
 					} else {		// HE
-						//section("<b>Notification Device(s)</b>") {
-							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
-								  description: "Select notification devices", submitOnChange: true)
-							paragraph ''
-						//}
-						//section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
-							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
-								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
-							paragraph ''
-						//}
-						//section("<b>Use Speech Device(s)</b>") {
-							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
-							if (settings.speak) {
-								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-							}
-							paragraph ''
-						//}
+                        input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
+                              description: "Select notification devices", submitOnChange: true)
+                        paragraph ''
+
+                        input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+                        if (settings.speak) {
+                            input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
+                            input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+                            input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+                        }
+                        paragraph ''
 					}
 				}
 			}
@@ -301,12 +291,13 @@ def initialize() {
     if (settings.debugOff) log.info "log.debug() logging disabled"
 
     subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
-    subscribe(settings.theThermostat, 'currentProgram', ProgramChangeHandler)
+    subscribe(settings.theThermostat, 'currentProgram', programChangeHandler)
     // if (thePrograms) subscribe(settings.theThermostat, "currentProgram", modeOrProgramHandler)
-    if (statModes) subscribe(settings.theThermostat, "thermostatMode", ModeChangeHandler)
+    if (statModes) subscribe(settings.theThermostat, "thermostatMode", modeChangeHandler)
 
     //def h = atomicState.isST ? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
-    atomicState.humidity = getMultiHumidistats()
+    def h = getMultiHumidistats()
+    atomicState.humidity = h
 	atomicState.because = " because ${app.label} was (re)initialized"
     runIn(2, atomicHumidityUpdater, [overwrite: true])
 	
@@ -647,21 +638,26 @@ def getCoolRange() {
 }
 
 def getMultiHumidistats() {
-	if (!settings.humidistats) 				return settings.humidistat.currentHumidity
-	if (settings.humidistats.size() == 1) 	return settings.humidistats[0].currentHumidity
-	
-	def tempList = settings.humidistats.currentHumidity
-	switch(settings.multiHumidType) {
-		case 'average':
-			return roundIt( (tempList.sum() / tempList.size()), 0)
-			break;
-		case 'lowest':
-			return tempList.min()
-			break;
-		case 'highest':
-			return tempList.max()
-			break;
+	def humidity = atomicState.humidity
+	if (!settings.humidistats) {
+    	humidity =  atomicState.isST ? settings.humidistat.currentHumidity : settings.humidistat.currentValue('humidity', true)
+    } else if (settings.humidistats.size() == 1) {
+        humidity = atomicState.isST ? settings.humidistats[0].currentHumidity : settings.humidistats[0].currentValue('humidity', true)
+	} else {
+		def tempList = atomicState.isST ? settings.humidistats*.currentHumidity : settings.humidistats*.currentValue('humidity', true)
+		switch(settings.multiHumidType) {
+			case 'average':
+				humidity = roundIt( (tempList.sum() / tempList.size()), 0)
+				break;
+			case 'lowest':
+				humidity = tempList.min()
+				break;
+			case 'highest':
+				humidity = tempList.max()
+				break;
+        }
 	}
+    return humidity
 }
 /*					
 def getMultiThermometers() {
