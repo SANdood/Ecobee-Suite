@@ -51,8 +51,9 @@
  *	1.7.23 - Fixed typo in setDehumiditySetpoint()
  *	1.7.24 - Fixed type conversion error in setFanMinOnTime
  *	1.7.25 - Added arg typing for Hubitat, some more fanMinOnTime cleanup
+ *	1.7.26 - Fixed thermostatHold in updateThermostatSetpoints()
  */
-String getVersionNum() 		{ return "1.7.25" }
+String getVersionNum() 		{ return "1.7.26" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -1360,8 +1361,11 @@ def generateEvent(Map results) {
 					if (isChange) {
 						if (sendValue == 'vacation') {
 							disableVacationButtons()
-						} else if (((sendValue == 'null') || (sendValue == '')) && (device.currentValue('thermostatHold') == 'vacation')) {
-							enableVacationButtons()
+						} else if ((sendValue == 'null') || (sendValue == '')) {
+                        	def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
+                        	if (thermostatHold == 'vacation') {
+								enableVacationButtons()
+                            }
 						}
 						String ncCp = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
 						String ncSp = ST ? device.currentValue('scheduledProgram') : device.currentValue('scheduledProgram', true)
@@ -1485,8 +1489,8 @@ def generateEvent(Map results) {
 						event = eventFront + [value: sendValue, descriptionText: "Fan Mode is ${sendValue}", data:[supportedThermostatFanModes: fanModes()], displayed: true]
 						sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false)
 					}
-					String ncTh = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
-					if (ncTh != 'vacation') {
+					String thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
+					if (thermostatHold != 'vacation') {
 						switch(sendValue) {
 							case 'off':
 								// Assume (for now) that thermostatMode is also 'off' - this should be enforced by setThermostatFanMode() (who is also only one	 who will send us 'off')
@@ -2159,7 +2163,8 @@ void updateThermostatSetpoints() {
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType, sendHoldHours)) {
 		def updates = [	coolingSetpoint: roundIt(coolingSetpoint, 1),	// was Display
 						heatingSetpoint: roundIt(heatingSetpoint, 1),	// was Display
-						lastHoldType: sendHoldType ]
+						lastHoldType: sendHoldType,
+                        thermostatHold: 'hold']
 		generateEvent(updates)
 		def thermostatSetpoint = ST ? device.currentValue('thermostatSetpoint') : device.currentValue('thermostatSetpoint', true)
 		LOG("Done updateThermostatSetpoints() coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}, thermostatSetpoint: ${thermostatSetpoint}",4,null,'trace')
@@ -2381,8 +2386,14 @@ void alterSetpoint(temp) {
 }
 
 //* 'Fix' buttons that really aren't buttons (ie. stop them from changing if pressed)
-void noOpWeatherTemperature() { sendEvent(name:'weatherTemperature',value:device.currentValue('weatherTemperature'),displayed:false,isStateChange:true) }
-void noOpCurrentProgramName() { sendEvent(name:'currentProgramName',value:device.currentValue('currentProgramName'),displayed:false,isStateChange:true) }
+void noOpWeatherTemperature() { 
+	def weatherTemperature = state.isST ? evice.currentValue('weatherTemperature') : evice.currentValue('weatherTemperature', true)
+	sendEvent(name:'weatherTemperature',value:weatherTemperature,displayed:false,isStateChange:true) 
+}
+void noOpCurrentProgramName() { 
+	def currentProgramName = state.isST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
+	sendEvent(name:'currentProgramName',value:'currentProgramName',displayed:false,isStateChange:true) 
+}
 
 void generateQuickEvent(String name, String value, Integer pollIn=0) {
 	sendEvent(name: name, value: value, displayed: false)
@@ -2582,7 +2593,8 @@ void setThermostatProgram(String program, String holdType=null, Integer holdHour
 
 		LOG("Thermostat Program is Hold: ${program}",2,this,'info')
 		generateProgramEvent(program, program)				// ('Hold: '+program)
-		def updates = [ lastHoldType: sendHoldType ]
+		def updates = [ lastHoldType: sendHoldType,
+        				thermostatHold: 'hold']
 		generateEvent(updates)
 	} else {
 		LOG("Error setting Program to ${program}", 2, this, "warn")
@@ -3510,27 +3522,10 @@ def getStockTempColors() {
 // **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//	- these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//	- performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//	  Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use state so that it is universal
-//
-//String	getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-//boolean getIsST()	  { return (state?.isST != null) ? state.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-//boolean getIsHE()	  { return (state?.isHE != null) ? state.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 String getPlatform() { (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
 boolean getIsHE()     { (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//	- they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//	- getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//	- "if (state.isST)" is more efficient than "if (isSTHub)"
-//
+
 String getHubPlatform() {
 	def pf = getPlatform()
 	state?.hubPlatform = pf			// if (state.hubPlatform == 'Hubitat') ...
@@ -3546,5 +3541,3 @@ def getParentSetting(String settingName) {
 	// def ST = (state?.isST != null) ? state?.isST : isST
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
-//
-// **************************************************************************************************************************
