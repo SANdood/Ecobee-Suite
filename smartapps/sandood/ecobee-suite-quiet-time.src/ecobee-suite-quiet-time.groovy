@@ -29,8 +29,9 @@
  *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.04 - Optimized isST/isHE, added Global Pause
  *	1.7.05 - Added option to disable local display of log.debug() logs
+ *	1.7.06 - Fixes for the auto-disable logic
  */
-String getVersionNum() { return "1.7.05" }
+String getVersionNum() { return "1.7.06" }
 String getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -400,8 +401,8 @@ void turnOnQuietTime() {
 	settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
         if (settings.hvacOff) {
+        	makeReservation(tid, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
         	statState[tid].thermostatMode = ST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
-            makeReservation(tid, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
             if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
             LOG("${stat.device.displayName} Mode is Off",3,null,'info')
         } else if (settings.hvacMode) {
@@ -418,19 +419,19 @@ void turnOnQuietTime() {
             }
         }
         if (settings.fanOff) { 
+        	makeReservation(tid, 'fanOff')						// reserve the fanOff also
         	statState[tid].thermostatFanMode = ST ? stat.currentValue('thermostatFanMode') : stat.currentValue('thermostatMode', true)
-            makeReservation(tid, 'fanOff')						// reserve the fanOff also
             stat.setThermostatFanMode('off','indefinite')
             LOG("${stat.device.displayName} Fan Mode is off",3,null,'info')
         }
         if (settings.circOff) { 
+        	makeReservation(tid, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
         	statState[tid].fanMinOnTime = ST ? stat.currentValue('fanMinOnTime') : stat.currentValue('fanMinOnTime', true)
-            makeReservation(tid, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
             stat.setFanMinOnTime(0)
             LOG("${stat.device.displayName} Circulation time is 0 mins/hour",3,null,'info')
         }
         if ( !settings.hvacOff && !settings.hvacMode && settings.adjustSetpoints) {
-        	statState[tid].holdType = 			ST ? stat.currentValue('lastHoldType') 			: stat.currentValue('lastHoldType', true)
+        	statState[tid].holdType = 			ST ? stat.currentValue('lastHoldType') 				: stat.currentValue('lastHoldType', true)
         	statState[tid].heatingSetpoint = 	ST ? stat.currentValue('heatingSetpointDisplay') 	: stat.currentValue('heatingSetpointDisplay', true)
             statState[tid].coolingSetpoint = 	ST ? stat.currentValue('coolingSetpointDisplay') 	: stat.currentValue('coolingSetpointDisplay', true)
             def h = statState[tid].heatingSetpoint + settings.heatAdjust
@@ -440,18 +441,18 @@ void turnOnQuietTime() {
             LOG("${stat.device.displayName} heatingSetpoint adjusted to ${h}, coolingSetpoint to ${c}",3,null,'info')
         }
         if (settings.humidOff && (stat.currentValue('hasHumidifier') == 'true')) { 
+        	makeReservation(tid, 'humidOff')
         	LOG("Turning off the humidifier",3,null,'info')
         	statState[tid].humidifierMode = stat.currentValue('humidifierMode')
-            makeReservation(tid, 'humidOff')
             stat.setHumidifierMode('off')
             LOG("${stat.device.displayName} humidifierMode is off",3,null,'info')
         }
         if (settings.dehumOff && (stat.currentValue('hasDehumidifier') == 'true')) {
         	def dehumNow = stat.currentValue('dehumidifierMode')
             if (dehumNow == 'on') {
-        		LOG("Turning off the dehumidifier",3,null,'info')
-        		statState[tid].dehumidifierMode = 'on'
             	makeReservation(tid, 'dehumOff')
+                LOG("Turning off the dehumidifier",3,null,'info')
+        		statState[tid].dehumidifierMode = 'on'
             	stat.setDehumidifierMode('off')
             	LOG("${stat.device.displayName} dehumidifierMode is off",3,null,'info')
             } else {
@@ -484,7 +485,7 @@ void turnOnQuietTime() {
 void turnQuietOff() {
 	LOG("Executing scheduled Auto Off for ${settings.qtSwitch.displayName}",2,null,'info')
     def qtOff = settings.qtOn=='on'?'off':'on'
-    settings.qtSwitch."${qtOff}"
+    settings.qtSwitch."${qtOff}()"
 }
 
 def quietOffHandler(evt=null) {
@@ -495,6 +496,7 @@ def quietOffHandler(evt=null) {
 	LOG("Quiet Time Off requested",2,null,'info')
 	boolean ST = atomicState.isST
     
+    if ((settings.qtAutoOff == null) || (settings.qtAutoOff != '(Disabled)')) { unschedule(turnQuietOff) }
    	atomicState.isQuietTime = false
    	// No delayed execution - 
    	// runIn(3, 'turnOffQuietTime', [overwrite: true])
