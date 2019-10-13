@@ -55,8 +55,9 @@
  *	1.7.31 - Optimized LOG() handling, fanMode/fanMinOnTime tweaks
  *	1.7.32 - Send programsList to sensors, to support add/deleteSensorFromProgram
  *	1.7.33 - Added notification device support on SmartThings
+ *	1.7.34 - Added Audio object settings (for Ecobee 4)
  */
-String getVersionNum()		{ return "1.7.33" }
+String getVersionNum()		{ return "1.7.34" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -1175,8 +1176,8 @@ def initialize() {
 	atomicState.sendJsonRetry = false
 	atomicState.forcePoll = null				// make sure we get ALL the data after initialization
     atomicState.vacationTemplate = null
-	def updatesLog = [thermostatUpdated:true, runtimeUpdated:true, forcePoll:true, getWeather:true, alertsUpdated:true, settingsUpdated:false, programUpdated:false, locationUpdated:false, 
-    				  eventsUpdated:false, sensorsUpdated:false, extendRTUpdated:false]
+	def updatesLog = [thermostatUpdated:true, runtimeUpdated:true, forcePoll:true, getWeather:true, alertsUpdated:true, settingsUpdated:false, programUpdated:false, 
+    				  locationUpdated:false, eventsUpdated:false, sensorsUpdated:false, extendRTUpdated:false, audioUpdated:false]
 	atomicState.updatesLog = updatesLog
 	atomicState.hourlyForcedUpdate = 0
 	atomicState.needExtendedRuntime = true		// we'll stop getting it once we decide we don't need it
@@ -1248,8 +1249,10 @@ def initialize() {
 	atomicState.alerts = [:]
 	atomicState.askAlexaAlerts = [:]
 	atomicState.askAlexaAppAlerts = [:]
+    atomicState.audio = [:]
 	atomicState.changeAlerts = [:]
 	atomicState.changeAttrs = [:]
+    atomicState.changeAudio = [:]
 	atomicState.changeCloud = [:]
 	atomicState.changeConfig = [:]
 	atomicState.changeDevice = [:]
@@ -2115,8 +2118,8 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + checkTherms + '","includeEquipmentStatus":"true"'
 	String gw = '( equipmentStatus'
 	if (thermostatUpdated || forcePoll) {
-		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true"'
-		gw += ' settings program events'
+		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true","includeAudio":"true"'
+		gw += ' settings program events audio'
 	}
 	if (forcePoll) {
 		// oemCfg needed only for Carrier Cor, to determine if useSchedule is enabled - but if it isn't, we aren't of much use anyway
@@ -2266,13 +2269,16 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		def tempSensors = [:]
 		def tempEquipStat = [:]
 		def tempLocation = [:]
+        def tempAudio = [:]
 		def tempStatTime = atomicState.statTime
 		def tempStatInfo = [:]
 		def tempAlerts = [:]
+
 		boolean programUpdated = false
 		boolean settingsUpdated = false
 		boolean eventsUpdated = false
 		boolean locationUpdated = false
+        boolean audioUpdated = false
 		boolean extendRTUpdated = false
 		boolean sensorsUpdated = false
 		boolean weatherUpdated = false
@@ -2301,6 +2307,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 					if (stat.program)	tempProgram[tid]	= stat.program
 					if (stat.events)	tempEvents[tid]		= stat.events
 					if (stat.location)	tempLocation[tid]	= stat.location
+                    if (stat.audio)		tempAudio[tid]		= stat.audio
 					// if (stat.oemCfg) tempOemCfg[tid] =	stat.oemCfg
 					tempStatInfo[tid] = [	brand:			stat.brand,
 											features:		stat.features,
@@ -2377,8 +2384,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		}
 		if (timers) log.debug "TIMER: equipmentStatus complete @ (${now() - pollEcobeeAPIStart}ms)"
 		
-		// ** Thermostat Status (Program, Events, Location) **
-		// OK, Only copy the thermostat stuff (program, events, settings or location) that has changed
+		// ** Thermostat Status (Program, Events, Location, Audio) **
+		// OK, Only copy the thermostat stuff (program, events, settings, audio or location) that has changed
 		if (result && (thermostatUpdated || forcePoll)) {
 			if (tempProgram != [:]) {
 				tempAtomic = atomicState.program
@@ -2446,6 +2453,23 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				} else {
 					locationUpdated = true
 					atomicState.statLocation = tempLocation
+				}
+			}
+            if (tempAudio != [:]) {
+				tempAtomic = atomicState.audio ? atomicState.audio : [:]
+				if (tempAtomic) {
+					tidList.each { audTid ->
+						if (!tempAtomic[audTid] || (tempAtomic[audTid] != tempAudio[audTid])) {
+							audioUpdated = true
+							tempAtomic[audTid] = tempAudio[audTid]
+						}
+					}
+					if (audioUpdated) {
+						atomicState.audio = tempAtomic
+					}
+				} else {
+					audioUpdated = true
+					atomicState.audio = tempAudio
 				}
 			}
 			// if (tempOemCfg != [:]) {
@@ -2607,16 +2631,17 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 			updatesLog = [thermostatUpdated:thermostatUpdated, runtimeUpdated:runtimeUpdated, alertsUpdated:alertsUpdated, settingsUpdated:settingsUpdated, 
 						  programUpdated:programUpdated, statInfoUpdated:statInfoUpdated, forcePoll:forcePoll, eventsUpdated:eventsUpdated, 
 						  locationUpdated:locationUpdated, extendRTUpdated:extendRTUpdated, sensorsUpdated:sensorsUpdated, weatherUpdated:weatherUpdated, 
-						  getWeather:getWeather, changedTids:tidList, equipUpdated:equipUpdated, rtReallyUpdated:rtReallyUpdated]
+						  getWeather:getWeather, changedTids:tidList, equipUpdated:equipUpdated, rtReallyUpdated:rtReallyUpdated, audioUpdated:audioUpdated]
 			atomicState.updatesLog = updatesLog
 			atomicState.statTime = tempStatTime
 						
 			// Update the data and send it down to the devices as events
 			if (debugLevelFour) LOG("T: ${thermostatUpdated} (s: ${settingsUpdated}, p: ${programUpdated}, e: ${eventsUpdated}), l: ${locationUpdated}, si: ${statInfoUpdated}, " +
-					  "R: ${runtimeUpdated} (rr: ${rtReallyUpdated}, e: ${extendRTUpdated}, s: ${sensorsUpdated}), w: ${weatherUpdated}, A: ${alertsUpdated}, E: ${equipUpdated}", 1, null, 'trace')
+					  "R: ${runtimeUpdated} (rr: ${rtReallyUpdated}, e: ${extendRTUpdated}, s: ${sensorsUpdated}), w: ${weatherUpdated}, A: ${alertsUpdated}, E: ${equipUpdated}" +
+                      "a: ${audioUpdated}", 1, null, 'trace')
 			
 			if (settings.thermostats) {
-				if (thermostatUpdated || rtReallyUpdated || extendRTUpdated || settingsUpdated || weatherUpdated || equipUpdated) {
+				if (thermostatUpdated || rtReallyUpdated || extendRTUpdated || settingsUpdated || weatherUpdated || equipUpdated || audioUpdated) {
 					updateThermostatData()		// update thermostats first (some sensor data is dependent upon thermostat changes)
 				} else {
 					LOG("No thermostat updates...", 2, null, 'info')
@@ -2722,10 +2747,12 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		def prepTime = (polledMS-startMS)			// if prep takes too long, we will do the updates asynchronously too
 		if (debugLevelThree) LOG("Prep complete (${prepTime}ms)",3,null,'trace')
 		if (timers) log.debug "TIMER: poolEcobeeAPICallback complete @ ${polledMS - pollEcobeeAPIStart}ms"
+        
+        // Work-around SmartThings CPU time limit of 20 seconds...
 		if (alertsUpdated) {
-			if (prepTime > 11000) { runIn(2, 'generateAlertsAndEvents', [overwrite: true]) } else { generateAlertsAndEvents() }
+			if (atomicState.isST && (prepTime > 11000)) { runIn(2, 'generateAlertsAndEvents', [overwrite: true]) } else { generateAlertsAndEvents() }
 		} else {
-			if (prepTime > 11000) { runIn(2, 'generateTheEvents', [overwrite: true]) } else { generateTheEvents() }
+			if (atomicState.isST && (prepTime > 11000)) { runIn(2, 'generateTheEvents', [overwrite: true]) } else { generateTheEvents() }
 		}
 	} else {
 		LOG('pollEcobeeAPICallback() Error',1,null,'warn')
@@ -3157,10 +3184,10 @@ void updateThermostatData() {
 	boolean rtReallyUpdated = updatesLog.rtReallyUpdated
 	boolean alertsUpdated = updatesLog.alertsUpdated
 	boolean settingsUpdated = updatesLog.settingsUpdated
-	// boolean alertsUpdated = updatesLog.alertsUpdated
 	boolean programUpdated = updatesLog.programUpdated
 	boolean eventsUpdated = updatesLog.eventsUpdated
 	//boolean locationUpdated = atomicState.locationUpdated	// this never gets sent anyway
+    boolean audioUpdated = updatesLog.audioUpdated
 	boolean extendRTUpdated = updatesLog.extendRTUpdated
 	boolean weatherUpdated = updatesLog.weatherUpdated
 	boolean sensorsUpdated = updatesLog.sensorsUpdated
@@ -3202,6 +3229,7 @@ void updateThermostatData() {
 		def events = atomicState.events ? atomicState.events[tid] : [:]
 		def runtime = atomicState.runtime ? atomicState.runtime[tid] : [:]
 		def statLocation = atomicState.statLocation ? atomicState.statLocation[tid] : [:]
+        def audio = atomicState.audio ? atomicState.audio[tid] : [:]
 		// def oemCfg = atomicState.oemCfg ? atomicState.oemCfg[tid] : [:]
 		def extendedRuntime = atomicState.extendedRuntime ? atomicState.extendedRuntime[tid] : [:]
 		
@@ -3811,6 +3839,31 @@ void updateThermostatData() {
 			if (timers) log.debug "TIMER: Finished queueing Attrs for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
 		}
 		
+      	// Audio Settings
+		if (audioUpdated || forcePoll) {
+			def changeAudio =  atomicState.changeAudio ? atomicState.changeAudio : [:]
+			if (!changeAudio?.containsKey(tid)) changeAudio[tid] = [:]
+			def audioValues = []
+			boolean audioChanged = false
+			int i = 0
+			audioNamesList.each { aud ->
+				def audioVal = audio?."${aud}"
+				if (audioVal == '') audioVal = 'null'
+				audioValues << audioVal 
+				if (true || changeAudio[tid]?.getAt(i) != audioVal) {
+					data += [ "${aud}": audioVal, ]
+					audioChanged = true
+				}
+				i++
+			}
+			if (audioChanged) {
+				// log.trace "attrsChanged: true"
+				changeAudio[tid] = audioValues
+				atomicState.changeAudio = changeAudio
+			}
+			if (timers) log.debug "TIMER: Finished queueing Audio for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
+		}
+        
 		// Thermostat Device Data
 		if (statInfoUpdated || forcePoll) {
 			def statInfo = atomicState.statInfo
@@ -5185,6 +5238,7 @@ boolean setEcobeeSetting(child, String deviceId, String name, String value) {
 	}
 	def sendValue = null
 	boolean found = false
+    boolean audioSetting = false
 	if (EcobeeTempSettings.contains(name)) {
 		// Is a temperature setting - need to convert to F*10 for Ecobee
 		found = true
@@ -5196,7 +5250,11 @@ boolean setEcobeeSetting(child, String deviceId, String name, String value) {
 	} else if (EcobeeROSettings.contains(name)) {
 		LOG("setEcobeeSetting(name: '${name}', value: '${value}') for ${child} (${deviceId}) - Setting is Read Only", 1, child, 'error')
 		return false
-	}
+	} else if (EcobeeAudioSettings.contains(name)) {
+    	found = true
+        audioSetting = true
+        sendValue = value.trim()
+    }
 	if (sendValue == null) {
 		if (!found) {
 			LOG("setEcobeeSetting(name: '${name}', value: '${value}') for ${child} (${deviceId}) - Invalid name", 1, child, 'error')
@@ -5204,8 +5262,15 @@ boolean setEcobeeSetting(child, String deviceId, String name, String value) {
 			LOG("setEcobeeSetting(name: '${name}', value: '${value}') for ${child} (${deviceId}) - Invalid value", 2, child, 'error')
 		}
 		return false
-	}				  
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"'+name+'":"'+"${sendValue}"+'"}}}'  
+	}
+    //def jsonRequestBody
+    //if (!audioSetting) {
+	//	jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"'+name+'":"'+"${sendValue}"+'"}}}'
+    //} else {
+    //	jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"audio":{"'+name+'":"'+"${sendValue}"+'"}}}'
+    //}
+    def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"'+deviceId+'"},"thermostat":{"'+(audioSetting?'audio':'settings')+
+    					  '":{"'+name+'":"'+"${sendValue}"+'"}}}'
 	LOG("setEcobeeSetting() - Request Body: ${jsonRequestBody}", 4, child, 'trace')
 	def result = sendJson(child, jsonRequestBody)
 	LOG("setEcobeeSetting ${name} to ${sendValue} with result ${result}", 4, child, 'trace')
@@ -5962,13 +6027,16 @@ void runEvery3Minutes(handler) {
 										 'coldTempAlertEnabled','disableAlertsOnIdt','disableHeatPumpAlerts','hotTempAlertEnabled','humidityAlertNotify',
 										 'humidityHighAlert','humidityLowAlert','randomStartDelayCool','randomStartDelayHeat','tempAlertNotify','ventilatorOffDateTime','wifiOfflineAlert'
 										]
+// Audio settings
+@Field final List audioNamesList = 		['microphoneEnabled','playbackVolume','soundAlertVolume','soundTickVolume','voiceEngines'
+										]
 // Settings (attributes)
 @Field final List settingsNamesList =	['autoAway','backlightOffDuringSleep','backlightOffTime','backlightOnIntensity','backlightSleepIntensity','coldTempAlertEnabled','compressorProtectionMinTime','condensationAvoid',
 										 'coolingLockout','dehumidifyWhenHeating','dehumidifyWithAC','disablePreCooling','disablePreHeating','drAccept','eiLocation','electricityBillCycleMonths','electricityBillStartMonth',
 										 'electricityBillingDayOfMonth','enableElectricityBillAlert','enableProjectedElectricityBillAlert','fanControlRequired','followMeComfort','groupName','groupRef','groupSetting','hasBoiler',
 										 /*hasDehumidifier,*/'hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasUVFilter','heatPumpGroundWater','heatPumpReversalOnCool','holdAction','humidityAlertNotify',
 										 'humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired','isRentalProperty','isVentilatorTimerOn','lastServiceDate','locale','monthlyElectricityBillLimit',
-										 'monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation','soundAlertVolume','soundTickVolume','stage1CoolingDissipationTime',
+										 'monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation',/*'soundAlertVolume','soundTickVolume',*/'stage1CoolingDissipationTime',
 										 'stage1HeatingDissipationTime','tempAlertNotifyTechnician','userAccessCode','userAccessSetting','ventilatorDehumidify','ventilatorFreeCooling','ventilatorMinOnTimeAway',
 										 'ventilatorMinOnTimeHome','ventilatorOffDateTime','ventilatorType'
 										]
@@ -5989,13 +6057,15 @@ void runEvery3Minutes(handler) {
 										 'electricityBillingDayOfMonth','enableElectricityBillAlert','enableProjectedElectricityBillAlert','fanControlRequired','followMeComfort','groupName','groupRef','groupSetting',
 										 'heatPumpReversalOnCool','holdAction','hotTempAlertEnabled','humidityAlertNotify','humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired',
 										 'isRentalProperty','isVentilatorTimerOn','lastServiceDate','locale','monthlyElectricityBillLimit','monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician',
-										 'smartCirculation','soundAlertVolume','soundTickVolume','stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','ventilatorDehumidify','ventilatorFreeCooling',
+										 'smartCirculation'/*,'soundAlertVolume','soundTickVolume'*/,'stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','ventilatorDehumidify','ventilatorFreeCooling',
 										 'ventilatorMinOnTimeAway','ventilatorMinOnTimeHome','ventilatorOffDateTime', 'ventilatorType'
+										]
+@Field final List EcobeeeAudioSettings =['microphoneEnabled','playbackVolume','soundAlertVolume','soundTickVolume'
 										]
 // Settings that are Read Only and cannot be changed directly
 @Field final List EcobeeROSettings =	['coolMaxTemp','coolMinTemp','coolStages','hasBoiler','hasDehumidifier','hasElectric','hasErv','hasForcedAir','hasHeatPump','hasHrv','hasHumidifier','hasUVFilter','heatMaxTemp','heatMinTemp',
 										 'heatPumpGroundWater','heatStages','userAccessCode','userAccessSetting','temperature','humidity','currentProgram','currentProgramName','currentProgramId','currentProgramOwner',
-										 'currentProgramType','scheduledProgram','scheduledProgramName','scheduledProgramId','scheduledProgramOwner','scheduledProgramType','debugLevel','decimalPrecision',
+										 'currentProgramType','scheduledProgram','scheduledProgramName','scheduledProgramId','scheduledProgramOwner','scheduledProgramType','debugLevel','decimalPrecision','voiceEngines'
 										]
 // Settings that must be changed only by specific commands
 @Field final List EcobeeDirectSettings= [
