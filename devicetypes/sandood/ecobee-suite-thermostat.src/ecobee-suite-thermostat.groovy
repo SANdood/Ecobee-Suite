@@ -51,8 +51,10 @@
  *	1.7.23 - Fixed typo in setDehumiditySetpoint()
  *	1.7.24 - Fixed type conversion error in setFanMinOnTime
  *	1.7.25 - Added arg typing for Hubitat, some more fanMinOnTime cleanup
+ *	1.7.26 - Fixed thermostatHold in updateThermostatSetpoints()
+ *	1.7.27 - Added support for display/update of Ecobee 4+ Audio settings, microphoneOn/Off, update attrs upon successful setEcobeeSettings()
  */
-String getVersionNum() 		{ return "1.7.25" }
+String getVersionNum() 		{ return "1.7.27" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -107,6 +109,8 @@ metadata {
 		command "home", 					[]	
 		command "lowerSetpoint", 			[]	
 		command "makeReservation", 			[]	
+        command	"microphoneOff",			[]
+        command "microphoneOn",				[]
 		command "night", 					[]						// this is probably the appropriate SmartThings device command to call, matches ST mode
 		command "noOp", 					[]						// Workaround for formatting issues
 		// command "off", 					[]						// redundant - should be predefined by the Thermostat capability
@@ -232,7 +236,7 @@ metadata {
 		attribute 'heatMaxTemp', 'number'				// Read Only
 		attribute 'heatMinTemp', 'number'				// Read Only
 		attribute 'heatMode', 'string'
-		attribute 'heatPumpGroundWater', 'string'				// Read Only
+		attribute 'heatPumpGroundWater', 'string'		// Read Only
 		attribute 'heatPumpReversalOnCool', 'string'
 		attribute 'heatRange', 'string'
 		attribute 'heatRangeHigh', 'number'
@@ -269,12 +273,14 @@ metadata {
 		attribute 'logo', 'string'
 		attribute 'maxSetBack', 'number'
 		attribute 'maxSetForward', 'number'
+        attribute 'microphoneEnabled', 'string'			// // From Audio object (boolean)
 		attribute 'mobile', 'string'
 		attribute 'modelNumber', 'string' 
 		attribute 'monthlyElectricityBillLimit', 'string'
 		attribute 'monthsBetweenService', 'string'
 		attribute 'motion', 'string'
 		attribute 'name', 'string'
+        attribute 'playbackVolume', 'number'			// // From Audio object
 		attribute 'programsList', 'string'				// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
 		attribute 'quickSaveSetBack', 'number'
 		attribute 'quickSaveSetForward', 'number'
@@ -292,8 +298,8 @@ metadata {
 		attribute 'serviceRemindTechnician', 'string'
 		attribute 'setpointDisplay', 'string'
 		attribute 'smartCirculation', 'string'			// not implemented by E3, but by this code it is
-		attribute 'soundAlertVolume', 'number'
-		attribute 'soundTickVolume', 'number'
+		attribute 'soundAlertVolume', 'number'			// From Audio object
+		attribute 'soundTickVolume', 'number'			// From Audio object
 		attribute 'stage1CoolingDifferentialTemp', 'number'
 		attribute 'stage1CoolingDissipationTime', 'number'
 		attribute 'stage1HeatingDifferentialTemp', 'number'
@@ -328,6 +334,7 @@ metadata {
 		attribute 'ventilatorMinOnTimeHome', 'number'
 		attribute 'ventilatorOffDateTime', 'string'		// Read Only
 		attribute 'ventilatorType', 'string'			// Read Only ('none', 'ventilator', 'hrv', 'erv')
+        attribute 'voiceEngines', 'JSON_OBJECT'			// From Audio object
 		attribute 'weatherDewpoint', 'number'
 		attribute 'weatherHumidity', 'number'
 		attribute 'weatherPressure', 'number'
@@ -1360,8 +1367,11 @@ def generateEvent(Map results) {
 					if (isChange) {
 						if (sendValue == 'vacation') {
 							disableVacationButtons()
-						} else if (((sendValue == 'null') || (sendValue == '')) && (device.currentValue('thermostatHold') == 'vacation')) {
-							enableVacationButtons()
+						} else if ((sendValue == 'null') || (sendValue == '')) {
+                        	def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
+                        	if (thermostatHold == 'vacation') {
+								enableVacationButtons()
+                            }
 						}
 						String ncCp = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
 						String ncSp = ST ? device.currentValue('scheduledProgram') : device.currentValue('scheduledProgram', true)
@@ -1485,8 +1495,8 @@ def generateEvent(Map results) {
 						event = eventFront + [value: sendValue, descriptionText: "Fan Mode is ${sendValue}", data:[supportedThermostatFanModes: fanModes()], displayed: true]
 						sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false)
 					}
-					String ncTh = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
-					if (ncTh != 'vacation') {
+					String thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
+					if (thermostatHold != 'vacation') {
 						switch(sendValue) {
 							case 'off':
 								// Assume (for now) that thermostatMode is also 'off' - this should be enforced by setThermostatFanMode() (who is also only one	 who will send us 'off')
@@ -1703,11 +1713,20 @@ def generateEvent(Map results) {
                 case 'name':
 				case 'userAccessCode':
                 case 'thermostatStatus':
-                case 'ventilatorOffDateTime': 
-                	// if (isChange) {
-                    	def sendText = (sendValue != 'null') ? sendValue : ''
-                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, isStateChange: true, displayed: (sendText != '')]
-                    //}
+                case 'ventilatorOffDateTime':
+                case 'playbackVolume':
+                case 'microphoneEnabled':
+                case 'soundAlertVolume':
+                case 'soundTickVolume':
+                    if (sendValue != 'null') {
+                    	if (isChange) {
+                        	event = eventFront + [value: sendValue, descriptionText: "${name} is ${value}", isStateChange: true, displayed: true]
+                        }
+                    } else {
+                    	if (isStateChange(device, name, '')) {
+                        	event = eventFront + [value: '', descriptionText: '', isStateChange: true, displayed: false]
+                        }
+                    }
                     break;
                 
 				// The following are all temperature values, send with the appropriate temperature unit (tu)
@@ -2159,7 +2178,8 @@ void updateThermostatSetpoints() {
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType, sendHoldHours)) {
 		def updates = [	coolingSetpoint: roundIt(coolingSetpoint, 1),	// was Display
 						heatingSetpoint: roundIt(heatingSetpoint, 1),	// was Display
-						lastHoldType: sendHoldType ]
+						lastHoldType: sendHoldType,
+                        thermostatHold: 'hold']
 		generateEvent(updates)
 		def thermostatSetpoint = ST ? device.currentValue('thermostatSetpoint') : device.currentValue('thermostatSetpoint', true)
 		LOG("Done updateThermostatSetpoints() coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}, thermostatSetpoint: ${thermostatSetpoint}",4,null,'trace')
@@ -2381,8 +2401,14 @@ void alterSetpoint(temp) {
 }
 
 //* 'Fix' buttons that really aren't buttons (ie. stop them from changing if pressed)
-void noOpWeatherTemperature() { sendEvent(name:'weatherTemperature',value:device.currentValue('weatherTemperature'),displayed:false,isStateChange:true) }
-void noOpCurrentProgramName() { sendEvent(name:'currentProgramName',value:device.currentValue('currentProgramName'),displayed:false,isStateChange:true) }
+void noOpWeatherTemperature() { 
+	def weatherTemperature = state.isST ? evice.currentValue('weatherTemperature') : evice.currentValue('weatherTemperature', true)
+	sendEvent(name:'weatherTemperature',value:weatherTemperature,displayed:false,isStateChange:true) 
+}
+void noOpCurrentProgramName() { 
+	def currentProgramName = state.isST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
+	sendEvent(name:'currentProgramName',value:'currentProgramName',displayed:false,isStateChange:true) 
+}
 
 void generateQuickEvent(String name, String value, Integer pollIn=0) {
 	sendEvent(name: name, value: value, displayed: false)
@@ -2582,7 +2608,8 @@ void setThermostatProgram(String program, String holdType=null, Integer holdHour
 
 		LOG("Thermostat Program is Hold: ${program}",2,this,'info')
 		generateProgramEvent(program, program)				// ('Hold: '+program)
-		def updates = [ lastHoldType: sendHoldType ]
+		def updates = [ lastHoldType: sendHoldType,
+        				thermostatHold: 'hold']
 		generateEvent(updates)
 	} else {
 		LOG("Error setting Program to ${program}", 2, this, "warn")
@@ -3217,6 +3244,10 @@ void setEcobeeSetting( String name, value ) {
 	} else {
 		String deviceId = getDeviceId()
 		result = parent.setEcobeeSetting( this, deviceId, name, value as String)
+        if (result) {
+        	def updates = ["${name}": value as String]
+			generateEvent(updates)
+        }
 	}
 	if (result == true){
 		LOG("setEcobeeSetting( ${name}, ${value} ) completed.", 2, null, 'info')
@@ -3225,6 +3256,20 @@ void setEcobeeSetting( String name, value ) {
 	}
 }
 
+// microphone Off/On commands for Ecobee 4+
+// If microphoneEnabled is null, then it is not supported on the current thermostat device, so we don't set a value here
+void microphoneOff() {
+	def isOn = state.isST ? device.currentValue('microphoneEnabled') : device.currentValue('microphoneEnabled', true)
+    if ((isOn != null) && ((isOn == true) || (isOn == 'true'))) {
+    	setEcobeeSetting( 'microphoneEnabled', 'true')
+    }
+}
+void microphoneOn() {
+	def isOn = state.isST ? device.currentValue('microphoneEnabled') : device.currentValue('microphoneEnabled', true)
+    if ((isOn != null) && ((isOn == false) || (isOn == 'false'))) {
+    	setEcobeeSetting( 'microphoneEnabled', 'false')
+    }
+}
 // No longer used as of v1.2.21
 void generateSetpointEvent() {
 	LOG('generateSetpointEvent called in error',1,null,'error')
