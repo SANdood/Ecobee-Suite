@@ -30,7 +30,9 @@
  *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.04 - Optimized isST/isHE, added Global Pause
  *	1.7.05 - Added option to disable local display of log.debug() logs
+ *	1.7.06 - Added optional daily "Actions disabled" time window
  */
+ 
 String getVersionNum() { return "1.7.05" }
 String getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
@@ -92,8 +94,9 @@ def mainPage() {
 		}
         
         if (!settings.tempDisable && (settings?.theThermostats?.size() > 0)) {
+        
         	section(title: (HE?'<b>':'') + "Smart Switches: Operating State" + (HE?'</b>':'')) {
-        		input(name: "theOpState", type: "enum", title: "When ${theThermostats?theThermostats:'thermostat'} changes to one of these Operating States", 
+        		input(name: "theOpState", type: "enum", title: "When ${settings?.theThermostats?settings.theThermostats.toString()[1..-2]:'thermostat'} changes to one of these Operating States", 
 					  options:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer'], required: true, multiple: true, submitOnChange: true)
 				// mode(title: "Enable only for specific mode(s)")
         	}
@@ -109,12 +112,25 @@ def mainPage() {
           		if (settings.theOffDimmers) {
 					input(name: 'offDimmerLevel', type: 'number', title: "Set dimmers to level...", range: "0..99", required: true)
 				}
-            
             	if (!settings.theOpState?.contains('idle')) {
-            		input(name: 'reverseOnIdle', type: 'bool', title: "Reverse above actions when ${settings.theThermostats?.size()>1?'all thermostats return':'thermostat returns'} to 'idle'?", 
+            		input(name: 'reverseOnIdle', type: 'bool', title: "Reverse above Actions when ${settings.theThermostats?.size()>1?'all thermostats return':'thermostat returns'} to 'idle'?", 
 						  defaultValue: false, submitOnChange: true)
             	}
-        	}
+            }
+            
+            section(title: (HE?'<b>':'') + "Smart Switches: Actions Schedule" + (HE?'</b>':'')) {
+        		input(name: "actionDays", type: "enum", title: "Select Days of the Week to run the above Actions", required: true, multiple: true, submitOnChange: true,
+                	options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday", "Saturday": "Saturday", "Sunday": "Sunday"])
+     		   	input(name: "fromTime", type: "time", title: "Disable Actions daily between From Time (optional)", required: false, submitOnChange: true)
+        		input(name: "toTime", type: "time", title: "...and To Time", required: (settings.fromTime != null), submitOnChange: true)
+                def between = (((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false)         				
+                paragraph "Actions ${between?'would NOT':'would'} run right now (Hint: set From & To to the same time to block Actions at any time).${settings.reverseOnIdle?' Actions will be reversed on \'idle\' at ANY time.':''}"
+                if (settings.fromTime) {
+                	input(name: 'reverseAtFromTime', type: 'bool', title: "${settings.reverseOnIdle?'Also r':'R'}everse above Actions at From time daily?", defaultValue: true, submitOnChange: true)
+                    def theDays = (settings?.actionDays?.size() == 7) ? 'daily' : 'on ' + settings.actionDays.toString()[1..-2].replace('",',', ').replace('"','')
+                    if (settings.actionDays) paragraph "Actions ${settings.reverseAtFromTime?'will':'will NOT'} be reversed at ${getShortTime(settings?.fromTime)} ${theDays}"
+                }
+			}
         }
 		
 		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
@@ -135,6 +151,7 @@ void installed() {
 void updated() {
 	LOG("Updated with settings ${settings}", 4, null, 'trace')
 	unsubscribe()
+    unschedule()
     initialize()
 }
 void uninstalled() {
@@ -151,60 +168,81 @@ def initialize() {
     }
     if (settings.debugOff) log.info "log.debug() logging disabled"
 	
-	subscribe(theThermostats, 'thermostatOperatingState', opStateHandler)
+	subscribe(settings.theThermostats, 'thermostatOperatingState', opStateHandler)
+    if (settings.fromTime && settings.reverseAtFromTime) {
+    	// schedule the daily reversal...
+        schedule(settings.fromTime, reverseActionsScheduled)
+    }
     return true
 }
 
 def opStateHandler(evt) {
 	LOG("${evt.name}: ${evt.value}",2,null,'info')
 	boolean ST = atomicState.isST
-	
+
 	if (evt.value == 'idle') {
-    	if (reverseOnIdle) {
+    	if (settings.reverseOnIdle) {
         	def isReallyIdle = true
-        	if (theThermostats.size() > 1) {
-            	theThermostats.each { 
+        	if (settings.theThermostats.size() > 1) {
+            	settings.theThermostats.each { 
 					String ncTos = ST ? it.currentValue('thermostatOperatingState') : it.currentValue('thermostatOperatingState', true)
 					if (ncTos != 'idle') isReallyIdle = false }
             }
             if (isReallyIdle) {	
-            	if (theOnSwitches) {
-                	LOG("Turning off ${theOnSwitches.displayName}",2,null,'info')
-        			theOnSwitches*.off()
-                }
-            	if (theOnDimmers) dimmersOff(theOnDimmers)
-        		if (theOffSwitches) {
-                	LOG("Turning on ${theOffSwitches.displayName}",2,null,'info')
-                	theOffSwitches*.on()
-                }
-        		if (theOffDimmers) dimmersOn(theOffDimmers)
+				reverseActions()
             }
             return
         }
     }
 	if (settings.theOpState.contains(evt.value)) {
-        if (theOnSwitches) {
-        	LOG("Turning on ${theOnSwitches.displayName}",2,null,'info')
-    		theOnSwitches*.on()
+    	if (!dayCheck()) {
+        	LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
+            return
         }
-        if (theOnDimmers) dimmersOn(theOnDimmers)
-        if (theOffSwitches) {
-        	LOG("Turning off ${theOffSwitches.displayName}",2,null,'info')
-        	theOffSwitches*.off()
+    	def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : true
+        if (between) {
+    		LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
+        	return
+    	}
+        if (settings.theOnSwitches) {
+        	LOG("Turning on ${settings.theOnSwitches*.displayName.toString()[1..-2]}",2,null,'info')
+    		settings.theOnSwitches*.on()
         }
-        if (theOffDimmers) dimmersOff(theOffDimmers)
+        if (settings.theOnDimmers) dimmersOn(settings.theOnDimmers)
+        if (settings.theOffSwitches) {
+        	LOG("Turning off ${settings.theOffSwitches*.displayName.toString()[1..-2]}",2,null,'info')
+        	settings.theOffSwitches*.off()
+        }
+        if (settings.theOffDimmers) dimmersOff(settings.theOffDimmers)
     }
+}
+void reverseActionsScheduled() {
+	if (dayCheck) reverseActions()
+}
+void reverseActions() {
+    if (settings.theOnSwitches) {
+        LOG("Turning off ${settings.theOnSwitches*.displayName.toString()[1..-2]}",2,null,'info')
+        settings.theOnSwitches*.off()
+    }
+    if (settings.theOnDimmers) dimmersOff(settings.theOnDimmers)
+    if (settings.theOffSwitches) {
+        LOG("Turning on ${settings.theOffSwitches.displayName.toString()[1..-2]}",2,null,'info')
+        settings.theOffSwitches*.on()
+    }
+    if (settings.theOffDimmers) dimmersOn(settings.theOffDimmers)
 }
 
 void dimmersOff( theDimmers ) {
+	if (!theDimmers) return
+    
 	boolean changed = false
-	def dimLevel = offDimmerLevel?:0
+	def dimLevel = settings.offDimmerLevel?:0
     if (dimLevel == 0) {
-      	if (theDimmers.currentSwitch.contains('on')) {
+      	if (settings.theDimmers*.currentSwitch.contains('on')) {
         	theDimmers*.off()
-            LOG("Turning off ${theDimmers.displayName}",3,null,'info')
+            LOG("Turning off ${theDimmers*.displayName.toString()[1..-2]}",3,null,'info')
         } else {
-        	LOG("${theDimmers.displayName} ${theDimmers.size()>1?'are':'is'} already off",3,null,'info')
+        	LOG("${theDimmers*.displayName.toString()[1..-2]} ${theDimmers.size()>1?'are':'is'} already off",3,null,'info')
         }
         return
     } else {
@@ -218,19 +256,21 @@ void dimmersOff( theDimmers ) {
    	}
    
    	if (changed) {
-       	LOG("Turning down ${(theDimmers.displayName).toString()} to ${dimLevel}%",3,null,'info')
+       	LOG("Turning down ${theDimmers*.displayName.toString()[1..-2]} to ${dimLevel}%",3,null,'info')
   	} else {
-       	LOG("${theDimmers.displayName} ${theDimmers.size()>1?'are':'is'} already at ${dimLevel}%",3,null,'info')
+       	LOG("${theDimmers*.displayName.toString()[1..-2]} ${theDimmers.size()>1?'are':'is'} already at ${dimLevel}%",3,null,'info')
     }
 }
 
 void dimmersOn( theDimmers ) {
+	if (!theDimmers) return
+    
     boolean changed = false
-    if (theDimmers?.currentSwitch.contains('off')) {
-    	theDimmers.on()
+    if (theDimmers*.currentSwitch.contains('off')) {
+    	theDimmers*.on()
         changed = true
     }
-    def dimLevel = onDimmerLevel?:99
+    def dimLevel = settings.onDimmerLevel?:99
     theDimmers.each {
     	if (it.currentLevel.toInteger() != dimLevel) {
     		it.setLevel(dimLevel)
@@ -238,12 +278,47 @@ void dimmersOn( theDimmers ) {
         }
     }
     if (changed) {
-    	LOG("Set ${theDimmers.displayName} to ${dimLevel}%",3,null,'info')
+    	LOG("Set ${theDimmers*.displayName.toString()[1..-2]} to ${dimLevel}%",3,null,'info')
     } else {
-    	LOG("${theDimmers.displayName} ${theDimmers.size()>1?'are':'is'} already at ${dimLevel}%",3,null,'info')
+    	LOG("${theDimmers*.displayName.toString()[1..-2]} ${theDimmers.size()>1?'are':'is'} already at ${dimLevel}%",3,null,'info')
     }
 }
 
+// SmartThings internal function format (Strings instead of Dates)
+private myTimeOfDayIsBetween(String fromTime, String toTime, Date checkDate, String timeZone) {
+log.debug "fromTime: ${fromTime}"
+	return myTimeOfDayIsBetween(timeToday(fromTime), timeToday(toTime), checkDate, timeZone)
+}
+
+private myTimeOfDayIsBetween(Date fromDate, Date toDate, Date checkDate, timeZone)     {
+	if (toDate == fromDate) {
+		return false	// blocks the whole day
+	} else if (toDate < fromDate) {
+		if (checkDate.before(fromDate)) {
+			fromDate = fromDate - 1
+		} else {
+			toDate = toDate + 1
+		}
+	}
+    return (!checkDate.before(fromDate) && !checkDate.after(toDate))
+}
+private toDateTime( str ) {
+	return timeToday( str )
+}
+def getShortTime( date ) {
+	Date dt = timeToday( date )
+	def df = new java.text.SimpleDateFormat("h:mm a")
+    df.setTimeZone(location.timeZone)
+    return df.format( dt )
+}
+private boolean dayCheck() {
+    def df = new java.text.SimpleDateFormat("EEEE")
+    // Ensure the new date object is set to local time zone
+    df.setTimeZone(location.timeZone)
+    def day = df.format(new Date())
+    //Does the preference input Days, i.e., days-of-week, contain today?
+    return (actionDays.contains(day))
+}
 void updateMyLabel() {
 	boolean ST = atomicState.isST
 	String flag = ST ? ' (paused)' : '<span '
