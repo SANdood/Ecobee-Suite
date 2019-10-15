@@ -179,7 +179,7 @@ def mainPage() {
 			}
 			
             section(title: (HE?'<b>':'') + "Heat Comfort Settings" + (HE?'</b>':'')) {
-                input(name: "heatPmv", title: "PMV in heat mode${settings.heatPmv!=null&&heatConfigured()?' ('+calculateHeatSetpoint()+'°'+unit+')':''}", 
+                input(name: "heatPmv", title: "PMV in heat mode${((settings.heatPmv) && heatConfigured()) ? ' ('+calculateHeatSetpoint()+'°'+unit+')' : '(foo!)'}", 
 					  type: 'enum', options: heatPmvOptions, required: !settings.coolPmv, submitOnChange: true)
                 if (settings.heatPmv=='custom') {
                     input(name: "heatPmvCustom", title: "Custom heat mode PMV (decimal)", type: 'decimal', range: "*..5", required: true, submitOnChange: true )
@@ -311,7 +311,7 @@ def initialize() {
 }
 
 boolean configured() {
-    return ((atomicState.humidity != null) && (atomicState.temperature != null))
+    return ((atomicState.humidity != null)) // && (atomicState.temperature != null))
 }
 
 boolean coolConfigured() {
@@ -581,6 +581,7 @@ def calculatePmv(temp, units, rh, met, clo) {
 }
 
 def calculateHeatSetpoint() {
+log.debug "in calculateHeatSetpoint"
     def targetPmv = settings.heatPmv=='custom' ? settings.heatPmvCustom : settings.heatPmv as BigDecimal
     def met = 		settings.heatMet=='custom' ? settings.heatMetCustom : settings.heatMet as BigDecimal
     def clo = 		settings.heatClo=='custom' ? settings.heatCloCustom : settings.heatClo as BigDecimal
