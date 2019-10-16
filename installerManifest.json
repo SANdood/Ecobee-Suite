@@ -96,7 +96,7 @@
 				"name": 	"ecobee Suite Smart Vents",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.11",
+				"version": 	"1.7.12",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 				"optional": 	false
