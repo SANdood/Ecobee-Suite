@@ -32,8 +32,9 @@
  *	1.7.09 - Removed redundant log.debug text, fixed new fan only vent option
  *	1.7.10 - Added option to disable local display of log.debug() logs, tweaked myLabel handling
  *	1.7.11 - Check both hasCapability('switchLevel') & hasCommand('setLevel')
+ *	1.7.12 - Fix typo in ventsOn(); set 100 instead of 99
  */
-String getVersionNum() 		{ return "1.7.11" }
+String getVersionNum() 		{ return "1.7.12" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -379,8 +380,8 @@ void ventOn( theVent ) {
     //    changed = true
     //}
     def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
-	if (hasSetlevel) {
-    	if (theVent.currentValue('level').toInteger() < 99) { theVent.setLevel(99) } //some vents don't handle '100'
+	if (hasSetLevel) {
+    	if (theVent.currentValue('level').toInteger() < 99) { theVent.setLevel(100) } //some vents don't handle '100'
         if (theVent.hasCommand('refresh')) theVent.refresh()
         if (theVent.currentSwitch != 'on') theVent.on()						// setLevel will turn on() for some devices, but not all
         changed = true
