@@ -31,8 +31,9 @@
  *	1.7.08 - Optimized checks when nothing changes; added vent open/close option for 'fan only'
  *	1.7.09 - Removed redundant log.debug text, fixed new fan only vent option
  *	1.7.10 - Added option to disable local display of log.debug() logs, tweaked myLabel handling
+ *	1.7.11 - Check both hasCapability('switchLevel') & hasCommand('setLevel')
  */
-String getVersionNum() 		{ return "1.7.10" }
+String getVersionNum() 		{ return "1.7.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -337,11 +338,13 @@ void allVentsClosed() {
 }
 
 void ventOff( theVent ) {
+	def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
     if (minimumVentLevel.toInteger() == 0) {
       	if (theVent?.currentSwitch == 'on') {
-			if (theVent.hasCapability('switchLevel')) {
+			if (hasSetLevel) {
         		theVent.off()
-				if (theVent.currentValue('switchLevel') != 0) theVent.setLevel(0)
+                if (theVent.hasCommand('refresh')) theVent.refresh()
+				if (theVent.currentValue('level') != 0) theVent.setLevel(0)
             	LOG("Closing ${theVent.displayName}",3,null,'info')
 			} else {
 				theVent.off()
@@ -351,8 +354,8 @@ void ventOff( theVent ) {
         	LOG("${theVent.displayName} is already closed/off",3,null,'info')
         }
     } else {
-		if (theVent.hasCapability('switchLevel')) {
-			if (theVent?.currentLevel.toInteger() != minimumVentLevel.toInteger()) {
+		if (hasSetLevel) {
+			if (theVent?.currentValue('level').toInteger() != minimumVentLevel.toInteger()) {
         		theVent.setLevel(minimumVentLevel.toInteger())	// make sure none of the vents are less than the specified minimum
             	LOG("Closing ${theVent.displayName} to ${minimumVentLevel}%",3,null,'info')
         	} else {
@@ -371,18 +374,24 @@ void ventOff( theVent ) {
 
 void ventOn( theVent ) {
     boolean changed = false
-    if (theVent?.currentSwitch == 'off') {
+    //if (theVent?.currentSwitch == 'off') {
+    //	theVent.on()
+    //    changed = true
+    //}
+    def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
+	if (hasSetlevel) {
+    	if (theVent.currentValue('level').toInteger() < 99) { theVent.setLevel(99) } //some vents don't handle '100'
+        if (theVent.hasCommand('refresh')) theVent.refresh()
+        if (theVent.currentSwitch != 'on') theVent.on()						// setLevel will turn on() for some devices, but not all
+        changed = true
+    } else {
     	theVent.on()
         changed = true
     }
-	if (theVent.hasCapability('switchLevel')) {
-    	if (theVent?.currentLevel.toInteger() < 99) { theVent.setLevel(99) } //some vents don't handle '100'
-        changed = true
-    }
     if (changed) {
-		LOG("${theVent.hasCapability('switchLevel')?'Opening':'Turning off'} ${theVent.displayName}",3,null,'info')
+		LOG("${hasSetLevel?'Opening':'Turning on'} ${theVent.displayName}",3,null,'info')
     } else {
-		LOG("${theVent.displayName} is already ${theVent.hasCapability('switchLevel')?'open':'on'}",3,null,'info')
+		LOG("${theVent.displayName} is already ${hasSetLevel?'open':'on'}",3,null,'info')
     }
 }
 // Helper Functions
