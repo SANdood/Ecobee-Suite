@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.7.33",
+			"version": 	"1.7.34",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -42,7 +42,7 @@
 				"name": 	"ecobee Suite Quiet Time",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.05",
+				"version": 	"1.7.06",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
 				"optional": 	false
@@ -87,7 +87,7 @@
 				"name": 	"ecobee Suite Smart Switches",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.05",
+				"version": 	"1.7.06",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
 				"optional": 	false
@@ -96,7 +96,7 @@
 				"name": 	"ecobee Suite Smart Vents",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.10",
+				"version": 	"1.7.11",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 				"optional": 	false
@@ -114,7 +114,7 @@
 				"name": 	"ecobee Suite Thermal Comfort",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.16",
+				"version": 	"1.7.17",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
 				"optional": 	false
@@ -135,7 +135,7 @@
 			"name": 	"Ecobee Suite Thermostat",
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published":	true,
-			"version": 	"1.7.25",
+			"version": 	"1.7.27",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
 			"optional": 	false
 		},
