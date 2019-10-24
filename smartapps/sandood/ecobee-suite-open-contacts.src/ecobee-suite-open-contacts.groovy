@@ -46,8 +46,9 @@
  *	1.7.30 - Corrected (user reported) tmpThermSaveState typo
  *	1.7.31 - Added noDebug option
  *	1.7.32 - Tweaked noDebug, add Notifications device support for ST
+ *	1.7.33 - Cleaned up Notification messages for single/multi thermostats
  */
-String getVersionNum() 		{ return "1.7.32" }
+String getVersionNum() 		{ return "1.7.33" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -612,7 +613,7 @@ void turnOffHVAC(quietly = false) {
                     tmpThermSavedState[tid].HVACModeState = 'off'
 					tmpThermSavedState[tid].wasAlreadyOff = false
             		therm.setThermostatMode('off')
-                	tstatNames << therm.displayName		// only report the ones that aren't off already
+                	if (!tstatNames.contains(therm.displayName)) tstatNames << therm.displayName		// only report the ones that aren't off already
                 	LOG("${therm.displayName} turned off (was ${tmpThermSavedState[tid].mode})",3,null,'info')    
             	}
             } else if (settings.adjustSetpoints) {
@@ -720,7 +721,7 @@ void turnOnHVAC(quietly = false) {
     if (doHVAC) {
         theStats.each { therm ->
 			LOG("Working on thermostat: ${therm}", 3, null, 'info')
-            tstatNames << therm.displayName
+            // if (!tstatNames.contains(therm.displayName)) tstatNames << therm.displayName
             def tid = getDeviceId(therm.deviceNetworkId)
             if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
             
@@ -752,7 +753,7 @@ void turnOnHVAC(quietly = false) {
 								tmpThermSavedState[tid].HVACModeState = 'on'
 								tmpThermSavedState[tid].mode = newMode
                         		therm.setThermostatMode( newMode )                            
-                				tstatNames << therm.displayName		// only report the ones that aren't off already
+                				if (!tstatNames.contains(therm.displayName)) tstatNames << therm.displayName		// only report the ones that aren't off already
                 				LOG("${therm.displayName} ${newMode.capitalize()} Mode restored (was ${oldMode.capitalize()})",3,null,'info')
 							} else {
 								LOG("${therm.displayName} was already off, not turning back on",3,null,'info')
