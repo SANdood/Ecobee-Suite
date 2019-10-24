@@ -41,8 +41,9 @@
  *	1.7.05 - Optimized isST
  *	1.7.06 - Fixed importUrl for HE
  *	1.7.07 - Added ability to add/delete sensor from ANY Named program/schedule/climate
+ *	1.7.08 - Optimized generateEvents() tally
  */
-String getVersionNum() 		{ return "1.7.07" }
+String getVersionNum() 		{ return "1.7.08" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 import groovy.json.*
@@ -305,7 +306,7 @@ def generateEvent(Map results) {
 	if(results) {
 		String tempDisplay = ''
 		results.each { name, value ->
-			objectsUpdated++
+			// objectsUpdated++
 			def linkText = getLinkText(device)
 			def isChange = false
 			def isDisplayed = true
@@ -320,6 +321,7 @@ def generateEvent(Map results) {
 							2, null, 'warn')
 						sendEvent( name: 'temperatureDisplay', linkText: linkText, value: '451°', handlerName: "temperatureDisplay", 
 								  descriptionText: 'Sensor is offline', /* isStateChange: true, */ displayed: true)
+						objectsUpdated++
 						// don't actually chhange the temperature - leave the old value
 						// event = [name: name, linkText: linkText, descriptionText: "Sensor is Offline", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
 					} else {
@@ -340,7 +342,7 @@ def generateEvent(Map results) {
 									  descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 							event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, 
 									 value: sendValue, isStateChange: true, displayed: true]
-							objectsUpdated++
+							objectsUpdated += 2
 						}
 					}
 					break;
@@ -352,8 +354,10 @@ def generateEvent(Map results) {
 					}
 
 					isChange = isStateChange(device, name, sendValue.toString())
-					if (isChange) event = [name: name, linkText: linkText, descriptionText: "Motion is ${sendValue}", handlerName: name, value: sendValue, 
-										   isStateChange: true, displayed: true]
+					if (isChange) {
+						event = [name: name, linkText: linkText, descriptionText: "Motion is ${sendValue}", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+						objectsUpdated++
+					}
 				    break;
 				case 'currentProgramName':
 					isChange = isStateChange(device, name, sendValue)
@@ -377,14 +381,20 @@ def generateEvent(Map results) {
 			case 'programsList':
 			case 'thermostatId':
 				isChange = isStateChange(device, name, sendValue)
-				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: false]
+				if (isChange) {
+					event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: false]
+					objectsUpdated++
+				}
 				break;
 			default:
 				// Must be a non-standard program name
 				isChange = isStateChange(device, name, sendValue)
-				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: false]
-				// Save non-standard Programs in a state variable
-				if (state?."${name}" != sendValue) state."${name}" = sendValue // avoid unnecessary writes to state
+				if (isChange) {
+					event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: false]
+					// Save non-standard Programs in a state variable
+					if (state?."${name}" != sendValue) state."${name}" = sendValue // avoid unnecessary writes to state
+					objectsUpdated++
+				}
 				break;
             }			
 			if (event != [:]) sendEvent(event)
