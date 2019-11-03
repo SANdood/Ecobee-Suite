@@ -13,20 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.6.00 - Release number synchronization
- *	1.6.01 - Fixed sendMessage()
- *	1.6.02 - Fix reservation initialization error
- *	1.6.03 - REALLY fix reservation initialization error
- *	1.6.04 - Really, REALLY fix reservation initialization error
- *	1.6.05 - Fixed getDeviceId()
- *	1.6.10 - Converted to parent-based reservations
- *	1.6.11 - Clear reservations when disabled
- *	1.6.12 - Cancel modeOff reservation if we get overridden
- *	1.6.13 - Removed location.contactBook support - deprecated by SmartThings
- *	1.6.14 - Removed use of *SetpointDisplay
- *	1.6.15 - Fixed(?) adjust temperature to adjust only when HVACMode is !Off
- *	1.6.16 - Fixed initialization logic WRT HVAC on/off state
- *	1.6.17 - Minor text edits
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixed initialization error
@@ -56,8 +42,14 @@
  *	1.7.26 - Fixed 'off_pending' (again)
  *	1.7.27 - Changed minimum LOG level to 3
  *	1.7.28 - Fixed unintended overwrite of thermostat's mode in statModeChange()
+ *	1.7.29 - Clean up appLabel in sendMessage()
+ *	1.7.30 - Corrected (user reported) tmpThermSaveState typo
+ *	1.7.31 - Added noDebug option
+ *	1.7.32 - Tweaked noDebug, add Notifications device support for ST
+ *	1.7.33 - Cleaned up Notification messages for single/multi thermostats
+ *	1.7.34 - Fixed Notifications section for ST, removed SMS for HE
  */
-String getVersionNum() 		{ return "1.7.28" }
+String getVersionNum() 		{ return "1.7.34" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -185,40 +177,52 @@ def mainPage() {
                         
 				if (settings.whichAction != "HVAC Actions Only") {
 					if (ST) {
-						section((HE?'<b>':'') + "Notifications" + (HE?'</b>':'')) {
-							paragraph "A notification will also be sent to the Hello Home log\n"
-							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
+						section("Notifications") {
+							paragraph "A notification will also be sent to the Hello Home log"
 							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
-							input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+							input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, description: "Select notification devices", 
+                            	  required: (!settings.pushNotify && (settings.phone == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
+								  submitOnChange: true, hideWhenEmpty: true)
+							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
+                            	  required: (!settings.pushNotify && (settings.notifiers == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
+                                  submitOnChange: true)
+                            input(name: "speak", type: "bool", title: "Spoken Notifications?", required: true, defaultValue: false, submitOnChange: true, hideWhenEmpty: (!"speechDevices" && !"musicDevices"))
 							if (settings.speak) {
-								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+								input(name: "speechDevices", type: "capability.speechSynthesis", title: "Using these speech devices", multiple: true, 
+                                	  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.musicDevices == null)), 
+                                      submitOnChange: true, hideWhenEmpty: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", title: "Using these music devices", multiple: true, 
+                                	  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.speechDevices == null)), 
+                                	  submitOnChange: true, hideWhenEmpty: true)
+								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: false)
 							}
-							if (!settings.phone && !settings.pushNotify && !settings.speak) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
-                            if (HE) paragraph ""
-						}
+                        	if (!settings.phone && !settings.pushNotify && !settings.speechDevices && !settings.musicDevices && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+                        }
 					} else {		// HE
-						section((HE?'<b>':'') + "Use Notification Device(s)" + (HE?'</b>':'')) {
-							input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
-								  description: "Select notification devices", submitOnChange: true)
-							if (HE) paragraph ""
+						section(hideWhenEmpty: true, "<b>Use Notification Device(s)</b>") {
+							input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, submitOnChange: true,
+                            	  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+							paragraph ""
 						}
-						section((HE?'<b>':'') + "Use SMS to Phone(s) (limit 10 messages per day)" + (HE?'</b>':'')) {
-							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)",
-								  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
-							if (HE) paragraph ""
-						}
-						section((HE?'<b>':'') + "Use Speech Device(s)" + (HE?'</b>':'')) {
+						//section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
+						//	input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)",
+						//		  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
+						//	paragraph ""
+						//}
+						section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), "<b>Use Speech Device(s)</b>") {
 							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
-								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "Using these speech devices", 
+                                	  multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "Using these music devices", 
+                                	  multiple: true, submitOnChange: true)
 								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
-							paragraph "A 'HelloHome' notification will also be sent to the Location Event log\n"
-                            if (HE) paragraph ''
+                            paragraph ''
 						}
+                        section(){
+                        	paragraph "A 'HelloHome' notification will also be sent to the Location Event log\n"
+                        }
 					}
             	}
             }          
@@ -227,6 +231,9 @@ def mainPage() {
 		section(title: (HE?'<b>':'') + "Temporary Pause" + (HE?'</b>':'')) {
 			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
+		section(title: "") {
+			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
+		}
         
         section (getVersionLabel()) {}
     }
@@ -252,7 +259,7 @@ void updated() {
 // TODO - if stat goes offline, then comes back online, then re-initialize states...
 //
 def initialize() {
-	LOG("${getVersionLabel()} - Initializing...", 4, "", 'info')
+	LOG("${getVersionLabel()} - Initializing...", 2, "", 'info')
 	updateMyLabel()
     //log.debug "settings: ${settings}"
 	
@@ -261,6 +268,7 @@ def initialize() {
 		LOG("Temporarily Paused", 4, null, 'info')
 		return true
 	}
+	if (settings.debugOff) log.info "log.debug() logging disabled"
     // subscribe(app, appTouch)
 	
 	boolean contactOffState = false
@@ -437,7 +445,7 @@ def coolSPHandler( evt ) {
         if (tmpThermSavedState[tid].HVACModeState != 'off') {
             // adjust and change the actual heating setpoints
             def c = evt.numberValue + settings.coolAdjust
-            tmpThermSaveState[tid].coolAdj = c
+            tmpThermSavedState[tid].coolAdj = c
             evt.device.setCoolingSetpoint( c, 'nextTransition')
             // Notify?
         } else {
@@ -616,7 +624,7 @@ void turnOffHVAC(quietly = false) {
                     tmpThermSavedState[tid].HVACModeState = 'off'
 					tmpThermSavedState[tid].wasAlreadyOff = false
             		therm.setThermostatMode('off')
-                	tstatNames << therm.displayName		// only report the ones that aren't off already
+                	if (!tstatNames.contains(therm.displayName)) tstatNames << therm.displayName		// only report the ones that aren't off already
                 	LOG("${therm.displayName} turned off (was ${tmpThermSavedState[tid].mode})",3,null,'info')    
             	}
             } else if (settings.adjustSetpoints) {
@@ -714,17 +722,17 @@ void turnOnHVAC(quietly = false) {
     atomicState.HVACModeState = 'on'
     String action = settings.whichAction ?: 'Notify Only'
     boolean doHVAC = action.contains('HVAC')
-	log.debug "turnOnHVAC() - action: ${action}, doHVAC: ${doHVAC}"
+	LOG("turnOnHVAC() - action: ${action}, doHVAC: ${doHVAC}", 3, null, 'info')
     boolean notReserved = true
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 	def tstatNames = []
-	log.debug "turnOnHVAC() - theStats: ${theStats}"
+	// log.debug "turnOnHVAC() - theStats: ${theStats}"
 	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
-	log.debug "turnOnHVAC() - thermSavedState = ${atomicState.thermSavedState}"
+	LOG("turnOnHVAC() - thermSavedState = ${atomicState.thermSavedState}", 3, null, 'debug')
     if (doHVAC) {
         theStats.each { therm ->
 			LOG("Working on thermostat: ${therm}", 3, null, 'info')
-            tstatNames << therm.displayName
+            // if (!tstatNames.contains(therm.displayName)) tstatNames << therm.displayName
             def tid = getDeviceId(therm.deviceNetworkId)
             if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
             
@@ -756,7 +764,7 @@ void turnOnHVAC(quietly = false) {
 								tmpThermSavedState[tid].HVACModeState = 'on'
 								tmpThermSavedState[tid].mode = newMode
                         		therm.setThermostatMode( newMode )                            
-                				tstatNames << therm.displayName		// only report the ones that aren't off already
+                				if (!tstatNames.contains(therm.displayName)) tstatNames << therm.displayName		// only report the ones that aren't off already
                 				LOG("${therm.displayName} ${newMode.capitalize()} Mode restored (was ${oldMode.capitalize()})",3,null,'info')
 							} else {
 								LOG("${therm.displayName} was already off, not turning back on",3,null,'info')
@@ -913,8 +921,13 @@ List getGuestList(String tid, String type='modeOff') {
 }
 void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 3, null, "info")
-    String msg = "${app.label} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 	if (atomicState.isST) {
+		if (settings.notifiers != null) {
+			settings.notifiers.each {									// Use notification devices (if any)
+				it.deviceNotification(msg)
+			}
+		}
 		if (phone) { // check that the user did select a phone number
 			if ( phone.indexOf(";") > 0){
 				def phones = settings.phone.split(";")
@@ -929,7 +942,7 @@ void sendMessage(notificationMessage) {
 		} 
 		if (settings.pushNotify) {
 			LOG("Sending Push to everyone", 3, null, 'warn')
-			sendPushMessage(msg)								// Push to everyone
+			sendPushMessage(msg)										// Push to everyone
 		}
 		if (settings.speak) {
 			if (settings.speechDevices != null) {
@@ -944,10 +957,10 @@ void sendMessage(notificationMessage) {
 				}
 			}
 		}
-		sendNotificationEvent( notificationMessage )			// Always send to hello home
+		sendNotificationEvent( notificationMessage )					// Always send to hello home
 	} else {		// isHE
 		if (settings.notifiers != null) {
-			settings.notifiers.each {							// Use notification devices on Hubitat
+			settings.notifiers.each {									// Use notification devices on Hubitat
 				it.deviceNotification(msg)
 			}
 		}
@@ -1044,7 +1057,7 @@ void clearReservations() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+    if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
