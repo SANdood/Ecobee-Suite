@@ -47,9 +47,9 @@
  *	1.7.31 - Added noDebug option
  *	1.7.32 - Tweaked noDebug, add Notifications device support for ST
  *	1.7.33 - Cleaned up Notification messages for single/multi thermostats
- *	1.7.34 - Fixed Notifications section for ST, removed SMS for HE
+ *	1.7.34 - Fixed Notifications section for SmartThings
  */
-String getVersionNum() 		{ return "1.7.34" }
+String getVersionNum() 		{ return "1.7.34a" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -163,18 +163,62 @@ def mainPage() {
             if ((settings.contactSensors != null) || (settings.theSwitches != null)) {
 				section(title: (HE?'<b>':'') + "Timers" + (HE?'</b>':'')) {
 					input(name: "offDelay", title: "Delay time (in minutes) before turning off HVAC or Sending Notification [Default=5]", type: "enum", required: true, 
-                    	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: 5)
+                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '5')
 					input(name: "onDelay", title: "Delay time (in minutes) before turning HVAC back on  or Sending Notification [Default=0]", type: "enum", required: true, 
-                    	options: [0, 1, 2, 3, 4, 5, 10, 15, 30], defaultValue: 0)
+                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0')
                     if (HE) paragraph ''
 	        	}
             
             	section(title: (HE?'<b>':'') + "Action Preferences" + (HE?'</b>':'')) {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
-                    	options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
+                    	  options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
                     if (HE) paragraph ''
 				}
-                        
+                
+/*                if (settings.whichAction?.startsWith('Notify')) {
+                	section("Customize Notifications") {
+                   		input(name: "customPrefix", type: "enum", title: "Prefix text:", defaultValue: "'(helper) at (location):'", required: false, submitOnChange: true, 
+                        	  options: '(helper):', '(helper) at (location):', '(location):', 'none', 'custom')
+                        if (settings.customPrefix == 'custom') {
+                            input(name: "customPrefixText", type: "text", title: "Custom Prefix text", defaultValue: "", required: true)
+                        }      
+                        input(name: "customContact", type: "enum", title: "Generally refer to Contact Sensors as", defaultValue: "contact sensors", submitOnChange: true,
+                        	  options: ['contact sensors', 'doors and/or windows', 'custom'])
+                        if (settings.customContact == 'custom') {
+                            input(name: "customContactText", type: "text", title: "Custom Contact Sensors text", defaultValue: "", required: true)
+                        }
+                    	input(name: "customSensorNames", type: "bool", "Use specific sensor names when possible?", defaultValue: true)
+                    	input(name: "customTstat", type: "enum", title: "Refer to HVAC system as", defaultValue: "(thermostat name)", options:
+                        	  ['HVAC system', '(thermostat name)', 'custom'])
+                        if (settings.customTstat == 'custom') {
+                            input(name: "customTstatText", type: "text", title: "Custom HVAC system text", defaultValue: "", required: true)
+                        }
+                        paragraph "Sample notification messages:"
+                        String thePrefix = ""
+                        switch (settings.customPrefix) {
+                        	case '(helper):':
+                            	thePrefix = atomicState.appDisplayName + ': '
+                                break
+                            case '(helper) at (location):':
+                            	thePrefix = atomicState.appDisplayName + " at ${location.name}: "
+                                break
+                            case '(location):':
+                            	thePrefix = location.name + ': '
+                                break
+                            case 'custom':
+                            	thePrefix = settings.customPrefixText.trim()
+                                if (!thePrefix.endsWith(':')) thePrefix = thePrefix + ' '
+                                break
+                            case 'none':
+                            	break
+                        }
+                        String theContact = (settings.customContact == 'custum') ? settings.customContactText : settings.customContact
+                        String theTstat = (settings.customTstat == 'custom') ? settings.customTstatText : ((settings.customTest == "(thermostat name)") ? "${myThermostats*.displayName.toString()[1..-2]}" : "HVAC System")
+                        paragraph thePrefix + theContact + "have been open too long, ${theTstat} is off"
+                    	//input(name: "shortMessages", type: "bool", title: "Use short messages", defaultValue: false, submitOnChange: true)
+                    }
+                }
+*/                        
 				if (settings.whichAction != "HVAC Actions Only") {
 					if (ST) {
 						section("Notifications") {
@@ -921,7 +965,7 @@ List getGuestList(String tid, String type='modeOff') {
 }
 void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 3, null, "info")
-    String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    String msg ="${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 	if (atomicState.isST) {
 		if (settings.notifiers != null) {
 			settings.notifiers.each {									// Use notification devices (if any)
@@ -964,18 +1008,18 @@ void sendMessage(notificationMessage) {
 				it.deviceNotification(msg)
 			}
 		}
-		if (settings.phone != null) {
-			if ( phone.indexOf(",") > 0){
-				def phones = phone.split(",")
-				for ( def i = 0; i < phones.size(); i++) {
-					LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-					sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-				}
-			} else {
-				LOG("Sending SMS to ${phone}", 3, null, 'info')
-				sendSmsMessage(phone.trim(), msg)						// Only to SMS contact
-			}
-		}
+//		if (settings.phone != null) {
+//			if ( phone.indexOf(",") > 0){
+//				def phones = phone.split(",")
+//				for ( def i = 0; i < phones.size(); i++) {
+//					LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+//					sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
+//				}
+//			} else {
+//				LOG("Sending SMS to ${phone}", 3, null, 'info')
+//				sendSmsMessage(phone.trim(), msg)						// Only to SMS contact
+//			}
+//		}
 		if (settings.speak) {
 			if (settings.speechDevices != null) {
 				settings.speechDevices.each {
