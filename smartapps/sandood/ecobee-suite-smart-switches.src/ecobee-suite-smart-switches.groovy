@@ -31,9 +31,10 @@
  *	1.7.04 - Optimized isST/isHE, added Global Pause
  *	1.7.05 - Added option to disable local display of log.debug() logs
  *	1.7.06 - Added optional daily "Actions disabled" time window
+ *	1.7.07 - Fixed between time calculation
  */
  
-String getVersionNum() { return "1.7.05" }
+String getVersionNum() { return "1.7.07" }
 String getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -199,7 +200,8 @@ def opStateHandler(evt) {
         	LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
             return
         }
-    	def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : true
+    	def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false
+        
         if (between) {
     		LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
         	return
