@@ -23,10 +23,10 @@
  *	1.7.07 - Fixed SMS text entry
  *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
  *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
- *  1.7.10 - Fixed statModeChange() event handler
- *  1.7.11 - Prevent duplicate notifications
- *  1.7.12 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *  1.7.13 - Wasn't saving thermState when turning back on
+ *	1.7.10 - Fixed statModeChange() event handler
+ *	1.7.11 - Prevent duplicate notifications
+ *	1.7.12 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.13 - Wasn't saving thermState when turning back on
  *	1.7.14 - Fix thermSavedState initialization
  *	1.7.15 - And fixed it some more
  *	1.7.16 - And still more
@@ -50,8 +50,9 @@
  *	1.7.34 - Fixed Notifications section for ST, removed SMS for HE
  *	1.7.35 - Fixed initialization error when HVAC should be off
  *	1.7.36 - Added options to customize the Notifications
+ *	1.7.37 - Bypass HE cache for currentContact/currentSwitch
  */
-String getVersionNum() 		{ return "1.7.36" }
+String getVersionNum() 		{ return "1.7.37" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -403,6 +404,8 @@ void updated() {
 def initialize() {
 	LOG("${getVersionLabel()} - Initializing...", 2, "", 'info')
 	updateMyLabel()
+    boolean ST = atomicState.isST
+    boolean HE = !ST
     //log.debug "settings: ${settings}"
 	
 	if(settings.tempDisable == true) {
@@ -418,7 +421,8 @@ def initialize() {
     	def openSensors = 0
         def closedSensors = 0
         contactSensors.each {
-            if (it?.currentContact == 'open') { openSensors++; } else { closedSensors++; }
+        	def currentContact = ST ? it?.currentValue('contact') : it?.currentValue('contact', true)	// bypass the cache on Hubitat
+            if (currentContact == 'open') { openSensors++; } else { closedSensors++; }
         }
     	if (contactOpen) {
         	subscribe(contactSensors, "contact.open", sensorOpened)
@@ -437,7 +441,8 @@ def initialize() {
     	def onSwitches = 0
         def offSwitches = 0
         theSwitches.each {
-        	if (it.currentSwitch == 'on') { onSwitches++ } else { offSwitches++ }
+        def currentSwitch = ST ? it.currentValue('switch') : it.currentValue('switch', true)
+        	if (currentSwitch == 'on') { onSwitches++ } else { offSwitches++ }
         }
     	if (switchOn) {
         	subscribe(theSwitches, "switch.on", sensorOpened)
@@ -463,7 +468,7 @@ def initialize() {
     		theStats.each() { therm ->
     			def tid = getDeviceId(therm.deviceNetworkId)
 				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-				if (atomicState.isST) {
+				if (ST) {
 					tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode'), HVACModeState: 'on', ]
 					if (settings.adjustSetpoints) {
 						tmpThermSavedState[tid] += [
@@ -823,7 +828,8 @@ void turnOffHVAC(quietly = false) {
 			if (contactSensors) {
         		def sensorList = []
             	contactSensors.each { 
-            		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorList << it
+                def currentContact = ST ? it.currentValue('contact') : it.currentValue('contact', true)
+            		if (currentContact == (settings.contactOpen?'open':'closed')) sensorList << it
             	}
 				String message = ""
 				if (!settings?.useSensorNames) {
@@ -861,7 +867,8 @@ void turnOffHVAC(quietly = false) {
         	if (!notified && theSwitches) {
         		def switchList = []
             	theSwitches.each {
-            		if (it.currentSwitch == (switchOn?'on':'off')) switchList << it
+                	def currentSwitch = ST ? it.currentValue('switch') : it.currentValue('switch', true)
+            		if (currentSwitch == (switchOn?'on':'off')) switchList << it
             	}
 				if (!settings?.useSensorNames) {
                     message = message + "${switchList.size()>1?'some':'one'} of the ${getMsgSwitch()} ${switchList.size()>1?'have':'has'} been "
@@ -1041,16 +1048,19 @@ void turnOnHVAC(quietly = false) {
 }
 
 boolean allClosed() {
+	boolean ST = atomicState.isST
 	// Check if all Sensors are in "HVAC ON" state   
     def response = true
     String txt = ''
     if (contactSensors) {
     	if (contactOpen) {
         	txt = 'closed'
-        	if (contactSensors.currentContact.contains('open')) response = false
+            def currentContacts = ST ? contactSensors*.currentContact : contactSensors*.currentValue('contact', true)
+        	if (currentContacts.contains('open')) response = false
         } else {
         	txt = 'open'
-        	if (contactSensors.currentContact.contains('closed')) response = false
+        	def currentContacts = ST ? contactSensors*.currentContact : contactSensors*.currentValue('contact', true)
+        	if (currentContacts.contains('closed')) response = false
         }
         if (response) LOG("All contact sensors are ${txt}",3,null,'info')
     }
@@ -1058,10 +1068,12 @@ boolean allClosed() {
     if (response && theSwitches) {
     	if (switchOn) {
         	txt = 'off'
-        	if (theSwitches.currentSwitch.contains('on')) response = false
+        	def currentSwitches = ST ? theSwitches*.currentSwitch : theSwitches*.currentValue('switch', true)
+        	if (currentSwitches.contains('on')) response = false
         } else {
         	txt = 'on'
-        	if (theSwitches.currentSwitch.contains('off')) response = false
+        	def currentSwitches = ST ? theSwitches*.currentSwitch : theSwitches*.currentValue('switch', true)
+        	if (currentSwitches.contains('off')) response = false
         }
         if (response) LOG("All switches are ${txt}",3,null,'info')
     }
@@ -1073,16 +1085,20 @@ def numOpen() {
 	def response = 0
 	if (settings.contactSensors) {
 		if (settings.contactOpen) {
-			response = settings.contactSensors.currentContact.count { it == 'open' }
+			def currentContacts = ST ? contactSensors*.currentContact : contactSensors*.currentValue('contact', true)
+        	response = currentContacts.count { it == 'open' }
 		} else {
-			response = settings.contactSensors.currentContact.count { it == 'closed' }
+			def currentContacts = ST ? contactSensors*.currentContact : contactSensors*.currentValue('contact', true)
+        	response = currentContacts.count { it == 'closed' }
 		}
 	}
 	if (settings.theSwitches) {
 		if ( settings.switchOn ) {
-			response += settings.theSwitches.currentSwitch.count { it == 'on' }
+        	def currentSwitches = ST ? theSwitches*.currentSwitch : theSwitches*.currentValue('switch', true)
+			response += currentSwitches.count { it == 'on' }
 		} else {
-			response += settings.theSwitches.currentSwitch.count { it == 'off' }
+			def currentSwitches = ST ? theSwitches*.currentSwitch : theSwitches*.currentValue('switch', true)
+			response += currentSwitches.count { it == 'off' }
 		}
 	}
     LOG("numOpen(): ${response}",3,null,'info')
