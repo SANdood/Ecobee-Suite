@@ -47,9 +47,11 @@
  *	1.7.31 - Added noDebug option
  *	1.7.32 - Tweaked noDebug, add Notifications device support for ST
  *	1.7.33 - Cleaned up Notification messages for single/multi thermostats
- *	1.7.34 - Fixed Notifications section for SmartThings
+ *	1.7.34 - Fixed Notifications section for ST, removed SMS for HE
+ *	1.7.35 - Fixed initialization error when HVAC should be off
+ *	1.7.36 - Added options to customize the Notifications
  */
-String getVersionNum() 		{ return "1.7.34a" }
+String getVersionNum() 		{ return "1.7.36" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -67,6 +69,7 @@ definition(
 
 preferences {
 	page(name: "mainPage")
+	page(name: "customNotifications")
 }
 
 // Preferences Pages
@@ -161,6 +164,7 @@ def mainPage() {
         	}
             
             if ((settings.contactSensors != null) || (settings.theSwitches != null)) {
+				
 				section(title: (HE?'<b>':'') + "Timers" + (HE?'</b>':'')) {
 					input(name: "offDelay", title: "Delay time (in minutes) before turning off HVAC or Sending Notification [Default=5]", type: "enum", required: true, 
                     	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '5')
@@ -172,54 +176,11 @@ def mainPage() {
             	section(title: (HE?'<b>':'') + "Action Preferences" + (HE?'</b>':'')) {
             		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
                     	  options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
+					if (settings?.whichAction == null) {app.updateSetting('whichAction', 'Notify Only'); settings?.whichAction = 'Notify Only'; }
                     if (HE) paragraph ''
 				}
-                
-/*                if (settings.whichAction?.startsWith('Notify')) {
-                	section("Customize Notifications") {
-                   		input(name: "customPrefix", type: "enum", title: "Prefix text:", defaultValue: "'(helper) at (location):'", required: false, submitOnChange: true, 
-                        	  options: '(helper):', '(helper) at (location):', '(location):', 'none', 'custom')
-                        if (settings.customPrefix == 'custom') {
-                            input(name: "customPrefixText", type: "text", title: "Custom Prefix text", defaultValue: "", required: true)
-                        }      
-                        input(name: "customContact", type: "enum", title: "Generally refer to Contact Sensors as", defaultValue: "contact sensors", submitOnChange: true,
-                        	  options: ['contact sensors', 'doors and/or windows', 'custom'])
-                        if (settings.customContact == 'custom') {
-                            input(name: "customContactText", type: "text", title: "Custom Contact Sensors text", defaultValue: "", required: true)
-                        }
-                    	input(name: "customSensorNames", type: "bool", "Use specific sensor names when possible?", defaultValue: true)
-                    	input(name: "customTstat", type: "enum", title: "Refer to HVAC system as", defaultValue: "(thermostat name)", options:
-                        	  ['HVAC system', '(thermostat name)', 'custom'])
-                        if (settings.customTstat == 'custom') {
-                            input(name: "customTstatText", type: "text", title: "Custom HVAC system text", defaultValue: "", required: true)
-                        }
-                        paragraph "Sample notification messages:"
-                        String thePrefix = ""
-                        switch (settings.customPrefix) {
-                        	case '(helper):':
-                            	thePrefix = atomicState.appDisplayName + ': '
-                                break
-                            case '(helper) at (location):':
-                            	thePrefix = atomicState.appDisplayName + " at ${location.name}: "
-                                break
-                            case '(location):':
-                            	thePrefix = location.name + ': '
-                                break
-                            case 'custom':
-                            	thePrefix = settings.customPrefixText.trim()
-                                if (!thePrefix.endsWith(':')) thePrefix = thePrefix + ' '
-                                break
-                            case 'none':
-                            	break
-                        }
-                        String theContact = (settings.customContact == 'custum') ? settings.customContactText : settings.customContact
-                        String theTstat = (settings.customTstat == 'custom') ? settings.customTstatText : ((settings.customTest == "(thermostat name)") ? "${myThermostats*.displayName.toString()[1..-2]}" : "HVAC System")
-                        paragraph thePrefix + theContact + "have been open too long, ${theTstat} is off"
-                    	//input(name: "shortMessages", type: "bool", title: "Use short messages", defaultValue: false, submitOnChange: true)
-                    }
-                }
-*/                        
-				if (settings.whichAction != "HVAC Actions Only") {
+                        
+				if (settings?.whichAction != "HVAC Actions Only") {
 					if (ST) {
 						section("Notifications") {
 							paragraph "A notification will also be sent to the Hello Home log"
@@ -243,7 +204,7 @@ def mainPage() {
                         	if (!settings.phone && !settings.pushNotify && !settings.speechDevices && !settings.musicDevices && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
                         }
 					} else {		// HE
-						section(hideWhenEmpty: true, "<b>Use Notification Device(s)</b>") {
+						section("<b>Use Notification Device(s)</b>") {
 							input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, submitOnChange: true,
                             	  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
 							paragraph ""
@@ -254,7 +215,7 @@ def mainPage() {
 						//	paragraph ""
 						//}
 						section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), "<b>Use Speech Device(s)</b>") {
-							input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
+							input(name: "speak", type: "bool", title: "Speak messages?", required: !settings?.notifiers, defaultValue: false, submitOnChange: true)
 							if (settings.speak) {
 								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "Using these speech devices", 
                                 	  multiple: true, submitOnChange: true)
@@ -262,13 +223,19 @@ def mainPage() {
                                 	  multiple: true, submitOnChange: true)
 								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
 							}
-                            paragraph ''
 						}
                         section(){
-                        	paragraph "A 'HelloHome' notification will also be sent to the Location Event log\n"
+                        	paragraph "A 'HelloHome' notification will also be sent to the Location Event log"
                         }
 					}
             	}
+				               
+                if (settings?.whichAction?.startsWith('Notify') && (settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
+					section() {
+						href name: "customNotifications", title: (HE?'<b>':'') + "Customize Notifications" + (HE?'</b>':''), page: "customNotifications", 
+							 description: "Customize notification messages", state: isCustomized()
+					}
+                }
             }          
 		} // End if (theThermostats?.size() > 0)
 
@@ -281,6 +248,137 @@ def mainPage() {
         
         section (getVersionLabel()) {}
     }
+	
+}
+def customNotifications(){
+	boolean ST = isST
+	boolean HE = !ST
+	dynamicPage(name: "customNotifications", uninstall: false, install: false) {
+		section((HE?'<b>':'') + "Customize Notifications" + (HE?'</b>':'')) {
+			input(name: "customPrefix", type: "enum", title: "Prefix text:", defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
+				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
+			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+			if (settings.customPrefix == 'custom') {
+				input(name: "customPrefixText", type: "text", title: "Custom Prefix text", defaultValue: "", required: true, submitOnChange: true)
+			}      
+			if (settings?.contactSensors) {
+				input(name: "customContact", type: "enum", title: "Generally refer to Contact Sensors as", defaultValue: 'contact sensors', submitOnChange: true,
+					  options: ['contact sensors', 'doors', 'windows', 'doors and/or windows', 'custom'], multiple: false)
+				if (settings?.customContact == null) { app.updateSetting('customContact', 'contact sensors'); settings.customContact = 'contact sensors'; }
+				if (settings?.customContact == 'custom') {
+					input(name: "customContactText", type: "text", title: "Custom Contact Sensors text", defaultValue: "", required: true, submitOnChange: true)
+				}
+			}
+			if (settings?.theSwitches) {
+				input(name: "customSwitch", type: "enum", title: "Generally refer to Switches as", defaultValue: 'switches', submitOnChange: true,
+					  options: ['switches', 'toggles', 'custom'], multiple: false)
+				if (settings?.customSwitch == null) { app.updateSetting('customSwitch', 'switches'); settings.customSwitch = 'switches'; }
+				if (settings.customSwitch == 'custom') {
+					input(name: "customSwitchText", type: "text", title: "Custom Switches text", defaultValue: "", required: true, submitOnChange: true)
+				}
+			}
+			input(name: "useSensorNames", type: "bool", title: "Use specific sensor names when possible?", defaultValue: true, submitOnChange: true)
+			if (settings?.useSensorNames) {
+            	input(name: "addThePrefix", type: "bool", title: "Add 'the' as prefix to device names?", defaultValue: false, submitOnChange: true)
+				if (settings?.contactSensors) input(name: "contactCleaners", type: "enum", title: "Strip these words from Contact display names", multiple: true, required: false, 
+													submitOnChange: true, options: ['Contact', 'Monitor', 'Multi-Sensor', 'Multisensor', 'Multi', 'Sensor', 'Door', 'Window'])
+				if (settings?.theSwitches) input(name: "switchCleaners", type: "enum", title: "Strip these words from Switch display names", multiple: true, required: false, 
+												 submitOnChange: true, options: ['Switch', 'Toggle', 'Power', 'Meter'])
+			}
+			if ((settings?.onDelay != '0') || (settings?.offDelay != '0')) {
+				input(name: "includeDelays", type: "bool", title: "Include open/close delay times in notifications?", defaultValue: true, submitOnChange: true)
+			}
+			input(name: "customTstat", type: "enum", title: "Refer to the HVAC system as", defaultValue: "(thermostat names) is/are", options:
+				  ['the HVAC system', '(thermostat names) is/are', 'custom'], submitOnChange: true, multiple: false)
+			if (settings?.customTstat == 'custom') {
+				input(name: "customTstatText", type: "text", title: "Custom HVAC system text", defaultValue: "", required: true, submitOnChange: true)
+			} 
+			if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat names) is/are'); settings.customTstat = '(thermostat names) is/are'; }
+			if (settings?.customTstat == '(thermostat names) is/are') {
+				input(name: "tstatCleaners", type: 'enum', title: "Strip these words from the Thermostat display names", multiple: true, required: false,
+					  submitOnChange: true, options: ['EcobeeTherm', 'EcoTherm', 'Thermostat', 'Ecobee'])
+				input(name: "tstatPrefix", type: 'enum', title: "Add this prefix to the Thermostat display names", multiple: false, required: false,
+					  submitOnChange: true, options: ['the', 'Ecobee', 'Thermostat', 'Ecobee Thermostat', 'the Ecobee', 'the Ecobee Thermostat', 'theThermostat']) 
+				input(name: "tstatSuffix", type: 'enum', title: "Add this suffix to the Thermostat display names", multiple: false, required: false,
+					  submitOnChange: true, options: ['Ecobee', 'HVAC', 'HVAC system', 'Thermostat', 'heating', 'cooling', 'A/C'])
+			}
+
+			paragraph "${HE?'<b><i>':''}Sample notification messages:${HE?'</i></b>':''}"
+			String thePrefix = getMsgPrefix()
+			String theContact = getMsgContact()
+			String theSwitch = getMsgSwitch()
+			String theTstat = getMsgTstat()
+			String samples = ""
+            
+			if (settings?.contactSensors) {
+				if (!useSensorNames) {
+					samples = thePrefix + "one or more " + theContact + " have been ${((settings.contactOpen==null)||settings?.contactOpen)?'open':'closed'} " +
+						(((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + ", ${theTstat}now off\n"
+				} else {
+                	def nameList = []
+                	if (settings?.addThePrefix) {
+						settings?.contactSensors.each {
+							nameList << ('the ' + it.displayName)
+                        }
+                    } else {
+                        nameList = settings?.contactSensors*.displayName
+                    }
+					String sensorStr = textListToString(nameList)
+					if (settings?.contactCleaners != []) {
+						settings?.contactCleaners.each{
+							sensorStr = sensorStr.replace(it, '').replace(it.toLowerCase(), '').trim()	// Strip out any unnecessary words
+						}
+					}
+					sensorStr = sensorStr.replace(':','').replace('  ', ' ').replace(' ,', ',').trim()           
+					samples = thePrefix + sensorStr + " ${settings?.contactSensors.size()>1?'have':'has'} been ${((settings.contactOpen==null)||settings?.contactOpen)?'open':'closed'} " +
+								(((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + 
+								", ${theTstat} now off\n"
+				}
+				if ((settings?.onDelay == '0') || !settings?.includeDelays) {
+					samples = samples.capitalize() + "${thePrefix}all ${theContact} are ${((settings.contactOpen==null)||settings?.contactOpen)?'closed':'open'}, ${theTstat} now on\n".capitalize()
+				} else {
+					samples = samples.capitalize() + "${thePrefix}all ${theContact} have been ${((settings.contactOpen==null)||settings?.contactOpen)?'closed':'open'} for ".capitalize() +
+						"${settings?.onDelay} minute${settings?.onDelay?.toInteger()>1?'s':''}, ${theTstat} now on\n"
+				}
+			}
+			if (settings?.theSwitches) {
+				String switchSample = ""
+				if (!useSensorNames) {
+					switchSample = thePrefix + "one or more " + theSwitch + " have been ${((settings.switchOn==null)||settings?.switchOn)?'on':'off'} " +
+						(((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + ", ${theTstat} now off\n"
+				} else {
+                	def nameList = []
+                	if (settings?.addThePrefix) {
+						settings?.theSwitches.each {
+							nameList << ('the ' + it.displayName)
+                        }
+                    } else {
+                        nameList = settings?.theSwitches*.displayName
+                    }
+					String switchStr = textListToString(nameList)
+					if (settings?.switchCleaners != []) {
+						settings?.switchCleaners.each{
+							switchStr = switchStr.replace(it, '').replace(it.toLowerCase(), '').trim()	// Strip out any unnecessary words
+						}
+					}
+					switchStr = switchStr.replace(':', '').replace('  ', ' ').replace(' ,', ',').trim()
+					switchSample = thePrefix + switchStr + " ${settings?.theSwitches.size()>1?'have':'has'} been ${((settings.switchOn==null)||settings?.switchOn)?'on':'off'} " +
+								(((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + 
+								", ${theTstat} now off\n"
+				}
+				if ((settings?.onDelay == '0') || !settings?.includeDelays) {
+					samples = samples + switchSample.capitalize() + "${thePrefix}all ${theSwitch} are ${((settings.contactOpen==null)||settings?.switchOn)?'off':'on'}, ${theTstat} now on\n".capitalize()
+				} else {
+					samples = samples + switchSample.capitalize() + "${thePrefix}all ${theSwitch} have been ${((settings.contactOpen==null)||settings?.switchOn)?'off':'on'} for ".capitalize() +
+						"${settings?.onDelay} minute${settings?.onDelay?.toInteger()>1?'s':''}, ${theTstat} now on\n"
+				}
+			}
+			paragraph samples
+		}
+	}
+}
+def isCustomized() {
+	return (customPrefix || customContact || customSwitch || customTstat || (includeDelays != null) || (useSensorNames != null)) ? "complete" : null
 }
 
 // Main functions
@@ -404,6 +502,7 @@ def initialize() {
     	LOG("Initialized while should be 'Off' - can't update states",2,null,'warn')
         theStats.each() { therm ->
     		def tid = getDeviceId(therm.deviceNetworkId)
+            if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
             tmpThermSavedState[tid].mode = (atomicState.isST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true))
             tmpThermSavedState[tid].HVACModeState = 'off'
         }
@@ -718,28 +817,81 @@ void turnOffHVAC(quietly = false) {
 			def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue(thermostatMode, true)
 			boolean isOn = tstatModes.contains('auto') || tstatModes.contains('heat') || tstatModes.contains('cool')
         	Integer delay = (settings.offDelay != null ? settings.offDelay : 5) as Integer
-    		if (contactSensors) {
-        		def sensorNames = []
+			String theStatsStr = getMsgTstats()
+			String justTheStats = theStatsStr.endsWith(' is') ? theStatsStr[0..-3] : (theStatsStr.endsWith(' are') ? theStatsStr[0..-4] : theStatsStr)
+
+			if (contactSensors) {
+        		def sensorList = []
             	contactSensors.each { 
-            		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorNames << it.displayName
+            		if (it.currentContact == (settings.contactOpen?'open':'closed')) sensorList << it
             	}
-        		if (delay != 0) {
-    				sendMessage("${sensorNames.toString()[1..-2]} ${(sensorNames.size()>1)?'has':'have'} been ${contactOpen?'open':'closed'} for ${delay} minutes, ${doHVAC?'running HVAC Off actions for':(isOn?'you should turn Off:':'these are all Off:')} ${tstatNames.toString()[1..-2]}.")
+				String message = ""
+				if (!settings?.useSensorNames) {
+                	message = message + "${sensorList.size()>1?'some':'one'} of the ${getMsgContact()} ${sensorList.size()>1?'have':'has'} been "
+				} else {
+                	def nameList = []
+                	if (settings?.addThePrefix) {
+						sensorList.each {
+							nameList << ('the ' + it.displayName)
+                        }
+                    } else {
+                        nameList = sensorList*.displayName
+                    }
+					String sensorStr = textListToString(nameList)
+					if (contactCleaners != []) {
+						contactCleaners.each{
+							sensorStr = sensorStr.replace(it, '').replace(it.toLowerCase(), '').trim()	// Strip out any unnecessary words
+						}
+					}
+					sensorStr = sensorStr.replace(':','').replace('  ', ' ').replace(' ,', ',').trim()
+					message = message + "${sensorStr} ${(sensorNames.size()>1)?'has':'have'} been "
+				}
+				
+				if (delay == 0) {
+					message = message + "${contactOpen?'opened':'closed'}, "
+				} else if ((delay != 0) && settings?.includeDelays) {
+					message = message + "${contactOpen?'open':'closed'} for ${delay} minute${delay>1?'s':''}, "
             	} else {
-            		sendMessage("${sensorNames.toString()[1..-2]} ${contactOpen?'opened':'closed'}, ${doHVAC?'running HVAC Off actions for':(isOn?'you should turn Off:':'these are all Off:')} ${tstatNames.toString()[1..-2]}.")
+            		message = message + "${contactOpen?'open':'closed'} for too long, "
             	}
+				message = message + (doHVAC ? (theStatsStr + ' now off') : ('you should turn off ' + justTheStats))
+				sendMessage(message)
             	notified = true		// only send 1 notification
         	}
         	if (!notified && theSwitches) {
-        		def switchNames = []
+        		def switchList = []
             	theSwitches.each {
-            		if (it.currentSwitch == (switchOn?'on':'off')) switchNames << it.displayName
+            		if (it.currentSwitch == (switchOn?'on':'off')) switchList << it
             	}
-        		if (delay != 0) {
-    				sendMessage("${switchNames.toString()[1..-2]} ${(switchNames.size()>1)?'has':'have'} been ${switchOn?'on':'off'} for ${delay} minutes, ${doHVAC?'running HVAC Off actions for':(isOn?'you should turn Off:':'these are all Off:')} ${tstatNames.toString()[1..-2]}.")
+				if (!settings?.useSensorNames) {
+                    message = message + "${switchList.size()>1?'some':'one'} of the ${getMsgSwitch()} ${switchList.size()>1?'have':'has'} been "
+				} else {
+                	def nameList = []
+                	if (settings?.addThePrefix) {
+						switchList.each {
+							nameList << ('the ' + it.displayName)
+                        }
+                    } else {
+                        nameList = switchList*.displayName
+                    }
+					String switchStr = textListToString(nameList)
+					if (switchCleaners != []) {
+						switchCleaners.each{
+							switchStr = switchStr.replace(it, '').replace(it.toLowerCase(), '').trim()	// Strip out any unnecessary words
+						}
+					}
+					switchStr = switchStr.replace(':', '').replace('  ', ' ').replace(' ,', ',').trim()
+					message = message + "${switchStr} ${(switchNames.size()>1)?'has':'have'} been "
+				}
+				if (delay == 0) {
+					message = message + "turned ${switchOn?'on':'off'}, "
+				} else if ((delay != 0) && settings?.includeDelays) {
+    				message = message + "${switchOn?'on':'off'} for ${delay} minute${delay>1?'s':''}, "
             	} else {
-            		sendMessage("${switchNames.toString()[1..-2]} turned ${switchOn?'on':'off'}, ${doHVAC?'running HVAC Off actions for':(isOn?'you should turn Off:':'these are all Off:')} ${tstatNames.toString()[1..-2]}.")
+            		message = message + "${switchOn?'on':'off'} for too long, "
             	}
+				message = message + (doHVAC ? (theStatsStr + ' now off') : ('you should turn off ' + justTheStats))
+				sendMessage(message)
           		notified = true
         	}
         	if (notified) LOG('Notifications sent',3,null,'info')
@@ -857,27 +1009,34 @@ void turnOnHVAC(quietly = false) {
         Integer delay = (settings.onDelay != null ? settings.onDelay : 0) as Integer
 		def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue('thermostatMode', true)
 		def isOff = tstatModes?.contains('off')
+		String theStatsStr = getMsgTstats()
+		String justTheStats = theStatsStr.endsWith(' is') ? theStatsStr[0..-3] : (theStatsStr.endsWith(' are') ? theStatsStr[0..-4] : theStatsStr)
+        String message = ""
     	if (contactSensors) {
-        	if (delay != 0) {
-    			sendMessage("All contact sensors have been ${contactOpen?'closed':'opened'} for ${delay} minutes, " +
-                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):(isOff?'you could turn On:':'these are all On:')} ${tstatNames.toString()[1..-2]}.")
+            message =  "${contactSensors.size()>1?'all of':''} the ${getMsgContact()} have been "
+            if (delay == 0) {
+                message = message + "${contactOpen?'closed':'opened'}, "
+            } else if ((delay != 0) && settings?.includeDelays) {
+                message = message + "${contactOpen?'closed':'open'} for ${delay} minute${delay>1?'s':''}, "
             } else {
-            	sendMessage("All contact sensors are ${contactOpen?'closed':'open'}, " +
-                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):(isOff?'you could turn On:':'these are all On:')} ${tstatNames.toString()[1..-2]}.")
-            }
-            notified = true		// only send 1 notification
-        }
-        if (!notified && theSwitches) {
-        	if (delay != 0) {
-    			sendMessage("${theSwitches.toString()[1..-2]}${(theSwitches.size()>1)?' all':''} left ${switchOn?'off':'on'} for ${delay} minutes, " +
-                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):(isOff?'you could turn On:':'these are all On:')} ${tstatNames.toString()[1..-2]}.")
-            } else {
-            	sendMessage("${theSwitches.toString()[1..-2]}${(theSwitches.size()>1)?' all':''} turned ${switchOn?'off':'on'}, " +
-                					"${doHVAC?(notReserved?'running HVAC On actions for':'but reservations prevent running HVAC On actions for'):(isOff?'you could turn On:':'these are all On:')} ${tstatNames.toString()[1..-2]}.")
+                message = message + "${contactOpen?'closed':'opened'}, "
             }
             notified = true
         }
-        if (notified) LOG('Notifications sent',3,null,'info')
+        if (theSwitches) {
+        	if (notified) message = message + ' and '
+            message = message + "${theSwitches.size()>1?'all of':''} the ${getMsgSwitch()} have been "
+            if (delay == 0) {
+				message = message + "turned ${switchOn?'off':'on'}, "
+			} else if ((delay != 0) && settings?.includeDelays) {
+				message = message + "${switchOn?'off':'on'} for ${delay} minute${delay>1?'s':''}, "
+			} else {
+				message = message + "turned ${switchOn?'off':'on'}, "
+			}
+        }
+		message = message + (doHVAC ? (notReserved ? (theStatsStr + ' now on') : ('but reservations block turning on ' + justTheStats)) : ('you could turn on ' + justTheStats))
+		sendMessage(message)
+        LOG('Notifications sent',3,null,'info')
     }    
 }
 
@@ -963,9 +1122,103 @@ List getReservations(String tid, String type='modeOff') {
 List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
+String textListToString(list) {
+	def c = list?.size()
+	String s = list.toString()[1..-2]
+	if (c == 1) return s.trim()						// statName
+	if (c == 2) return s.replace(', ',' and ').trim()	// statName1 and statName2
+	int i = s.lastIndexOf(', ')+2
+	return (s.take(i) + 'and ' + s.drop(i)).trim()		// statName1, statName2, (...) and statNameN
+}
+String getMsgPrefix() {
+	String thePrefix = ""
+	if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+	switch (settings?.customPrefix) {
+		case '(helper):':
+			thePrefix = atomicState.appDisplayName + ': '
+			break
+		case '(helper) at (location):':
+			thePrefix = atomicState.appDisplayName + " at ${location.name}: "
+			break
+		case '(location):':
+			thePrefix = location.name + ': '
+			break
+		case 'custom':
+			thePrefix = settings?.customPrefixText?.trim() + ' '
+			break
+		case 'none':
+			break
+	}
+	return thePrefix
+}
+String getMsgContact() {
+	String theContact = ""
+	if (settings?.contactSensors) {
+		if (settings?.customContact == null) {
+			app.updateSetting('customContact', 'contact sensors')
+			settings?.customContact = 'contact sensors'
+			theContact = 'contact sensors'
+		} else {
+			theContact = (settings?.customContact == 'custom') ? settings?.customContactText : settings?.customContact
+		}
+	}
+	return theContact
+}
+String getMsgSwitch() {                       
+	String theSwitch = ""
+	if (settings?.theSwitches) {
+		if (settings?.customSwitch == null) {
+			app.updateSetting('customSwitch', 'switches')
+			settings?.customSwitches = 'switches'
+			theSwitch = 'switches'
+		} else {
+			theSwitch = (settings?.customSwitch == 'custom') ? settings?.customSwitchText : settings?.customSwitch
+		}
+	}
+	return theSwitch
+}
+String getMsgTstat() {						
+	String theTstat = ""
+	if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat names) is/are'); settings?.customTstat = '(thermostat names) is/are'; }
+	switch (settings.customTstat) {
+		case 'custom':
+			theTstat = settings.customTstatText 
+			break
+		case "(thermostat names) is/are":
+			def stats = settings?.theThermostats ?: myThermostats
+			def nameList = []
+			if (settings?.tstatSuffix || settings?.tstatPrefix) {
+				stats.each {
+					def name = it.displayName
+					if (settings.tstatPrefix) name = settings.tstatPrefix + ' ' + name
+					if (settings.tstatSuffix) name = name + ' ' + settings.tstatSuffix
+					nameList << name
+				}
+			} else {
+				nameList = stats*.displayName
+			}
+			String statStr = textListToString(nameList)
+			if (tstatCleaners != []) {
+				tstatCleaners.each{
+					if ((!settings?.tstatSuffix || (settings.tstatSuffix != it)) && (!settings?.tstatPrefix || (settings.tstatPrefix != it))) {	// Don't strip the prefix/suffix we added above
+						statStr = statStr.replace(it, '').replace(it.toLowerCase(), '')	// Strip out any unnecessary words
+					}
+				}
+			}
+			statStr = statStr.replace(':','').replace('  ', ' ').trim()		// Finally, get rid of any double spaces
+			theTstat = (statStr + ((stats?.size() > 1) ? ' are' : ' is'))	
+			break
+		case 'the HVAC system':
+			theTstat = 'the H V A C system is'
+			break
+	}
+	return theTstat
+}
+
 void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 3, null, "info")
-    String msg ="${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    String msg = getMsgPrefix() + notificationMessage
+	
 	if (atomicState.isST) {
 		if (settings.notifiers != null) {
 			settings.notifiers.each {									// Use notification devices (if any)
