@@ -30,8 +30,9 @@
  *	1.7.04 - Optimized isST/isHE, added Global Pause
  *	1.7.05 - Added option to disable local display of log.debug() logs
  *	1.7.06 - Fixes for the auto-disable logic
+ *	1.7.07 - More fixes for autoOff
  */
-String getVersionNum() { return "1.7.06" }
+String getVersionNum() { return "1.7.07" }
 String getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -98,11 +99,13 @@ def mainPage() {
 				paragraph("Quiet Time is enabled by turning on (or off) a physical or virtual switch.")
 				input(name: 'qtSwitch', type: 'capability.switch', required: true, title: 'Which switch controls Quiet Time?', multiple: false, submitOnChange: true)
 				if (settings.qtSwitch) {
-					input(name: "qtOn", type: "enum", title: "Effect Quiet Time Actions when switch '${settings.qtSwitch.displayName}' is turned", defaultValue: 'on', required: true, multiple: false, submitOnChange: true,
-							options: ["on","off"])
-					input(name: "qtAutoOff", type: "enum", title: "Auto-disable Quiet Time after ", descriptionText: (settings?.qtAutoOff != null)?:'(Disabled)', defaultValue: '(Disabled)', required: true, multiple: false, submitOnChange: true,
-							options: ["(Disabled)", "10 Minutes", "15 Minutes", "30 Minutes", "45 Minutes", "1 Hour", "2 Hours", "3 Hours", "4 Hours", "6 Hours"])
+					input(name: "qtOn", type: "enum", title: "Effect Quiet Time Actions when switch '${settings.qtSwitch.displayName}' is turned", defaultValue: 'on', required: true, 
+                    	  multiple: false, submitOnChange: true, options: ["on","off"])
+					input(name: "qtAutoOff", type: "enum", title: "Auto-disable Quiet Time after ", defaultValue: '(Disabled)', required: true, multiple: false, submitOnChange: true,
+						  options: ["(Disabled)", "10 Minutes", "15 Minutes", "30 Minutes", "45 Minutes", "1 Hour", "2 Hours", "3 Hours", "4 Hours", "6 Hours"])
 				}
+                if (settings?.qtOn == null) {app.updateSetting('qtOn', 'on'); settings?.qtOn = 'on'; }
+                if (settings?.qtAutoOff == null) {app.updateSetting('qtAutoOff', '(Disabled)'); settings?.qtAutoOff = '(Disabled)'; }
 			}
 
 			section(title: (HE?'<b>':'') + "Quiet Time Actions" + (HE?'</b>':'')) {
@@ -232,7 +235,7 @@ void updated() {
 }
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 2, null, 'info')
-    log.info "${app.name}, ${app.label}"
+    //log.info "${app.name}, ${app.label}"
 	updateMyLabel()
 	
 	if(tempDisable == true) {
@@ -473,7 +476,7 @@ void turnOnQuietTime() {
     atomicState.statState = statState
     atomicState.isQuietTime = true
     
-    if ((settings.qtAutoOff == null) || (settings.qtAutoOff != '(Disabled)')) {
+    if ((settings.qtAutoOff != null) && (settings.qtAutoOff != '(Disabled)')) {
     	def seconds = settings.qtAutoOff.contains('Minute')? (settings.qtAutoOff.tokenize()[0].toInteger() * 60) : (settings.quAutoOff.tokenize()[0].toInteger() * 3600)
         LOG("Quiet Time Auto Off scheduled in ${seconds} seconds.",2,null,'info')
        	runIn( seconds, turnQuietOff, [overwrite: true])
@@ -496,7 +499,7 @@ def quietOffHandler(evt=null) {
 	LOG("Quiet Time Off requested",2,null,'info')
 	boolean ST = atomicState.isST
     
-    if ((settings.qtAutoOff == null) || (settings.qtAutoOff != '(Disabled)')) { unschedule(turnQuietOff) }
+    if ((settings.qtAutoOff != null) && (settings.qtAutoOff != '(Disabled)')) { unschedule(turnQuietOff) }
    	atomicState.isQuietTime = false
    	// No delayed execution - 
    	// runIn(3, 'turnOffQuietTime', [overwrite: true])
