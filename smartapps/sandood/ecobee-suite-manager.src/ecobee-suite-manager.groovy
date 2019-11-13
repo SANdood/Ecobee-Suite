@@ -60,7 +60,7 @@
  *	1.7.36 - Fixed child.label/child.name
  *	1.7.37 - If Auto mode is disabled, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint in setPrgramSetpoints()
  */
-String getVersionNum()		{ return "1.7.37" }
+String getVersionNum()		{ return "1.7.37a" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -5106,7 +5106,7 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
 	
 	// IFF autoHeatCoolFeatureEnabled, then enforce the minimum delta
     def hasAutoMode = atomicState.settings ? atomicState.settings[deviceId].autoHeatCoolFeatureEnabled : false
-	def delta = atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : (hasAutoMode ? null : 0.0)
+	def delta = !hasAutoMode ? 0.0 : (atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null)
 	if (hasAutoMode && (delta != null) && (ht != null) && (ct != null) && (ht <= ct) && ((ct - ht) < delta)) {
 		LOG("setProgramSetpoints() - Error: Auto Mode is enabled, heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
 		return false
@@ -5120,12 +5120,13 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
 			def adjusted = ''
 			// If we have both ht & ct and we support Auto Mode, we already know the delta is good
 			// but if we only have 1, we need to determine the valid value for the other
+            // if no Auto mode, we just copy the current value over, otherwise we adjust it
 			if (!ct) {
-				ct = (!coolTemp || ((coolTemp - ht) < delta)) ? (ht + delta) : coolTemp
-				if(!coolingSetpoint || (ct != cooltemp)) adjusted = 'cool'
+				ct = (!hasAutoMode && coolTemp) ? coolTemp : ((!coolTemp || ((coolTemp - ht) < delta)) ? (ht + delta) : coolTemp)
+				if (hasAutoMode && (!coolingSetpoint || (ct != cooltemp))) adjusted = 'cool'
 			} else if (!ht) {
-				ht = (!heatTemp || ((ct - heatTemp) < delta)) ? (ct - delta) : heatTemp
-				if (!heatingSetpoint || (ht != heatTemp)) adjusted = 'heat'
+				ht = (!hasAutoMode && heatTemp) ? heatTemp : ((!heatTemp || ((ct - heatTemp) < delta)) ? (ct - delta) : heatTemp)
+				if (hasAutoMode && (!heatingSetpoint || (ht != heatTemp))) adjusted = 'heat'
 			}
 			LOG("setProgramSetpoints() - heatingSetpoint: ${ht/10}°F ${adjusted=='heat'?'(adjusted)':''}, coolingSetpoint: ${ct/10}°F ${adjusted=='cool'?'(adjusted)':''}${adjusted?', minDelta: '+(delta/10).toString()+'°F':''}",2,child,'info')
 			program.climates[c].heatTemp = ht
