@@ -52,8 +52,10 @@
  *	1.7.24 - Fixed type conversion error in setFanMinOnTime
  *	1.7.25 - Added arg typing for Hubitat, some more fanMinOnTime cleanup
  *	1.7.26 - Fixed thermostatHold in updateThermostatSetpoints()
+ *	1.7.27 - Added support for display/update of Ecobee 4+ Audio settings, microphoneOn/Off, update attrs upon successful setEcobeeSettings()
+ *	1.7.28 - Fixed typo in setProgramSetpoints(); if Auto mode is disabled, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint
  */
-String getVersionNum() 		{ return "1.7.26" }
+String getVersionNum() 		{ return "1.7.28" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -108,6 +110,8 @@ metadata {
 		command "home", 					[]	
 		command "lowerSetpoint", 			[]	
 		command "makeReservation", 			[]	
+        command	"microphoneOff",			[]
+        command "microphoneOn",				[]
 		command "night", 					[]						// this is probably the appropriate SmartThings device command to call, matches ST mode
 		command "noOp", 					[]						// Workaround for formatting issues
 		// command "off", 					[]						// redundant - should be predefined by the Thermostat capability
@@ -233,7 +237,7 @@ metadata {
 		attribute 'heatMaxTemp', 'number'				// Read Only
 		attribute 'heatMinTemp', 'number'				// Read Only
 		attribute 'heatMode', 'string'
-		attribute 'heatPumpGroundWater', 'string'				// Read Only
+		attribute 'heatPumpGroundWater', 'string'		// Read Only
 		attribute 'heatPumpReversalOnCool', 'string'
 		attribute 'heatRange', 'string'
 		attribute 'heatRangeHigh', 'number'
@@ -270,12 +274,14 @@ metadata {
 		attribute 'logo', 'string'
 		attribute 'maxSetBack', 'number'
 		attribute 'maxSetForward', 'number'
+        attribute 'microphoneEnabled', 'string'			// // From Audio object (boolean)
 		attribute 'mobile', 'string'
 		attribute 'modelNumber', 'string' 
 		attribute 'monthlyElectricityBillLimit', 'string'
 		attribute 'monthsBetweenService', 'string'
 		attribute 'motion', 'string'
 		attribute 'name', 'string'
+        attribute 'playbackVolume', 'number'			// // From Audio object
 		attribute 'programsList', 'string'				// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
 		attribute 'quickSaveSetBack', 'number'
 		attribute 'quickSaveSetForward', 'number'
@@ -293,8 +299,8 @@ metadata {
 		attribute 'serviceRemindTechnician', 'string'
 		attribute 'setpointDisplay', 'string'
 		attribute 'smartCirculation', 'string'			// not implemented by E3, but by this code it is
-		attribute 'soundAlertVolume', 'number'
-		attribute 'soundTickVolume', 'number'
+		attribute 'soundAlertVolume', 'number'			// From Audio object
+		attribute 'soundTickVolume', 'number'			// From Audio object
 		attribute 'stage1CoolingDifferentialTemp', 'number'
 		attribute 'stage1CoolingDissipationTime', 'number'
 		attribute 'stage1HeatingDifferentialTemp', 'number'
@@ -329,6 +335,7 @@ metadata {
 		attribute 'ventilatorMinOnTimeHome', 'number'
 		attribute 'ventilatorOffDateTime', 'string'		// Read Only
 		attribute 'ventilatorType', 'string'			// Read Only ('none', 'ventilator', 'hrv', 'erv')
+        attribute 'voiceEngines', 'JSON_OBJECT'			// From Audio object
 		attribute 'weatherDewpoint', 'number'
 		attribute 'weatherHumidity', 'number'
 		attribute 'weatherPressure', 'number'
@@ -1707,11 +1714,20 @@ def generateEvent(Map results) {
                 case 'name':
 				case 'userAccessCode':
                 case 'thermostatStatus':
-                case 'ventilatorOffDateTime': 
-                	// if (isChange) {
-                    	def sendText = (sendValue != 'null') ? sendValue : ''
-                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, isStateChange: true, displayed: (sendText != '')]
-                    //}
+                case 'ventilatorOffDateTime':
+                case 'playbackVolume':
+                case 'microphoneEnabled':
+                case 'soundAlertVolume':
+                case 'soundTickVolume':
+                    if (sendValue != 'null') {
+                    	if (isChange) {
+                        	event = eventFront + [value: sendValue, descriptionText: "${name} is ${value}", isStateChange: true, displayed: true]
+                        }
+                    } else {
+                    	if (isStateChange(device, name, '')) {
+                        	event = eventFront + [value: '', descriptionText: '', isStateChange: true, displayed: false]
+                        }
+                    }
                     break;
                 
 				// The following are all temperature values, send with the appropriate temperature unit (tu)
@@ -1751,12 +1767,17 @@ def generateEvent(Map results) {
 				case 'heatMode':
 				case 'coolMode':
 				case 'auxHeatMode':
-					def modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
-					if (sendValue == 'true') {
-						if (!supportedThermostatModes.contains(modeValue)) supportedThermostatModes += modeValue
-					} else {
-						if (supportedThermostatModes.contains(modeValue)) supportedThermostatModes -= modeValue
-					}
+                	if (isChange) {
+                        def modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
+                        if (sendValue == 'true') {
+                            if (!supportedThermostatModes.contains(modeValue)) supportedThermostatModes += modeValue
+                        } else {
+                            if (supportedThermostatModes.contains(modeValue)) supportedThermostatModes -= modeValue
+                        }
+                    	state.supportedThermostatModes = supportedThermostatModes.sort(false)
+                    	updateModeButtons()	//	This will actually disable any that were turned off (e.g., 'auto' / 'autoHeatCoolFeatureEnabled'
+                    }
+                    
 				// Removed all the miscellaneous settings - they will thus appear in the device event list via 'default:' (May 10, 2019 - BAB)
 				// This *should* improve the efficiency of the 'switch', at least a little
 				case 'debugLevel':
@@ -1800,9 +1821,10 @@ def generateEvent(Map results) {
 			}
 		}
 		if (state.supportedThermostatModes != supportedThermostatModes) {
-			state.supportedThermostatModes = supportedThermostatModes
+			state.supportedThermostatModes = supportedThermostatModes.sort(false)
 			sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
 			sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
+            updateModeButtons()
 		}
 		//generateSetpointEvent()
 		//generateStatusEvent()
@@ -2112,53 +2134,57 @@ void updateThermostatSetpoints() {
 	}
 	LOG("updateThermostatSetpoints(): sendHoldType == ${sendHoldType} ${sendHoldHours}", 4, null, 'trace')
 
-	// make sure we maintain the proper heatCoolMinDelta
+	// IFF we have Auto mode enabled, make sure we maintain the proper heatCoolMinDelta
+    def hasAutoMode = ((ST ? device.currentValue('autoMode') : device.currentValue('autoMode', true)) == 'true') ? true : false
 	def delta = (ST ? device.currentValue('heatCoolMinDelta') : device.currentValue('heatCoolMinDelta', true))?.toBigDecimal()
-	if (!delta) delta = isMetric ? 0.5 : 1.0
-
-	if ((heatingSetpoint + delta) > coolingSetpoint) {
-		// we have to adjust heat/cool
-		if (state.newHeatingSetpoint) {
-			if (!state.newCoolingSetpoint) {
-				// got request to change heat only, push cool up
-				coolingSetpoint = heatingSetpoint + delta
-			} else {
-				// got request to change both, let's see what the thermostat is doing
-				def mode = ST ? device.currentValue('thermostatMode') : device.currentValue('thermostatMode', true)
-				if (mode == 'heat') {
-					// we are in Heat Mode, so raise the cooling setpoint
-					coolingSetpoint = heatingSetpoint + delta
-				} else if (mode == 'cool') {
-					// we are in Cool Mode, so lower the heating setpoint
-					heatingSetpoint = coolingSetpoint - delta
-				} else if (mode == 'auto') {
-					// Auto Mode - let's see if the heat or cooling is on
-					def opState = ST ? device.currentValue('thermostatOperatingState') : device.currentValue('thermostatOperatingState', true)
-					if (opState.contains('ea')) {
-						// currently heating, raise the cooling setpoint
-						coolingSetpoint = heatingSetpoint + delta
-					} else if (opState.contains('oo')) {
-						// currently cooling, lower the heating setpoint
-						heatingSetpoint = coolingSetpoint - delta
-					} else {
-						// Auto & Idle, check what our last operating state was and adjust the opposite
-                        def ncLos = ST ? device.currentValue('lastOpState') : device.currentValue('lastOpState', true)
-						if (ncLos?.contains('ea')) {
-							// We were last heating, raise the cooling setpoint
-							coolingSetpoint = heatingSetpoint + delta
-						} else {
-							// Must have been cooling, lower the heating setpoint
-							heatingSetpoint = coolingSetpoint - delta
-						}
-					}
-				}
-			}
-		} else if (state.newCoolingSetpoint) {
-			// heat not requested, so just lower the heating setpoint
-			heatingSetpoint = coolingSetpoint - delta
-		}
-		LOG("updateThermostatSetpoints() adjusted setpoints, heat ${heatingSetpoint}°, cool ${coolingSetpoint}°", 2, null, 'info')
-	}
+    if (!hasAutoMode || !delta) delta = 0.0
+	//if (!delta) delta = isMetric ? 0.5 : 1.0
+    
+    if (hasAutoMode) {
+        if ((heatingSetpoint + delta) > coolingSetpoint) {
+            // we have to adjust heat/cool
+            if (state.newHeatingSetpoint) {
+                if (!state.newCoolingSetpoint) {
+                    // got request to change heat only, push cool up
+                    coolingSetpoint = heatingSetpoint + delta
+                } else {
+                    // got request to change both, let's see what the thermostat is doing
+                    def mode = ST ? device.currentValue('thermostatMode') : device.currentValue('thermostatMode', true)
+                    if (mode == 'heat') {
+                        // we are in Heat Mode, so raise the cooling setpoint
+                        coolingSetpoint = heatingSetpoint + delta
+                    } else if (mode == 'cool') {
+                        // we are in Cool Mode, so lower the heating setpoint
+                        heatingSetpoint = coolingSetpoint - delta
+                    } else if (mode == 'auto') {
+                        // Auto Mode - let's see if the heat or cooling is on
+                        def opState = ST ? device.currentValue('thermostatOperatingState') : device.currentValue('thermostatOperatingState', true)
+                        if (opState.contains('ea')) {
+                            // currently heating, raise the cooling setpoint
+                            coolingSetpoint = heatingSetpoint + delta
+                        } else if (opState.contains('oo')) {
+                            // currently cooling, lower the heating setpoint
+                            heatingSetpoint = coolingSetpoint - delta
+                        } else {
+                            // Auto & Idle, check what our last operating state was and adjust the opposite
+                            def ncLos = ST ? device.currentValue('lastOpState') : device.currentValue('lastOpState', true)
+                            if (ncLos?.contains('ea')) {
+                                // We were last heating, raise the cooling setpoint
+                                coolingSetpoint = heatingSetpoint + delta
+                            } else {
+                                // Must have been cooling, lower the heating setpoint
+                                heatingSetpoint = coolingSetpoint - delta
+                            }
+                        }
+                    }
+                }
+            } else if (state.newCoolingSetpoint) {
+                // heat not requested, so just lower the heating setpoint
+                heatingSetpoint = coolingSetpoint - delta
+            }
+            LOG("updateThermostatSetpoints() adjusted setpoints, heat ${heatingSetpoint}°, cool ${coolingSetpoint}°", 2, null, 'info')
+        }
+    }
 
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType, sendHoldHours)) {
 		def updates = [	coolingSetpoint: roundIt(coolingSetpoint, 1),	// was Display
@@ -2414,6 +2440,9 @@ void setThermostatMode(String value) {
 	def validModes = statModes()		// device.currentValue('supportedThermostatModes')
 	if (!validModes.contains(value)) {
 		LOG("Requested Thermostat Mode (${value}) is not supported by ${device.displayName}", 2, null, 'warn')
+        if (value == 'auto') {
+        	
+        }
 		return
 	}
 
@@ -3213,7 +3242,7 @@ void setProgramSetpoints(programName, heatingSetpoint, coolingSetpoint) {
 		if ( currentProgram == programName) { 
 			def updates = []
 			if (coolingSetpoint) updates << [coolingSetpoint: coolingSetpoint]
-			if (heatinfSetpoint) updates << [heatingSetpoint: heatingSetpoint]
+			if (heatingSetpoint) updates << [heatingSetpoint: heatingSetpoint]
 			if (updates != []) generateEvent(updates)
 		}
 		LOG("setProgramSetpoints() - completed",3,null,'trace')
@@ -3229,6 +3258,10 @@ void setEcobeeSetting( String name, value ) {
 	} else {
 		String deviceId = getDeviceId()
 		result = parent.setEcobeeSetting( this, deviceId, name, value as String)
+        if (result) {
+        	def updates = ["${name}": value as String]
+			generateEvent(updates)
+        }
 	}
 	if (result == true){
 		LOG("setEcobeeSetting( ${name}, ${value} ) completed.", 2, null, 'info')
@@ -3237,6 +3270,20 @@ void setEcobeeSetting( String name, value ) {
 	}
 }
 
+// microphone Off/On commands for Ecobee 4+
+// If microphoneEnabled is null, then it is not supported on the current thermostat device, so we don't set a value here
+void microphoneOff() {
+	def isOn = state.isST ? device.currentValue('microphoneEnabled') : device.currentValue('microphoneEnabled', true)
+    if ((isOn != null) && ((isOn == true) || (isOn == 'true'))) {
+    	setEcobeeSetting( 'microphoneEnabled', 'true')
+    }
+}
+void microphoneOn() {
+	def isOn = state.isST ? device.currentValue('microphoneEnabled') : device.currentValue('microphoneEnabled', true)
+    if ((isOn != null) && ((isOn == false) || (isOn == 'false'))) {
+    	setEcobeeSetting( 'microphoneEnabled', 'false')
+    }
+}
 // No longer used as of v1.2.21
 void generateSetpointEvent() {
 	LOG('generateSetpointEvent called in error',1,null,'error')
