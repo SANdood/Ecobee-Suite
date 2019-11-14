@@ -59,8 +59,9 @@
  *	1.7.35 - Cleaned up initialize redundancy
  *	1.7.36 - Fixed child.label/child.name
  *	1.7.37 - If Auto mode is disabled, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint in setPrgramSetpoints()
+ *	1.7.38 - Added queued requests to climateChange actions (setProgramSetpoints, addSensorToProgram, deleteSensorFromProgram)
  */
-String getVersionNum()		{ return "1.7.37a" }
+String getVersionNum()		{ return "1.7.38" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -5020,7 +5021,13 @@ boolean addSensorToProgram(child, deviceId, sensorId, programId) {
 			program.climates[c].sensors << [id: tempSensor, name: sensorName] // add this sensor to the sensors list
 			climateChange[deviceId] = program
 			atomicState.climateChange = climateChange
-			runIn(2, 'updateClimates', [data: [deviceId: deviceId]])
+            if (!atomicState.climateChangeQueue || (atomicState.climateChangeQueue == 0)) {
+            	atomicState.climateChangeQueue = 1
+            } else {
+            	atomicState.climateChangeQueue = atomicState.climateChangeQueue + 1
+            }
+            int delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
+			runIn(delay, 'updateClimates', [overwrite: false, data: [child: child, deviceId: deviceId]])
 			LOG("addSensorToProgram() - ${sensName} addition to ${programId.capitalize()} program on thermostat ${statName} queued successfully",4,child,'info')
 			return true
 		}
@@ -5032,7 +5039,7 @@ boolean addSensorToProgram(child, deviceId, sensorId, programId) {
 /////////////////////////////////////////////////////////////////////
 boolean deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 	String statName = getThermostatName( deviceId )
-	String sensName = child.device?.displayName
+	String sensName = child?.device?.displayName
 	LOG("deleteSensorFromProgram(${sensName},${statName},${sensorId},${programId})",2,child,'trace')
 	
 	def program
@@ -5061,7 +5068,13 @@ boolean deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 					program.climates[c].sensors = program.climates[c].sensors - program.climates[c].sensors[s]	 
 					climateChange[deviceId] = program
 					atomicState.climateChange = climateChange		// save for later 
-					runIn(2, 'updateClimates', [data: [deviceId: deviceId]])
+                    if (!atomicState.climateChangeQueue || (atomicState.climateChangeQueue == 0)) {
+            			atomicState.climateChangeQueue = 1
+            		} else {
+            			atomicState.climateChangeQueue = atomicState.climateChangeQueue + 1
+            		}
+            		int delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
+					runIn(delay, 'updateClimates', [overwrite: false, data: [child: child, deviceId: deviceId]])
 					LOG("deleteSensorFromProgram() - ${sensName} deletion from ${programId.capitalize()} program on thermostat ${statName} queued successfully", 4, child, 'info')
 					return true
 				}
@@ -5077,13 +5090,15 @@ boolean deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 
 boolean setProgramSetpoints(child, String deviceId, String programName, String heatingSetpoint, String coolingSetpoint) {
 	if (child == null) child = getChildDevice(getThermostatDNI(deviceId))
+    String statName = getChildDevice(getThermostatDNI(deviceId)).displayName
+    
 	if (atomicState.connected?.toString() != 'full') {
 		LOG("API is not fully connected, queueing call to setProgramSetpoints(${child}, ${deviceId}, ${heatingSetpoint} ${coolingSetpoint}", 2, child, 'warn')
-		queueFailedCall('setProgramSetpoint', child.device.deviceNetworkId, 4, deviceId, programName, heatingSetpoint, coolingSetpoint)
+		queueFailedCall('setProgramSetpoint', ${statName}, 4, deviceId, programName, heatingSetpoint, coolingSetpoint)
 		return false
 	}
 	
-	LOG("setProgramSetpoints() for ${child} (${deviceId}: ${programName}, heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})", 2, child, 'trace')
+	LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName}, heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})", 2, child, 'trace')
 	
 	def program
 	def climateChange = atomicState.climateChange
@@ -5108,7 +5123,7 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
     def hasAutoMode = atomicState.settings ? atomicState.settings[deviceId].autoHeatCoolFeatureEnabled : false
 	def delta = !hasAutoMode ? 0.0 : (atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null)
 	if (hasAutoMode && (delta != null) && (ht != null) && (ct != null) && (ht <= ct) && ((ct - ht) < delta)) {
-		LOG("setProgramSetpoints() - Error: Auto Mode is enabled, heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
+		LOG("setProgramSetpoints() - Error: Auto Mode is enabled on ${statName}, heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
 		return false
 	}
 		
@@ -5128,28 +5143,40 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
 				ht = (!hasAutoMode && heatTemp) ? heatTemp : ((!heatTemp || ((ct - heatTemp) < delta)) ? (ct - delta) : heatTemp)
 				if (hasAutoMode && (!heatingSetpoint || (ht != heatTemp))) adjusted = 'heat'
 			}
-			LOG("setProgramSetpoints() - heatingSetpoint: ${ht/10}°F ${adjusted=='heat'?'(adjusted)':''}, coolingSetpoint: ${ct/10}°F ${adjusted=='cool'?'(adjusted)':''}${adjusted?', minDelta: '+(delta/10).toString()+'°F':''}",2,child,'info')
+			LOG("setProgramSetpoints(${programName}) - heatingSetpoint: ${ht/10}°F ${adjusted=='heat'?'(adjusted)':''}, coolingSetpoint: ${ct/10}°F ${adjusted=='cool'?'(adjusted)':''}${adjusted?', minDelta: '+(delta/10).toString()+'°F':''}",2,child,'info')
 			program.climates[c].heatTemp = ht
 			program.climates[c].coolTemp = ct
 			climateChange[deviceId] = program
 			atomicState.climateChange = climateChange		// save for later 
-			if (updateClimatesDirect( child, deviceId )) {
-				LOG("setProgramSetpoints() for ${child} (${deviceId}): ${programName} setpoints change - Succeeded", 2, child, 'info')
-				return true
-			} else {
-				LOG("setProgramSetpoints() for ${child} (${deviceId}): ${programName} setpoints change - Failed", 1, child, 'warn')
-				// queue failed request
-				return false
-			}
+            if (!atomicState.climateChangeQueue || (atomicState.climateChangeQueue == 0)) {
+            	atomicState.climateChangeQueue = 1
+            } else {
+            	atomicState.climateChangeQueue = atomicState.climateChangeQueue + 1
+            }
+            int delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
+			runIn(delay, 'updateClimates', [overwrite: false, data: [child: child, deviceId: deviceId]])
+            LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName} setpoints change request was queued successfully",4,child,'info')
+            return true
+			//if (updateClimatesDirect( child, deviceId )) {
+			//	LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName} setpoints change - Succeeded", 2, child, 'info')
+			//	return true
+			//} else {
+			//	LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName} setpoints change - Failed", 1, child, 'warn')
+			//	// queue failed request
+			//	return false
+			//}
 		}
 		c++
 	}
 	// didn't find the specified climate
-	LOG("setProgramSetpoints(): ${programName} not found for ${child} (${deviceId})", 1, child, 'warn')
+	LOG("setProgramSetpoints(): ${programName} not found for ${statName} (${deviceId})", 1, child, 'warn')
 	return false
 }
 
 void updateClimates(data) {
+	LOG("Running delayed Climates update",2,null,'info')
+    if (!atomicState.climateChangeQueue) atomicState.climateChangeQueue = 0
+    if (atomicState.climateChangeQueue > 0) atomicState.climateChangeQueue = atomicState.climateChangeQueue - 1
 	updateClimatesDirect(data.child, data.deviceId)
 }
 
@@ -5157,24 +5184,26 @@ boolean updateClimatesDirect(child, deviceId) {
 	if (child == null) {
 		child = getChildDevice(getThermostatDNI(deviceId))
 	}
+    String statName = getChildDevice(getThermostatDNI(deviceId)).displayName
 	if (atomicState.connected?.toString() != 'full') {
 		LOG("API is not fully connected, queueing call to updateClimateChangeDirect(${child}, ${deviceId})", 2, child, 'warn')
 		queueFailedCall('updateClimatesDirect', child.device.deviceNetworkId, 1, deviceId)
 		return false
 	}
 	
-	LOG("Updating Program settings for ${child} (${deviceId})", 4, child, 'info')
+	LOG("Updating Program settings for ${statName} (${deviceId})", 4, child, 'info')
 	def climateChange = atomicState.climateChange
 	def program
 	if (climateChange && climateChange[deviceId]) program = climateChange[deviceId]
-	def result
+	boolean result = false
+    LOG("Program settings request: ${program}", 4, child, 'info')
 	if (program) {
 		def programJson = JsonOutput.toJson(program)
 		def thermostatSettings = ',"thermostat":{"program":' + programJson +'}'
 		def thermostatFunctions = ''
 		def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 		result = sendJson(child, jsonRequestBody)
-		LOG("Updating Program settings for ${child} (${deviceId}) returned ${result}", 4, child, result?'info':'warn')
+		LOG("Updating Program settings for ${statName} (${deviceId}) returned ${result}", 4, child, result?'info':'warn')
 		if (result) {
 			climateChange[deviceId] = null
 			atomicState.climateChange = climateChange
@@ -5186,7 +5215,7 @@ boolean updateClimatesDirect(child, deviceId) {
 		}
 	}
 	// atomicState.forcePoll = true
-	runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
+	runIn(15, pollChildren, [overwrite: true])	// Pick up the changes
 	return result	 
 }
 
