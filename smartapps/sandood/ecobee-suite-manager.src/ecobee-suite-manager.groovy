@@ -61,7 +61,7 @@
  *	1.7.37 - If Auto mode is disabled, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint in setPrgramSetpoints()
  *	1.7.38 - Added queued requests to climateChange actions (setProgramSetpoints, addSensorToProgram, deleteSensorFromProgram)
  */
-String getVersionNum()		{ return "1.7.38" }
+String getVersionNum()		{ return "1.7.38a" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -1974,11 +1974,11 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 					}
 				} else if ( [14, 1, 2, 3].contains(statusCode)) {
 					LOG("checkThermostatSummary() - status code: ${statusCode}, message: ${resp.data.status.message}", 2, null, 'warn')
-					runIn(2, 'refreshAuthToken', [overwrite: true])
+					runIn(2, refreshAuthToken, [overwrite: true])
 				} else {
 					// if we get here, we had http status== 200, but API status != 0
 					if (statusCode != 999) LOG("checkThermostatSummary() - Ecobee API status ${statusCode}, message: ${resp.data?.status?.message}", 1, null, 'warn')
-					runIn(2, 'refreshAuthToken', [overwrite: true])
+					runIn(2, refreshAuthToken, [overwrite: true])
 				}
 			} else {
 				LOG("${preText}ThermostatSummary poll got http status ${resp.status}", 1, null, "error")
@@ -2004,7 +2004,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 	} catch (java.util.concurrent.TimeoutException e) {
 		LOG("checkThermostatSummary() - Concurrent Execution Timeout: ${e}.", 1, null, "warn")
 		// Do not add an else statement to run immediately as this could cause an long looping cycle
-		runIn(atomicState.reAttemptInterval, "pollChildren", [overwrite: true])
+		runIn(atomicState.reAttemptInterval, pollChildren, [overwrite: true])
 		result = false
 	//
 	// These appear to be transient errors, treat them all as if a Timeout... 
@@ -2022,7 +2022,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 		}
 		def inTimeoutRetry = atomicState.inTimeoutRetry
 		if (inTimeoutRetry == null) inTimeoutRetry = 0
-		if (inTimeoutRetry < 3) runIn(atomicState.reAttemptInterval, "pollChildren", [overwrite: true])
+		if (inTimeoutRetry < 3) runIn(atomicState.reAttemptInterval, pollChildren, [overwrite: true])
 		atomicState.inTimeoutRetry = inTimeoutRetry + 1
 		result = false
 		// throw e
@@ -2232,7 +2232,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				apiLost("${preText}Too many retries (${atomicState.reAttemptPoll - 1}) for polling.")
 			} else {
 				LOG(preText+'Setting up retryPolling',1,null,'debug')
-				runIn(atomicState.reAttemptInterval, "pollChildren", [overwrite: true]) 
+				runIn(atomicState.reAttemptInterval, pollChildren, [overwrite: true]) 
 			}
 			throw e
 			return false
@@ -2712,7 +2712,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 			}
 			def inTimeoutRetry = atomicState.inTimeoutRetry
 			if (inTimeoutRetry == null) inTimeoutRetry = 0
-			if (inTimeoutRetry < 3) runIn(atomicState.reAttemptInterval, "pollChildren", [overwrite: true])
+			if (inTimeoutRetry < 3) runIn(atomicState.reAttemptInterval, pollChildren, [overwrite: true])
 			atomicState.inTimeoutRetry = inTimeoutRetry + 1
 			return result
 		} else /* can we handle any other errors??? */ {
@@ -2731,9 +2731,9 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
         
         // Work-around SmartThings CPU time limit of 20 seconds...
 		if (alertsUpdated) {
-			if (atomicState.isST && (prepTime > 11000)) { runIn(2, 'generateAlertsAndEvents', [overwrite: true]) } else { generateAlertsAndEvents() }
+			if (atomicState.isST && (prepTime > 11000)) { runIn(2, generateAlertsAndEvents, [overwrite: true]) } else { generateAlertsAndEvents() }
 		} else {
-			if (atomicState.isST && (prepTime > 11000)) { runIn(2, 'generateTheEvents', [overwrite: true]) } else { generateTheEvents() }
+			if (atomicState.isST && (prepTime > 11000)) { runIn(2, generateTheEvents, [overwrite: true]) } else { generateTheEvents() }
 		}
 	} else {
 		LOG('pollEcobeeAPICallback() Error',1,null,'warn')
@@ -4179,7 +4179,7 @@ boolean refreshAuthToken(child=null) {
 							LOG("OAUTH Token = state ${atomicState.authToken} == in: ${resp?.data?.access_token}", 2, child, 'trace')
 						}
 						
-						def action = atomicState.action
+						String action = atomicState.action
 						// Reset saved action
 						atomicState.action = ''
 						if (action) { // && atomicState.action != "") {
@@ -4187,7 +4187,7 @@ boolean refreshAuthToken(child=null) {
 							runIn( 2, "${action}", [overwrite: true]) // this will collapse multiple threads back into just one
 						} else {
 							// Assume we had to re-authorize during a pollEcobeeAPI session
-							runIn( 2, "pollChildren", [overwrite: true])
+							runIn( 2, pollChildren, [overwrite: true])
 						}
 					} else {
 						LOG("No jsonMap??? ${jsonMap}", 2, child, 'trace')
@@ -4208,7 +4208,7 @@ boolean refreshAuthToken(child=null) {
 			//LOG("refreshAuthToken() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode}  response? data: ${e.getResponse()?.getData()}", 1, null, "error")
 			LOG("refreshAuthToken() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode}", 1, child, "error")
 			if ((e.statusCode != 401) && (e.statusCode != 400)) {
-				runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true])
+				runIn(atomicState.reAttemptInterval, refreshAuthToken, [overwrite: true])
 			} else if ((e.statusCode == 401) || (e.statusCode == 400)) {			
 				atomicState.reAttempt = atomicState.reAttempt + 1
 				if (atomicState.reAttempt > 5) {						
@@ -4217,7 +4217,7 @@ boolean refreshAuthToken(child=null) {
 				} else {
 					if (debugLevelFour) LOG("Setting up runIn for refreshAuthToken", 1, child, 'trace') // 4
 					if ( atomicState.isHE || canSchedule() ) {						
-						runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) 
+						runIn(atomicState.reAttemptInterval, refreshAuthToken, [overwrite: true]) 
 					} else { 
 						if (debugLevelFour) LOG("Unable to schedule refreshAuthToken, running directly", 1, child, 'trace')			 // 4			
 						result = refreshAuthToken(child) 
@@ -4229,7 +4229,7 @@ boolean refreshAuthToken(child=null) {
 		} catch (java.util.concurrent.TimeoutException e) {
 			LOG("refreshAuthToken(), TimeoutException: ${e}.", 1, child, "warn")
 			// Likely bad luck and network overload, move on and let it try again
-			if ( atomicState.isHE || canSchedule() ) { runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) } else { refreshAuthToken(child) }			 
+			if ( atomicState.isHE || canSchedule() ) { runIn(atomicState.reAttemptInterval, refreshAuthToken, [overwrite: true]) } else { refreshAuthToken(child) }			 
 			return false
 		} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException |
 				 javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException | java.net.UnknownHostException | java.net.UnknownHostException e) {
@@ -4244,7 +4244,7 @@ boolean refreshAuthToken(child=null) {
 			def inTimeoutRetry = atomicState.inTimeoutRetry
 			if (inTimeoutRetry == null) inTimeoutRetry = 0
 			// try to re-Authorize for 5 minutes
-			if (inTimeoutRetry < 20) runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true])
+			if (inTimeoutRetry < 20) runIn(atomicState.reAttemptInterval, refreshAuthToken, [overwrite: true])
 			atomicState.inTimeoutRetry = inTimeoutRetry + 1
 			//LOG("refreshAuthToken(), ConnectTimeoutException: ${e}.",1,null,'warn')
 			//if(canSchedule()) { runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) } else { refreshAuthToken() }
@@ -4261,7 +4261,7 @@ boolean refreshAuthToken(child=null) {
 void queueFailedCall(String routine, String DNI, numArgs, arg1=null, arg2=null, arg3=null, arg4=null, arg5=null, arg6=null, arg7=null) {
 	//log.debug "queueCall routine: ${routine}, DNI: ${DNI}, ${arg1}, ${arg2}, ${arg3}, ${arg4}, ${arg5}, ${arg6}, ${arg7}"	 // ${routine}" // , args: ${theArgs}"
 	if ((atomicState.connected == 'full') && atomicState.runningCallQueue) return // don't queue when we are clearing the queue
-	runIn(2, 'queueCall', [overwrite: false, data: [routine: routine, DNI: DNI, args: [arg1, arg2, arg3, arg4, arg5], done: false, numArgs: numArgs]])
+	runIn(2, queueCall, [overwrite: false, data: [routine: routine, DNI: DNI, args: [arg1, arg2, arg3, arg4, arg5], done: false, numArgs: numArgs]])
 	if (atomicState.callsQueued == null) { atomicState.callsQueued = 0; atomicState.callsRun = 0; }
 	atomicState.callsQueued = atomicState.callsQueued + 1
 }
@@ -5026,8 +5026,8 @@ boolean addSensorToProgram(child, deviceId, sensorId, programId) {
             } else {
             	atomicState.climateChangeQueue = atomicState.climateChangeQueue + 1
             }
-            int delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
-			runIn(delay, 'updateClimates', [overwrite: false, data: [child: child, deviceId: deviceId]])
+            def delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
+			runIn(delay, updateClimates, [overwrite: false, data: [child: null, deviceId: deviceId]])
 			LOG("addSensorToProgram() - ${sensName} addition to ${programId.capitalize()} program on thermostat ${statName} queued successfully",4,child,'info')
 			return true
 		}
@@ -5073,8 +5073,8 @@ boolean deleteSensorFromProgram(child, deviceId, sensorId, programId) {
             		} else {
             			atomicState.climateChangeQueue = atomicState.climateChangeQueue + 1
             		}
-            		int delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
-					runIn(delay, 'updateClimates', [overwrite: false, data: [child: child, deviceId: deviceId]])
+            		def delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
+					runIn(delay, updateClimates, [overwrite: false, data: [child: null, deviceId: deviceId]])
 					LOG("deleteSensorFromProgram() - ${sensName} deletion from ${programId.capitalize()} program on thermostat ${statName} queued successfully", 4, child, 'info')
 					return true
 				}
@@ -5153,8 +5153,8 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
             } else {
             	atomicState.climateChangeQueue = atomicState.climateChangeQueue + 1
             }
-            int delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
-			runIn(delay, 'updateClimates', [overwrite: false, data: [child: child, deviceId: deviceId]])
+            def delay = (atomicState.climateChangeQueue == 1) ? 2 : (15 * atomicState.climateChangeQueue)		// queue multiple changes about 15 seconds apart
+			runIn(delay, updateClimates, [overwrite: false, data: [child: null, deviceId: deviceId]])
             LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName} setpoints change request was queued successfully",4,child,'info')
             return true
 			//if (updateClimatesDirect( child, deviceId )) {
@@ -5384,7 +5384,7 @@ boolean sendJson(child=null, String jsonBody) {
 		if (inTimeoutRetry == null) inTimeoutRetry = 0
 		if (inTimeoutRetry < 8) {
 			// retry quickly...
-			runIn(2, "sendJsonRetry", [overwrite: true])
+			runIn(2, sendJsonRetry, [overwrite: true])
 		}
 		atomicState.inTimeoutRetry = inTimeoutRetry + 1
 		result = false
