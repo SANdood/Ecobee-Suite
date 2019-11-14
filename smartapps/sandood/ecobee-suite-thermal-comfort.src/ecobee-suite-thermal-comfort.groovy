@@ -30,8 +30,10 @@
  *	1.7.15 - Added option to disable local display of log.debug() logs, support Notification devices on ST
  *	1.7.16 - Fixed ST Notifications section, removed HE SMS option, fixed event handlers typo, fixed humidity initialization
  *	1.7.17 - Double-verify program before changing; don't send repetitive (fixed) setpoint changes
+ *	1.7.18 - Added notification customization and cleaned up notifier choices
+ *	1.7.19 - Don't enforce heal/cooling setpoint rules if thermostat not configured for Auto Mode
  */
-String getVersionNum() { return "1.7.17" }
+String getVersionNum() { return "1.7.19" }
 String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
@@ -51,12 +53,13 @@ definition(
 
 preferences {
 	page(name: "mainPage")
+    page(name: "customNotifications")
 }
 
 def mainPage() {
     def unit = getTemperatureScale()
-	def ST = isST
-	def HE = !ST
+	boolean ST = isST
+	boolean HE = !ST
 	
     def coolPmvOptions = [
 			(-1.0): 'Very cool (-1.0)',
@@ -163,7 +166,7 @@ def mainPage() {
             }
 			
 			section(title: (HE?'<b>':'') + "Cool Comfort Settings" + (HE?'</b>':'')) {
-       			input(name: "coolPmv", title: "PMV in cool mode${settings.coolPmv!=null&&coolConfigured()?' ('+calculateCoolSetpoint()+'°'+unit+')':''}", 
+       			input(name: "coolPmv", title: "PMV in cool mode${((settings?.coolPmv!=null) && coolConfigured()) ? ' ('+calculateCoolSetpoint()+'°'+unit+')':' ()'}", 
                 	  type: 'enum', options: coolPmvOptions, required: !settings.heatPmv, submitOnChange: true)
                 if (settings.coolPmv=='custom') {
                     input(name: "coolPmvCustom", title: "Custom cool mode PMV (decimal)", type: 'decimal', range: "-5..*", required: true, submitOnChange: true )
@@ -180,7 +183,7 @@ def mainPage() {
 			}
 			
             section(title: (HE?'<b>':'') + "Heat Comfort Settings" + (HE?'</b>':'')) {
-                input(name: "heatPmv", title: "PMV in heat mode${((settings.heatPmv) && heatConfigured()) ? ' ('+calculateHeatSetpoint()+'°'+unit+')' : '(foo!)'}", 
+                input(name: "heatPmv", title: "PMV in heat mode${((settings.heatPmv!=null) && heatConfigured()) ? ' ('+calculateHeatSetpoint()+'°'+unit+')' : '()'}", 
 					  type: 'enum', options: heatPmvOptions, required: !settings.coolPmv, submitOnChange: true)
                 if (settings.heatPmv=='custom') {
                     input(name: "heatPmvCustom", title: "Custom heat mode PMV (decimal)", type: 'decimal', range: "*..5", required: true, submitOnChange: true )
@@ -208,37 +211,59 @@ def mainPage() {
                 }
 				paragraph ''
         	}
-			section (title: (HE?'<b>':'') + "Notifications" + (HE?'</b>':'')) {
-				input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
-				paragraph HE ? "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" 
-							 : "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
-				if (settings.notify) {
-					if (ST) {
+			
+            if (ST) {
+           		section (title: "Notifications" ) {
+					input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
+					paragraph "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
+					if (settings.notify) {
                         input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
-                        input(name: "notifiers", type: "capability.notification", title: "Send Notifications directly to...", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify && !settings.notifiers),
-                              multiple: true, description: "Select notification devices", submitOnChange: true)
-                        input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-                        input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+                        input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, description: "Select notification devices", 
+                              required: (!settings.pushNotify && (settings.phone == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
+                              submitOnChange: true, hideWhenEmpty: true)
+                        input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
+                              required: (!settings.pushNotify && (settings.notifiers == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
+                              submitOnChange: true)
+                        input(name: "speak", type: "bool", title: "Spoken Notifications?", required: true, defaultValue: false, submitOnChange: true, hideWhenEmpty: (!"speechDevices" && !"musicDevices"))
                         if (settings.speak) {
-                            input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-                            input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-                            if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+                            input(name: "speechDevices", type: "capability.speechSynthesis", title: "Using these speech devices", multiple: true, 
+                                  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.musicDevices == null)), 
+                                  submitOnChange: true, hideWhenEmpty: true)
+                            input(name: "musicDevices", type: "capability.musicPlayer", title: "Using these music devices", multiple: true, 
+                                  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.speechDevices == null)), 
+                                  submitOnChange: true, hideWhenEmpty: true)
+                            if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: false)
                         }
-					} else {		// HE
-                        input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
-                              description: "Select notification devices", submitOnChange: true)
-                        paragraph ''
-
-                        input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
-                        if (settings.speak) {
-                            input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-                            input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-                            input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-                        }
-                        paragraph ''
+                        if (!settings.phone && !settings.pushNotify && !settings.speechDevices && !settings.musicDevices && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
 					}
+                }
+            } else {		// HE
+                section (title: "<b>Notifications</b>") {
+					input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
+					paragraph "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" 
+					if (settings.notify) {
+						input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, submitOnChange: true,
+                              required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+						paragraph ""
+						section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), "<b>Use Speech Device(s)</b>") {
+							input(name: "speak", type: "bool", title: "Speak messages?", required: !settings?.notifiers, defaultValue: false, submitOnChange: true)
+							if (settings.speak) {
+								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "Using these speech devices", 
+                                	  multiple: true, submitOnChange: true)
+								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "Using these music devices", 
+                                	  multiple: true, submitOnChange: true)
+								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+							}
+						}
+                    }
 				}
 			}
+            if (settings?.notify && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
+				section() {
+					href name: "customNotifications", title: (HE?'<b>':'') + "Customize Notifications" + (HE?'</b>':''), page: "customNotifications", 
+						 description: "Customize notification messages", state: isCustomized()
+				}
+            }
         }
         section(title: (HE?'<b>':'') + "Temporarily Paused" + (HE?'</b>':'')) {
         	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)
@@ -249,10 +274,48 @@ def mainPage() {
     	section (getVersionLabel()) {}
     }
 }
+def customNotifications(){
+	boolean ST = isST
+	boolean HE = !ST
+	dynamicPage(name: "customNotifications", uninstall: false, install: false) {
+		section((HE?'<b>':'') + "Custom Notifications" + (HE?'</b>':'')) {
+			input(name: "customPrefix", type: "enum", title: "Prefix text:", defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
+				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
+			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+			if (settings.customPrefix == 'custom') {
+				input(name: "customPrefixText", type: "text", title: "Custom Prefix text", defaultValue: "", required: true, submitOnChange: true)
+			}      
+			input(name: "customTstat", type: "enum", title: "Refer to the HVAC system as", defaultValue: "(thermostat name)", options:
+				  ['the HVAC system', '(thermostat name)', 'custom'], submitOnChange: true, multiple: false)
+			if (settings?.customTstat == 'custom') {
+				input(name: "customTstatText", type: "text", title: "Custom HVAC system text", defaultValue: "", required: true, submitOnChange: true)
+			} 
+			if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat name)'); settings.customTstat = '(thermostat name)'; }
+			if (settings?.customTstat == '(thermostat name)') {
+				input(name: "tstatCleaners", type: 'enum', title: "Strip these words from the Thermostat's display name (${theThermostat.displayName})", multiple: true, required: false,
+					  submitOnChange: true, options: ['EcobeeTherm', 'EcoTherm', 'Thermostat', 'Ecobee'])
+				input(name: "tstatPrefix", type: 'enum', title: "Add this prefix to the Thermostat's display name", multiple: false, required: false,
+					  submitOnChange: true, options: ['the', 'Ecobee', 'Thermostat', 'Ecobee Thermostat', 'the Ecobee', 'the Ecobee Thermostat', 'the Thermostat']) 
+			}
 
+			paragraph "${HE?'<b><i>':''}Sample notification message:${HE?'</i></b>':''}"
+			String thePrefix = getMsgPrefix()
+			String theTstat = getMsgTstat()
+            String unit = getTemperatureScale()
+            String heatTemp = "${(settings.heatPmv!=null&&heatConfigured())?calculateHeatSetpoint():(unit=='F'?'68':'21')}"
+            String coolTemp = "${(settings.coolPmv!=null&&coolConfigured())?calculateCoolSetpoint():(unit=='F'?'75':'23')}"
+			paragraph "${getMsgPrefix()}I changed ${theTstat} setpoints for the ${thePrograms[0]} program to Heat: ${heatTemp}°${unit} and Cool: " +
+					  "${coolTemp}°${unit} because I wanted you to see the results!"
+		}
+	}
+}
+def isCustomized() {
+	return (customPrefix || customTstat) ? "complete" : null
+}
 void installed() {
 	LOG("Installed with settings: ${settings}", 4, null, 'trace')
     atomicState.humidity = null
+    atomicState.because = " because ${app.label} was initialized"
 	initialize()
 }
 void uninstalled() {
@@ -263,6 +326,7 @@ void updated() {
 	unsubscribe()
     unschedule()
     atomicState.humidity = null
+    atomicState.because = " because ${app.label} was reinitialized"
     initialize()
 }
 def getProgramsList() {
@@ -300,10 +364,11 @@ def initialize() {
     //def h = atomicState.isST ? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
     def h = getMultiHumidistats()
     atomicState.humidity = h
-	atomicState.because = " because ${app.label} was (re)initialized"
+	
     atomicState.lastHeatRequest = -999
     atomicState.lastCoolRequest = 999
     atomicState.fixed = null
+    atomicState.lastFixed = null
     atomicState.lastProgram = ""
     atomicState.lastHeatSetpoint = -999
     atomicState.lastCoolSetpoint = 999
@@ -341,7 +406,7 @@ def programChangeHandler(evt) {
     
     // Don't schedule the update if the new thermostat program isn't one that we're supposed to adjust!
     if (!settings.thePrograms || settings.thePrograms?.contains(evt.value)) {
-        atomicState.because = " because the thermostat's Program changed to ${evt.value}"
+        atomicState.because = " because the thermostat's program changed to ${evt.value}"
     	runIn(10, atomicHumidityUpdater, [overwrite: true])				// Wait a bit longer for all the setpoints to update after the program change
     }
 }
@@ -351,7 +416,7 @@ def modeChangeHandler(evt) {
     
     // Don't schedule the update if the new thermostat mode isn't one that we're supposed to adjust!
     if (!settings.statModes || settings.statModes?.contains(evt.value)) {
-		atomicState.because = " because the thermostat's Mode changed to ${evt.value}"
+		atomicState.because = " because the thermostat's mode changed to ${evt.value}"
     	runIn(5, atomicHumidityUpdater, [overwrite: true])				// Mode changes don't directly impact setpoints, but give it time just in case
     }
 }
@@ -458,61 +523,68 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
     	LOG("Request to change program ${program}, bit that is not the current program (${currentProgram}) - ignoring request",2,null,'warn')
         return
     }
-	def delta = ST ? settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal : settings.theThermostat.currentValue('heatCoolMinDelta', true) as BigDecimal
-	def fixed
+    def hasAutoMode = ST ? settings.theThermostat.currentValue('hasAuto') : settings.theThermostat.currentValue('hasAuto', true) 
+	def delta = !hasAutoMode ? 0.0 : (ST ? settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal : settings.theThermostat.currentValue('heatCoolMinDelta', true) as BigDecimal)
+	def fixed = null
     atomicState.lastHeatRequest = heatTemp
     atomicState.lastCoolRequest = coolTemp
 	def ht = heatTemp.toBigDecimal()
 	def ct = coolTemp.toBigDecimal()
 	LOG("${ht} - ${ct}", 3, null, 'debug')
-	if ((ct - ht) < delta) {
-		fixed = null
-		// Uh-oh, the temps are too close together!
-		if (settings.heatPmv == null) {
-			// We are only adjusting cool, so move heat out of the way
-			ht = ct - delta
-			fixed = 'heat'
-		} else if (settings.coolPmv == null) {
-			// We are only adjusting heat, so move cool out of the way
-			ct = ht + delta
-			fixed = 'cool'
-		}
-		if (!fixed) {
-			if ((settings.statModes != null) && (settings.statModes.size() == 1)) {
-				if (settings.statModes.contains('cool')) {
-					// we are ONLY adjusting PMV in cool mode, move the heat setpoint
-					ht = ct - delta
-					fixed = 'heat'
-				} else if (settings.statModes.contains('heat')) {
-					// we are ONLY adjusting PMV in heat mode, move the cool setpoint
-					ct = ht + delta
-					fixed = 'cool'
-				}
-			}
-		}
-		if (!fixed) {
-			// Hmmm...looks like we're adjusting both, and so we don't know which to fix
-			String lastMode = ST ? settings.theThermostat.currentValue('lastOpState') : settings.theThermostat.currentValue('lastOpState', true)	// what did the thermostat most recently do?
-			if (lastMode) {
-				if (lastMode.contains('cool')) {
-					ht = ct - delta							// move the other one
-					fixed = 'heat'
-				} else if (lastMode.contains('heat')) {
-					ct = ht + delta							
-					fixed = 'cool'
-				}
-			}
-		}
-		if (!fixed) {
-			// Nothing left to try - we're screwed!!!!
-			LOG("Unable to adjust PMV, calculated setpoints are too close together (less than ${delta}°${unit}", 1, null, 'warn')
-			return
-		} else {
-			coolTemp = ct
-			heatTemp = ht
-		}
-	}
-	
+    // Don't adjust setpoints if we don't have Auto mode...just treat as 2 independent setpoints
+    // (And let Ecobee figure it out)
+    if (hasAutoMode) {
+        if ((ct - ht) < delta) {
+            fixed = null
+            // Uh-oh, the temps are too close together!
+            if (settings.heatPmv == null) {
+                // We are only adjusting cool, so move heat out of the way
+                ht = ct - delta
+                fixed = 'heat'
+            } else if (settings.coolPmv == null) {
+                // We are only adjusting heat, so move cool out of the way
+                ct = ht + delta
+                fixed = 'cool'
+            }
+            if (!fixed) {
+                if ((settings.statModes != null) && (settings.statModes.size() == 1)) {
+                    if (settings.statModes.contains('cool')) {
+                        // we are ONLY adjusting PMV in cool mode, move the heat setpoint
+                        ht = ct - delta
+                        fixed = 'heat'
+                    } else if (settings.statModes.contains('heat')) {
+                        // we are ONLY adjusting PMV in heat mode, move the cool setpoint
+                        ct = ht + delta
+                        fixed = 'cool'
+                    }
+                }
+            }
+            if (!fixed) {
+                // Hmmm...looks like we're adjusting both, and so we don't know which to fix
+                String lastMode = ST ? settings.theThermostat.currentValue('lastOpState') : settings.theThermostat.currentValue('lastOpState', true)	// what did the thermostat most recently do?
+                if (lastMode) {
+                    if (lastMode.contains('cool')) {
+                        ht = ct - delta							// move the other one
+                        fixed = 'heat'
+                    } else if (lastMode.contains('heat')) {
+                        ct = ht + delta							
+                        fixed = 'cool'
+                    }
+                }
+            }
+            if (!fixed) {
+                // Nothing left to try - we're screwed!!!!
+                LOG("Unable to adjust PMV, calculated setpoints are too close together (less than ${delta}°${unit}", 1, null, 'warn')
+                return
+            } else {
+                coolTemp = ct
+                heatTemp = ht
+            }
+        }
+	} else {
+    	coolTemp = ct
+        heatTemp = ht
+    }
     String currentMode 		= ST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)    
     def currentHeatSetpoint = roundIt(((ST ? settings.theThermostat.currentValue('heatingSetpoint') : settings.theThermostat.currentValue('heatingSetpoint', true)) as BigDecimal), 2)
     def currentCoolSetpoint = roundIt(((ST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)) as BigDecimal), 2)
@@ -534,9 +606,10 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
 	// Only send the notification if we are changing the CURRENT program - program could have changed under us...
 	if (currentProgram == program) {
 		String because = atomicState.because
-		String s = settings.theThermostat.displayName.endsWith('s') ? "'" : "'s"
-		def msg = "I changed ${settings.theThermostat.displayName}${s} setpoints to Heat: ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and Cool: " +
-			"${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}for the ${program} program${because}"
+        if (heatTemp.toString().endsWith('.00') || heatTemp.toString().endsWith('.0')) heatTemp = heatTemp as Integer
+        if (coolTemp.toString().endsWith('.00') || coolTemp.toString().endsWith('.0')) coolTemp = coolTemp as Integer
+		def msg = "I changed ${getMsgTstat()} setpoints for the ${program} program to Heat: ${heatTemp}°${unit} ${(fixed=='heat')?'(adjusted) ':''}and Cool: " +
+			"${coolTemp}°${unit} ${(fixed=='cool')?'(adjusted) ':''}${because}"
 		if (msg != atomicState.lastMsg) sendMessage( msg )	// don't send the same message over and over again (shouldn't be happening anyway)
 		atomicState.lastMsg = msg
 	}
@@ -734,10 +807,67 @@ def getMultiThermometers() {
 */
 
 // Helper Functions
+String textListToString(list) {
+	def c = list?.size()
+	String s = list.toString()[1..-2]
+	if (c == 1) return s.trim()						// statName
+	if (c == 2) return s.replace(', ',' and ').trim()	// statName1 and statName2
+	int i = s.lastIndexOf(', ')+2
+	return (s.take(i) + 'and ' + s.drop(i)).trim()		// statName1, statName2, (...) and statNameN
+}
+String getMsgPrefix() {
+	String thePrefix = ""
+	if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+	switch (settings?.customPrefix) {
+		case '(helper):':
+			thePrefix = atomicState.appDisplayName + ': '
+			break
+		case '(helper) at (location):':
+			thePrefix = atomicState.appDisplayName + " at ${location.name}: "
+			break
+		case '(location):':
+			thePrefix = location.name + ': '
+			break
+		case 'custom':
+			thePrefix = settings?.customPrefixText?.trim() + ' '
+			break
+		case 'none':
+			break
+	}
+	return thePrefix
+}
+
+String getMsgTstat() {						
+	String theTstat = ""
+	if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat name)'); settings?.customTstat = '(thermostat name)'; }
+	switch (settings?.customTstat) {
+		case 'custom':
+			theTstat = settings?.customTstatText 
+			break
+		case "(thermostat name)":
+			String name = settings?.theThermostat.displayName
+			if (settings?.tstatPrefix) name = settings.tstatPrefix + ' ' + name
+            name = name + (name.endsWith('s') ? "'" : "'s")
+			if (name != "") {
+				tstatCleaners.each{
+					if ((!settings?.tstatPrefix || (settings.tstatPrefix != it))) {	// Don't strip the prefix/suffix we added above
+						name = name.replace(it, '').replace(it.toLowerCase(), '')	// Strip out any unnecessary words
+					}
+				}
+			}
+			theTstat = name.replace(':','').replace('  ', ' ').trim()		// Finally, get rid of any double spaces
+			break
+		case 'the HVAC system':
+			theTstat = "the H V A C system's"
+			break
+	}
+	return theTstat
+}
+
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${settings.notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
-        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+        String msg = getMsgPrefix() + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
 			if (settings.notifiers != null) {
 				settings.notifiers.each {								// Use notification devices
@@ -778,18 +908,6 @@ void sendMessage(notificationMessage) {
 			if (settings.notifiers != null) {
 				settings.notifiers.each {							// Use notification devices on Hubitat
 					it.deviceNotification(msg)
-				}
-			}
-			if (settings.phone != null) {
-				if ( settings.phone.indexOf(",") > 0){
-					def phones = phone.split(",")
-					for ( def i = 0; i < phones.size(); i++) {
-						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-					}
-				} else {
-					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
 			}
 			if (settings.speak) {
