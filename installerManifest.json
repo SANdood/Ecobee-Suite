@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.7.34",
+			"version": 	"1.7.38",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -33,7 +33,7 @@
 				"name": 	"ecobee Suite Open Contacts",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.33",
+				"version": 	"1.7.38",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
 				"optional": 	false
@@ -114,7 +114,7 @@
 				"name": 	"ecobee Suite Thermal Comfort",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.17",
+				"version": 	"1.7.19",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
 				"optional": 	false
