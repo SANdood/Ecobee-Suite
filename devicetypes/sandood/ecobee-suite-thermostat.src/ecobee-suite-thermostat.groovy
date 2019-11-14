@@ -53,8 +53,10 @@
  *	1.7.25 - Added arg typing for Hubitat, some more fanMinOnTime cleanup
  *	1.7.26 - Fixed thermostatHold in updateThermostatSetpoints()
  *	1.7.27 - Added support for display/update of Ecobee 4+ Audio settings, microphoneOn/Off, update attrs upon successful setEcobeeSettings()
+ *	1.7.28 - Fixed typo in setProgramSetpoints(); 
+ *	1.7.29 - if Auto mode is disabled for this thermostat, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint
  */
-String getVersionNum() 		{ return "1.7.27" }
+String getVersionNum() 		{ return "1.7.29" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -1766,12 +1768,17 @@ def generateEvent(Map results) {
 				case 'heatMode':
 				case 'coolMode':
 				case 'auxHeatMode':
-					def modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
-					if (sendValue == 'true') {
-						if (!supportedThermostatModes.contains(modeValue)) supportedThermostatModes += modeValue
-					} else {
-						if (supportedThermostatModes.contains(modeValue)) supportedThermostatModes -= modeValue
-					}
+                	if (isChange) {
+                        def modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
+                        if (sendValue == 'true') {
+                            if (!supportedThermostatModes.contains(modeValue)) supportedThermostatModes += modeValue
+                        } else {
+                            if (supportedThermostatModes.contains(modeValue)) supportedThermostatModes -= modeValue
+                        }
+                    	state.supportedThermostatModes = supportedThermostatModes.sort(false)
+                    	updateModeButtons()	//	This will actually disable any that were turned off (e.g., 'auto' / 'autoHeatCoolFeatureEnabled'
+                    }
+                    
 				// Removed all the miscellaneous settings - they will thus appear in the device event list via 'default:' (May 10, 2019 - BAB)
 				// This *should* improve the efficiency of the 'switch', at least a little
 				case 'debugLevel':
@@ -1815,9 +1822,10 @@ def generateEvent(Map results) {
 			}
 		}
 		if (state.supportedThermostatModes != supportedThermostatModes) {
-			state.supportedThermostatModes = supportedThermostatModes
+			state.supportedThermostatModes = supportedThermostatModes.sort(false)
 			sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
 			sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
+            updateModeButtons()
 		}
 		//generateSetpointEvent()
 		//generateStatusEvent()
@@ -2127,53 +2135,57 @@ void updateThermostatSetpoints() {
 	}
 	LOG("updateThermostatSetpoints(): sendHoldType == ${sendHoldType} ${sendHoldHours}", 4, null, 'trace')
 
-	// make sure we maintain the proper heatCoolMinDelta
+	// IFF we have Auto mode enabled, make sure we maintain the proper heatCoolMinDelta
+    def hasAutoMode = ((ST ? device.currentValue('autoMode') : device.currentValue('autoMode', true)) == 'true') ? true : false
 	def delta = (ST ? device.currentValue('heatCoolMinDelta') : device.currentValue('heatCoolMinDelta', true))?.toBigDecimal()
-	if (!delta) delta = isMetric ? 0.5 : 1.0
-
-	if ((heatingSetpoint + delta) > coolingSetpoint) {
-		// we have to adjust heat/cool
-		if (state.newHeatingSetpoint) {
-			if (!state.newCoolingSetpoint) {
-				// got request to change heat only, push cool up
-				coolingSetpoint = heatingSetpoint + delta
-			} else {
-				// got request to change both, let's see what the thermostat is doing
-				def mode = ST ? device.currentValue('thermostatMode') : device.currentValue('thermostatMode', true)
-				if (mode == 'heat') {
-					// we are in Heat Mode, so raise the cooling setpoint
-					coolingSetpoint = heatingSetpoint + delta
-				} else if (mode == 'cool') {
-					// we are in Cool Mode, so lower the heating setpoint
-					heatingSetpoint = coolingSetpoint - delta
-				} else if (mode == 'auto') {
-					// Auto Mode - let's see if the heat or cooling is on
-					def opState = ST ? device.currentValue('thermostatOperatingState') : device.currentValue('thermostatOperatingState', true)
-					if (opState.contains('ea')) {
-						// currently heating, raise the cooling setpoint
-						coolingSetpoint = heatingSetpoint + delta
-					} else if (opState.contains('oo')) {
-						// currently cooling, lower the heating setpoint
-						heatingSetpoint = coolingSetpoint - delta
-					} else {
-						// Auto & Idle, check what our last operating state was and adjust the opposite
-                        def ncLos = ST ? device.currentValue('lastOpState') : device.currentValue('lastOpState', true)
-						if (ncLos?.contains('ea')) {
-							// We were last heating, raise the cooling setpoint
-							coolingSetpoint = heatingSetpoint + delta
-						} else {
-							// Must have been cooling, lower the heating setpoint
-							heatingSetpoint = coolingSetpoint - delta
-						}
-					}
-				}
-			}
-		} else if (state.newCoolingSetpoint) {
-			// heat not requested, so just lower the heating setpoint
-			heatingSetpoint = coolingSetpoint - delta
-		}
-		LOG("updateThermostatSetpoints() adjusted setpoints, heat ${heatingSetpoint}°, cool ${coolingSetpoint}°", 2, null, 'info')
-	}
+    if (!hasAutoMode || !delta) delta = 0.0
+	//if (!delta) delta = isMetric ? 0.5 : 1.0
+    
+    if (hasAutoMode) {
+        if ((heatingSetpoint + delta) > coolingSetpoint) {
+            // we have to adjust heat/cool
+            if (state.newHeatingSetpoint) {
+                if (!state.newCoolingSetpoint) {
+                    // got request to change heat only, push cool up
+                    coolingSetpoint = heatingSetpoint + delta
+                } else {
+                    // got request to change both, let's see what the thermostat is doing
+                    def mode = ST ? device.currentValue('thermostatMode') : device.currentValue('thermostatMode', true)
+                    if (mode == 'heat') {
+                        // we are in Heat Mode, so raise the cooling setpoint
+                        coolingSetpoint = heatingSetpoint + delta
+                    } else if (mode == 'cool') {
+                        // we are in Cool Mode, so lower the heating setpoint
+                        heatingSetpoint = coolingSetpoint - delta
+                    } else if (mode == 'auto') {
+                        // Auto Mode - let's see if the heat or cooling is on
+                        def opState = ST ? device.currentValue('thermostatOperatingState') : device.currentValue('thermostatOperatingState', true)
+                        if (opState.contains('ea')) {
+                            // currently heating, raise the cooling setpoint
+                            coolingSetpoint = heatingSetpoint + delta
+                        } else if (opState.contains('oo')) {
+                            // currently cooling, lower the heating setpoint
+                            heatingSetpoint = coolingSetpoint - delta
+                        } else {
+                            // Auto & Idle, check what our last operating state was and adjust the opposite
+                            def ncLos = ST ? device.currentValue('lastOpState') : device.currentValue('lastOpState', true)
+                            if (ncLos?.contains('ea')) {
+                                // We were last heating, raise the cooling setpoint
+                                coolingSetpoint = heatingSetpoint + delta
+                            } else {
+                                // Must have been cooling, lower the heating setpoint
+                                heatingSetpoint = coolingSetpoint - delta
+                            }
+                        }
+                    }
+                }
+            } else if (state.newCoolingSetpoint) {
+                // heat not requested, so just lower the heating setpoint
+                heatingSetpoint = coolingSetpoint - delta
+            }
+            LOG("updateThermostatSetpoints() adjusted setpoints, heat ${heatingSetpoint}°, cool ${coolingSetpoint}°", 2, null, 'info')
+        }
+    }
 
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType, sendHoldHours)) {
 		def updates = [	coolingSetpoint: roundIt(coolingSetpoint, 1),	// was Display
@@ -2429,6 +2441,9 @@ void setThermostatMode(String value) {
 	def validModes = statModes()		// device.currentValue('supportedThermostatModes')
 	if (!validModes.contains(value)) {
 		LOG("Requested Thermostat Mode (${value}) is not supported by ${device.displayName}", 2, null, 'warn')
+        if (value == 'auto') {
+        	
+        }
 		return
 	}
 
@@ -3226,10 +3241,10 @@ void setProgramSetpoints(programName, heatingSetpoint, coolingSetpoint) {
 	if (parent.setProgramSetpoints( this, deviceId as String, programName as String, heatingSetpoint as String, coolingSetpoint as String)) {
     	String currentProgram = state.isST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
 		if ( currentProgram == programName) { 
-			def updates = []
+			def updates = [:]
 			if (coolingSetpoint) updates << [coolingSetpoint: coolingSetpoint]
-			if (heatinfSetpoint) updates << [heatingSetpoint: heatingSetpoint]
-			if (updates != []) generateEvent(updates)
+			if (heatingSetpoint) updates << [heatingSetpoint: heatingSetpoint]
+			if (updates != [:]) generateEvent(updates)
 		}
 		LOG("setProgramSetpoints() - completed",3,null,'trace')
 	} else LOG("setProgramSetpoints() - failed",1,null,'warn')
