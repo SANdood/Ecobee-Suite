@@ -31,8 +31,9 @@
  *	1.7.05 - Added option to disable local display of log.debug() logs
  *	1.7.06 - Fixes for the auto-disable logic
  *	1.7.07 - More fixes for autoOff
+ *	1.7.08 - Fix hasHumidifier
  */
-String getVersionNum() { return "1.7.07" }
+String getVersionNum() { return "1.7.08" }
 String getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -608,7 +609,7 @@ boolean hasHumidifier() {
 			if ((hh != null) && ((hh == true) || (hh == 'true'))) result = true
         }
 	}
-	atomicState.hasDehumidifier = result
+	atomicState.hasHumidifier = result
     return result
 }	
 
