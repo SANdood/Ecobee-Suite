@@ -33,8 +33,9 @@
  *	1.7.17 - Fixed appLabel on ST
  *	1.7.18 - Added option to disable local display of log.debug() logs, support Notification devices on ST
  *	1.7.19 - Fixed appLabel yet again
+ *	1.7.20 - Cleaned up Notifications settings, removed SMS for HE
  */
-String getVersionNum() { return "1.7.19" }
+String getVersionNum() { return "1.7.20" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -278,41 +279,48 @@ def mainPage() {
 				paragraph HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
         	}            
 			if (settings.notify) {
-				if (ST) {
-					section("Notifications") {
-						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
-						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
-							  multiple: true, description: "Select notification devices", submitOnChange: true)
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-						}
-						if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
-					}
-				} else {		// HE
-					section("<b>Use Notification Device(s)</b>") {
-						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
-							  description: "Select notification devices", submitOnChange: true)
-						paragraph ""
-					}
-					section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
-							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
-						paragraph ""
-					}
-					section("<b>Use Speech Device(s)</b>") {
-						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-						}
-						paragraph ""
-					}
-				}
+            	if (ST) {
+                    section("Notifications") {
+                        paragraph "A notification will also be sent to the Hello Home log"
+                        input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+                        input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, description: "Select notification devices", 
+                              required: (!settings.pushNotify && (settings.phone == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
+                              submitOnChange: true, hideWhenEmpty: true)
+                        input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
+                              required: (!settings.pushNotify && (settings.notifiers == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
+                              submitOnChange: true)
+                        input(name: "speak", type: "bool", title: "Spoken Notifications?", required: true, defaultValue: false, submitOnChange: true, hideWhenEmpty: (!"speechDevices" && !"musicDevices"))
+                        if (settings.speak) {
+                            input(name: "speechDevices", type: "capability.speechSynthesis", title: "Using these speech devices", multiple: true, 
+                                  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.musicDevices == null)), 
+                                  submitOnChange: true, hideWhenEmpty: true)
+                            input(name: "musicDevices", type: "capability.musicPlayer", title: "Using these music devices", multiple: true, 
+                                  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.speechDevices == null)), 
+                                  submitOnChange: true, hideWhenEmpty: true)
+                            if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: false)
+                        }
+                        if (!settings.phone && !settings.pushNotify && !settings.speechDevices && !settings.musicDevices && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+                    }
+                } else {		// HE
+                    section("<b>Use Notification Device(s)</b>") {
+                        input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, submitOnChange: true,
+                              required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+                        paragraph ""
+                    }
+                    section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), "<b>Use Speech Device(s)</b>") {
+                        input(name: "speak", type: "bool", title: "Speak messages?", required: !settings?.notifiers, defaultValue: false, submitOnChange: true)
+                        if (settings.speak) {
+                            input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "Using these speech devices", 
+                                  multiple: true, submitOnChange: true)
+                            input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "Using these music devices", 
+                                  multiple: true, submitOnChange: true)
+                            input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+                        }
+                    }
+                    section(){
+                        paragraph "A 'HelloHome' notification will also be sent to the Location Event log"
+                    }
+                }
 			}
         }
         section(title: (HE?'<b>':'') + "Temporary Disable" + (HE?'</b>':'')) {
@@ -1342,6 +1350,7 @@ void sendMessage(notificationMessage) {
 					it.deviceNotification(msg)
 				}
 			}
+            /*
 			if (settings.phone != null) {
 				if ( settings.phone.indexOf(",") > 0){
 					def phones = phone.split(",")
@@ -1354,6 +1363,7 @@ void sendMessage(notificationMessage) {
 					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
 			}
+            */
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
 					settings.speechDevices.each {
