@@ -24,9 +24,11 @@
  *	1.7.09 - Clean up app label in sendMessage()
  *	1.7.10 - Added option to disable local display of log.debug() logs, support Notification devices on ST
  *	1.7.11 - Parameterized Home/Away selections
+ *	1.7.12 - Cleaned up notifications, removed SMS for HE platform
+ *`	1.7.13 - Added Customized Notifications
  */
 import groovy.json.*
-String getVersionNum() { return "1.7.11" }
+String getVersionNum() { return "1.7.13" }
 String getVersionLabel() { return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -45,6 +47,7 @@ definition(
 
 preferences {
 	page(name: "mainPage")
+    page(name: "customNotifications")
 }
 
 // Preferences Pages
@@ -84,15 +87,13 @@ def mainPage() {
             } else {
         		input (name: "myThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)",
                 	   required: true, multiple: true, submitOnChange: true)
-				paragraph ''
+				if (HE) paragraph ''
 			}
         }
 
 		if (settings?.myThermostats && !settings?.tempDisable) {
             section (title: (HE?'<b>':'') + "Conditions" + (HE?'</b>':'')) {
                 input(name: "people", type: "capability.presenceSensor", title: "When any of these are present...",  multiple: true, required: true, submitOnChange: true)
-				input(name: "identify", type: 'bool', title: 'Identify who is home for logs & notifications?', required: (settings.people != null), defaultValue: false)
-				paragraph ''
 				input(name: "timeOfDay", type: "time", title: "At this time of day",  required: !settings.onAway, submitOnChange: true)
 				input(name: "onAway", type: "bool", title: "When ${settings?.myThermostats?.size()>1?'any thermostats\'':'the thermostat\'s'} Program changes", defaultValue: false, 
                 	  required: (settings.timeOfDay == null), submitOnChange: true)
@@ -102,7 +103,7 @@ def mainPage() {
                 	input(name: 'awayPrograms', type: 'enum', title: "When Program changes to any of these: ", options: programs, required: true, defaultValue: 'Away', multiple: true, 
                           submitOnChange: true)
                 }
-				paragraph ''
+				if (HE) paragraph ''
             }
             
 			section( title: (HE?'<b>':'') + "Actions" + (HE?'</b>':'')) {
@@ -118,11 +119,11 @@ def mainPage() {
                 	  submitOnChange: true)
                 if (settings.setHome) {
                 	def programs = getEcobeePrograms()
-                    programs = programs - (settings.awayPrograms + ["Resume"])
+                    programs = programs - ((settings.awayPrograms?:[]) + ["Resume"])
                 	input(name: 'homeProgram', type: 'enum', title: "Change Program to: ", options: programs, required: true, defaultValue: 'Home', multiple: false, 
                           submitOnChange: true)
                 }
-				paragraph ''
+				if (HE) paragraph ''
             }
                 
             section (title: (HE?'<b>':'') + "Advanced Options" + (HE?'</b>':'')) {
@@ -132,45 +133,58 @@ def mainPage() {
                     options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
                 input(name: "modes", type: "mode", title: "Only when Location Mode is", multiple: true, required: false, submitOnChange: true)
 				input(name: "notify", type: "bool", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
-				paragraph HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
+				// paragraph HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
             }
 			
 			if (settings.notify) {
 				if (ST) {
-					section("Notifications") {
-						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
-						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak && !settings.pushNotify),
-							  multiple: true, description: "Select notification devices", submitOnChange: true)
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", required: false, submitOnChange: true)
-						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-						}
-						if (!settings.phone && !settings.pushNotify && !settings.speak && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+                    section("Notifications") {
+                        paragraph "A notification will also be sent to the Hello Home log"
+                        input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
+                        input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, description: "Select notification devices", 
+                              required: (!settings.pushNotify && (settings.phone == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
+                              submitOnChange: true, hideWhenEmpty: true)
+                        input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
+                              required: (!settings.pushNotify && (settings.notifiers == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
+                              submitOnChange: true)
+                        input(name: "speak", type: "bool", title: "Spoken Notifications?", required: true, defaultValue: false, submitOnChange: true, hideWhenEmpty: (!"speechDevices" && !"musicDevices"))
+                        if (settings.speak) {
+                            input(name: "speechDevices", type: "capability.speechSynthesis", title: "Using these speech devices", multiple: true, 
+                                  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.musicDevices == null)), 
+                                  submitOnChange: true, hideWhenEmpty: true)
+                            input(name: "musicDevices", type: "capability.musicPlayer", title: "Using these music devices", multiple: true, 
+                                  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.speechDevices == null)), 
+                                  submitOnChange: true, hideWhenEmpty: true)
+                            if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: false)
+                        }
+                        if (!settings.phone && !settings.pushNotify && !settings.speechDevices && !settings.musicDevices && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+                    }
+                } else {		// HE
+                    section("<b>Use Notification Device(s)</b>") {
+                        input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, submitOnChange: true,
+                              required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+                        paragraph ""
+                    }
+                    section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), "<b>Use Speech Device(s)</b>") {
+                        input(name: "speak", type: "bool", title: "Speak messages?", required: !settings?.notifiers, defaultValue: false, submitOnChange: true)
+                        if (settings.speak) {
+                            input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "Using these speech devices", 
+                                  multiple: true, submitOnChange: true)
+                            input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "Using these music devices", 
+                                  multiple: true, submitOnChange: true)
+                            input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+                        }
+                    }
+                    section(){
+                        paragraph "A 'HelloHome' notification will also be sent to the Location Event log"
+                    }
+                }
+                if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
+					section() {
+						href name: "customNotifications", title: (HE?'<b>':'') + "Customize Notifications" + (HE?'</b>':''), page: "customNotifications", 
+							 description: "Customize notification messages", state: isCustomized()
 					}
-				} else {		// HE
-					section("<b>Use Notification Device(s)") {
-						input(name: "notifiers", type: "capability.notification", title: "", required: ((settings.phone == null) && !settings.speak), multiple: true, 
-							  description: "Select notification devices</b>", submitOnChange: true)
-						paragraph ""
-					}
-					section("<b>Use SMS to Phone(s) (limit 10 messages per day)</b>") {
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777, +441234567890)", 
-							  required: ((settings.notifiers == null) && !settings.speak), submitOnChange: true)
-						paragraph ""
-					}
-					section("<b>Use Speech Device(s)</b>") {
-						input(name: "speak", type: "bool", title: "Speak messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", multiple: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", multiple: true, submitOnChange: true)
-							input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-						}
-						paragraph ""
-					}
-				}
+                }
 			}				
         }
         section(title: (HE?'<b>':'') + "Temporary Pause" + (HE?'</b>':'')) {
@@ -181,6 +195,75 @@ def mainPage() {
 		}
 		section (getVersionLabel()) {}
     }
+}
+
+def customNotifications(){
+	boolean ST = isST
+	boolean HE = !ST
+	dynamicPage(name: "customNotifications", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: false, install: false) {
+		section((HE?'<b>':'') + "Custom Explanation" + (HE?'</b>':'')) {
+        	input(name: "identify", type: 'bool', title: 'Identify who is home for logs & notifications?', required: (settings.people != null), defaultValue: false, submitOnChange: true)
+            input(name: 'customBecause', type: "enum", title: 'Explanation text:', required: true, defaultValue: 'still home', submitOnChange: true, multiple: false, 
+            	  options: ['still here', 'still home', 'still present', 'home', 'at home', 'here', 'working from home', 'working from home today','present'].sort(false) + ['custom'])
+        	if (settings?.customBecause == 'custom') {
+            	input(name: 'customBecauseText', type: 'text', title: "Custom Explanation text", defaultValue: "", required: true, submitOnChange: true)
+            }
+        }
+        section((HE?'<b>':'') + "Custom Notification Prefix" + (HE?'</b>':'')){
+			input(name: "customPrefix", type: "enum", title: "Notification Prefix text:", defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
+				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
+			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+			if (settings.customPrefix == 'custom') {
+				input(name: "customPrefixText", type: "text", title: "Custom Prefix text", defaultValue: "", required: true, submitOnChange: true)
+			}
+        }
+        section((HE?'<b>':'') + "Custom Thermostat Identification" + (HE?'</b>':'')) {
+			input(name: "customTstat", type: "enum", title: "Refer to the HVAC system as", defaultValue: "(thermostat names)", options:
+				  ['the thermostat', 'the HVAC system', '(thermostat names)', 'custom'], submitOnChange: true, multiple: false)
+			if (settings?.customTstat == 'custom') {
+				input(name: "customTstatText", type: "text", title: "Custom HVAC system text", defaultValue: "", required: true, submitOnChange: true)
+			} 
+			if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat names)'); settings.customTstat = '(thermostat names)'; }
+			if (settings?.customTstat == '(thermostat names)') {
+				input(name: "tstatCleaners", type: 'enum', title: "Strip these words from the Thermostat display names", multiple: true, required: false,
+					  submitOnChange: true, options: ['EcobeeTherm', 'EcoTherm', 'Thermostat', 'Ecobee'].sort(false))
+				input(name: "tstatPrefix", type: 'enum', title: "Add this prefix to the Thermostat display names", multiple: false, required: false,
+					  submitOnChange: true, options: ['the', 'Ecobee', 'thermostat', 'Ecobee thermostat', 'the Ecobee', 'the Ecobee thermostat', 'the thermostat'].sort(false)) 
+				input(name: "tstatSuffix", type: 'enum', title: "Add this suffix to the Thermostat display names", multiple: false, required: false,
+					  submitOnChange: true, options: ['Ecobee', 'HVAC', 'HVAC system', 'thermostat'])
+			}
+        }
+		section("${HE?'<b><i>':''}Sample notification message(s):${HE?'</i></b>':''}") {
+			String thePrefix = getMsgPrefix()
+			String theTstat = getMsgTstat()
+			String samples = ""
+            String who = whoIsHome()
+            def tc = myThermostats.size()
+            boolean multiple = false
+            
+            if (ST && settings.wfhPhrase) {
+            	samples = samples + thePrefix + "I executed '${settings.wfhPhrase}' because ${who} ${becauseText(who)}\n"
+                multiple = true
+            }
+            if (settings.setMode) {
+            	samples = samples + thePrefix + "I ${multiple?'also ':''}changed Location Mode to ${settings.setMode}\n"
+                multiple = true
+            }
+            if (settings.onAway) {
+            	samples = samples + thePrefix + "${thePrefix}: I ${multiple?'also ':''}reset ${theTstat} to the '${settings.homeProgram}' program because Thermostat ${myThermostats[0].displayName} "
+                "changed to '${settings.awayPrograms[0]}' and ${who} ${becauseText(who)}\n"
+                multiple = true
+			}
+            if (settings.setHome) {
+            	samples = samples + thePrefix + "I ${multiple?'also ':''}changed ${theTstat} to the '${settings.homeProgram}' program because ${who} ${becauseText(who)}"
+            }
+			paragraph samples
+		}
+	}
+}
+
+def isCustomized() {
+	return (customPrefix || customTstat || (useSensorNames != null)) ? "complete" : null
 }
 
 void installed() {
@@ -219,7 +302,7 @@ def checkPresence() {
             location.helloHome.execute(wfhPhrase)
         	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
 			def who = whoIsHome()
-			sendMessage("I executed '${wfhPhrase}' because ${who} ${who.contains(' and ')?'are':'is'} still home")
+			sendMessage("I executed '${wfhPhrase}' because ${who} ${becaueText()}")
             multiple = true
         }
         if (settings.setMode) {
@@ -242,9 +325,9 @@ def checkPresence() {
             def also = multiple ? 'also ' : ''
 			def who = whoIsHome()
 			if (verified) {
-				sendMessage("I ${also} verified that thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} ${tc>1?'are':'is'} set to the 'Home' program because ${who} ${who.contains(' and ')?'are':'is'} still home")
+				sendMessage("I ${also} verified that thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} ${tc>1?'are':'is'} set to the '${settings.homeProgram}' program because ${who} ${becauseText(who)}")
 			} else {
-				sendMessage("I ${also} changed thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the 'Home' program because ${who} ${who.contains(' and ')?'are':'is'} still home")
+				sendMessage("I ${also} changed thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the '${settings.homeProgram}' program because ${who} ${becauseText(who)}")
 				runIn(300, checkHome, [overwrite: true])
 			}
         }
@@ -259,7 +342,7 @@ def checkProgram(evt) {
     if (settings.onAway && (settings.awayPrograms.contains(evt.value)) && anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
     	evt.device.home()
 		def who = whoIsHome()
-        sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the '${settings.homeProgram}' program because Thermostat ${evt.device.displayName} changed to '${evt.value}' and ${who} ${who.contains(' and ')?'are':'is'} still home")
+        sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the '${settings.homeProgram}' program because Thermostat ${evt.device.displayName} changed to '${evt.value}' and ${who} ${becauseText(who)}")
         runIn(300, checkHome, [overwrite: true])
         
     	if (ST && wfhPhrase) {
@@ -323,6 +406,12 @@ String whoIsHome() {
 	} else {
 		return "nobody"
 	}
+}
+
+String becauseText(who) {
+	if (settings?.customBecause == null) { app.updateSetting('customBecause', 'still home'); settings.customBecause = 'still home'; }
+    String reason = settings?.customBecause == 'custom' ? settings?.customBecauseText : settings?.customBecause
+	return (who.contains(' and ')?'are ':'is ') + reason
 }
 
 // get the combined set of Ecobee Programs applicable for these thermostats
@@ -396,10 +485,91 @@ boolean getDaysOk() {
     return result
 }
 
+String textListToString(list) {
+	def c = list?.size()
+	String s = list.toString()[1..-2]
+	if (c == 1) return s.trim()						// statName
+	if (c == 2) return s.replace(', ',' and ').trim()	// statName1 and statName2
+	int i = s.lastIndexOf(', ')+2
+	return (s.take(i) + 'and ' + s.drop(i)).trim()		// statName1, statName2, (...) and statNameN
+}
+String getMsgPrefix() {
+	String thePrefix = ""
+	if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+	switch (settings?.customPrefix) {
+		case '(helper):':
+			thePrefix = atomicState.appDisplayName + ': '
+			break
+		case '(helper) at (location):':
+			thePrefix = atomicState.appDisplayName + " at ${location.name}: "
+			break
+		case '(location):':
+			thePrefix = location.name + ': '
+			break
+		case 'custom':
+			thePrefix = settings?.customPrefixText?.trim() + ' '
+			break
+		case 'none':
+			break
+	}
+	return thePrefix
+}
+
+String getMsgTstat() {						
+	String theTstat = ""
+	if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat names)'); settings?.customTstat = '(thermostat names)'; }
+	switch (settings.customTstat) {
+		case 'custom':
+			theTstat = settings.customTstatText 
+			break
+		case "(thermostat names)":
+			def stats = settings?.theThermostats ?: myThermostats
+			def nameList = []
+            String prefix = ""
+            String suffix = ""
+			if (settings?.tstatSuffix || settings?.tstatPrefix) {
+            	def tc = stats.size()
+            	if (tc == 1) {
+					def name = stats[0].displayName
+					if (settings.tstatPrefix) name = settings.tstatPrefix + ' ' + name
+					if (settings.tstatSuffix) name = name + ' ' + settings.tstatSuffix
+					nameList << name
+				} else {
+					nameList = stats*.displayName
+					if (settings.tstatPrefix) prefix = settings.tstatPrefix == 'the' ? 'the ' : settings.tstatPrefix + 's '
+                    if (settings.tstatSuffix) suffix = settings.tstatSuffix == 'HVAC' ? ' HVAC' : ' ' + settings.tstatSuffix + 's'
+				}
+			} else {
+				nameList = stats*.displayName
+			}
+			String statStr = textListToString(nameList)
+			if (tstatCleaners != []) {
+				tstatCleaners.each{
+					if ((!settings?.tstatSuffix || (settings.tstatSuffix != it)) && (!settings?.tstatPrefix || (settings.tstatPrefix != it))) {	// Don't strip the prefix/suffix we added above
+						statStr = statStr.replace(it, '').replace(it.toLowerCase(), '')	// Strip out any unnecessary words
+					}
+				}
+			}
+			statStr = statStr.replace(':','').replace('  ', ' ').trim()		// Finally, get rid of any double spaces
+			theTstat = prefix + statStr + suffix 	// (statStr + ((stats?.size() > 1) ? ' are' : ' is'))	
+			break
+		case 'the HVAC system':
+			theTstat = 'the H V A C system'
+			break
+        case 'the thermostat':
+        	def stats = settings?.theThermostats ?: myThermostats
+           	def tc = stats.size()
+            theTstat = 'the thermostat' + ((tc > 1) ? 's' : '')
+        	break
+	}
+	return theTstat
+}
+
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
     if (settings.notify) {
-        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    	String msg = getMsgPrefix() + notificationMessage
+        //String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (atomicState.isST) {
 			if (settings.notifiers != null) {
 				settings.notifiers.each {							// Use notification devices on Hubitat
@@ -441,7 +611,7 @@ void sendMessage(notificationMessage) {
 					it.deviceNotification(msg)
 				}
 			}
-			if (settings.phone != null) {
+		/*	if (settings.phone != null) {
 				if ( settings.phone.indexOf(",") > 0){
 					def phones = phone.split(",")
 					for ( def i = 0; i < phones.size(); i++) {
@@ -452,7 +622,7 @@ void sendMessage(notificationMessage) {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
 					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
-			}
+			} */
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
 					settings.speechDevices.each {
