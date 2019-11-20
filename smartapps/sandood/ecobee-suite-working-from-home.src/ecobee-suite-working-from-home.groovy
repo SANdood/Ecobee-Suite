@@ -26,9 +26,10 @@
  *	1.7.11 - Parameterized Home/Away selections
  *	1.7.12 - Cleaned up notifications, removed SMS for HE platform
  *`	1.7.13 - Added Customized Notifications
+ *	1.7.14 - Fixed custom notifications, removed extraneous logging
  */
 import groovy.json.*
-String getVersionNum() { return "1.7.13" }
+String getVersionNum() { return "1.7.14" }
 String getVersionLabel() { return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -325,9 +326,9 @@ def checkPresence() {
             def also = multiple ? 'also ' : ''
 			def who = whoIsHome()
 			if (verified) {
-				sendMessage("I ${also} verified that thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} ${tc>1?'are':'is'} set to the '${settings.homeProgram}' program because ${who} ${becauseText(who)}")
+				sendMessage("I ${also} verified that ${getMsgTstat()} ${tc>1?'are':'is'} set to the '${settings.homeProgram}' program because ${who} ${becauseText(who)}")
 			} else {
-				sendMessage("I ${also} changed thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the '${settings.homeProgram}' program because ${who} ${becauseText(who)}")
+				sendMessage("I ${also} changed ${getMsgTstat()} to the '${settings.homeProgram}' program because ${who} ${becauseText(who)}")
 				runIn(300, checkHome, [overwrite: true])
 			}
         }
@@ -342,7 +343,7 @@ def checkProgram(evt) {
     if (settings.onAway && (settings.awayPrograms.contains(evt.value)) && anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
     	evt.device.home()
 		def who = whoIsHome()
-        sendMessage("I reset thermostat${tc>1?'s':''} ${myThermostats.toString()[1..-2]} to the '${settings.homeProgram}' program because Thermostat ${evt.device.displayName} changed to '${evt.value}' and ${who} ${becauseText(who)}")
+        sendMessage("I reset ${getMsgTstat()} to the '${settings.homeProgram}' program because Thermostat ${evt.device.displayName} changed to '${evt.value}' and ${who} ${becauseText(who)}")
         runIn(300, checkHome, [overwrite: true])
         
     	if (ST && wfhPhrase) {
