@@ -34,8 +34,9 @@
  *	1.7.18 - Added option to disable local display of log.debug() logs, support Notification devices on ST
  *	1.7.19 - Fixed appLabel yet again
  *	1.7.20 - Cleaned up Notifications settings, removed SMS for HE
+ *	1.7.21 - Added customized notifications, fixed missing notification on mode change
  */
-String getVersionNum() { return "1.7.20" }
+String getVersionNum() { return "1.7.21" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -54,6 +55,7 @@ definition(
 
 preferences {
 	page(name: "mainPage")
+    page(name: "customNotifications")
 }
 
 def mainPage() {
@@ -321,6 +323,13 @@ def mainPage() {
                         paragraph "A 'HelloHome' notification will also be sent to the Location Event log"
                     }
                 }
+                
+                if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
+					section() {
+						href name: "customNotifications", title: (HE?'<b>':'') + "Customize Notifications" + (HE?'</b>':''), page: "customNotifications", 
+							 description: "Customize notification messages", state: isCustomized()
+					}
+                }
 			}
         }
         section(title: (HE?'<b>':'') + "Temporary Disable" + (HE?'</b>':'')) {
@@ -328,6 +337,79 @@ def mainPage() {
 		}
     	section (getVersionLabel()) {}
     }
+}
+
+
+def customNotifications(){
+	boolean ST = isST
+	boolean HE = !ST
+	dynamicPage(name: "customNotifications", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: false, install: false) {
+        section((HE?'<b>':'') + "Custom Notification Prefix" + (HE?'</b>':'')){
+			input(name: "customPrefix", type: "enum", title: "Notification Prefix text:", defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
+				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
+			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+			if (settings.customPrefix == 'custom') {
+				input(name: "customPrefixText", type: "text", title: "Custom Prefix text", defaultValue: "", required: true, submitOnChange: true)
+			}
+        }
+        section((HE?'<b>':'') + "Custom Thermostat Identification" + (HE?'</b>':'')) {
+			input(name: "customTstat", type: "enum", title: "Refer to the HVAC system as", defaultValue: "(thermostat names)", options:
+				  ['the thermostat', 'the HVAC system', '(thermostat names)', 'custom'], submitOnChange: true, multiple: false)
+			if (settings?.customTstat == 'custom') {
+				input(name: "customTstatText", type: "text", title: "Custom HVAC system text", defaultValue: "", required: true, submitOnChange: true)
+			} 
+			if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat names)'); settings.customTstat = '(thermostat names)'; }
+			if (settings?.customTstat == '(thermostat names)') {
+				input(name: "tstatCleaners", type: 'enum', title: "Strip these words from the Thermostat display names", multiple: true, required: false,
+					  submitOnChange: true, options: ['EcobeeTherm', 'EcoTherm', 'Thermostat', 'Ecobee'].sort(false))
+				input(name: "tstatPrefix", type: 'enum', title: "Add this prefix to the Thermostat display names", multiple: false, required: false,
+					  submitOnChange: true, options: ['the', 'Ecobee', 'thermostat', 'Ecobee thermostat', 'the Ecobee', 'the Ecobee thermostat', 'the thermostat'].sort(false)) 
+				input(name: "tstatSuffix", type: 'enum', title: "Add this suffix to the Thermostat display names", multiple: false, required: false,
+					  submitOnChange: true, options: ['Ecobee', 'HVAC', 'HVAC system', 'thermostat'])
+			}
+        }
+		section("${HE?'<b><i>':''}Sample notification message(s):${HE?'</i></b>':''}") {
+        	String unit = getTemperatureScale()
+			String thePrefix = getMsgPrefix()
+			String theTstats = getMsgTstat()
+            String theTstat = getMsgTstat([thermostats[0]])
+            String theLowTemp = unit == 'F' ? 62 : 18
+            String theHighTemp = unit == 'F' ? 80 : 28
+			String samples = ""
+            def tc = thermostats.size()
+            boolean multiple = false
+            
+            if (settings?.aboveCool || settings?.belowHeat) {
+            	String tt = theTstat.endsWith('s') ? theTstat + "'" : theTstat + "'s"
+            	samples = getMsgPrefix() + "${tt} inside temperature is ${theLowTemp}°, so I changed it to 'Heat' mode\n"
+            }
+            samples = samples + "The outside temperature is ${theHighTemp}°${unit}, so I changed ${getMsgTstat()} to 'Cool' mode\n"
+                        
+      /*      
+            if (ST && settings.wfhPhrase) {
+            	samples = samples + thePrefix + "I executed '${settings.wfhPhrase}' because ${who} ${becauseText(who)}\n"
+                multiple = true
+            }
+            if (settings.setMode) {
+            	samples = samples + thePrefix + "I ${multiple?'also ':''}changed Location Mode to ${settings.setMode}\n"
+                multiple = true
+            }
+            if (settings.onAway) {
+            	samples = samples + thePrefix + "${thePrefix}: I ${multiple?'also ':''}reset ${theTstat} to the '${settings.homeProgram}' program because Thermostat ${myThermostats[0].displayName} "
+                "changed to '${settings.awayPrograms[0]}' and ${who} ${becauseText(who)}\n"
+                multiple = true
+			}
+            if (settings.setHome) {
+            	samples = samples + thePrefix + "I ${multiple?'also ':''}changed ${theTstat} to the '${settings.homeProgram}' program because ${who} ${becauseText(who)}"
+            }
+            */
+			paragraph samples
+		}
+	}
+}
+
+def isCustomized() {
+	return (customPrefix || customTstat || (useSensorNames != null)) ? "complete" : null
 }
 
 void installed() {
@@ -616,7 +698,7 @@ def insideChangeHandler(evt) {
         if (okMode) {
         	atomicState.locModeEnabled = true
             if (newMode != null) {
-                String cMode = isSt ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
+                String cMode = St ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
 				// log.debug "newMode: ${newMode}, cMode: ${cMode}"
                 if (cMode != newMode) {
                     boolean override = ((cMode != 'off') || (settings.insideOverridesOff && (!anyReservations(tid, 'modeOff') || ((countReservations(tid, 'modeOff') == 1) && haveReservation(tid, 'modeOff')))))
@@ -631,7 +713,9 @@ def insideChangeHandler(evt) {
                         insideOverride[tid] = (coolOverride || heatOverride)
                         evt.device.setThermostatMode(newMode)
                         LOG("${evt.device.displayName} temperature (inside) is ${theTemp}°${evt.unit}, changed thermostat to ${newMode} mode",3,null,'trace')
-                        sendMessage("Thermostat ${evt.device.displayName} inside temperature is ${theTemp}°, so I changed it to ${newMode} mode")
+                        String theTstat = getMsgTstat([evt.device])
+                        String tt = theTstat.endsWith('s') ? theTstat + "'" : theTstat + "'s"
+                        sendMessage("${tt} inside temperature is ${theTemp}°, so I changed it to '${newMode}' mode")
                     }
                 }
             } else {
@@ -751,6 +835,7 @@ def temperatureUpdate( BigDecimal temp ) {
     	LOG("Ignoring invalid temperature: ${temp}°${unit}", 2, null, 'warn')
         return false
     }
+    boolean ST = atomicState.isST
     
     temp = roundIt(temp, (unit=='C'?2:1))
     atomicState.temperature = temp
@@ -876,11 +961,12 @@ def temperatureUpdate( BigDecimal temp ) {
 	
 	if ((desiredMode != null) || (desiredProgram != null)) {
     	String changeNames = ""
+        def changeNamesList = []
         String sameNames = ""
         def insideOverride = atomicState.insideOverride
 		settings.thermostats.each { 
-        	String cMode = atomicState.isST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
-			String cProgram = atomicState.isST ? it.currentValue('currentProgramName') : it.currentValue('currentProgramName', true)
+        	String cMode = ST ? it.currentValue('thermostatMode') : it.currentValue('thermostatMode', true)
+			String cProgram = ST ? it.currentValue('currentProgramName') : it.currentValue('currentProgramName', true)
             String tid = getDeviceId(it.deviceNetworkId)
             if (!insideOverride || !insideOverride.containsKey(tid) || !insideOverride[tid]) {
                 if ((cMode && (cMode != desiredMode)) || (cProgram && (cProgram != desiredProgram))) {
@@ -905,20 +991,22 @@ def temperatureUpdate( BigDecimal temp ) {
 									it.setThermostatProgram(desiredProgram, sendHoldType, sendHoldHours)
 								}
                                 changeNames += changeNames ? ", ${it.displayName}" : it.displayName
+                                changeNamesList << it
                             } else {
                                 // somebody else still has a 'modeOff' reservation so we can't turn it on
                                 def reservedBy = getGuestList(tid,'modeOff')
                                 LOG("Reservations: ${reservedBy}", 3, null, 'debug')
 								if (reservedBy == []) reservedBy = ['somebody']
-                                def msg = "The Outside  Temperature is ${temp}°${unit}, but I can't change ${it.displayName} to ${desiredMode} Mode because ${reservedBy.toString()[1..-2]} hold 'modeOff' reservations"
+                                def msg = "The outside temperature is ${temp}°${unit}, but I can't change ${getMsgTstat([it])} to '${desiredMode}' Mode because ${reservedBy.toString()[1..-2]} hold 'modeOff' reservations"
                                 LOG(msg ,2,null,'warn')
                                 sendMessage(msg)
                                 // here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
                             }
                         } else {
                             // Not off currently, so we can change freely
+                            boolean changed = false
                             cancelReservation(tid, 'modeOff')	// just in case
-                            if (desiredMode && (cMode != desiredMode)) it.setThermostatMode(desiredMode)
+                            if (desiredMode && (cMode != desiredMode)) { it.setThermostatMode(desiredMode); changed = true }
 							if (desiredProgram && (cProgram != desiredProgram)) {
 								def sendHoldType = whatHoldType(stat)
 								def sendHoldHours = null
@@ -928,7 +1016,12 @@ def temperatureUpdate( BigDecimal temp ) {
 								}
 								LOG("sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
 								it.setThermostatProgram(desiredProgram, sendHoldType, sendHoldHours)
+                                changed = true
 							}
+                            if (changed) {
+                            	changeNames += changeNames ? ", ${it.displayName}" : it.displayName
+                                changeNamesList << it
+                            }
                         }
                     }
                 } else {
@@ -943,7 +1036,7 @@ def temperatureUpdate( BigDecimal temp ) {
         def multi=0
         if (changeNames) {
         	LOG("Temp is ${temp}°${unit}, changed ${changeNames} to ${desiredMode} mode",3,null,'trace')
-        	sendMessage("The temperature is ${temp}°${unit}, so I changed thermostat${changeNames.size() > 1?'s':''} ${changeNames} to ${desiredMode} mode")
+        	sendMessage("The outside temperature is ${temp}°${unit}, so I changed ${getMsgTstat(changeNamesList)} to '${desiredMode}' mode")
         }
         if (sameNames) LOG("Temp is ${temp}°${unit}, ${sameNames} already in ${desiredMode} mode",3,null,'info')
 	}
@@ -1304,11 +1397,91 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
+String textListToString(list) {
+	def c = list?.size()
+	String s = list.toString()[1..-2]
+	if (c == 1) return s.trim()						// statName
+	if (c == 2) return s.replace(', ',' and ').trim()	// statName1 and statName2
+	int i = s.lastIndexOf(', ')+2
+	return (s.take(i) + 'and ' + s.drop(i)).trim()		// statName1, statName2, (...) and statNameN
+}
+String getMsgPrefix() {
+	String thePrefix = ""
+	if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+	switch (settings?.customPrefix) {
+		case '(helper):':
+			thePrefix = atomicState.appDisplayName + ': '
+			break
+		case '(helper) at (location):':
+			thePrefix = atomicState.appDisplayName + " at ${location.name}: "
+			break
+		case '(location):':
+			thePrefix = location.name + ': '
+			break
+		case 'custom':
+			thePrefix = settings?.customPrefixText?.trim() + ' '
+			break
+		case 'none':
+			break
+	}
+	return thePrefix
+}
+
+String getMsgTstat(statList = []) {						
+	String theTstat = ""
+	if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat names)'); settings?.customTstat = '(thermostat names)'; }
+	switch (settings.customTstat) {
+		case 'custom':
+			theTstat = settings.customTstatText 
+			break
+		case "(thermostat names)":
+			def stats = statList ?: settings?.thermostats
+			def nameList = []
+            String prefix = ""
+            String suffix = ""
+			if (settings?.tstatSuffix || settings?.tstatPrefix) {
+            	def tc = stats.size()
+            	if (tc == 1) {
+					def name = stats[0].displayName
+					if (settings.tstatPrefix) name = settings.tstatPrefix + ' ' + name
+					if (settings.tstatSuffix) name = name + ' ' + settings.tstatSuffix
+					nameList << name
+				} else {
+					nameList = stats*.displayName
+					if (settings.tstatPrefix) prefix = settings.tstatPrefix == 'the' ? 'the ' : settings.tstatPrefix + 's '
+                    if (settings.tstatSuffix) suffix = settings.tstatSuffix == 'HVAC' ? ' HVAC' : ' ' + settings.tstatSuffix + 's'
+				}
+			} else {
+				nameList = stats*.displayName
+			}
+			String statStr = textListToString(nameList)
+			if (tstatCleaners != []) {
+				tstatCleaners.each{
+					if ((!settings?.tstatSuffix || (settings.tstatSuffix != it)) && (!settings?.tstatPrefix || (settings.tstatPrefix != it))) {	// Don't strip the prefix/suffix we added above
+						statStr = statStr.replace(it, '').replace(it.toLowerCase(), '')	// Strip out any unnecessary words
+					}
+				}
+			}
+			statStr = statStr.replace(':','').replace('  ', ' ').trim()		// Finally, get rid of any double spaces
+			theTstat = prefix + statStr + suffix 	// (statStr + ((stats?.size() > 1) ? ' are' : ' is'))	
+			break
+		case 'the HVAC system':
+			theTstat = 'the H V A C system'
+			break
+        case 'the thermostat':
+        	def stats = statList ?: settings?.thermostats
+           	def tc = stats.size()
+            theTstat = 'the thermostat' + ((tc > 1) ? 's' : '')
+        	break
+	}
+	return theTstat
+}
+
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
 	boolean ST = atomicState.isST
     if (settings.notify) {
-		String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+		String msg = getMsgPrefix() + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (ST) {
 			if (settings.notifiers != null) {
 				settings.notifiers.each {									// Use notification devices (if any)
@@ -1416,7 +1589,8 @@ void updateMyLabel() {
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		String modeProgStr = ' (' + thermostats[0].currentValue('thermostatMode').capitalize() + ' - ' + thermostats[0].currentValue('currentProgramName') + ')'
-		String newLabel = myLabel + (!ST ? '<span style="color:green">' + modeProgStr : modeProgStr)					 
+		String newLabel = myLabel + (!ST ? '<span style="color:green">' + modeProgStr + '</span>' : modeProgStr)		
+        // log.debug "newLabel: ${newLabel}"
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
 }
