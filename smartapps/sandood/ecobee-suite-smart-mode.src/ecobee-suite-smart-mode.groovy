@@ -35,8 +35,9 @@
  *	1.7.19 - Fixed appLabel yet again
  *	1.7.20 - Cleaned up Notifications settings, removed SMS for HE
  *	1.7.21 - Added customized notifications, fixed missing notification on mode change
+ *	1.7.22 - Fixed typo in insideChangeHandler()
  */
-String getVersionNum() { return "1.7.21" }
+String getVersionNum() { return "1.7.22" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -698,8 +699,8 @@ def insideChangeHandler(evt) {
         if (okMode) {
         	atomicState.locModeEnabled = true
             if (newMode != null) {
-                String cMode = St ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
-				// log.debug "newMode: ${newMode}, cMode: ${cMode}"
+                String cMode = ST ? evt?.device?.latestValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
+				log.debug "newMode: ${newMode}, cMode: ${cMode}"
                 if (cMode != newMode) {
                     boolean override = ((cMode != 'off') || (settings.insideOverridesOff && (!anyReservations(tid, 'modeOff') || ((countReservations(tid, 'modeOff') == 1) && haveReservation(tid, 'modeOff')))))
                     if (!override) {
