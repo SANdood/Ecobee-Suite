@@ -699,7 +699,7 @@ def insideChangeHandler(evt) {
         if (okMode) {
         	atomicState.locModeEnabled = true
             if (newMode != null) {
-                String cMode = ST ? evt?.device?.latestValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
+                String cMode = ST ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
 				log.debug "newMode: ${newMode}, cMode: ${cMode}"
                 if (cMode != newMode) {
                     boolean override = ((cMode != 'off') || (settings.insideOverridesOff && (!anyReservations(tid, 'modeOff') || ((countReservations(tid, 'modeOff') == 1) && haveReservation(tid, 'modeOff')))))
