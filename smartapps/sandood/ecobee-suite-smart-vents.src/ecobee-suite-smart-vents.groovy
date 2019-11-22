@@ -33,8 +33,9 @@
  *	1.7.10 - Added option to disable local display of log.debug() logs, tweaked myLabel handling
  *	1.7.11 - Check both hasCapability('switchLevel') & hasCommand('setLevel')
  *	1.7.12 - Fix typo in ventsOn(); set 100 instead of 99
+ *	1.7.13 - Optimized checkTemperature() to avoid timeout errors on ST
  */
-String getVersionNum() 		{ return "1.7.12" }
+String getVersionNum() 		{ return "1.7.13" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -230,33 +231,36 @@ String checkTemperature() {
 	// boolean ST = atomicState.isST
 	// def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
    	String smarter = settings.theThermostat.currentValue('thermostatOperatingStateDisplay')
+    boolean beSmart = (smarter?.contains('mart'))	// "(Smart Recovery)"
 	String cOpState = theThermostat.currentValue('thermostatOperatingState')
 	def cTemperature = theThermostat.currentTemperature
 	def coolSP = theThermostat.currentValue('coolingSetpoint')
 	def heatSP = theThermostat.currentValue('heatingSetpoint')
 	String cMode = theThermostat.currentValue('thermostatMode')
 	def cTemp = getAverageTemperature()
-	def currentStatus = [smarter: smarter, opState: cOpState, mode: cMode, temperature: cTemp, coolSP: coolSP, heatSP: heatSP]
+	def currentStatus = [smarter: smarter, beSmart: beSmart, opState: cOpState, mode: cMode, temperature: cTemp, coolSP: coolSP, heatSP: heatSP]
 	if (atomicState.currentStatus && (atomicState.currentStatus == currentStatus)) { LOG("Status unchanged...",3,null,'info'); return; }	// ignore - identical to last time
+    
 	atomicState.currentStatus = currentStatus
 	LOG("currentStatus: ${currentStatus}",3,null,'info')
-	
+	//info currentStatus: [smarter:heating, opState:heating, mode:heat, temperature:18.8, coolSP:27.2, heatSP:22.5]
+    
 	// LOG("Current Operating State ${cOpState}",3,null,'info')
     def offset 
-	def vents = ''			// if not heating/cooling/fan, then no change to current vents
+	String vents = ''			// if not heating/cooling/fan, then no change to current vents
     if (cTemp != null) {	// only if valid temperature readings (Ecosensors can return "unknown")
     	if ((cOpState == 'heating') || (cMode == 'heat')) {
-        	offset = settings.heatOffset ? settings.heatOffset : 0.0
-    		def heatTarget = useThermostat ? ((smarter && (cTemperature != null))? cTemperature + offset : theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
-        	if (smarter && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
+        	offset = settings.heatOffset ?: 0.0
+    		def heatTarget = useThermostat ? ((beSmart && (cTemperature != null))? cTemperature + offset : theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
+        	if (beSmart && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
 			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
-        	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
+        	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${beSmart?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
     	} else if ((cOpState == 'cooling') || (cMode == 'cool')) {
-        	offset = settings.coolOffset ? settings.coolOffset : 0.0
-    		def coolTarget = useThermostat ? ((smarter && (cTemperature != null)) ? cTemperature + offset : theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
-        	if (smarter && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
+        	offset = settings.coolOffset ?: 0.0
+    		def coolTarget = useThermostat ? ((beSmart && (cTemperature != null)) ? cTemperature + offset : theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
+        	if (beSmart && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
 			vents = (coolTarget >= cTemp) ? 'closed' : 'open'
-        	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${smarter?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
+        	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${beSmart?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
 		} else if (cOpState == 'idle') {
     		LOG("${theThermostat.displayName} is idle, room temperature is ${cTemp}°",3,null,'info')
         	def currentMode = theThermostat.currentValue('thermostatMode')
@@ -273,7 +277,7 @@ String checkTemperature() {
         		LOG("${theThermostat.displayName} is running fan only, room temperature is ${cTemp}°, vents-->closed",3,null,'info')
 			}
 		}    
-		if (theWindows && theWindows.currentContact.contains('open')) {
+		if (theWindows && theWindows*.currentContact.contains('open')) {
 			vents = 'closed'	// but if a window is open, close the vents
         	LOG("${(theWindows.size()>1)?'A':'The'} window/contact is open",3,null,'info')
     	}
