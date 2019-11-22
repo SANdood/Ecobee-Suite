@@ -34,8 +34,9 @@
  *	1.7.11 - Check both hasCapability('switchLevel') & hasCommand('setLevel')
  *	1.7.12 - Fix typo in ventsOn(); set 100 instead of 99
  *	1.7.13 - Optimized checkTemperature() to avoid timeout errors on ST
+ *	1.7.14 - Added maximumVentLevel and fanOnlyState; more optimizations
  */
-String getVersionNum() 		{ return "1.7.13" }
+String getVersionNum() 		{ return "1.7.14" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -60,6 +61,7 @@ preferences {
 def mainPage() {
 	boolean ST = isST
 	boolean HE = !ST
+    def vc = 0			// vent counter
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
@@ -108,14 +110,19 @@ def mainPage() {
         		paragraph("Specified Econet, Keen and/or 'generic' dimmer/switch-controlled vents will be opened until target temperature is achieved, and then closed")
 				input(name: "theEconetVents", type: "${ST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, 
 					  submitOnChange: true)
+                vc = settings?.theEconetVents.size()
 				input(name: "theKeenVents", type: "${ST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", required: false, 
 					  multiple:true, submitOnChange: true)
+            	vc = vc + settings?.theKeenVents.size()
                 input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", required: false, multiple: true, 
 					  submitOnChange: true)
+                vc = vc + settings?.theGenericVents.size()
 				input(name: "theGenericSwitches", type: 'capability.switch', title: "Control which Switch(es)?", required: false, multiple: true, submitOnChange: true)
+                vc = vc + settings?.theGenericVents.size()
             	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents ) {
             		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage.")
             		input(name: "minimumVentLevel", type: "number", title: "Minimum vent level when closed?", required: true, defaultValue:10, description: '10', range: "0..100")
+                    input(name: "maximumVentLevel", type: "number", title: "Maximum vent level when open?", required: true, defaultValue:100, description: '100', range: "0..100")
             	}
 				if (HE) paragraph ''
         	}
@@ -141,16 +148,19 @@ def mainPage() {
 					input(name: "heatingSetpoint", type: "decimal", title: "Target heating setpoint?", description: 'Tap to choose...', required: true)
 					input(name: "coolingSetpoint", type: "decimal", title: "Target cooling setpoint?", description: 'Tap to choose...', required: true)
 				} else {
-                	input(name: "heatOffset", type: "decimal", title: "Heating differential?", defaultValue: 0.0, description: "0.0", required: true, range: "-10..10")
-					input(name: "coolOffset", type: "decimal", title: "Cooling differential?", defaultValue: 0.0, description: "0.0", required: true, range: "-10..10")
+                	input(name: "heatOffset", type: "decimal", title: "Heating differential?", defaultValue: 0.0,/* description: "0.0",*/ required: true, range: "-10..10")
+					input(name: "coolOffset", type: "decimal", title: "Cooling differential?", defaultValue: 0.0,/* description: "0.0",*/ required: true, range: "-10..10")
 				}
-				input(name: 'closedFanOnly', type: 'bool', title: "Close the vents while HVAC is 'fan only'?", defaultValue: false)
+				if (false) input(name: 'closedFanOnly', type: 'bool', title: "Close the vent${vc>1?'s':''} while HVAC is 'fan only'?", defaultValue: false)
+                def foDefault = settings?.closedFanOnly != null ? (settings.closedFanOnly ? 'closed' : 'unchanged') : 'unchanged'
+                input(name: 'fanOnlyState', type: 'enum', title: "Vent state during 'Fan Only' operation?", required: true, submitOnChange: true, default: foDefault,
+                	  options: ['open', 'closed', 'unchanged'])
 				if (HE) paragraph ''
 			}
         } else { 
         	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents || settings.theGenericSwitches) {
             	section( title: (HE?'<b>':'') + "Disabled Vent State" + (HE?'</b>':'')) {
-            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', description: 'Tap to choose...', options:[open: 'open/on',closed: 'closed/off',unchanged: 'unchanged'], 
+            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', options:[open: 'open/on',closed: 'closed/off',unchanged: 'unchanged'], 
 						  required: true, multiple: false, defaultValue: 'closed')
 					if (HE) paragraph ''
                 }
@@ -217,7 +227,7 @@ def initialize() {
 
 void changeHandler(evt) {
 	updateTheVents()
-	runIn( 2, checkAndSet, [overwrite: true])
+	runIn( 3, checkAndSet, [overwrite: true])		// collapse multiple interelated events into a single thread
 }
 
 void checkAndSet() {
@@ -225,61 +235,80 @@ void checkAndSet() {
 }
 
 String checkTemperature() {
-	// Be smarter if we are in Smart Recovery mode: follow the thermostat's temperature instead of watching the current setpoint. Otherwise the room won't get the benefits of heat/cool
-    // Smart Recovery. Also, we add the heat/cool differential to try and get ahead of the Smart Recovery curve (otherwise we close too early or too often)
-    // 
-	// boolean ST = atomicState.isST
-	// def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
-   	String smarter = settings.theThermostat.currentValue('thermostatOperatingStateDisplay')
-    boolean beSmart = (smarter?.contains('mart'))	// "(Smart Recovery)"
-	String cOpState = theThermostat.currentValue('thermostatOperatingState')
-	def cTemperature = theThermostat.currentTemperature
-	def coolSP = theThermostat.currentValue('coolingSetpoint')
-	def heatSP = theThermostat.currentValue('heatingSetpoint')
-	String cMode = theThermostat.currentValue('thermostatMode')
-	def cTemp = getAverageTemperature()
-	def currentStatus = [smarter: smarter, beSmart: beSmart, opState: cOpState, mode: cMode, temperature: cTemp, coolSP: coolSP, heatSP: heatSP]
-	if (atomicState.currentStatus && (atomicState.currentStatus == currentStatus)) { LOG("Status unchanged...",3,null,'info'); return; }	// ignore - identical to last time
+	boolean ST = atomicState.isST
     
-	atomicState.currentStatus = currentStatus
-	LOG("currentStatus: ${currentStatus}",3,null,'info')
-	//info currentStatus: [smarter:heating, opState:heating, mode:heat, temperature:18.8, coolSP:27.2, heatSP:22.5]
-    
-	// LOG("Current Operating State ${cOpState}",3,null,'info')
-    def offset 
-	String vents = ''			// if not heating/cooling/fan, then no change to current vents
-    if (cTemp != null) {	// only if valid temperature readings (Ecosensors can return "unknown")
+    def cTemp = getAverageTemperature()
+    if (cTemp != null) {		// only if valid temperature readings (Ecosensors can return "unknown")
+        // Be smarter if we are in Smart Recovery mode: follow the thermostat's temperature instead of watching the current setpoint. Otherwise the room won't get the benefits of heat/cool
+        // Smart Recovery. Also, we add the heat/cool differential to try and get ahead of the Smart Recovery curve (otherwise we close too early or too often)
+
+        String smarter = 	ST ? theThermostat.currentValue('thermostatOperatingStateDisplay')	: theThermostat.currentValue('thermostatOperatingStateDisplay', true)
+        boolean beSmart = 	(smarter?.contains('mart'))	// "(Smart Recovery)"
+        String cOpState = 	ST ? theThermostat.currentValue('thermostatOperatingState') 		: theThermostat.currentValue('thermostatOperatingState', true)
+        def cTemperature = 	ST ? theThermostat.currentValue('temperature')						: theThermostat.currentValue('temperature', true)
+        def coolSP = 		ST ? theThermostat.currentValue('coolingSetpoint') 					: theThermostat.currentValue('coolingSetpoint', true)
+        def heatSP = 		ST ? theThermostat.currentValue('heatingSetpoint') 					: theThermostat.currentValue('heatingSetpoint', true)
+        String cMode = 		ST ? theThermostat.currentValue('thermostatMode') 					: theThermostat.currentValue('thermostatMode', true)
+        // def cTemp = getAverageTemperature()
+        def currentStatus = [smarter: smarter, beSmart: beSmart, opState: cOpState, mode: cMode, temperature: cTemp, coolSP: coolSP, heatSP: heatSP]
+        if (atomicState.currentStatus == currentStatus) { 
+            LOG("Status unchanged...",3,null,'info')
+            return 			// ignore - identical to last time
+        } else {
+            atomicState.currentStatus = currentStatus
+            LOG("currentStatus: ${currentStatus}",3,null,'info')
+        }
+        def offset 
+        String vents = 'unchanged'			// if not heating/cooling/fan, then no change to current vents
     	if ((cOpState == 'heating') || (cMode == 'heat')) {
         	offset = settings.heatOffset ?: 0.0
-    		def heatTarget = useThermostat ? ((beSmart && (cTemperature != null))? cTemperature + offset : theThermostat.currentValue('heatingSetpoint') + offset) : settings.heatingSetpoint
-        	if (beSmart && useThermostat) cTemp = cTemp - theThermostat.currentValue('heatDifferential')
+    		def heatTarget = useThermostat ? ((beSmart && (cTemperature != null)) ? cTemperature + offset : heatSP + offset) : settings.heatingSetpoint
+        	if (beSmart && useThermostat) {
+            	cTemp = cTemp - (ST ? theThermostat.currentValue('heatDifferential') : theThermostat.currentValue('heatDifferential', true))
+            }
 			vents = (heatTarget <= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°, ${beSmart?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
     	} else if ((cOpState == 'cooling') || (cMode == 'cool')) {
         	offset = settings.coolOffset ?: 0.0
-    		def coolTarget = useThermostat ? ((beSmart && (cTemperature != null)) ? cTemperature + offset : theThermostat.currentValue('coolingSetpoint') + offset) : settings.coolingSetpoint
-        	if (beSmart && useThermostat) cTemp = cTemp + theThermostat.currentValue('coolDifferential')
+    		def coolTarget = useThermostat ? ((beSmart && (cTemperature != null)) ? cTemperature + offset : coolSP + offset) : settings.coolingSetpoint
+        	if (beSmart && useThermostat) {
+            	cTemp = cTemp + (ST ? theThermostat.currentValue('coolDifferential') : theThermostat.currentValue('coolDifferential', true))
+            }
 			vents = (coolTarget >= cTemp) ? 'closed' : 'open'
         	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°, ${beSmart?'adjusted ':''}room temperature is ${cTemp}°",3,null,'info')
 		} else if (cOpState == 'idle') {
     		LOG("${theThermostat.displayName} is idle, room temperature is ${cTemp}°",3,null,'info')
-        	def currentMode = theThermostat.currentValue('thermostatMode')
+        	def currentMode = ST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
         	if (currentMode == 'cool') {
-        		def coolTarget = useThermostat ? theThermostat.currentValue('coolingSetpoint') : settings.coolingSetpoint
-            	vents = (coolTarget >= cTemp) ? 'closed' : 'open'
-        	} 
+        		def coolTarget = useThermostat ? coolSP : settings.coolingSetpoint
+            	vents = (coolTarget > cTemp) ? 'closed' : 'open'
+        	} else if (currentMode == 'heat') {
+            	def heatTarget = useThermostat ? heatSP : settings.heatingSetpoint
+                vents = (heatTarget < cTemp) ? 'closed' : 'open'
+            }
 		} else if (vents == '' && (cOpState == 'fan only')) {
-			if (!settings.closedFanOnly) {
-    			vents = 'unchanged'
-        		LOG("${theThermostat.displayName} is running fan only, room temperature is ${cTemp}°, vents-->unchanged",3,null,'info')
-			} else {
-				vents = 'closed'
-        		LOG("${theThermostat.displayName} is running fan only, room temperature is ${cTemp}°, vents-->closed",3,null,'info')
-			}
+        	if (!settings.fanOnlyState) {
+                if (!settings.closedFanOnly) {
+                    vents = 'unchanged'
+                    LOG("${theThermostat.displayName} is running 'Fan Only', room temperature is ${cTemp}°, vents-->unchanged",3,null,'info')
+                } else {
+                    vents = 'closed'
+                    LOG("${theThermostat.displayName} is running 'Fan Only', room temperature is ${cTemp}°, vents-->closed",3,null,'info')
+                }
+            } else {
+            	// New Fan Only selector is in use
+                vents = settings.fanOnlyState
+                LOG("${theThermostat.displayName} is running 'Fan Only', room temperature is ${cTemp}°, vents-->${settings?.fanOnlyState}",3,null,'info')
+            }
 		}    
-		if (theWindows && theWindows*.currentContact.contains('open')) {
-			vents = 'closed'	// but if a window is open, close the vents
-        	LOG("${(theWindows.size()>1)?'A':'The'} window/contact is open",3,null,'info')
+		if (vents == 'open') {
+        	if (settings.theWindows) {
+            	boolean openWindows = ST ? settings.theWindows*.currentValue('contact').contains('open') : settings.theWindows*.currentValue('contact', true).contains('open')
+                if (openWindows) {
+					vents = 'closed'	// but if a window is open, close the vents
+        			LOG("${(theWindows.size()>1)?'A':'The'} window/contact is open",3,null,'info')
+                }
+            }
     	}
 		LOG("Vents should be ${vents!=''?vents:'unchanged'}",3,null,'info')
 		//return vents
@@ -288,10 +317,12 @@ String checkTemperature() {
 }
 
 def getAverageTemperature() {
+	boolean ST = atomicState.isST
+    
 	def tTemp = 0.0G
     Integer i = 0
 	settings.theSensors.each {
-		def t = it.currentTemperature
+		def t = ST ? it.currentValue('temperature') : it.currentValue('temperature', true)
 		if (t != null) {
         	tTemp += t as BigDecimal
             i++
@@ -311,7 +342,26 @@ void setTheVents(ventState) {
         allVentsOpen()
     } else if (ventState == 'closed') {
         allVentsClosed()
-	}
+	} else if (ventState == 'unchanged') {
+    	boolean ST = atomicState.isST	
+    	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
+        def ventSwitch = ST ? theVents[0].currentValue('switch') : theVents[0].currentValue('switch', true) // assumption: all vents are in the same state
+        if (ventSwitch == 'on') {
+            ventState = 'open'
+        	def hasLevel = theVents[0].hasAttribute('level')
+            if (hasLevel) {
+        		def currentLevel = (ST ? theVents[0].currentValue('level') : theVents[0].currentValue('level', true))?.toInteger()
+        		if (currentLevel == minimumVentLevel.toInteger()) {
+                	// while physically 'open', we are set to the minimum vent level, so we are logically 'closed'
+	            	ventState = 'closed'
+                }
+           	}
+        } else {
+        	// assert ventSwitch == 'off'
+        	ventState = 'closed'
+        }
+        LOG("setTheVents('unchanged'), prior ventState: ${atomicState.ventState}, new ventState: ${ventState}",3,null,'trace')
+    }
 	if (ventState) atomicState.ventState = ventState
 	updateMyLabel()
 	runIn(2, updateTheVents, [overwrite: true])
@@ -320,11 +370,11 @@ void setTheVents(ventState) {
 void updateTheVents() {
 	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
     theVents.each {
-		if (it.hasCapability('Refresh')) {
+		if (it.hasCommand('refresh')) {
     		it.refresh()
-    	} else if (it.hasCapability('Polling')) {
+    	} else if (it.hasCommand('poll')) {
     		it.poll()
-    	} else if (it.hasCapability('Health Check')) {
+    	} else if (it.hasCommand('ping')) {
     		it.ping()
         }
     }
@@ -333,43 +383,52 @@ void updateTheVents() {
 void allVentsOpen() {
 	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
     //LOG("Opening the vent${theVents.size()>1?'s':''}",3,null,'info')
-	theVents?.each { ventOn(it) }
+	theVents.each { ventOn(it) }
 }
 
 void allVentsClosed() {
 	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
     //LOG("Closing the vent${theVents.size()>1?'s':''}",3,null,'info')
-	theVents?.each { ventOff(it) } 
+	theVents.each { ventOff(it) } 
 }
 
 void ventOff( theVent ) {
+	boolean ST = atomicState.isST	
+    
 	def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
     if (minimumVentLevel.toInteger() == 0) {
-      	if (theVent?.currentSwitch == 'on') {
+    	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+      	if (currentSwitch == 'on') {
 			if (hasSetLevel) {
         		theVent.off()
                 if (theVent.hasCommand('refresh')) theVent.refresh()
-				if (theVent.currentValue('level') != 0) theVent.setLevel(0)
+                def currentLevel = ST ? theVent.currentValue('level') : theVent.currentValue('level', true)
+				if (currentLevel?.toInteger() != 0) theVent.setLevel(0) // Belt & suspenders - make sure the level is reset to 0
             	LOG("Closing ${theVent.displayName}",3,null,'info')
 			} else {
 				theVent.off()
 				LOG("Turning off ${theVent.displayName}",3,null,'info')
 			}
+            if (theVent.hasCommand('refresh')) theVent.refresh()
         } else {
         	LOG("${theVent.displayName} is already closed/off",3,null,'info')
         }
     } else {
 		if (hasSetLevel) {
-			if (theVent?.currentValue('level').toInteger() != minimumVentLevel.toInteger()) {
+        	def currentLevel = ST ? theVent.currentValue('level') : theVent.currentValue('level', true)
+			if (currentLevel?.toInteger() != minimumVentLevel.toInteger()) {
         		theVent.setLevel(minimumVentLevel.toInteger())	// make sure none of the vents are less than the specified minimum
             	LOG("Closing ${theVent.displayName} to ${minimumVentLevel}%",3,null,'info')
+                if (theVent.hasCommand('refresh')) theVent.refresh()
         	} else {
-        		LOG("${theVent.displayName} is already closed",3,null,'info')
+        		LOG("${theVent.displayName} is already closed to ${minimumVentLevel}%",3,null,'info')
         	}
 		} else {
-			if (theVent?.currentSwitch == 'on') {
+        	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+			if (currentSwitch == 'on') {
 				theVent.off()
 				LOG("Turning off ${theVent.displayName}",3,null,'info')
+                if (theVent.hasCommand('refresh')) theVent.refresh()
 			} else {
 				LOG("${theVent.displayName} is already off",3,null,'info')
 			}
@@ -378,25 +437,49 @@ void ventOff( theVent ) {
 }
 
 void ventOn( theVent ) {
+	boolean ST = atomicState.isST
     boolean changed = false
-    //if (theVent?.currentSwitch == 'off') {
-    //	theVent.on()
-    //    changed = true
-    //}
     def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
-	if (hasSetLevel) {
-    	if (theVent.currentValue('level').toInteger() < 99) { theVent.setLevel(100) } //some vents don't handle '100'
-        if (theVent.hasCommand('refresh')) theVent.refresh()
-        if (theVent.currentSwitch != 'on') theVent.on()						// setLevel will turn on() for some devices, but not all
-        changed = true
+    def maximumVentLevel = (settings.maximumVentLevel ?: 100) as Integer
+	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+    def currentLevel = hasSetLevel ? ( ST ? theVent.currentValue('level') : theVent.currentValue('level', true) ) : ((currentSwitch == 'on') ? 100 : 0)
+    if (maximumVentLevel >= 99) {
+      	if (currentSwitch == 'off') {
+            if (hasSetLevel) {
+                if (currentLevel.toInteger() < 99) { theVent.setLevel(100) } //some vents don't handle '100'
+                if (theVent.hasCommand('refresh')) theVent.refresh()
+                currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+                if (currentSwitch != 'on') theVent.on()						// setLevel will turn on() for some devices, but not all
+                changed = true
+            } else {
+                theVent.on()
+                changed = true
+            }
+        	if (changed) {
+            	if (theVent.hasCommand('refresh')) theVent.refresh()
+            	LOG("${hasSetLevel?'Opening':'Turning on'} ${theVent.displayName}",3,null,'info')
+        	} else {
+            	LOG("${theVent.displayName} is already ${hasSetLevel?'open':'on'}",3,null,'info')
+        	}
+        }
     } else {
-    	theVent.on()
-        changed = true
-    }
-    if (changed) {
-		LOG("${hasSetLevel?'Opening':'Turning on'} ${theVent.displayName}",3,null,'info')
-    } else {
-		LOG("${theVent.displayName} is already ${hasSetLevel?'open':'on'}",3,null,'info')
+    	// New feature: use configured maximum level
+        if (hasSetLevel) {
+        	if (currentLevel.toInteger() != maximumVentLevel) {
+        		theVent.setLevel(maximumVentLevel)	// make sure none of the vents are less than the specified minimum
+            	LOG("Opening ${theVent.displayName} to ${maximumVentLevel}%",3,null,'info')
+                if (theVent.hasCommand('refresh')) theVent.refresh()
+        	} else {
+        		LOG("${theVent.displayName} is already open to ${maximumVentLevel}%",3,null,'info')
+        	}
+		} else {
+			if (currentSwitch == 'off') {
+				theVent.on()
+				LOG("Turning on ${theVent.displayName}",3,null,'info')
+			} else {
+				LOG("${theVent.displayName} is already on",3,null,'info')
+			}
+        }
     }
 }
 // Helper Functions
