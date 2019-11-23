@@ -35,8 +35,9 @@
  *	1.7.12 - Fix typo in ventsOn(); set 100 instead of 99
  *	1.7.13 - Optimized checkTemperature() to avoid timeout errors on ST
  *	1.7.14 - Added maximumVentLevel and fanOnlyState; more optimizations
+ *	1.7.15 - More bugs squashed, settings page cleaned up
  */
-String getVersionNum() 		{ return "1.7.14" }
+String getVersionNum() 		{ return "1.7.15" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -62,6 +63,7 @@ def mainPage() {
 	boolean ST = isST
 	boolean HE = !ST
     def vc = 0			// vent counter
+    def unit = getTemperatureScale()
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
@@ -90,71 +92,98 @@ def mainPage() {
                 	atomicState.appDisplayName = app.label
                 }
             }
-        	if (settings.tempDisable) {
-            	paragraph "WARNING: Temporarily Paused - re-enable below."
-            } else {
-            	paragraph("Select temperature sensors for this Helper. If you select multiple sensors, the temperature will be averaged across all of them.") 
+        }
+        
+        if (settings.tempDisable) {
+           	section(title: (HE?'<b>':'') + "WARNING: Temporarily Paused - re-enable below." + (HE?'</b>':'')) {}
+        } else {
+        	section(title: (HE?'<b>':'') + "Temperature Sensors" + (HE?'</b>':'')) {
+        		paragraph("Select temperature sensors for this Helper. If you select multiple sensors, the temperature will be averaged across all of them.") 
         		input(name: "theSensors", type:"capability.temperatureMeasurement", title: "Use which Temperature Sensor(s)", required: true, multiple: true, submitOnChange: true)
 				if (settings.theSensors) paragraph "The current ${settings.theSensors?.size()>1?'average ':''}temperature for ${settings.theSensors?.size()==1?'this sensor':'these sensors'} is ${getAverageTemperature()}°"
             }
 		}
         
-        if (!settings.tempDisable && settings?.theSensors) {
-       		section(title: (HE?'<b>':'') + "Smart Vents & Switches: Windows (optional)" + (HE?'</b>':'')) {
-        		paragraph("Windows will temporarily deactivate Smart Vents while they are open")
-            	input(name: "theWindows", type: "capability.contactSensor", title: "Which Window contact sensor(s)? (optional)", required: false, multiple: true)
-				if (HE) paragraph ''
-        	}
-       
-        	section(title: (HE?'<b>':'') + "Smart Vents & Switches: Automated Vents" + (HE?'</b>':'')) {
-        		paragraph("Specified Econet, Keen and/or 'generic' dimmer/switch-controlled vents will be opened until target temperature is achieved, and then closed")
-				input(name: "theEconetVents", type: "${ST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", required: false, multiple: true, 
-					  submitOnChange: true)
-                vc = settings?.theEconetVents.size()
-				input(name: "theKeenVents", type: "${ST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", required: false, 
-					  multiple:true, submitOnChange: true)
-            	vc = vc + settings?.theKeenVents.size()
-                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", required: false, multiple: true, 
-					  submitOnChange: true)
-                vc = vc + settings?.theGenericVents.size()
-				input(name: "theGenericSwitches", type: 'capability.switch', title: "Control which Switch(es)?", required: false, multiple: true, submitOnChange: true)
-                vc = vc + settings?.theGenericVents.size()
+        if (!settings.tempDisable && settings?.theSensors) {       
+        	section(title: (HE?'<b>':'') + "Automated Vents" + (HE?'</b>':'')) {
+        		paragraph("Selected vents will be opened while the HVAC system is heating or cooling until target temperature is achieved, and then closed")
+				input(name: "theEconetVents", type: "${ST?'device.econetVent':'device.EconetVent'}", title: "Control which EcoNet Vent(s)?", multiple: true, submitOnChange: true, 
+                	  hideWhenEmpty: true, required: (!settings.theKeenVents && ! settings.theGenericVents && !settings.theGenericSwitches))
+                if (settings.theEconetVents) vc = settings.theEconetVents.size()
+				input(name: "theKeenVents", type: "${ST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: "Control which Keen Home Smart Vent(s)?", multiple:true, 
+                	  submitOnChange: true, hideWhenEmpty: true, required: (!settings.theEconetVents && ! settings.theGenericVents && !settings.theGenericSwitches))
+            	if (settings.theKeenVents) vc = vc + settings.theKeenVents.size()
+                input(name: "theGenericVents", type: 'capability.switchLevel', title: "Control which Generic (dimmer) Vent(s)?", multiple: true, submitOnChange: true, hideWhenEmpty: true, 
+                	  required: (!settings.theEconetVents && ! settings.theKeenVents && !settings.theGenericSwitches))
+                if (settings.theGenericVents) vc = vc + settings.theGenericVents.size()
+				input(name: "theGenericSwitches", type: 'capability.switch', title: "Control which Switch(es)?", multiple: true, submitOnChange: true, hideWhenEmpty: true,
+                	  required: (!settings.theEconetVents && ! settings.theKeenVents && !settings.theGenericVents))
+                if (settings.theGenericSwitches) vc = vc + settings.theGenericSwitches.size()
+                def s = ((vc == 0) || (vc > 1)) ? 's' : ''
+                paragraph "${vc} vent${s}/switch${s=='s'?'es':''} selected"
+                
             	if (settings.theEconetVents || settings.theKeenVents || settings.theGenericVents ) {
-            		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage.")
+            		paragraph("Fully closing too many vents at once may be detrimental to your HVAC system. You may want to define a minimum closed percentage")
             		input(name: "minimumVentLevel", type: "number", title: "Minimum vent level when closed?", required: true, defaultValue:10, description: '10', range: "0..100")
                     input(name: "maximumVentLevel", type: "number", title: "Maximum vent level when open?", required: true, defaultValue:100, description: '100', range: "0..100")
             	}
 				if (HE) paragraph ''
         	}
+            
+            section(title: (HE?'<b>':'') + "Windows & Doors" + (HE?'</b>':'')) {
+        		paragraph("Open Windows and Doors will temporarily deactivate (close) the vent${vc>1?'s':''}")
+            	input(name: "theWindows", type: "capability.contactSensor", title: "Monitor these Window/Door contact sensor(s)? (optional)", required: false, multiple: true)
+				if (HE) paragraph ''
+        	}
         
-			section(title: (HE?'<b>':'') + "Smart Vents & Switches: Thermostat" + (HE?'</b>':'')) {
+			section(title: (HE?'<b>':'') + "Thermostat" + (HE?'</b>':'')) {
 				paragraph("Specify which thermostat to monitor for heating/cooling events")
 				input(name: "theThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select thermostat",
 					  multiple: false, required: true, submitOnChange: true)
 				if (HE) paragraph ''
 			}
 		
-			section(title: (HE?'<b>':'') + "Smart Vents: Target Temperature" + (HE?'</b>':'')) {
+			section(title: (HE?'<b>':'') + "Target Temperature" + (HE?'</b>':'')) {
+            	def cSetpoint
+				def cHeatSetpoint
+				def cCoolSetpoint
+				def cMode
+                def cProgram
             	if (settings.useThermostat && settings.theThermostat) {
-					def cSetpoint = 	ST ? settings.theThermostat.currentValue('thermostatSetpoint') : settings.theThermostat.currentValue('thermostatSetpoint', true)
-					def cHeatSetpoint = ST ? settings.theThermostat.currentValue('heatingSetpoint') : settings.theThermostat.currentValue('heatingSetpoint', true)
-					def cCoolSetpoint = ST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)
-					def cMode = 		ST ? settings.theThermostat.currentValue('thermostatMode') : settings.theThermostat.currentValue('thermostatMode', true)
-					paragraph("${settings.theThermostat} is in '${cMode}' mode, heatingSetpoint: ${cHeatSetpoint}°, coolingSetpoint: ${cCoolSetpoint}°, thermostatSetpoint: ${cSetpoint}°.")
+					cSetpoint = 	ST ? settings.theThermostat.currentValue('thermostatSetpoint') 	: 	settings.theThermostat.currentValue('thermostatSetpoint', true)
+					cHeatSetpoint = ST ? settings.theThermostat.currentValue('heatingSetpoint') 	: 	settings.theThermostat.currentValue('heatingSetpoint', true)
+					cCoolSetpoint = ST ? settings.theThermostat.currentValue('coolingSetpoint') 	: 	settings.theThermostat.currentValue('coolingSetpoint', true)
+					cMode = 		ST ? settings.theThermostat.currentValue('thermostatMode') 		: 	settings.theThermostat.currentValue('thermostatMode', true)
+                    cProgram = 		ST ? settings.theThermostat.currentValue('currentProgramName') 	: 	settings.theThermostat.currentValue('currentProgramName', true)
+					paragraph("${settings.theThermostat} is in '${cMode}' mode running the '${cProgram}' program. The heating setpoint is ${cHeatSetpoint}°${unit}, " +
+                    		  "the cooling setpoint is ${cCoolSetpoint}°${unit}, and the thermostat setpoint is ${cSetpoint}°${unit}")
                 }
-				input(name: "useThermostat", type: "bool", title: "Follow setpoints on thermostat${settings.theThermostat?' '+settings.theThermostat.displayName:''}?", required: true, 
+				input(name: "useThermostat", type: "bool", title: "Follow the setpoints on ${settings.theThermostat?' '+settings.theThermostat.displayName:'the thermostat'}?", required: true, 
 					  defaultValue: true, submitOnChange: true)
+                def heatAt = null
+                def coolAt = null
 				if (!settings.useThermostat) {
-					input(name: "heatingSetpoint", type: "decimal", title: "Target heating setpoint?", description: 'Tap to choose...', required: true)
-					input(name: "coolingSetpoint", type: "decimal", title: "Target cooling setpoint?", description: 'Tap to choose...', required: true)
+					input(name: "heatingSetpoint", type: "decimal", title: "Target heating setpoint?", required: true, submitOnChange: true)
+					input(name: "coolingSetpoint", type: "decimal", title: "Target cooling setpoint?", required: true, submitOnChange: true)
+                    if (settings.heatingSetpoint) heatAt = settings.heatingSetpoint
+                    if (settings.coolingSetpoint) coolAt = settings.coolingSetpoint
 				} else {
-                	input(name: "heatOffset", type: "decimal", title: "Heating differential?", defaultValue: 0.0,/* description: "0.0",*/ required: true, range: "-10..10")
-					input(name: "coolOffset", type: "decimal", title: "Cooling differential?", defaultValue: 0.0,/* description: "0.0",*/ required: true, range: "-10..10")
+                	input(name: "heatOffset", type: "decimal", title: "Heating differential?", defaultValue: 0.0, required: true, range: "-10..10", submitOnChange: true)
+					input(name: "coolOffset", type: "decimal", title: "Cooling differential?", defaultValue: 0.0, required: true, range: "-10..10", submitOnChange: true)
+                    if (!settings.heatOffset) {settings.heatOffset = 0.0; app.updateSetting('heatOffset', 0.0); }
+                    if (!settings.coolOffset) {settings.coolOffset = 0.0; app.updateSetting('coolOffset', 0.0); }
+                    if (cHeatSetpoint && (settings.heatOffset != null)) heatAt = cHeatSetpoint + settings.heatOffset
+                    if (cCoolSetpoint && (settings.coolOffset != null)) coolAt = cCoolSetpoint + settings.coolOffset
 				}
-				if (false) input(name: 'closedFanOnly', type: 'bool', title: "Close the vent${vc>1?'s':''} while HVAC is 'fan only'?", defaultValue: false)
-                def foDefault = settings?.closedFanOnly != null ? (settings.closedFanOnly ? 'closed' : 'unchanged') : 'unchanged'
-                input(name: 'fanOnlyState', type: 'enum', title: "Vent state during 'Fan Only' operation?", required: true, submitOnChange: true, default: foDefault,
-                	  options: ['open', 'closed', 'unchanged'])
+                if (heatAt && coolAt) paragraph "In the '${cProgram}' program, the vent${vc>1?'s':''} will open when the observed temperature at the selected " +
+                								"sensor${settings.theSensors?.size()>1?'s':''} is less than ${heatAt}°${unit} or more than ${coolAt}°${unit}"
+                
+    		}
+            section(title: (HE?'<b>':'') + "Fan Only State" + (HE?'</b>':'')) {
+				//if (false) input(name: 'closedFanOnly', type: 'bool', title: "Close the vent${vc>1?'s':''} while HVAC is 'fan only'?", defaultValue: false)
+                String foDefault = (settings?.closedFanOnly != null) ? (settings.closedFanOnly ? 'closed' : 'unchanged') : 'unchanged'
+                input(name: 'fanOnlyState', type: 'enum', title: "Vent state during 'Fan Only' operation?", required: true, submitOnChange: true, defaultValue: foDefault,
+                	  options: ['open', 'closed', 'unchanged'], multiple: false)
 				if (HE) paragraph ''
 			}
         } else { 
@@ -192,7 +221,20 @@ void uninstalled() {
 }
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
-	
+    boolean ST = atomicState.isST
+    boolean HE = !ST
+
+    // Housekeeping
+    if (settings.closedFanOnly != null) {
+    	if (settings.fanOnlyState == null) {
+        	def vs = settings.closedFanOnly ? 'closed' : 'unchanged'
+            settings.fanOnlyState = vs
+            app.updateSetting('fanOnlyState', vs)
+        }
+        settings.closedFanOnly = null
+        if (HE) app.removeSetting('closedFanOnly')
+    }
+    atomicState.version = getVersionLabel()
     atomicState.scheduled = false
     // Now, just exit if we are disabled...
 	if (settings.tempDisable) {
@@ -231,6 +273,10 @@ void changeHandler(evt) {
 }
 
 void checkAndSet() {
+	if (!atomicState.version || (atomicState.version != getVersionLabel())) {
+    	LOG('Helper version changed, re-initializing...',1,null,'info')
+    	updated()
+    }
 	setTheVents(checkTemperature())
 }
 
