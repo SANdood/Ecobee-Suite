@@ -30,8 +30,9 @@
  *	1.7.14 - Clean up appLabel in sendMessage(), eliminate duplicate currentProgram/currentProgramName subscriptions
  *	1.7.15 - Remove fanMode setting, fix fanMinOnTime to not break the hold
  *	1.7.16 - Added option to disable local display of log.debug() logs, support Notification devices on ST
+ *	1.7.17 - Option to skip notification if Thermostat Mode is 'Off'
  */
-String getVersionNum() { return "1.7.16" }
+String getVersionNum() { return "1.7.17" }
 String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -224,6 +225,8 @@ def mainPage() {
 					
 					paragraph ''
 					input(name: "notify", type: "bool", title: "Notify on Actions?", required: true, defaultValue: false, submitOnChange: true)
+                    if (settings.notify) input(name: "noOffNotify", type: "bool", title: "Suppress notifications if Thermostat Mode is Off?", required: true, defaultValue: false, submitOnChange: true)
+                    
 					paragraph (HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n")
                 } // End of "Actions" section
 				
@@ -794,83 +797,91 @@ def getThermostatModes() {
 
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
-    if (settings.notify) {
-        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-		if (atomicState.isST) {
-			if (settings.notifiers != null) {
-				settings.notifiers.each {									// Use notification devices (if any)
-					it.deviceNotification(msg)
-				}
-			}
-			if (settings.phone) { // check that the user did select a phone number
-				if ( settings.phone.indexOf(";") > 0){
-					def phones = settings.phone.split(";")
-					for ( def i = 0; i < phones.size(); i++) {
-						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-					}
-				} else {
-					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)				// Only to SMS contact
-				}
-			} 
-			if (settings.pushNotify) {
-				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)										// Push to everyone
-			}
-			if (settings.speak) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak( "From " + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText( "From " + msg )
-					}
-				}
-			}
-		} else {		// isHE
-			if (settings.notifiers != null) {
-				settings.notifiers.each {							// Use notification devices on Hubitat
-					it.deviceNotification(msg)
-				}
-			}
-			if (settings.phone != null) {
-				if ( settings.phone.indexOf(",") > 0){
-					def phones = phone.split(",")
-					for ( def i = 0; i < phones.size(); i++) {
-						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-					}
-				} else {
-					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
-				}
-			}
-			if (settings.speak) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak( "From " + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText( "From " + msg )
-					}
-				}
-			}
-			
-		}
-    }
-	// Always send to Hello Home / Location Event log
+    
+    	// Always send to Hello Home / Location Event log
 	if (atomicState.isST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
+    
+    if (!settings.notify) return
+    
+    if (settings.noOffNotify && myThermostats*.currentValue('thermostatMode').contains('off')) {
+    	LOG("Skipping notification because all thermostats are Off and Off Notifications are disabled",2, null, "info")
+        return
+    }
+    
+    String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    if (atomicState.isST) {
+        if (settings.notifiers != null) {
+            settings.notifiers.each {									// Use notification devices (if any)
+                it.deviceNotification(msg)
+            }
+        }
+        if (settings.phone) { // check that the user did select a phone number
+            if ( settings.phone.indexOf(";") > 0){
+                def phones = settings.phone.split(";")
+                for ( def i = 0; i < phones.size(); i++) {
+                    LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+                    sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
+                }
+            } else {
+                LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+                sendSmsMessage(settings.phone.trim(), msg)				// Only to SMS contact
+            }
+        } 
+        if (settings.pushNotify) {
+            LOG("Sending Push to everyone", 3, null, 'warn')
+            sendPushMessage(msg)										// Push to everyone
+        }
+        if (settings.speak) {
+            if (settings.speechDevices != null) {
+                settings.speechDevices.each {
+                    it.speak( "From " + msg )
+                }
+            }
+            if (settings.musicDevices != null) {
+                settings.musicDevices.each {
+                    it.setLevel( settings.volume )
+                    it.playText( "From " + msg )
+                }
+            }
+        }
+    } else {		// isHE
+        if (settings.notifiers != null) {
+            settings.notifiers.each {							// Use notification devices on Hubitat
+                it.deviceNotification(msg)
+            }
+        }
+        if (settings.phone != null) {
+            if ( settings.phone.indexOf(",") > 0){
+                def phones = phone.split(",")
+                for ( def i = 0; i < phones.size(); i++) {
+                    LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+                    sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
+                }
+            } else {
+                LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+                sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
+            }
+        }
+        if (settings.speak) {
+            if (settings.speechDevices != null) {
+                settings.speechDevices.each {
+                    it.speak( "From " + msg )
+                }
+            }
+            if (settings.musicDevices != null) {
+                settings.musicDevices.each {
+                    it.setLevel( settings.volume )
+                    it.playText( "From " + msg )
+                }
+            }
+        }
+
+    }
+
 }
 
 void updateMyLabel() {
