@@ -1,5 +1,5 @@
 /**
- *	Based on original code Copyright 2015 SmartThings
+ *	Based on original code Copyright 2015 SmartThings 
  *	Additional changes Copyright 2016 Sean Kendall Schneyer
  *	Additional changes Copyright 2017, 2018, 2019 Barry A. Burke
  *
