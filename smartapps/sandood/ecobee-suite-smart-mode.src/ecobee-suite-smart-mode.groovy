@@ -36,8 +36,9 @@
  *	1.7.20 - Cleaned up Notifications settings, removed SMS for HE
  *	1.7.21 - Added customized notifications, fixed missing notification on mode change
  *	1.7.22 - Fixed typo in insideChangeHandler()
+ *	1.7.23 - Fixed setting.* typos
  */
-String getVersionNum() { return "1.7.22" }
+String getVersionNum() { return "1.7.23" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -919,7 +920,7 @@ def temperatureUpdate( BigDecimal temp ) {
                 	desiredMode = 		settings.betweenMode
 					desiredProgram = 	settings.betweenSchedule
                     if (settings.betweenSetpoints) {
-            			changeSetpoints(settings.betweenProgram, settings.betweenHeatTemp, setting.betweenCoolTemp)
+            			changeSetpoints(settings.betweenProgram, settings.betweenHeatTemp, settings.betweenCoolTemp)
             		}
             		atomicState.aboveChanged = false
             		atomicState.betweenChanged = true
@@ -929,7 +930,7 @@ def temperatureUpdate( BigDecimal temp ) {
                 	desiredMode = 		settings.aboveMode
 					desiredProgram = 	settings.aboveProgram
                     if (settings.aboveSetpoints) {
-            			changeSetpoints(settings.aboveProgram, settings.aboveHeatTemp, setting.aboveCoolTemp)
+            			changeSetpoints(settings.aboveProgram, settings.aboveHeatTemp, settings.aboveCoolTemp)
             		}
                     atomicState.aboveChanged = true
                     atomicState.betweeChanged = false
@@ -952,7 +953,7 @@ def temperatureUpdate( BigDecimal temp ) {
 			desiredMode = 		settings.betweenMode
 			desiredProgram = 	settings.betweenSchedule
             if (settings.betweenSetpoints) {
-            	changeSetpoints(settings.betweenProgram, settings.betweenHeatTemp, setting.betweenCoolTemp)
+            	changeSetpoints(settings.betweenProgram, settings.betweenHeatTemp, settings.betweenCoolTemp)
             }
             atomicState.aboveChanged = false
             atomicState.betweenChanged = true
