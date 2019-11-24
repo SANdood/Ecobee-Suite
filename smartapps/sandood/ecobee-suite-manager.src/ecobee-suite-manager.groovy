@@ -60,8 +60,9 @@
  *	1.7.36 - Fixed child.label/child.name
  *	1.7.37 - If Auto mode is disabled, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint in setPrgramSetpoints()
  *	1.7.38 - Added queued requests to climateChange actions (setProgramSetpoints, addSensorToProgram, deleteSensorFromProgram)
+ *	1.7.39 - Fixed type conversion error in setProgramSetpoints with null setpoint
  */
-String getVersionNum()		{ return "1.7.38" }
+String getVersionNum()		{ return "1.7.39" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -5116,8 +5117,8 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
 	// convert C temps to F
 	def isMetric = (getTemperatureScale() == "C")
 	// log.debug "hs: ${heatingSetpoint}, null? ${(heatingSetpoint != null)}, bigD? ${heatingSetpoint.isBigDecimal()}, *10: ${(heatingSetpoint * 10.0)}" // , ri: ${roundIt((heatingSetpoint * 10.0), 0)}"
-	def ht = ((heatingSetpoint != '') && heatingSetpoint.isBigDecimal() ) ? (roundIt((isMetric ? (cToF(heatingSetpoint.toBigDecimal()) * 10.0) : (heatingSetpoint.toBigDecimal() * 10.0)), 0)) : null		// better precision using BigDecimal round-half-up
-	def ct = ((coolingSetpoint != '') && coolingSetpoint.isBigDecimal() ) ? (roundIt((isMetric ? (cToF(coolingSetpoint.toBigDecimal()) * 10.0) : (coolingSetpoint.toBigDecimal() * 10.0)), 0)) : null
+	def ht = (heatingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(heatingSetpoint.toBigDecimal()) * 10.0) : (heatingSetpoint.toBigDecimal() * 10.0)), 0)) : null )		// better precision using BigDecimal round-half-up
+	def ct = (coolingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(coolingSetpoint.toBigDecimal()) * 10.0) : (coolingSetpoint.toBigDecimal() * 10.0)), 0)) : null )
 	// log.debug "ht: ${ht}, ct: ${ct}"
 	
 	// IFF autoHeatCoolFeatureEnabled, then enforce the minimum delta
