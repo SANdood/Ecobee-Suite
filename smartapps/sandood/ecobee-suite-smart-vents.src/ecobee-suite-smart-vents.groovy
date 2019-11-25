@@ -36,8 +36,9 @@
  *	1.7.13 - Optimized checkTemperature() to avoid timeout errors on ST
  *	1.7.14 - Added maximumVentLevel and fanOnlyState; more optimizations
  *	1.7.15 - More bugs squashed, settings page cleaned up
+ *	1.7.16 - Fixed vents not changing 
  */
-String getVersionNum() 		{ return "1.7.15" }
+String getVersionNum() 		{ return "1.7.16" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -284,6 +285,7 @@ String checkTemperature() {
 	boolean ST = atomicState.isST
     
     def cTemp = getAverageTemperature()
+    String vents = 'unchanged'			// if not heating/cooling/fan, then no change to current vents
     if (cTemp != null) {		// only if valid temperature readings (Ecosensors can return "unknown")
         // Be smarter if we are in Smart Recovery mode: follow the thermostat's temperature instead of watching the current setpoint. Otherwise the room won't get the benefits of heat/cool
         // Smart Recovery. Also, we add the heat/cool differential to try and get ahead of the Smart Recovery curve (otherwise we close too early or too often)
@@ -305,7 +307,6 @@ String checkTemperature() {
             LOG("currentStatus: ${currentStatus}",3,null,'info')
         }
         def offset 
-        String vents = 'unchanged'			// if not heating/cooling/fan, then no change to current vents
     	if ((cOpState == 'heating') || (cMode == 'heat')) {
         	offset = settings.heatOffset ?: 0.0
     		def heatTarget = useThermostat ? ((beSmart && (cTemperature != null)) ? cTemperature + offset : heatSP + offset) : settings.heatingSetpoint
@@ -384,6 +385,7 @@ def getAverageTemperature() {
 }
 
 void setTheVents(ventState) {
+log.debug "setTheVents(${ventState})"
 	if (ventState == 'open') {
         allVentsOpen()
     } else if (ventState == 'closed') {
