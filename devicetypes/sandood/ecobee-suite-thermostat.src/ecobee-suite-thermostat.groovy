@@ -53,9 +53,11 @@
  *	1.7.25 - Added arg typing for Hubitat, some more fanMinOnTime cleanup
  *	1.7.26 - Fixed thermostatHold in updateThermostatSetpoints()
  *	1.7.27 - Added support for display/update of Ecobee 4+ Audio settings, microphoneOn/Off, update attrs upon successful setEcobeeSettings()
- *	1.7.28 - Fixed typo in setProgramSetpoints(); if Auto mode is disabled, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint
+ *	1.7.28 - Fixed typo in setProgramSetpoints(); 
+ *	1.7.29 - if Auto mode is disabled for this thermostat, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint
+ *	1.7.30 - TESTING: Fixes for timeout errors in setProgramSetpoint()
  */
-String getVersionNum() 		{ return "1.7.28" }
+String getVersionNum() 		{ return "1.7.30" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -3233,17 +3235,20 @@ void cancelDemandResponse() {
 }
 
 // Climate change commands
-void setProgramSetpoints(programName, heatingSetpoint, coolingSetpoint) {
+void setProgramSetpoints(String programName, heatingSetpoint, coolingSetpoint) {
 	def scale = getTemperatureScale()
 	LOG("setProgramSetpoints( ${programName}, heatSP: ${heatingSetpoint}°${scale}, coolSP: ${coolingSetpoint}°${scale} )",2,null,'info')
-	def deviceId = getDeviceId()
-	if (parent.setProgramSetpoints( this, deviceId as String, programName as String, heatingSetpoint as String, coolingSetpoint as String)) {
+	String deviceId = getDeviceId()
+    String heatSP = heatingSetpoint ? heatingSetpoint.toString() : ""
+    String coolSP = coolingSetpoint ? coolingSetpoint.toString() : ""
+	if (parent.setProgramSetpoints( this, deviceId, programName, heatSP, coolSP)) {
+    	LOG("setProgramSetpoints() SUCCEEDED!!!",2,null,'trace')
     	String currentProgram = state.isST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
 		if ( currentProgram == programName) { 
-			def updates = []
-			if (coolingSetpoint) updates << [coolingSetpoint: coolingSetpoint]
-			if (heatingSetpoint) updates << [heatingSetpoint: heatingSetpoint]
-			if (updates != []) generateEvent(updates)
+			def updates = [:]
+			if (coolingSP) updates << [coolingSetpoint: coolingSP]
+			if (heatingSP) updates << [heatingSetpoint: heatingSP]
+			if (updates != [:]) generateEvent(updates)
 		}
 		LOG("setProgramSetpoints() - completed",3,null,'trace')
 	} else LOG("setProgramSetpoints() - failed",1,null,'warn')
