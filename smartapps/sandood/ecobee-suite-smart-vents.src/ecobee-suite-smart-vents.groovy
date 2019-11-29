@@ -37,8 +37,9 @@
  *	1.7.14 - Added maximumVentLevel and fanOnlyState; more optimizations
  *	1.7.15 - More bugs squashed, settings page cleaned up
  *	1.7.16 - Fixed vents not changing 
+ *	1.7.17 - Fixed vents not changing when both minLevel & maxLevel are set
  */
-String getVersionNum() 		{ return "1.7.16" }
+String getVersionNum() 		{ return "1.7.17" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -437,14 +438,15 @@ void allVentsOpen() {
 void allVentsClosed() {
 	def theVents = (settings.theEconetVents ?: []) + (settings.theKeenVents ?: []) + (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
     //LOG("Closing the vent${theVents.size()>1?'s':''}",3,null,'info')
-	theVents.each { ventOff(it) } 
+	theVents.each { ventOff(it) }
 }
 
 void ventOff( theVent ) {
 	boolean ST = atomicState.isST	
     
 	def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
-    if (minimumVentLevel.toInteger() == 0) {
+    def minVentLevel = (settings.minimumVentLevel ?: 0) as Integer
+    if (minVentLevel == 0) {
     	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
       	if (currentSwitch == 'on') {
 			if (hasSetLevel) {
@@ -457,26 +459,26 @@ void ventOff( theVent ) {
 				theVent.off()
 				LOG("Turning off ${theVent.displayName}",3,null,'info')
 			}
-            if (theVent.hasCommand('refresh')) theVent.refresh()
+            //if (theVent.hasCommand('refresh')) theVent.refresh()
         } else {
         	LOG("${theVent.displayName} is already closed/off",3,null,'info')
         }
     } else {
 		if (hasSetLevel) {
         	def currentLevel = ST ? theVent.currentValue('level') : theVent.currentValue('level', true)
-			if (currentLevel?.toInteger() != minimumVentLevel.toInteger()) {
-        		theVent.setLevel(minimumVentLevel.toInteger())	// make sure none of the vents are less than the specified minimum
-            	LOG("Closing ${theVent.displayName} to ${minimumVentLevel}%",3,null,'info')
-                if (theVent.hasCommand('refresh')) theVent.refresh()
+			if (currentLevel?.toInteger() != minVentLevel) {
+        		theVent.setLevel(minVentLevel)	// make sure none of the vents are less than the specified minimum
+            	LOG("Closing ${theVent.displayName} to ${minVentLevel}%",3,null,'info')
+               // if (theVent.hasCommand('refresh')) theVent.refresh()
         	} else {
-        		LOG("${theVent.displayName} is already closed to ${minimumVentLevel}%",3,null,'info')
+        		LOG("${theVent.displayName} is already closed to ${minVentLevel}%",3,null,'info')
         	}
 		} else {
         	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
 			if (currentSwitch == 'on') {
 				theVent.off()
 				LOG("Turning off ${theVent.displayName}",3,null,'info')
-                if (theVent.hasCommand('refresh')) theVent.refresh()
+                //if (theVent.hasCommand('refresh')) theVent.refresh()
 			} else {
 				LOG("${theVent.displayName} is already off",3,null,'info')
 			}
@@ -488,13 +490,14 @@ void ventOn( theVent ) {
 	boolean ST = atomicState.isST
     boolean changed = false
     def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
-    def maximumVentLevel = (settings.maximumVentLevel ?: 100) as Integer
+    def maxVentLevel = (settings.maximumVentLevel ?: 100) as Integer
+    def minVentLevel = (settings.minimumVentLevel ?: 0) as Integer
 	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
-    def currentLevel = hasSetLevel ? ( ST ? theVent.currentValue('level') : theVent.currentValue('level', true) ) : ((currentSwitch == 'on') ? 100 : 0)
-    if (maximumVentLevel >= 99) {
-      	if (currentSwitch == 'off') {
+    def currentLevel = (hasSetLevel ? ( ST ? theVent.currentValue('level') : theVent.currentValue('level', true) ) : ((currentSwitch == 'on') ? 100 : 0)) as Integer
+    if (maxVentLevel >= 99) {
+      	if ((currentSwitch == 'off') || (currentLevel < maxVentLevel)) {
             if (hasSetLevel) {
-                if (currentLevel.toInteger() < 99) { theVent.setLevel(100) } //some vents don't handle '100'
+                if (currentLevel.toInteger() < maxVentLevel) { theVent.setLevel(maxVentLevel) } //some vents don't handle '100'
                 if (theVent.hasCommand('refresh')) theVent.refresh()
                 currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
                 if (currentSwitch != 'on') theVent.on()						// setLevel will turn on() for some devices, but not all
@@ -504,7 +507,7 @@ void ventOn( theVent ) {
                 changed = true
             }
         	if (changed) {
-            	if (theVent.hasCommand('refresh')) theVent.refresh()
+            	//if (theVent.hasCommand('refresh')) theVent.refresh()
             	LOG("${hasSetLevel?'Opening':'Turning on'} ${theVent.displayName}",3,null,'info')
         	} else {
             	LOG("${theVent.displayName} is already ${hasSetLevel?'open':'on'}",3,null,'info')
@@ -513,12 +516,12 @@ void ventOn( theVent ) {
     } else {
     	// New feature: use configured maximum level
         if (hasSetLevel) {
-        	if (currentLevel.toInteger() != maximumVentLevel) {
-        		theVent.setLevel(maximumVentLevel)	// make sure none of the vents are less than the specified minimum
-            	LOG("Opening ${theVent.displayName} to ${maximumVentLevel}%",3,null,'info')
-                if (theVent.hasCommand('refresh')) theVent.refresh()
+        	if (currentLevel != maxVentLevel) {
+        		theVent.setLevel(maxVentLevel)	// make sure none of the vents are less than the specified minimum
+            	LOG("Opening ${theVent.displayName} to ${maxVentLevel}%",3,null,'info')
+                //if (theVent.hasCommand('refresh')) theVent.refresh()
         	} else {
-        		LOG("${theVent.displayName} is already open to ${maximumVentLevel}%",3,null,'info')
+        		LOG("${theVent.displayName} is already open to ${maxVentLevel}%",3,null,'info')
         	}
 		} else {
 			if (currentSwitch == 'off') {
