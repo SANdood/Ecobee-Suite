@@ -96,7 +96,7 @@
 				"name": 	"ecobee Suite Smart Vents",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.16",
+				"version": 	"1.7.17",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 				"optional": 	false
@@ -135,7 +135,7 @@
 			"name": 	"Ecobee Suite Thermostat",
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published":	true,
-			"version": 	"1.7.29",
+			"version": 	"1.7.30",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
 			"optional": 	false
 		},
