@@ -52,8 +52,9 @@
  *	1.7.36 - Added options to customize the Notifications
  *	1.7.37 - Bypass HE cache for currentContact/currentSwitch
  *	1.7.38 - Tweaks to notification customization
+ *	1.7.39 - Fixed typo that prevented announcements being sent or spoken in some cases
  */
-String getVersionNum() 		{ return "1.7.38" }
+String getVersionNum() 		{ return "1.7.39" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -818,7 +819,7 @@ void turnOffHVAC(quietly = false) {
 			def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue(thermostatMode, true)
 			boolean isOn = tstatModes.contains('auto') || tstatModes.contains('heat') || tstatModes.contains('cool')
         	Integer delay = (settings.offDelay != null ? settings.offDelay : 5) as Integer
-			String theStatsStr = getMsgTstats()
+			String theStatsStr = getMsgTstat()
 			String justTheStats = theStatsStr.endsWith(' is') ? theStatsStr[0..-3] : (theStatsStr.endsWith(' are') ? theStatsStr[0..-4] : theStatsStr)
 
 			if (contactSensors) {
@@ -1012,7 +1013,7 @@ void turnOnHVAC(quietly = false) {
         Integer delay = (settings.onDelay != null ? settings.onDelay : 0) as Integer
 		def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue('thermostatMode', true)
 		def isOff = tstatModes?.contains('off')
-		String theStatsStr = getMsgTstats()
+		String theStatsStr = getMsgTstat()
 		String justTheStats = theStatsStr.endsWith(' is') ? theStatsStr[0..-3] : (theStatsStr.endsWith(' are') ? theStatsStr[0..-4] : theStatsStr)
         String message = ""
     	if (contactSensors) {
