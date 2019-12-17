@@ -53,8 +53,9 @@
  *	1.7.37 - Bypass HE cache for currentContact/currentSwitch
  *	1.7.38 - Tweaks to notification customization
  *	1.7.39 - Fixed typo that prevented announcements being sent or spoken in some cases
+ *	1.7.40 - Fixed another issue preventing announcements
  */
-String getVersionNum() 		{ return "1.7.39" }
+String getVersionNum() 		{ return "1.7.40" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -847,7 +848,7 @@ void turnOffHVAC(quietly = false) {
 						}
 					}
 					sensorStr = sensorStr.replace(':','').replace('  ', ' ').replace(' ,', ',').trim()
-					message = message + "${sensorStr} ${(sensorNames.size()>1)?'has':'have'} been "
+					message = message + "${sensorStr} ${(sensorList.size()>1)?'has':'have'} been "
 				}
 				
 				if (delay == 0) {
