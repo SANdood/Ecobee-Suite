@@ -218,9 +218,9 @@ One side-effect of the updated approach is that during the inital startup period
 
 While the installation process is different for SmartThings users and for Hubitat users, users of these platforms should be familiar with installing third-party code on their platform. The following documentation provides instructions for each platform separately:
 
-Start [here for SmartThings installation instructions](#smart-install)<br>
+Start [here for SmartThings installation instructions](#install-smartthings)<br>
 
-Start [here for Hubitat installation instructions](#hubitat-install)
+Start [here for Hubitat installation instructions](#install-hubitat)
 
 
 ## <a name="install-smartthings">SmartThings Installation</a>
