@@ -15,24 +15,23 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.02 - Fixing Mode change event handling
- *  1.7.03 - Fix programList bug
  *	1.7.04 - noncached currentValue() on HE
  *	1.7.05 - Belt & suspenders for thermostatHold compares
  *	1.7.06 - Cosmetic Cleanups
- *  1.7.07 - Fixed variable definition (ncCp)
- *  1.7.08 - Cleaned up messages (a little - more still to do)
- *  1.7.09 - Fixed SMS text entry
+ *	1.7.07 - Fixed variable definition (ncCp)
+ *	1.7.08 - Cleaned up messages (a little - more still to do)
+ *	1.7.09 - Fixed SMS text entry
  *	1.7.10 - Fixing private method issue caused by grails, "Vacation" from currentProgramName
- *  1.7.11 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.11 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.12 - Optimized isST/isHE, formatting, Global Pause
  *	1.7.13 - Fixed holdType == ES Manager setting, & getEcobeePrograms()
  *	1.7.14 - Clean up appLabel in sendMessage(), eliminate duplicate currentProgram/currentProgramName subscriptions
  *	1.7.15 - Remove fanMode setting, fix fanMinOnTime to not break the hold
  *	1.7.16 - Added option to disable local display of log.debug() logs, support Notification devices on ST
  *	1.7.17 - Option to skip notification if Thermostat Mode is 'Off'
+ *	1.7.18 - Fixed helper labelling
  */
-String getVersionNum() { return "1.7.17" }
+String getVersionNum() { return "1.7.18" }
 String getVersionLabel() { return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -40,11 +39,12 @@ definition(
 	name: 			"ecobee Suite Routines",
 	namespace: 		"sandood",
 	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nChange Ecobee Programs based on ${isST?'SmartThings Routine execution or':'Hubitat'} Mode changes, Switch(es) state change, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
+	description:	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nChange Ecobee Programs based on ${isST?'SmartThings Routine execution or':'Hubitat'} Mode changes, Switch(es) state change, OR change Mode/run Routine based on Ecobee Program/Vacation changes",
 	category: 		"Convenience",
 	parent: 		"sandood:Ecobee Suite Manager",
 	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
 	singleInstance:	false,
     pausable: 		true
 )
@@ -60,12 +60,18 @@ def mainPage() {
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
 		section(title: '') {						// Hubitat doesn't have "Routines" yet
-			String defaultLabel = "Mode${isST?'/Routine':''}/Switches/Program"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
-            if (!app.label) {
+			String defaultName = "Mode${isST?'/Routine':''}/Switches/Program"
+			String defaultLabel = atomicState?.appDisplayName ?: defaultName
+			String oldName = app.label
+			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
+			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
+				app.updateLabel(thisName)
+				atomicState.appDisplayName = thisName
+			} else if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
+			updateMyLabel()
 			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
@@ -75,16 +81,23 @@ def mainPage() {
 						atomicState.appDisplayName = myLabel
 						app.updateLabel(myLabel)
 					}
-				}
+				} else {
+                	atomicState.appDisplayName = app.label
+                }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+                	if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
+            updateMyLabel() 
         	if(settings.tempDisable == true) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
@@ -886,22 +899,20 @@ void sendMessage(notificationMessage) {
 
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	
+    
 	String flag = ST ? ' (paused)' : '<span '
 	
-	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
 	if (myLabel.contains(flag)) {
-		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
