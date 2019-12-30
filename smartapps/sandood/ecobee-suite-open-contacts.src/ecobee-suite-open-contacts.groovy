@@ -13,31 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - nonCached currentValue() for HE
- *	1.7.02 - Fixed initialization error
- *	1.7.03 - Cosmetic cleanup, and nonCached currentValue() on Hubitat
- * 	1.7.04 - Fix myThermostats (should have been theThermostats)
- *	1.7.05 - More nonCached cleanup
- *	1.7.06 - Fixed multi-contact/multi-switch initialization
- *	1.7.07 - Fixed SMS text entry
- *	1.7.08 - Don't turn HVAC On if it was Off when the first contact/switch would have turned it Off
- *	1.7.09 - Fixing private method issue caused by grails, handle my/theThermostats, fix therm.displayName
- *	1.7.10 - Fixed statModeChange() event handler
- *	1.7.11 - Prevent duplicate notifications
- *	1.7.12 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.13 - Wasn't saving thermState when turning back on
- *	1.7.14 - Fix thermSavedState initialization
- *	1.7.15 - And fixed it some more
- *	1.7.16 - And still more
- *	1.7.17 - Optimized isST/isHE, more multi-stat/multi-contact work, Global Pause
- *	1.7.18 - Fixed therm.currentValue typo
- *	1.7.19 - Fixed optimization typo
- *	1.7.20 - Fixed accidental double-paste into GitHub
- *	1.7.21 - Yet another type...
- *	1.7.22 - Double check everything is still open before turning off
- *	1.7.23 - Cleaned up unschedule()
- *	1.7.24 - Fixed ADT (another damned typo)
  *	1.7.25 - Don't notify if contacts are closed while "off_pending" delay
  *	1.7.26 - Fixed 'off_pending' (again)
  *	1.7.27 - Changed minimum LOG level to 3
@@ -54,8 +29,9 @@
  *	1.7.38 - Tweaks to notification customization
  *	1.7.39 - Fixed typo that prevented announcements being sent or spoken in some cases
  *	1.7.40 - Fixed another issue preventing announcements
+ *	1.7.41 - Fixed Helper labelling
  */
-String getVersionNum() 		{ return "1.7.40" }
+String getVersionNum() 		{ return "1.7.41" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -67,6 +43,7 @@ definition(
 	parent: 		"sandood:Ecobee Suite Manager",
 	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
 	singleInstance: false,
     pausable: 		true
 )
@@ -82,12 +59,18 @@ def mainPage() {
 	boolean HE = !ST
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + getVersionLabel() + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
-        	String defaultLabel = "Contacts & Switches"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
-            if (!app.label) {
+        	String defaultName = "Contacts & Switches"
+			String defaultLabel = atomicState?.appDisplayName ?: defaultName
+			String oldName = app.label
+			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
+			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
+				app.updateLabel(thisName)
+				atomicState.appDisplayName = thisName
+			} else if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
+			updateMyLabel()
 			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
@@ -97,17 +80,24 @@ def mainPage() {
 						atomicState.appDisplayName = myLabel
 						app.updateLabel(myLabel)
 					}
-				}
+				} else {
+                	atomicState.appDisplayName = app.label
+                }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+                	if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
-        	if(settings.tempDisable) { 
+            updateMyLabel()
+        	if (settings.tempDisable) { 
 				paragraph "WARNING: Temporarily Paused - re-enable below." 
 			} else { 
 				if (settings.theThermostats || !settings.myThermostats) {
@@ -1304,21 +1294,21 @@ void sendMessage(notificationMessage) {
 	}
 }
 void updateMyLabel() {
-	String flag = atomicState.isST ? ' (paused)' : '<span '
+	boolean ST = atomicState.isST
+    
+	String flag = ST ? ' (paused)' : '<span '
 	
-	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
 	if (myLabel.contains(flag)) {
-		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (isHE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
