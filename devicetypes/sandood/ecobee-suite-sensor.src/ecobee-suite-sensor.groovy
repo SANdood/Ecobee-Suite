@@ -16,34 +16,19 @@
  *  See Changelog for change history
  *
  * <snip>
- *	1.4.0  - Major Release: renamed devices also
- *	1.4.01 - Added VersionLabel display
- *	1.4.02 - Fixed getMyId so that add/delete works properly
- *	1.4.03 - Fixed a typo
- *	1.4.04 - Updated for delayed add/delete function
- *	1.4.05 - Fixed add/deleteSensorFromProgram
- *	1.4.06 - Removed extra 'inactiveLabel: false', changed main() definition
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Converted all math to BigDecimal for better precision
- *	1.6.00 - Release number synchronization
- *	1.6.10 - Resync for Ecobee Suite Manager-based reservations
- *	1.6.11 - Fix for off-line sensors
- *	1.6.12 - Added a modicom of compatibility with the (new) Samsung (Connect) app
- *	1.6.13 - Fixed sensor off-line reporting
- *	1.6.14 - Clean up digits display
- *  1.6.15 - Shortcut the 'TestingForInstall' installed()
- *	1.6.16 - Log uninstalls also
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() on HE
  *	1.7.02 - Fixing private method issue caused by grails
- *  1.7.03 - Register new health check; auto reload new versions, avoid Health Check for test device install
- *  1.7.04 - Added importUrl for HE IDE
+ *	1.7.03 - Register new health check; auto reload new versions, avoid Health Check for test device install
+ *	1.7.04 - Added importUrl for HE IDE
  *	1.7.05 - Optimized isST
  *	1.7.06 - Fixed importUrl for HE
  *	1.7.07 - Added ability to add/delete sensor from ANY Named program/schedule/climate
  *	1.7.08 - Optimized generateEvents() tally
+ *	1.7.09 - Ornamented command arguments for HE
+ *	1.7.10 - Additional Hubitat optimizations
  */
-String getVersionNum() 		{ return "1.7.08" }
+String getVersionNum() 		{ return "1.7.10" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 import groovy.json.*
@@ -82,27 +67,32 @@ metadata {
 		attribute "windows", "string"
 		
 		if (isST) {
-			command "addSensorToProgram",	['string']
-			command "deleteSensorFromProgram", ['string']
+			command "addSensorToProgram",		['string']
+			command "deleteSensorFromProgram", 	['string']
 		} else {
 			command "addSensorToProgram", 		[[name:'Program Name*', type:'STRING', description:'Add sensor to this Program Name']]
 			command "deleteSensorFromProgram", 	[[name:'Program Name*', type:'STRING', description:'Delete sensor from this Program Name']]
 		}
 		
 	// These commands are all really internal-use only
-		command "addSensorToAway", []
-		command "addSensorToHome", []
-		command "addSensorToSleep", []
-		command "deleteSensorFromAway", []
-		command "deleteSensorFromHome", []
-		command "deleteSensorFromSleep", []
-		command "disableSmartRoom", []
-		command "doRefresh", []
-		command "enableSmartRoom", []
-		command "noOp", []
-		command "removeSensorFromAway", []
-		command "removeSensorFromHome", []
-		command "removeSensorFromSleep", []
+		command "addSensorToAway", 				[]
+		command "addSensorToHome", 				[]
+		command "addSensorToSleep", 			[]
+		command "deleteSensorFromAway", 		[]
+		command "deleteSensorFromHome", 		[]
+		command "deleteSensorFromSleep", 		[]
+		command "disableSmartRoom", 			[]
+		command "doRefresh", 					[]
+		command "enableSmartRoom", 				[]
+		command "noOp", 						[]
+		command "removeSensorFromAway", 		[]
+		command "removeSensorFromHome", 		[]
+        if (isST) {
+        	command "removeSensorFromProgram", 	['string']
+        } else {
+        	command "removeSensorFromProgram",	[[name:'Program Name*', type:'STRING', description:'Remove sensor from this Program Name']]
+        }
+		command "removeSensorFromSleep", 		[]
 
 	}
 
@@ -118,7 +108,7 @@ metadata {
 		backgroundColor:"#ff9c14"		// ecobee flame orange
         backgroundColor:"#00A0D3"		// SmartThings new "good" blue (replaced green)
 */    
-
+	if (isST) {
 	tiles(scale: 2) {
 		multiAttributeTile(name:"temperatureDisplay", type: "generic", width: 6, height: 4){
 			tileAttribute ("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
@@ -232,6 +222,7 @@ metadata {
         			'currentProgramIcon', 	'doors', 'windows', 'vents', 'SmartRoom',
                     						'Home',  'Away',  'Sleep', 'refresh'])
 	}
+    }
     preferences {
        	input "dummy", "text", title: "${getVersionLabel()}", description: "."
 	}
@@ -459,6 +450,8 @@ void deleteSensorFromSleep() { deleteSensorFromProgram('sleep') }
 void removeSensorFromHome() { deleteSensorFromProgram('home') }
 void removeSensorFromAway() { deleteSensorFromProgram('away') }
 void removeSensorFromSleep() { deleteSensorFromProgram('sleep') }
+
+def removeSensorFromProgram(programId) { deleteSensorFromProgram(programId) }
 
 def deleteSensorFromProgram(programId) {
 	LOG("deleteSensorFromProgram(${programId}) - entry",3,this,'trace')
