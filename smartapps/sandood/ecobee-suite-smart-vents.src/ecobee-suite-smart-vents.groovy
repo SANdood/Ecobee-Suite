@@ -13,18 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Allow Ecobee Suite Thermostats only
- *	1.5.02 - Converted all math to BigDecimal
- *	1.6.00 - Release number synchronization
- *	1.6.10 - Resync for parent-based reservatlues (nuions
- *	1.6.11 - Fix offline sensor temperature vall instead of Unknown)
- *	1.6.12 - Added "Generic" (dimmer/switchLevel) Vents
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - nonCached currentValue() for HE
- *	1.7.02 - Fixing private method issue caused by grails
- *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.04 - Optimized isST/isHE, formatting, added Global Pause
  *	1.7.05 - More code optimizations
  *	1.7.06 - Added generic switch control (e.g., to control a fan)
  *	1.7.07 - Update vent status (refresh) before & after taking actions, display vent status in appLabel
@@ -38,8 +26,10 @@
  *	1.7.15 - More bugs squashed, settings page cleaned up
  *	1.7.16 - Fixed vents not changing 
  *	1.7.17 - Fixed vents not changing when both minLevel & maxLevel are set
+ *	1.7.18 - Added conditional support for "contact sensor" capability, so vents show logical state in HomeKit (as blinds)
+ *	1.7.19 - Fixed helper labelling
  */
-String getVersionNum() 		{ return "1.7.17" }
+String getVersionNum() 		{ return "1.7.19" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -52,6 +42,7 @@ definition(
 	parent: 		"sandood:Ecobee Suite Manager",
 	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 	singleInstance: false,
     pausable: 		true
 )
@@ -69,12 +60,18 @@ def mainPage() {
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
-        	String defaultLabel = "Smart Vents & Switches"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
-            if (!app.label) {
+        	String defaultName = "Smart Vents & Switches"
+			String defaultLabel = atomicState?.appDisplayName ?: defaultName
+			String oldName = app.label
+			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
+			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
+				app.updateLabel(thisName)
+				atomicState.appDisplayName = thisName
+			} else if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
+			updateMyLabel()
 			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
@@ -86,14 +83,24 @@ def mainPage() {
 					}
 				}
 			} else {
-            	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+				def opts = [' (paused)', ' (open)', ' (closed)']
+				String flag
+				opts.each {
+					if (!flag && app.label.contains(it)) flag = it
+				}
+				if (flag) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        app.label.substring(0, app.label.indexOf(flag))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
+			updateMyLabel()
         }
         
         if (settings.tempDisable) {
@@ -484,6 +491,8 @@ void ventOff( theVent ) {
 			}
 		}
     }
+    // Display the contact as "closed", even if we are partially open (so that HomeKit shows open/closed Blinds)
+    if (theVent.hasAttribute('contact') && theVent.hasCommand('closeContact') && (theVent.currentValue('contact') != 'closed')) theVent.closeContact()
 }
 
 void ventOn( theVent ) {
@@ -532,11 +541,14 @@ void ventOn( theVent ) {
 			}
         }
     }
+    // Display the contact as "open", even if we are only partially open (so that HomeKit shows open/closed Blinds)
+    if (theVent.hasAttribute('contact') && theVent.hasCommand('openContact') && (theVent.currentValue('contact') != 'open')) theVent.openContact()
 }
+
 // Helper Functions
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	def opts = [' (pa', ' (op', ' (cl']
+	def opts = [' (paused)', ' (open)', ' (closed)']
 	String flag
 	if (ST) {
 		opts.each {
@@ -546,7 +558,7 @@ void updateMyLabel() {
 		flag = '<span '
 	}
 	
-	// Display Ecobee connection status as part of the label...
+	// Display vent status 
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
@@ -558,13 +570,13 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (atomicState.ventState == 'open') {
-		def newLabel = myLabel + (!ST ? '<span style="color:green"> (open)</span>' : ' (open)')
+		def newLabel = myLabel + ( ST ? ' (open)' : '<span style="color:green"> (open)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (atomicState.ventState == 'closed') { 
-		def newLabel = myLabel + (!ST ? '<span style="color:green"> (closed)</span>' : ' (closed)')
+		def newLabel = myLabel + ( ST ? ' (closed)' : '<span style="color:green"> (closed)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
