@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.7.39",
+			"version": 	"1.7.40",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -33,7 +33,7 @@
 				"name": 	"ecobee Suite Open Contacts",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.40",
+				"version": 	"1.7.41",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
 				"optional": 	false
@@ -42,7 +42,7 @@
 				"name": 	"ecobee Suite Quiet Time",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.08",
+				"version": 	"1.7.09",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
 				"optional": 	false
@@ -51,7 +51,7 @@
 				"name": 	"ecobee Suite Routines",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.17",
+				"version": 	"1.7.18",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
 				"optional": 	false
@@ -60,7 +60,7 @@
 				"name": 	"ecobee Suite Smart Circulation",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.12",
+				"version": 	"1.7.13",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
 				"optional": 	false
@@ -69,7 +69,7 @@
 				"name": 	"ecobee Suite Smart Mode",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.23",
+				"version": 	"1.7.25",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-mode.groovy",
 				"optional": 	false
@@ -78,7 +78,7 @@
 				"name": 	"ecobee Suite Smart Room",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.06",
+				"version": 	"1.7.07",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy",
 				"optional": 	false
@@ -87,7 +87,7 @@
 				"name": 	"ecobee Suite Smart Switches",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.07",
+				"version": 	"1.7.08",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
 				"optional": 	false
@@ -96,7 +96,7 @@
 				"name": 	"ecobee Suite Smart Vents",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.17",
+				"version": 	"1.7.19",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 				"optional": 	false
@@ -105,7 +105,7 @@
 				"name": 	"ecobee Suite Smart Zones",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.05",
+				"version": 	"1.7.06",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
 				"optional": 	false
@@ -114,7 +114,7 @@
 				"name": 	"ecobee Suite Thermal Comfort",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.19",
+				"version": 	"1.7.20",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
 				"optional": 	false
@@ -123,7 +123,7 @@
 				"name": 	"ecobee Suite Working From Home",
 				"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 				"published": 	true,
-				"version": 	"1.7.14",
+				"version": 	"1.7.15",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
 				"optional": 	false
@@ -135,7 +135,7 @@
 			"name": 	"Ecobee Suite Thermostat",
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published":	true,
-			"version": 	"1.7.30",
+			"version": 	"1.7.31",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
 			"optional": 	false
 		},
@@ -143,7 +143,7 @@
 			"name": 	"Ecobee Suite Sensor",
 			"iconUrl": 	"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 			"published": 	true,
-			"version": 	"1.7.08",
+			"version": 	"1.7.10",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
 			"optional": 	false
 		}
