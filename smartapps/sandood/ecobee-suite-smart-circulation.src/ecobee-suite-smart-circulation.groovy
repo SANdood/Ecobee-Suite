@@ -14,20 +14,21 @@
  *
  * <snip>
  *	1.7.00 - Initial Release of Universal Ecobee Suite
- *  1.7.01 - nonCached currentValue() for HE
- *  1.7.02 - more nonCached cases for HE
+ *	1.7.01 - nonCached currentValue() for HE
+ *	1.7.02 - more nonCached cases for HE
  *	1.7.03 - Fixing private method issue caused by grails
  *	1.7.04 - Fix error message when temps don't converge
  *	1.7.05 - Fix adjustments down (was getting stuck unless delta < 1.0), fix broken mode handler, reservations work, fix 'Vacation'
- *  1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.07 - Added option to require ALL or ANY of the Modes/Programs restrictions
  *	1.7.08 - Fixed typos and formatting
  *	1.7.09 - Optimized isST/isHE, added Global Pause, misc optimizations
  *	1.7.10 - More optimizations, auto-update new versions, fixed another typo
  *	1.7.11 - LOG when calcTemps() is Done!
  *	1.7.12 - Added option to disable local display of log.debug() logs
+ *	1.7.13 - Fixed Helper labelling
  */
-String getVersionNum() { return "1.7.12" }
+String getVersionNum() { return "1.7.13" }
 String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -40,6 +41,7 @@ definition(
 	parent: 		"sandood:Ecobee Suite Manager",
 	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
 	singleInstance: false,
     pausable: 		true
 )
@@ -55,12 +57,18 @@ def mainPage() {
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
-			String defaultLabel = "Smart Circulation"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
-            if (!app.label) {
+			String defaultName = "Smart Circulation"
+			String defaultLabel = atomicState?.appDisplayName ?: defaultName
+			String oldName = app.label
+			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
+			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
+				app.updateLabel(thisName)
+				atomicState.appDisplayName = thisName
+			} else if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
+			updateMyLabel()
 			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
@@ -70,16 +78,23 @@ def mainPage() {
 						atomicState.appDisplayName = myLabel
 						app.updateLabel(myLabel)
 					}
-				}
+				} else {
+                	atomicState.appDisplayName = app.label
+                }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+                	if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        app.label.substring(0, app.label.indexOf(' (paused)'))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
+            updateMyLabel()
         	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Paused - re-enable below." }
             else {
         		input(name: "theThermostat", type:"${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", required: true, multiple: false, 
@@ -680,23 +695,21 @@ def calcTemps() {
 // HELPER FUNCTIONS
 // Temporary/Global Pause functions
 void updateMyLabel() {
-	// Add (paused) to the label when paused
 	boolean ST = atomicState.isST
+    
 	String flag = ST ? ' (paused)' : '<span '
 	
-	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
 	if (myLabel.contains(flag)) {
-		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
