@@ -13,40 +13,32 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.6.00 - Release number synchronization
- *	1.6.01 - Fix reservation initialization error
- *	1.6.02 - REALLY fix reservation initialization error
- *	1.6.03 - Really, REALLY fix reservation initialization error
- *	1.6.10 - Converted to parent-based reservations
- *	1.6.11 - Clear reservations when disabled
- *	1.6.12 - Clear reservations on manual override
- *	1.6.13 - Removed use of *SetpointDisplay
- *	1.6.14 - Fixed typo (thanks @jml923)
- *	1.6.15 - Added scheduled Auto Off for Quiet Time
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Use nonCached currentValue() for stat attributes on Hubitat
  *	1.7.02 - Fixing private method issue caused by grails
- *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.04 - Optimized isST/isHE, added Global Pause
  *	1.7.05 - Added option to disable local display of log.debug() logs
  *	1.7.06 - Fixes for the auto-disable logic
  *	1.7.07 - More fixes for autoOff
  *	1.7.08 - Fix hasHumidifier
+ *	1.7.09 - Fixed Helper labelling
  */
-String getVersionNum() { return "1.7.08" }
+String getVersionNum() { return "1.7.09" }
 String getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-	name: "ecobee Suite Quiet Time",
-	namespace: "sandood",
-	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets HVAC into user-specified 'Quiet Mode' when a specified switch (real or virtual) is enabled.",
-	category: "Convenience",
-	parent: "sandood:Ecobee Suite Manager",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	name: 			"ecobee Suite Quiet Time",
+	namespace: 		"sandood",
+	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets HVAC into user-specified 'Quiet Mode' when a specified switch (real or virtual) is enabled.",
+	category: 		"Convenience",
+	parent: 		"sandood:Ecobee Suite Manager",
+	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
 	singleInstance: false,
-    pausable: true
+    pausable: 		true
 )
 
 preferences {
@@ -60,12 +52,18 @@ def mainPage() {
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
-        	String defaultLabel = "Quiet Time"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
-            if (!app.label) {
+        	String defaultName = "Quiet Time"
+			String defaultLabel = atomicState?.appDisplayName ?: defaultName
+			String oldName = app.label
+			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
+			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
+				app.updateLabel(thisName)
+				atomicState.appDisplayName = thisName
+			} else if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
+			updateMyLabel()
 			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
@@ -75,16 +73,23 @@ def mainPage() {
 						atomicState.appDisplayName = myLabel
 						app.updateLabel(myLabel)
 					}
-				}
+				} else {
+                	atomicState.appDisplayName = app.label
+                }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+                	if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
+            updateMyLabel()
         	if(settings.tempDisable) { 
 				paragraph "WARNING: Temporarily Paused - re-enable below." 
 			} else { 
@@ -787,8 +792,7 @@ def pauseOff() {
 }
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	boolean HE = !ST
-	
+    
 	String flag = ST ? ' (paused)' : '<span '
 	
 	String myLabel = atomicState.appDisplayName
@@ -797,12 +801,11 @@ void updateMyLabel() {
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
 	if (myLabel.contains(flag)) {
-		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (HE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
