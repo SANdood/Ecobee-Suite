@@ -13,18 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - Fixed thermostats*.auto()
- *  1.7.02 - Fixed SMS text entry
- *	1.7.03 - Fixing private method issue caused by grails
- *	1.7.04 - Trying to fix reservations
- *  1.7.05 - Fixing inside override issues
- *  1.7.06 - Don't do inside override until temp reaches setpoint+differential
- *  1.7.07 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *  1.7.08 - Added settings option to allow internal temp/setpoint to override 'off' (but only if we hold the only 'off' Reservation)
- *	1.7.09 - When mode changes away, release reservations and set stats Mode to doneMode (if any)
- *	1.7.10 - Optimized isHE/isST, added Global Pause
- *	1.7.11 - Fixed yet another typo
  *	1.7.12 - Extended external temperature range, add Program change support
  *	1.7.13 - Changed displayName to Smart Mode, Programs & Setpoints
  *	1.7.14 - Rerun temperature checks when location.mode becomes valid again
@@ -37,8 +25,10 @@
  *	1.7.21 - Added customized notifications, fixed missing notification on mode change
  *	1.7.22 - Fixed typo in insideChangeHandler()
  *	1.7.23 - Fixed setting.* typos
+ *	1.7.24 - Added more supported weather stations for both ST and HE
+ *	1.7.25 - Fixed Helper labelling
  */
-String getVersionNum() { return "1.7.23" }
+String getVersionNum() { return "1.7.25" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -51,6 +41,7 @@ definition(
 	parent: 		"sandood:Ecobee Suite Manager",
 	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
 	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
 	singleInstance: false,
     pausable: 		true
 )
@@ -66,12 +57,18 @@ def mainPage() {
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
-			String defaultLabel = "Smart Mode, Programs & Setpoints"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
-            if (!app.label) {
+			String defaultName = "Smart Mode, Programs & Setpoints"
+			String defaultLabel = atomicState?.appDisplayName ?: defaultName
+			String oldName = app.label
+			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
+			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
+				app.updateLabel(thisName)
+				atomicState.appDisplayName = thisName
+			} else if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
+			updateMyLabel()
 			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
@@ -83,14 +80,24 @@ def mainPage() {
 					}
 				}
 			} else {
-            	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+				def opts = [' (paused)', '(Cool', ' (Heat', ' (Aux', ' (Off', ' (Auto', ' (Emer']
+				String flag
+				opts.each {
+					if (!flag && app.label.contains(it)) flag = it
+				}
+				if (flag) {
+					if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        app.label.substring(0, app.label.indexOf(flag))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
+			updateMyLabel()
         	if(settings.tempDisable) { 
 				paragraph "WARNING: Temporarily Paused - re-enable below."
 			} else {
@@ -132,12 +139,33 @@ def mainPage() {
                             		options:thermostats.displayName)
 						}
 					} else if (settings.tempSource == 'station') {
-						paragraph "Using a ${ST?'SmartThings':'Hubitat'}-based Weather Station - please select ${ST?'ONE ':''}from the list of the supported Weather Station devices below..."
+						paragraph "Using a ${ST?'SmartThings':'Hubitat'}-based Weather Station - please select ${ST?'ONE ':'<b>ONE</b> '}from the list of the supported Weather Station devices below..."
 						if (ST) {
+							// Smart Weather Station Tile
+							// NOTES: supplies temperature & relative humidity only
 							input(name: "smartWeather", type: "device.smartWeatherStationTile", title: 'Which SmartWeather Station Tile?', required: false, 
 									multiple: false, hideWhenEmpty: true)
+							
+							// Smart Weather Station Tile 2.0
+							// NOTES: supplies temperature & dewpoint
 							input(name: "smartWeather2", type: "device.smartWeatherStationTile2.0", title: 'Which SmartWeather Station Tile 2.0?', required: false, 
 									multiple: false, hideWhenEmpty: true)
+							
+							// Netatmo Outdoor Module
+							// NOTES: provides temperature & relative humidity only
+							input(name: "netatmoOutdoorModule", type: "device.NetatmoOutdoorModule", title: "Which Netatmo Outdoor Module?", required: false, multiple: false, hideWhenEmpty: true)
+						} else {
+							// Ambient Weather Device (https://community.hubitat.com/t/ambient-weather-device/3660)
+							// NOTES: provides temperature & dewpoint
+							input(name: "ambientWeatherDevice", type: "device.AmbientWeatherDevice", title: "Which Ambient Weather Device?", require: false, multiple: false, hideWhenEmpty: true)
+							
+							// DarkSky.net Weather Driver (https://community.hubitat.com/t/release-darksky-net-weather-driver-no-pws-required/22699)
+							// NOTES: provides temperature & relative humidity, but dewpoint is optional, so we'll calculate it ourselves
+							input(name: "darkSkyNetWeatherDriver", type: "device.DarkSky.netWeatherDriver", title: "Which DarkSky.net Weather Driver?", required: false, multiple: false, hideWhenEmpty: true)
+							
+							// Netatmo Outdoor Module (multiple sources - one is here: https://github.com/fuzzysb/Hubitat)
+							// NOTES: provides temperature & relative humidity only
+							input(name: "netatmoOutdoorModule", type: "device.NetatmoOutdoorModule", title: "Which Netatmo Outdoor Module?", required: false, multiple: false, hideWhenEmpty: true)
 						}
 						input(name: "meteoWeather", type: "${ST?'device.meteobridgeWeatherStation':'device.MeteobridgeWeatherStation'}", title: 'Which Meteobridge Weather Station?', required: false, 
                         		multiple: false, hideWhenEmpty: true)      
@@ -513,13 +541,14 @@ boolean initialize() {
             
         case 'station':
         	if (settings.smartWeather) {
+				// ST only, temperature & humidity, no dewpoint
             	subscribe(settings.smartWeather, 'temperature', tempChangeHandler)
                 def latest = ST ? settings.smartWeather.currentState('temperature') : settings.smartWeather.currentState('temperature', true)
                 def t = latest.numberValue
                 def unit = latest.unit
                 if (t != null) {
                 	t = latest.numberValue
-                	if (dewBelowOverride) {
+                	if (settings.dewBelowOverride) {
                 		subscribe(settings.smartWeather, 'relativeHumidity', humidityChangeHandler)
                 		latest = ST ? settings.smartWeather.currentState('relativeHumidity') : settings.smartWeather.currentState('relativeHumidity', true)
                 		if (latest?.numberValue != null) {
@@ -534,6 +563,7 @@ boolean initialize() {
                     temperatureUpdate(tempNow) 
                 }
             } else if (settings.smartWeather2) {
+				// ST only, has temperature & dewpoint
             	def latest
                 if (settings.dewBelowOverride) {
                 	subscribe(settings.smartWeather2, 'dewpoint', dewpointChangeHandler)
@@ -550,28 +580,74 @@ boolean initialize() {
                 	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                     temperatureUpdate(tempNow) 
                 }
-            } else if (settings.meteoWeather) {
-            	def latest
+			} else if (settings.ambientWeatherDevice) {
+				// HE only, has temperature & dewpoint
+				def latest
                 if (settings.dewBelowOverride) {
-                	subscribe(settings.meteoWeather, 'dewpoint', dewpointChangeHandler)
-                	latest = ST ? settings.meteoWeather.currentState('dewpoint') : settings.meteoWeather.currentState('dewpoint', true)
+                	subscribe(settings.ambientWeatherDevice, 'dewpoint', dewpointChangeHandler)
+                	latest = ST ? settings.ambientWeatherDevice.currentState('dewpoint') : settings.ambientWeatherDevice.currentState('dewpoint', true)
                     if (latest?.numberValue != null) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
                         LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
                     }
                 }
-            	subscribe(settings.meteoWeather, 'temperature', tempChangeHandler)
-                latest = ST ? settings.meteoWeather.currentState('temperature') : settings.meteoWeather.currentState('temperature', true)
+            	subscribe(settings.ambientWeatherDevice, 'temperature', tempChangeHandler)
+                latest = ST ? settings.ambientWeatherDevice.currentState('temperature') : settings.ambientWeatherDevice.currentState('temperature', true)
             	if (latest?.numberValue != null) { 
                 	tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                     temperatureUpdate(tempNow) 
                 }
-            } else if (settings.ambientWeather) {
+			} else if (settings.darkSkyNetWeatherDriver) {
+				// HE only, optional dewpoint so we calculate ourselves
+				subscribe(settings.darkSkyNetWeatherDriver, 'temperature', tempChangeHandler)
+                def latest = settings.darkSkyNetWeatherDriver.currentState('temperature', true)
+                def t = latest.numberValue
+                def unit = latest.unit
+                if (t != null) {
+                	t = latest.numberValue
+                	if (settings.dewBelowOverride) {
+                		subscribe(settings.darkSkyNetWeatherDriver, 'relativeHumidity', humidityChangeHandler)
+                		latest = settings.darkSkyNetWeatherDriver.currentState('relativeHumidity', true)
+                		if (latest?.numberValue != null) {
+                        	def h = roundIt(latest.numberValue, (unit=='C'?2:1))
+                        	LOG("Outside Humidity is: ${h}%",3,null,'info')
+                			def d = calculateDewpoint( t, h, unit )
+                            atomicState.dewpoint = d
+                            LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
+                        }
+                    }
+                	tempNow = t 
+                    temperatureUpdate(tempNow) 
+                }
+			} else if (settings.netatmoOutdoorModule) {
+				// ST & HE No dewpoint - calculate ourselves
+				subscribe(settings.netatmoOutdoorModule, 'temperature', tempChangeHandler)
+                def latest = ST ? settings.netatmoOutdoorModule.currentState('temperature') : settings.netatmoOutdoorModule.currentState('temperature', true)
+                def t = latest.numberValue
+                def unit = latest.unit
+                if (t != null) {
+                	t = latest.numberValue
+                	if (settings.dewBelowOverride) {
+                		subscribe(settings.netatmoOutdoorModule, 'relativeHumidity', humidityChangeHandler)
+                		latest = ST ? settings.netatmoOutdoorModule.currentState('relativeHumidity') : settings.netatmoOutdoorModule.currentState('relativeHumidity', true)
+                		if (latest?.numberValue != null) {
+                        	def h = roundIt(latest.numberValue, (unit=='C'?2:1))
+                        	LOG("Outside Humidity is: ${h}%",3,null,'info')
+                			def d = calculateDewpoint( t, h, unit )
+                            atomicState.dewpoint = d
+                            LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
+                        }
+                    }
+                	tempNow = t 
+                    temperatureUpdate(tempNow) 
+                }
+			} else if (settings.meteoWeather) {
+				// HE & ST, has temperature & dewpoint
             	def latest
                 if (settings.dewBelowOverride) {
-                	subscribe(settings.meteoWeather, 'dewPoint', dewpointChangeHandler)
-                	latest = ST ? settings.meteoWeather.currentState('dewPoint') : settings.meteoWeather.currentState('dewPoint', true)
+                	subscribe(settings.meteoWeather, 'dewpoint', dewpointChangeHandler)
+                	latest = ST ? settings.meteoWeather.currentState('dewpoint') : settings.meteoWeather.currentState('dewpoint', true)
                     if (latest?.numberValue != null) {
                     	def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
                         atomicState.dewpoint = d
@@ -780,8 +856,15 @@ def tempChangeHandler(evt) {
                         runIn(2, atomicTempUpdater, [overwrite: true] )		// humidity might be updated also
                         return
                    	}
-                } else if ((settings.tempSource == 'station') && settings.smartWeather) {
-                	def latest = ST ? settings.smartWeather.currentState('relativeHumidity') : settings.smartWeather.currentState('relativeHumidity', true)
+				} else if (settings.tempSource == 'station') {
+					def latest
+					if (settings.smartWeather) {						// ST only
+                		latest = settings.smartWeather.currentState('relativeHumidity')
+					} else if (settings.darkSkyNetWeatherDriver) {		// HE only
+						latest = settings.darkSkyNetWeatherDriver.currentState('relativeHumidity', true)
+					} else if (settings.netatmoOutdoorModule) {			// both ST & HE
+						latest = ST ? settings.netatmoOutdoorModule.currentState('relativeHumidity') : settings.netatmoOutdoorModule.currentState('relativeHumidity', true)
+					}
                     if (latest.numberValue != null) {
                     	h = latest.numberValue
                         LOG("Outside Humidity is: ${h}%",3,null,'info')
@@ -1565,7 +1648,8 @@ void sendMessage(notificationMessage) {
 
 void updateMyLabel() {
 	boolean ST = atomicState.isST
-	def opts = [' (pa', '(Co', ' (He', ' (Au', ' (Of', ' (Au', ' (Em']
+	
+	def opts = [' (paused)', '(Cool', ' (Heat', ' (Aux', ' (Off', ' (Auto', ' (Emer']
 	String flag
 	if (ST) {
 		opts.each {
@@ -1575,23 +1659,24 @@ void updateMyLabel() {
 		flag = '<span '
 	}
 	
-	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
 	if (flag && myLabel.contains(flag)) {
-		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		String  newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		String  newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
-		String modeProgStr = ' (' + thermostats[0].currentValue('thermostatMode').capitalize() + ' - ' + thermostats[0].currentValue('currentProgramName') + ')'
-		String newLabel = myLabel + (!ST ? '<span style="color:green">' + modeProgStr + '</span>' : modeProgStr)		
+		String newLabel = myLabel
+		if (settings.thermostats?.size()) {
+			String modeProgStr = ' (' + thermostats[0].currentValue('thermostatMode').capitalize() + ' - ' + thermostats[0].currentValue('currentProgramName') + ')'
+			newLabel = newLabel + (!ST ? '<span style="color:green">' + modeProgStr + '</span>' : modeProgStr)
+		}
         // log.debug "newLabel: ${newLabel}"
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
