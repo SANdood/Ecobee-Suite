@@ -26,21 +26,6 @@
  *	See Github Changelog for complete change history
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - Improved thermostatHold testing
- *  1.7.03 - More thermostatHold optimizations
- *	1.7.04 - Big String fix
- *  1.7.05 - noCache most currentValue() for HE
- *	1.7.06 - More sendValue cleanup
- *	1.7.07 - Added dehumidifierLevel/setpoint, fix setFanMinOnTime()
- *	1.7.08 - Updating setpoints & climates fixed
- *	1.7.09 - Updating timeOfDay & weatherSymbol fixed
- *	1.7.10 - Cleanup state changes, fix thermostatOperatingStateDisplay
- *  1.7.11 - Don't accept null temperature, fixing private method issue caused by grails
- *	1.7.12 - Register for new health check mechanism, don't register for Health Check if test install
- *  1.7.13 - Added importUrl for HE IDE
- *  1.7.14 - Added current/scheduledProgramOwner and ProgramType
- *	1.7.15 - Fixed currrentThermostat typo (x2)
  *	1.7.16 - Fixed nagging command error & preferences{}
  *	1.7.17 - Optimized isST/isHE calls, fixed set*fanMinOnTime()
  *	1.7.18 - Fixed sendHoldType conversion error
@@ -56,8 +41,9 @@
  *	1.7.28 - Fixed typo in setProgramSetpoints(); 
  *	1.7.29 - if Auto mode is disabled for this thermostat, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint
  *	1.7.30 - Fixes for timeout errors in setProgramSetpoint()
+ *	1.7.31 - Additional Hubitat optimizations
  */
-String getVersionNum() 		{ return "1.7.30" }
+String getVersionNum() 		{ return "1.7.31" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -121,32 +107,47 @@ metadata {
 		command "raiseSetpoint", 			[]	
 		command "resumeProgram", 			['string']
 		command "setCoolingSetpointDelay",	[]
-		command "setDehumidifierMode", 		['string']
-		if (isST) {
-        	command "setDehumiditySetpoint", ['number']
-        } else {
-        	command "setDehumiditySetpoint", [[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
-        }
-		command "setEcobeeSetting", 		['string', 'string']	// Allows changes to (most) Ecobee Settings
         if (isST) {
+			command "setDehumidifierMode", 	['string']
+        	command "setDehumiditySetpoint",['number']
+        	command "setEcobeeSetting", 	['string', 'string']	// Allows changes to (most) Ecobee Settings
         	command "setFanMinOnTime",		['number']
         } else {
+        	command "setDehumidifierMode", 	[[name:'Dehumidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
+											  constraints: ['auto','off','on']]]
+        	command "setDehumiditySetpoint",[[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
+        	command "setEcobeeSetting", 	[[name:'Ecobee Setting Name*', type:'STRING', description:'Name of setting to change'],
+											 [name:'Ecobee Setting Value*', type:'STRING', description:'New value for this setting']]
 			command "setFanMinOnTime", 		[[name:'Fan Min On Time*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
         }
 		command "setFanMinOnTimeDelay", 	[]
 		command "setHeatingSetpointDelay",	[]
-		command	"setHumidifierMode", 		['string']
 		if (isST) {
+        	command	"setHumidifierMode", 	['string']
 			command "setHumiditySetpoint",	['number']
+            command "setProgramSetpoints", 	['string', 'number', 'number']
 		} else {
+        	command	"setHumidifierMode", 	[[name:'Humidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
+											  constraints: ['auto','off','on']]]
 			command "setHumiditySetpoint", 	[[name:'Humidity Setpoint*', type:'NUMBER', description:'Humidifier RH% setpoint (0-100)']]
+			command "setProgramSetpoints", 	[[name:'Program Name*', type:'STRING', description:'Program to change'],
+											 [name:'Heating Setpoint*', type:'NUMBER', description:'Heating setpoint temperature'],
+											 [name:'Cooling Setpoint*', type:'NUMBER', description:'Cooling setpoint temperature']]
 		}
-		command "setProgramSetpoints", 		['string', 'number', 'number']
+		
 		// command "setSchedule"			['JSON_OBJECT']
 		// command "setThermostatFanMode"	['string']
 		// command "setThermostatMode"		['string']
-		command "setThermostatProgram", 	['string', 'string', 'number']
-		command "setVacationFanMinOnTime",	['number']
+        if (isST) {
+			command "setThermostatProgram", 	['string', 'string', 'number']
+			command "setVacationFanMinOnTime",	['number']
+        } else {
+			command "setThermostatProgram", [[name:'Program Name*', type:'STRING', description:'Desired Program'],
+											 [name:'Hold Type*', type:'ENUM', description:'Delect and option',
+											  constraints: ['indefinite', 'nextTransition', 'holdHours']],
+											 [name:'Hold Hours', type:'NUMBER', description:'Hours to Hold (if Hold Type == Hold Hours]']]
+            command "setVacationFanMinOnTime",[[name:'Fan Min On Time for Vacation Hold*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
+        }
 		command "wakeup", 					[]
 
 		attribute 'apiConnected','string'
@@ -359,6 +360,7 @@ metadata {
 		input(name: "dummy", type: "text", title: "${getVersionLabel()}", description: " ", required: false)
 	}
 	
+    if (isST) {
 	tiles(scale: 2) {
 		multiAttributeTile(name:"temperatureDisplay", type:"thermostat", width:6, height:4, canChangeIcon: true) {
 			tileAttribute("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
@@ -823,6 +825,7 @@ metadata {
 			"apiStatus", "lastPoll"
 			])
 	}
+    }
 }
 
 // parse events into attributes
