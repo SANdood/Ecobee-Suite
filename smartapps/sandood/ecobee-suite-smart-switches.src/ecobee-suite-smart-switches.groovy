@@ -12,42 +12,33 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	1.0.1  - Initial Release
- *	1.0.2  - Added option to limit operation to certain SmartThings Modes
- *	1.0.3  - Updated settings and TempDisable handling
- *	1.2.0  - Sync version number with new holdHours/holdAction support
- *	1.2.1  - Protect agsinst LOG type errors
- *	1.3.0  - Major Release: renamed and moved to "sandood" namespace
- *	1.4.0  - Renamed parent Ecobee Suite Manager
- *	1.4.01 - Updated description
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Allow Ecobee Suite Thermostats only
- *	1.6.00 - Release number synchronization
- *	1.6.10 - Resync for parent-based reservations
+ * <snip>
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Fixing private method issue caused by grails
- *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.04 - Optimized isST/isHE, added Global Pause
  *	1.7.05 - Added option to disable local display of log.debug() logs
  *	1.7.06 - Added optional daily "Actions disabled" time window
  *	1.7.07 - Fixed between time calculation
+ *	1.7.08 - Fixed helper labelling
  */
  
-String getVersionNum() { return "1.7.07" }
+String getVersionNum() { return "1.7.08" }
 String getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-	name: "ecobee Suite Smart Switches",
-	namespace: "sandood",
-	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled switches, dimmers and generic vents based on thermostat operating state",
-	category: "Convenience",
-	parent: "sandood:Ecobee Suite Manager",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	name: 			"ecobee Suite Smart Switches",
+	namespace: 		"sandood",
+	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled switches, dimmers and generic vents based on thermostat operating state",
+	category: 		"Convenience",
+	parent: 		"sandood:Ecobee Suite Manager",
+	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
+	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
 	singleInstance: false,
-    pausable: true
+    pausable: 		true
 )
 
 preferences {
@@ -61,13 +52,19 @@ def mainPage() {
 	
 	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
     	section(title: "") {
-        	String defaultLabel = "Smart Switch/Dimmer/Vent"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
-            if (!app.label) {
+        	String defaultName = "Smart Switch/Dimmer/Vent"
+			String defaultLabel = atomicState?.appDisplayName ?: defaultName
+			String oldName = app.label
+			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
+			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
+				app.updateLabel(thisName)
+				atomicState.appDisplayName = thisName
+			} else if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
 			}
-			if (isHE) {
+			updateMyLabel()
+			if (HE) {
 				if (app.label.contains('<span ')) {
 					if (atomicState?.appDisplayName != null) {
 						app.updateLabel(atomicState.appDisplayName)
@@ -76,16 +73,23 @@ def mainPage() {
 						atomicState.appDisplayName = myLabel
 						app.updateLabel(myLabel)
 					}
-				}
+				} else {
+                	atomicState.appDisplayName = app.label
+                }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+                	if (atomicState?.appDisplayName != null) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
+            updateMyLabel()
             if (settings.tempDisable) {
             	paragraph "WARNING: Temporarily Paused - re-enable below."
             } else {
@@ -323,21 +327,20 @@ private boolean dayCheck() {
 }
 void updateMyLabel() {
 	boolean ST = atomicState.isST
+    
 	String flag = ST ? ' (paused)' : '<span '
 	
-	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
 	if (myLabel.contains(flag)) {
-		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
