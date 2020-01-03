@@ -26,21 +26,6 @@
  *	See Github Changelog for complete change history
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - Improved thermostatHold testing
- *  1.7.03 - More thermostatHold optimizations
- *	1.7.04 - Big String fix
- *  1.7.05 - noCache most currentValue() for HE
- *	1.7.06 - More sendValue cleanup
- *	1.7.07 - Added dehumidifierLevel/setpoint, fix setFanMinOnTime()
- *	1.7.08 - Updating setpoints & climates fixed
- *	1.7.09 - Updating timeOfDay & weatherSymbol fixed
- *	1.7.10 - Cleanup state changes, fix thermostatOperatingStateDisplay
- *  1.7.11 - Don't accept null temperature, fixing private method issue caused by grails
- *	1.7.12 - Register for new health check mechanism, don't register for Health Check if test install
- *  1.7.13 - Added importUrl for HE IDE
- *  1.7.14 - Added current/scheduledProgramOwner and ProgramType
- *	1.7.15 - Fixed currrentThermostat typo (x2)
  *	1.7.16 - Fixed nagging command error & preferences{}
  *	1.7.17 - Optimized isST/isHE calls, fixed set*fanMinOnTime()
  *	1.7.18 - Fixed sendHoldType conversion error
@@ -55,9 +40,11 @@
  *	1.7.27 - Added support for display/update of Ecobee 4+ Audio settings, microphoneOn/Off, update attrs upon successful setEcobeeSettings()
  *	1.7.28 - Fixed typo in setProgramSetpoints(); 
  *	1.7.29 - if Auto mode is disabled for this thermostat, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint
- *	1.7.30 - TESTING: Fixes for timeout errors in setProgramSetpoint()
+ *	1.7.30 - Fixes for timeout errors in setProgramSetpoint()
+ *	1.7.31 - Additional Hubitat optimizations
+ *	1.7.32 - Added next*Setpoints, setFanMode keeps current fanMinOnTime for ON & CIRCULATE; resets to 0 for OFF & AUTO
  */
-String getVersionNum() 		{ return "1.7.30" }
+String getVersionNum() 		{ return "1.7.32" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -121,32 +108,47 @@ metadata {
 		command "raiseSetpoint", 			[]	
 		command "resumeProgram", 			['string']
 		command "setCoolingSetpointDelay",	[]
-		command "setDehumidifierMode", 		['string']
-		if (isST) {
-        	command "setDehumiditySetpoint", ['number']
-        } else {
-        	command "setDehumiditySetpoint", [[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
-        }
-		command "setEcobeeSetting", 		['string', 'string']	// Allows changes to (most) Ecobee Settings
         if (isST) {
+			command "setDehumidifierMode", 	['string']
+        	command "setDehumiditySetpoint",['number']
+        	command "setEcobeeSetting", 	['string', 'string']	// Allows changes to (most) Ecobee Settings
         	command "setFanMinOnTime",		['number']
         } else {
+        	command "setDehumidifierMode", 	[[name:'Dehumidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
+											  constraints: ['auto','off','on']]]
+        	command "setDehumiditySetpoint",[[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
+        	command "setEcobeeSetting", 	[[name:'Ecobee Setting Name*', type:'STRING', description:'Name of setting to change'],
+											 [name:'Ecobee Setting Value*', type:'STRING', description:'New value for this setting']]
 			command "setFanMinOnTime", 		[[name:'Fan Min On Time*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
         }
 		command "setFanMinOnTimeDelay", 	[]
 		command "setHeatingSetpointDelay",	[]
-		command	"setHumidifierMode", 		['string']
 		if (isST) {
+        	command	"setHumidifierMode", 	['string']
 			command "setHumiditySetpoint",	['number']
+            command "setProgramSetpoints", 	['string', 'number', 'number']
 		} else {
+        	command	"setHumidifierMode", 	[[name:'Humidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
+											  constraints: ['auto','off','on']]]
 			command "setHumiditySetpoint", 	[[name:'Humidity Setpoint*', type:'NUMBER', description:'Humidifier RH% setpoint (0-100)']]
+			command "setProgramSetpoints", 	[[name:'Program Name*', type:'STRING', description:'Program to change'],
+											 [name:'Heating Setpoint*', type:'NUMBER', description:'Heating setpoint temperature'],
+											 [name:'Cooling Setpoint*', type:'NUMBER', description:'Cooling setpoint temperature']]
 		}
-		command "setProgramSetpoints", 		['string', 'number', 'number']
+		
 		// command "setSchedule"			['JSON_OBJECT']
 		// command "setThermostatFanMode"	['string']
 		// command "setThermostatMode"		['string']
-		command "setThermostatProgram", 	['string', 'string', 'number']
-		command "setVacationFanMinOnTime",	['number']
+        if (isST) {
+			command "setThermostatProgram", 	['string', 'string', 'number']
+			command "setVacationFanMinOnTime",	['number']
+        } else {
+			command "setThermostatProgram", [[name:'Program Name*', type:'STRING', description:'Desired Program'],
+											 [name:'Hold Type*', type:'ENUM', description:'Delect and option',
+											  constraints: ['indefinite', 'nextTransition', 'holdHours']],
+											 [name:'Hold Hours', type:'NUMBER', description:'Hours to Hold (if Hold Type == Hold Hours]']]
+            command "setVacationFanMinOnTime",[[name:'Fan Min On Time for Vacation Hold*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
+        }
 		command "wakeup", 					[]
 
 		attribute 'apiConnected','string'
@@ -283,6 +285,8 @@ metadata {
 		attribute 'monthsBetweenService', 'string'
 		attribute 'motion', 'string'
 		attribute 'name', 'string'
+        attribute "nextCoolingSetpoint", "number"
+        attribute "nextHeatingSetpoint", "number"
         attribute 'playbackVolume', 'number'			// // From Audio object
 		attribute 'programsList', 'string'				// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
 		attribute 'quickSaveSetBack', 'number'
@@ -359,6 +363,7 @@ metadata {
 		input(name: "dummy", type: "text", title: "${getVersionLabel()}", description: " ", required: false)
 	}
 	
+    if (isST) {
 	tiles(scale: 2) {
 		multiAttributeTile(name:"temperatureDisplay", type:"thermostat", width:6, height:4, canChangeIcon: true) {
 			tileAttribute("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
@@ -823,6 +828,7 @@ metadata {
 			"apiStatus", "lastPoll"
 			])
 	}
+    }
 }
 
 // parse events into attributes
@@ -900,7 +906,7 @@ def generateEvent(Map results) {
 	if (!state.version || (state.version != getVersionLabel())) updated()
 	def startMS = now()
 	boolean debugLevelFour = debugLevel(4)
-	if (debugLevelFour) LOG("generateEvent(): parsing data ${results}", 4)
+	if (debugLevelFour) LOG("generateEvent(): parsing data ${results}", 1)
 	//LOG("Debug level of parent: ${getParentSetting('debugLevel')}", 4, null, "debug")
 	boolean ST = state.isST
 	def linkText = device.displayName
@@ -1798,11 +1804,14 @@ def generateEvent(Map results) {
 				case 'statHoldAction':
 				case 'lastHoldType':
                 case 'thermostatOperatingStateDisplay':
+                case 'nextHeatingSetpoint':
+                case 'nextCoolingSetpoint':
 				//if (name == 'currentProgramId') log.debug "${name}: ${sendValue}, ${sendValue == 'null'}"
 					//if (isChange) {
                     	def sendText = (sendValue != 'null') ? sendValue : ''
                         def descText = (sendText != '') ? "${name} is ${sendText}" : ''
                         /* if (isStateChange(device, name, sendText)) */ event = eventFront + [value: sendText, descriptionText: descText, /* isStateChange: true, */ displayed: false]
+                        //if (name == 'nextHeatingSetpoint') log.debug event
                     //}
 					break;
 
@@ -1814,6 +1823,7 @@ def generateEvent(Map results) {
             //log.debug "Before event check: ${event}"
 			if (event != [:]) {
 				if (debugLevelFour) LOG("generateEvent() - Out of switch{}, calling sendevent(${event})", 1)
+                //if (event.name == 'temperature') log.debug "temperature sent"
 				sendEvent(event)
 			}
 			if (tempDisplay != "") {
@@ -2825,12 +2835,15 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 
 	String currentProgramName 
 	String currentThermostatHold
+    def currentFanMinOnTime
     if (ST) {
     	currentProgramName = device.currentValue('currentProgramName')
     	currentThermostatHold = device.currentValue('thermostatHold')
+        currentFanMinOnTime = (device.currentValue('fanMinOnTime') ?: 0) as Integer
     } else {
     	currentProgramName = device.currentValue('currentProgramName', true)
     	currentThermostatHold = device.currentValue('thermostatHold', true)
+        currentFanMinOnTime = (device.currentValue('fanMinOnTime', true) ?: 0) as Integer
     }
     
 	if (((currentThermostatHold != '') && (currentThermostatHold != null) && (currentThermostatHold != 'null')) || currentProgramName.startsWith('Hold') || currentProgramName.startsWith('Auto ')) {
@@ -2859,7 +2872,8 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 	switch (value) {
 		case 'on':
 			results = false
-			if (currentFanMode != 'on') results = parent.setFanMode(this, 'on', nullMinOnTime, getDeviceId(), sendHoldType, sendHoldHours)
+			// if (currentFanMode != 'on') results = parent.setFanMode(this, 'on', nullMinOnTime, getDeviceId(), sendHoldType, sendHoldHours)
+            if (currentFanMode != 'on') results = parent.setFanMode(this, 'on', currentFanMinOnTime, getDeviceId(), sendHoldType, sendHoldHours)
 			if (results) {
 				// pre-load the values that will (eventually) be sent back from the thermostat
 				updates = [thermostatFanMode:'on',thermostatOperatingState:'fan only',equipmentOperatingState:'fan only' /*,currentProgramName:'Hold: Fan'*/]
@@ -2912,21 +2926,21 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 		case 'circulate':
 			// For Ecobee thernmostats, 'circulate' will be active any time fanMinOnTime != 0 and Fan Mode == 'auto'
 			// For this implementation, we will use 'circulate' whenever fanMinOnTime != 0, and 'off' when fanMinOnTime == 0 && thermostatMode == 'off'
-			def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
-			def fanTime = fanMinOnTime
-			if ((fanMinOnTime == null) || (fanMinOnTime.toInteger() == 0)) {
+			// def fanMinOnTime = ST ? device.currentValue('fanMinOnTime') : device.currentValue('fanMinOnTime', true)
+			def fanTime = currentFanMinOnTime
+			if ((fanTime == null) || (fanTime.toInteger() == 0)) {
 				// 20 minutes/hour is roughly the default for HoneyWell thermostats (35%), upon which ST has modeled their thermostat implementation
 				fanTime = 20
 			}
 			if ((currentFanMode == 'auto') || (currentFanMode == 'circulate')) {
-				if (fanTime != fanMinOnTime) {
+				if (fanTime != currentFanMinOnTime) {
 					results = parent.setFanMinOnTime(this, deviceId, fanTime)
 				} else results = true
 			} else {
 				results = parent.setFanMode(this, setValue, fanTime, getDeviceId(), sendHoldType, sendHoldHours)
 			}
 			if (results) {
-				updates = [fanMinOnTime:fanTime,thermostatFanMode: 'circulate', thermostatFanModeDisplay: 'circulate']
+				updates = [fanMinOnTime:fanTime, thermostatFanMode: 'circulate', thermostatFanModeDisplay: 'circulate']
 				generateEvent(updates)
 			} else {
 				updates = [thermostatFanMode: currentFanMode, thermostatFanModeDisplay: currentFanMode]
@@ -3246,8 +3260,8 @@ void setProgramSetpoints(String programName, heatingSetpoint, coolingSetpoint) {
     	String currentProgram = state.isST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
 		if ( currentProgram == programName) { 
 			def updates = [:]
-			if (coolingSP) updates << [coolingSetpoint: coolingSP]
-			if (heatingSP) updates << [heatingSetpoint: heatingSP]
+			if (coolSP) updates << [coolingSetpoint: coolSP]
+			if (heatSP) updates << [heatingSetpoint: heatSP]
 			if (updates != [:]) generateEvent(updates)
 		}
 		LOG("setProgramSetpoints() - completed",3,null,'trace')
