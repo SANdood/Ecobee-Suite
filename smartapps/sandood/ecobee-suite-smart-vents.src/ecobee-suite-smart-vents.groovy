@@ -32,8 +32,9 @@
  *	1.7.21 - Fix HubConnect EcoVent selector
  *	1.7.22 - Added optional Ecobee Programs selections & auto Sensor enrollments; show open percentage in label
  *	1.7.23 - Enable Smart Recovery handling when *nextClimate* is enabled (but currently running Program is not), default min/maxVentLevel to 1/98 for silent operation
+ *	1.7.24 - Remove extraneous log.debug, fix app.label handling of levels, added 'percentage' as option for Paused
  */
-String getVersionNum() 		{ return "1.7.23" }
+String getVersionNum() 		{ return "1.7.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -67,10 +68,10 @@ def mainPage() {
         	String defaultName = "Smart Vents & Switches"
 			String defaultLabel = atomicState?.appDisplayName ?: defaultName
 			String oldName = app.label
-            log.debug "old ${oldName}"
+            //log.debug "old ${oldName}"
 			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
 			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
-            log.debug "update ${settings.thisName} ${app.label}"
+            //log.debug "update ${settings.thisName} ${app.label}"
 				app.updateLabel(settings.thisName)
 				atomicState.appDisplayName = settings.thisName
 			} else if (!app.label) {
@@ -244,15 +245,18 @@ def mainPage() {
                 input(name: 'fanOnlyState', type: 'enum', title: "Vent state for 'Fan Only' operation?", required: true, submitOnChange: true, defaultValue: foDefault,
                 	  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false)
                 if (fanOnlyState == 'percentage') {
-                	input(name: 'fanOnlyLevel', type: "number", title: "Vent level?", required: true, defaultValue:50, description: '50', range: "0..100")
+                	input(name: 'fanOnlyLevel', type: "number", title: "Fan Only Vent level?", required: true, defaultValue:50, description: '50', range: "0..100", submitOnChange: true)
                 }
 				if (HE) paragraph ''
 			}
         } else { 
         	if (settings.theEconetVents || settings.theHCEcoVents || settings.theKeenVents || settings.theHCKeenVents || settings.theGenericVents || settings.theGenericSwitches) {
             	section( title: (HE?'<b>':'') + "Disabled Vent State" + (HE?'</b>':'')) {
-            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', options:[open: 'open/on',closed: 'closed/off',unchanged: 'unchanged'], 
-						  required: true, multiple: false, defaultValue: 'closed')
+            		input(name: 'disabledVents', type: 'enum', title: 'Disabled, desired vent state', options:['open': 'open/on','closed': 'closed/off','percentage': 'percentage','unchanged': 'unchanged'], 
+						  required: true, multiple: false, defaultValue: 'closed', submitOnChange: true)
+                    if (disabledVents == 'percentage') {
+                		input(name: 'disabledLevel', type: "number", title: "Paused Vent level?", required: true, defaultValue:50, description: '50', range: "0..100", submitOnChange: true)
+                	}
 					if (HE) paragraph ''
                 }
       		}
@@ -302,8 +306,14 @@ def initialize() {
     // Now, just exit if we are disabled...
 	if (settings.tempDisable) {
         if (settings.disabledVents && (settings.disabledVents != 'unchanged')) {
-			(settings.disabledVents.startsWith('open')) ? setTheVents('open') : setTheVents('closed') 
-            LOG("Temporarily Paused, setting vents to ${settings.disabledVents}.", 3, null, 'info')
+			if (settings.disabledVents == 'open') {
+            	setTheVents('open')
+            } else if (settings.disabledVents == 'closed') {
+            	setTheVents('closed')
+            } else if (settings.disabledVents == 'percentage') {
+            	setTheVents(settings.disabledLevel ?: 50)
+            }
+            LOG("Temporarily Paused, setting vents to (${atomicState.ventState} ${atomicState.ventLevel})", 3, null, 'info')
         } else {
         	LOG("Temporarily Paused, vents unchanged", 3, null, 'info')
         }
@@ -545,13 +555,17 @@ def getAverageTemperature() {
 }
 
 void setTheVents(ventState) {
+	def newVentState
 	if (!ventState) ventState = 'unchanged'
 	if (ventState == 'open') {
         allVentsOpen()
+        newVentState = 'open'
     } else if (ventState == 'closed') {
         allVentsClosed()
+        newVentState = 'closed'
 	} else if (ventState.isNumber()) {
     	allVentsLevel(ventState as Integer)
+        newVentState = (ventState.toInteger() == settings.minimumVentLevel.toInteger()) ? 'closed' : 'open'
     } else if (ventState == 'unchanged') {
     	boolean ST = atomicState.isST	
     	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
@@ -559,23 +573,23 @@ void setTheVents(ventState) {
                     	 (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
         def ventSwitch = ST ? theVents[0].currentValue('switch') : theVents[0].currentValue('switch', true) // assumption: all vents are in the same state
         if (ventSwitch == 'on') {
-            ventState = 'open'
+            newVentState = 'open'
         	def hasLevel = theVents[0].hasAttribute('level')
             if (hasLevel) {
         		def currentLevel = (ST ? theVents[0].currentValue('level') : theVents[0].currentValue('level', true))?.toInteger()
         		if (currentLevel <= minimumVentLevel.toInteger()) {
                 	// while physically 'open', we are set to the minimum vent level, so we are logically 'closed'
-	            	ventState = 'closed'
+	            	newVentState = 'closed'
                 }
            	}
         } else {
         	// assert ventSwitch == 'off'
-        	ventState = 'closed'
+        	newVentState = 'closed'
         }
-        LOG("setTheVents('unchanged'), prior ventState: ${atomicState.ventState}, new ventState: ${ventState}",3,null,'trace')
+        LOG("setTheVents('unchanged'), prior ventState: ${atomicState.ventState}, new ventState: ${newVentState}",3,null,'trace')
     }
-	if (ventState && (atomicState.ventState != ventState)) {
-    	atomicState.ventState = ventState
+	if (newVentState && (atomicState.ventState != newVentState)) {
+    	atomicState.ventState = newVentState
         runIn(2, updateTheVents, [overwrite: true])
 		updateMyLabel()
     }
@@ -804,7 +818,7 @@ void updateMyLabel() {
 	// Display vent status 
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
-    log.debug app.label
+    	//log.debug app.label
 		myLabel = app.label
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
@@ -814,21 +828,24 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
     String cLevel = atomicState.lastLevel
+    // log.debug "cLevel: ${cLevel}"
+    String newLabel
 	if (settings.tempDisable) {
     	cLevel = ' (paused ' + cLevel + ')'
-		def newLabel = myLabel + ( ST ? cLevel : '<span style="color:red">' + cLevel + '</span>' )
+		newLabel = myLabel + ( ST ? cLevel : '<span style="color:red">' + cLevel + '</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (atomicState.ventState == 'open') {
     	cLevel = ' (open ' + cLevel + ')'
-		def newLabel = myLabel + ( ST ? cLevel : '<span style="color:green">' + cLevel + '</span>' )
+		newLabel = myLabel + ( ST ? cLevel : '<span style="color:green">' + cLevel + '</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (atomicState.ventState == 'closed') { 
     	cLevel = ' (closed ' + cLevel + ')'
-		def newLabel = myLabel + ( ST ? cLevel : '<span style="color:green">' + cLevel + '</span>' )
+		newLabel = myLabel + ( ST ? cLevel : '<span style="color:green">' + cLevel + '</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
+    //log.debug "newLabel: " + newLabel + ", myLabel: " + myLabel + ", app.label: " + app.label
 }
 
 // Ask our parents for help sending the events to our peer sensor devices
