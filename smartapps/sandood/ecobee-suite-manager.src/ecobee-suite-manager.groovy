@@ -36,8 +36,12 @@
  *	1.7.38 - Added queued requests to climateChange actions (setProgramSetpoints, addSensorToProgram, deleteSensorFromProgram)
  *	1.7.39 - Fixed type conversion error in setProgramSetpoints with null setpoint
  *	1.7.40 - Miscellaneous Map/HashMap optimizations
+ *	1.7.41 - Revamped Smart Recovery, so that the Smart Vents Helper knows what the Recovery target is
+ *	1.7.42 - Added weatherTempLowForecast, for the new Smart Humidity Helper
+ *	1.7.43 - Added nextProgramName (for Smart Vents), fixed Fan Holds
+ *	1.7.44 - Optimized myConvertTemperatureIfNeeded()
  */
-String getVersionNum()		{ return "1.7.40" }
+String getVersionNum()		{ return "1.7.44" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -327,7 +331,7 @@ def thermsPage(params) {
 			input(name: "thermostats", title:"Select Thermostats", type: "enum", required:false, multiple:true, description: "Tap to choose", params: params, options: stats, submitOnChange: true)		   
 		}
 		section("NOTE:\n\nThe temperature units (F or C) is determined by your Location settings automatically. Please update your Hub settings " + 
-			"(under My Locations) to change the units used.\n\nThe current value is ${getTemperatureScale()}.") {
+			"(under My Locations) to change the units used.\n\nThe current value is ${temperatureScale}.") {
 		}
 	}	   
 }
@@ -2310,12 +2314,25 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				// let's don't copy all that weather info...we only need some 3 bits of that info
 				if (getWeather || forcePoll) {
 					if (stat.weather) {
+                    	// Find the lowest temperature forecasted for today, today+1 (2 days), today+2 (3 days), ... today+4 (5 days) - (used by Smart Humidity helper)
+                        def low24 = stat.weather.forecasts[0].temperature
+                        for (int j=5; j<9; j++) {
+                        	if (stat.weather.forecasts[j].temperature < low24) low24 = stat.weather.forecasts[j].temperature
+                        }
+                        low24 = low24 / 10.0
+                        def low1Day = stat.weather.forecasts[1].tempLow / 10.0
+                        def low2Day = stat.weather.forecasts[2].tempLow / 10.0
+                        def low3Day = stat.weather.forecasts[3].tempLow / 10.0
+                        def low4Day = stat.weather.forecasts[4].tempLow / 10.0
+
 						tempWeather[tid] = [timestamp:		stat.weather.timestamp,
 											temperature:	stat.weather.forecasts[0]?.temperature.toString(),
 											humidity:		stat.weather.forecasts[0]?.relativeHumidity,
+                                            tempLowForecast:"${low24},${low1Day},${low2Day},${low3Day},${low4Day}",		// Simplest way to send - let the Helper do the work
 											dewpoint:		stat.weather.forecasts[0]?.dewpoint,
 											pressure:		stat.weather.forecasts[0]?.pressure,
 											weatherSymbol:	stat.weather.forecasts[0]?.weatherSymbol.toString()] as HashMap
+                    	
 					}
 				}
 				if (forcePoll || alertsUpdated) {
@@ -3073,7 +3090,7 @@ void updateSensorData() {
 				// collect the climates that this sensor is included in
 				def sensorClimates = [:] as HashMap
 				def climatesList = []
-				if (programUpdated || forcePoll) {	// these will only change when the program object changes
+				if (programUpdated) {	// these will only change when the program object changes
 					def statProgram = atomicState.program[tid]
 					if (statProgram?.climates) {
 						statProgram.climates.each { climate ->
@@ -3162,21 +3179,21 @@ void updateThermostatData() {
 	boolean ST = atomicState.isST
 	def updatesLog = atomicState.updatesLog
 	if (debugLevelFour) LOG("updateThermostatData() - updatesLog: ${updatesLog}", 1, null, 'trace')
-	boolean thermostatUpdated = updatesLog.thermostatUpdated
-	boolean runtimeUpdated = updatesLog.runtimeUpdated
-	boolean rtReallyUpdated = updatesLog.rtReallyUpdated
-	boolean alertsUpdated = updatesLog.alertsUpdated
-	boolean settingsUpdated = updatesLog.settingsUpdated
-	boolean programUpdated = updatesLog.programUpdated
-	boolean eventsUpdated = updatesLog.eventsUpdated
+	boolean thermostatUpdated =	updatesLog.thermostatUpdated
+	boolean runtimeUpdated = 	updatesLog.runtimeUpdated
+	boolean rtReallyUpdated = 	updatesLog.rtReallyUpdated
+	boolean alertsUpdated = 	updatesLog.alertsUpdated
+	boolean settingsUpdated = 	updatesLog.settingsUpdated
+	boolean programUpdated = 	updatesLog.programUpdated
+	boolean eventsUpdated = 	updatesLog.eventsUpdated
 	//boolean locationUpdated = atomicState.locationUpdated	// this never gets sent anyway
-    boolean audioUpdated = updatesLog.audioUpdated
-	boolean extendRTUpdated = updatesLog.extendRTUpdated
-	boolean weatherUpdated = updatesLog.weatherUpdated
-	boolean sensorsUpdated = updatesLog.sensorsUpdated
-	boolean equipUpdated = updatesLog.equipUpdated
-	boolean forcePoll = updatesLog.forcePoll
-	def changedTids = updatesLog.changedTids
+    boolean audioUpdated = 		updatesLog.audioUpdated
+	boolean extendRTUpdated = 	updatesLog.extendRTUpdated
+	boolean weatherUpdated = 	updatesLog.weatherUpdated
+	boolean sensorsUpdated = 	updatesLog.sensorsUpdated
+	boolean equipUpdated = 		updatesLog.equipUpdated
+	boolean forcePoll = 		updatesLog.forcePoll
+	def changedTids = 			updatesLog.changedTids
 	
 	boolean usingMetric = wantMetric() // cache the value to save the function calls
 	if (forcePoll) {
@@ -3202,7 +3219,7 @@ void updateThermostatData() {
 		// if (atomicState.askAlexaAppAlerts?.containsKey(tid) && (atomicState.askAlexaAppAlerts[tid] == true)) atomicState.askAlexaAppAlerts[tid] = []
 		String DNI = (atomicState.isHE?'ecobee_suite-thermostat-':'') + ([ app.id, tid ].join('.'))
 		String tstatName = getThermostatName(tid)
-		
+
 		if (debugLevelThree) LOG("updateThermostatData() - Updating event data for thermostat ${tstatName} (${tid})", 3, null, 'info')
 		if (TIMERS) log.debug "TIMER: Updating event data for ${tstatName} ${tid} @ ${now() - pollEcobeeAPIStart}ms"
 
@@ -3225,6 +3242,7 @@ void updateThermostatData() {
 		def tempWeatherDewpoint
 		def tempWeatherHumidity
 		def tempWeatherPressure
+        def tempWeatherLowForecast
 
 		if ( rtReallyUpdated || sensorsUpdated || forcePoll) {
 			// Occupancy (motion)
@@ -3266,12 +3284,15 @@ void updateThermostatData() {
 			// log.debug atomicState.weather[tid]
 			def weather = (atomicState.weather ? atomicState.weather[tid] : [:]	) as HashMap
 			// log.debug weather
-			if (weather?.temperature != null) {
-				tempWeatherTemperature = myConvertTemperatureIfNeeded((weather.temperature.toBigDecimal() / 10.0), "F", apiPrecision)
-			} else {tempWeatherTemperature = 451.0} // will happen only once, when weather object changes to shortWeather
-			if (weather?.dewpoint != null) tempWeatherDewpoint = myConvertTemperatureIfNeeded((weather.dewpoint.toBigDecimal() / 10.0), "F", apiPrecision)
-			if (weather?.humidity != null) tempWeatherHumidity = weather.humidity
-			if (weather?.pressure != null) tempWeatherPressure = usingMetric ? weather.pressure : roundIt((weather.pressure.toBigDecimal() * 0.02953),2) //milliBars to inHg
+            if (weather) {
+                if (weather.temperature != null) {
+                    tempWeatherTemperature = myConvertTemperatureIfNeeded((weather.temperature.toBigDecimal() / 10.0), "F", apiPrecision)
+                } else {tempWeatherTemperature == 451.0} // will happen only once, when weather object changes to shortWeather
+                if (weather.dewpoint != null) 		tempWeatherDewpoint 	= myConvertTemperatureIfNeeded((weather.dewpoint.toBigDecimal() / 10.0), "F", apiPrecision)
+                if (weather.humidity != null) 		tempWeatherHumidity 	= weather.humidity
+                if (weather.pressure != null) 		tempWeatherPressure 	= usingMetric ? weather.pressure : roundIt((weather.pressure.toBigDecimal() * 0.02953),2) //milliBars to inHg
+                if (weather.tempLowForecast != null)tempWeatherLowForecast 	= weather.tempLowForecast	// Send in native 'F' so Helper doesn't have to do conversions
+            }
 			if (TIMERS) log.debug "TIMER: Finished updating Weather for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
 		}
 		
@@ -3337,6 +3358,9 @@ void updateThermostatData() {
 			scheduledClimateType = schedClimateRef.type
 			program.climates?.each { climatesList += '"'+it.name+'"' } // read with: programsList = new JsonSlurper().parseText(theThermostat.currentValue('programsList'))
 			climatesList.sort()
+            // find the nextClimate* and next****ingSetpoint
+            //
+
 		}
 		if (debugLevelFour) LOG("${tstatName} -> scheduledClimateId: ${scheduledClimateId}, scheduledClimateName: ${scheduledClimateName}, scheduledClimateOwner: ${scheduledClimateOwner}, " +
 					  "scheduledClimateType: ${scheduledClimateType}, climatesList: ${climatesList.toString()}", 1, null, 'info')
@@ -3451,7 +3475,7 @@ void updateThermostatData() {
 			if (debugLevelFour) LOG("Found a running Event: ${runningEvent}", 1, null, 'trace') 
 			holdEndsAt = fixDateTimeString( runningEvent.endDate, runningEvent.endTime, statTime[tid])
 			thermostatHold = runningEvent.type
-			String tempClimateRef = runningEvent.holdClimateRef ? runningEvent.holdClimateRef : ''
+			String tempClimateRef = runningEvent.holdClimateRef ?: ''
 			def currentClimateRef = ((tempClimateRef != '') ? program.climates.find { it.climateRef == tempClimateRef } : [:]) as HashMap
 			// log.debug "runningEvent.type: ${runningEvent.type}"
 			switch (runningEvent.type) {
@@ -3461,13 +3485,27 @@ void updateThermostatData() {
 						currentClimateName = 'Hold: ' + currentClimate
 						currentClimateOwner = currentClimateRef?.owner
 						currentClimateType = currentClimateRef?.type
-					} else if ((runningEvent.name=='auto')||(runningEvent.name=='hold')) {		// Handle the "auto" climates (includes fan on override, and maybe the Smart Recovery?)
+					} else if ((runningEvent.name=='auto')||(runningEvent.name=='hold')) {		// Handle the "auto" climates (includes fan on overrides)
+                    	currentClimateType = 'hold'
 						if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false)) {
-							currentClimateName = 'Hold: Fan'
+							if (runningEvent.fan == 'on') {
+								currentClimateName = 'Hold: Fan On'
+								thermostatHold = 'fan on'
+							} else if (runningEvent.fan == 'auto') {
+								if (runningEvent.fanMinOnTime == 0) { 
+									currentClimateName = 'Hold: Fan Auto'
+									thermostatHold = 'fan auto'
+								} else {
+									currentClimateName = 'Hold: Circulate'
+									thermostatHold = 'circulate'
+								}
+							}
 						} else {
 							currentClimateName = 'Hold: Temp'
 						}
-						currentClimate = runningEvent.name.capitalize()
+						//currentClimate = runningEvent.name.capitalize()
+					} else {
+						currentClimateName = 'Hold'
 					}
 					break;
 				case 'vacation':
@@ -3528,7 +3566,7 @@ void updateThermostatData() {
 		if (debugLevelFour) LOG("updateThermostatData(${tstatName} ${tid}) - currentClimate: ${currentClimate}, currentClimateName: ${currentClimateName}, currentClimateId: ${currentClimateId}, " +
 								"currentClimateOwner: ${currentClimateOwner}, currentClimateType: ${currentClimateType}", 1, null, 'trace')
 
-		// Note that fanMode == 'auto' might be changedby the Thermostat DTH to 'off' or 'circulate' dependent on  HVACmode and fanMinRunTime
+		// Note that fanMode == 'auto' might be changed by the Thermostat DTH to 'off' or 'circulate' dependent on  HVACmode and fanMinRunTime
 		if (runningEvent) {
 			currentFanMode = runningEvent.fan
 			currentVentMode = runningEvent.vent
@@ -3579,12 +3617,12 @@ void updateThermostatData() {
 		def coolStages = statSettings.coolStages 
 		String equipOpStat // = 'idle'	// assume we're idle - this gets fixed below if different
 		String thermOpStat // = 'idle'
-		Boolean isHeating = false
-		Boolean isCooling = false
-		Boolean smartRecovery = false
-		Boolean overCool = false
-		Boolean dehumidifying = false
-		Boolean ecoPreCool = false
+		boolean isHeating = false
+		boolean isCooling = false
+		boolean smartRecovery = false
+		boolean overCool = false
+		boolean dehumidifying = false
+		boolean ecoPreCool = false
 
 		// Let's deduce if we are in Smart Recovery mode
 		if (equipStatus.contains('ea')) {
@@ -3626,6 +3664,37 @@ void updateThermostatData() {
 				LOG("${tstatName} is in Smart Recovery (${tid}), temp: ${tempTemperature}, setpoint: ${tempCoolingSetpoint}",3,null,'info')
 			}
 		}
+        
+        // These are only set when running Smart Recovery
+        def nextHeatingSetpoint = 'null'
+        def nextCoolingSetpoint = 'null'
+        String nextProgramName = 'null'
+        
+        if (smartRecovery) {
+        	// When in Smart Recovery, set the nextHeating/CoolingSetpoints so that Smart Vents knows where we are trying to get to
+    		Calendar calendar = Calendar.getInstance()
+    		calendar.setTime(new Date().parse('yyyy-MM-dd HH:mm:ss',statTime[tid]))
+    		int td = (calendar.get(Calendar.DAY_OF_WEEK) > 1) ? (calendar.get(Calendar.DAY_OF_WEEK) - 2) : 6	// Change from (Sunday = 0) to (Monday == 0, Sunday == 6)
+            int ti = (calendar.get(Calendar.HOUR_OF_DAY) * 2) + ((calendar.get(Calendar.MINUTE) < 30) ? 0 : 1)	// Index into Schedule[day] array of program Ids
+            def schedClimateId = program?.schedule[td][ti] // currently scheduled program
+            //log.debug "[${tid}] schedClimate = ${schedClimateId}, td: ${td}, ti: ${ti}"
+            ti++
+            def nextClimateId = ''
+            while (!nextClimateId) {
+            	if (ti == 48) { ti = 0; td = (td < 6) ? td + 1 : 0; }
+                if (schedClimateId != program?.schedule[td][ti]) {
+                    nextClimateId = program.schedule[td][ti]
+                } else ti++ 
+            }
+            def nextClimate = program?.climates?.find { it.climateRef == nextClimateId }
+            if (nextClimate) {
+            	nextCoolingSetpoint = myConvertTemperatureIfNeeded( nextClimate.coolTemp / 10.0, 'F', apiPrecision ) 
+                nextHeatingSetpoint = myConvertTemperatureIfNeeded( nextClimate.heatTemp / 10.0, 'F', apiPrecision )
+                nextProgramName = nextClimate.name
+            }
+        }
+        //log.debug "[${tid}] nextClimate: ${nextClimate}, nextHeat: ${nextHeatingSetpoint}, nextCool: ${nextCoolingSetpoint}"
+		
 		if (equipUpdated || forcePoll) {
 			equipOpStat = 'idle'
 			thermOpStat = 'idle'
@@ -3666,7 +3735,7 @@ void updateThermostatData() {
 			} else if (equipStatus.contains('de')) { // These can also run independent of heat/cool
 				equipOpStat = 'dehumidifier' 
 				thermOpStat = equipStats.contains('fan') ? 'fan only (dehumidifier)' : 'idle (dehumidifier)'
-				// SHOULD thermOpStat BE FAN ONLY????
+				// SHOULD thermOpStat BE FAN ONLY? --> yes, this is fixed in ES Thermostat
 			} else if (equipStatus.contains('hu')) { 
 				equipOpStat = 'humidifier' 
 				thermOpStat = equipStatus.contains('fan') ? 'fan only (humidifier)' : 'idle (humidifier)'
@@ -3731,14 +3800,18 @@ void updateThermostatData() {
 		// NOTE: to force a total update, simply set all the atomicState.xxxChanged Maps to [:]
 		
 		// Equipment operating status - need to send first so that temperatureDisplay is properly updated after API connection loss/recovery
-		if (thermostatUpdated || equipUpdated || forcePoll || (atomicState.wasConnected != isConnected)) { 
+        // And we send the nextSetpoints before the status, so that SmartRecovery has them initialized (for targeting in Smart Vents)
+		if (thermostatUpdated || equipUpdated || smartRecovery || forcePoll || (atomicState.wasConnected != isConnected)) { 
 			def changeEquip = (atomicState.changeEquip ? atomicState.changeEquip : [:])  as HashMap
 			atomicState.wasConnected = isConnected
 			boolean eqpChanged = false
-			if ((changeEquip == [:]) || !changeEquip.containsKey(tid) || (changeEquip[tid] == null)) changeEquip[tid] = ['null','null','null','null']
-			if (equipStatus && (changeEquip[tid][0] != equipStatus)) { data << [equipmentStatus: equipStatus];			changeEquip[tid][0] = equipStatus; eqpChanged = true; }
-			if (thermOpStat && (changeEquip[tid][1] != thermOpStat)) { data << [thermostatOperatingState: thermOpStat];	changeEquip[tid][1] = thermOpStat; eqpChanged = true; }
-			if (equipOpStat && (changeEquip[tid][2] != equipOpStat)) { data << [equipmentOperatingState: equipOpStat];	changeEquip[tid][2] = equipOpStat; eqpChanged = true; }
+			if ((changeEquip == [:]) || !changeEquip.containsKey(tid) || (changeEquip[tid] == null)) changeEquip[tid] = ['null','null','null','null','','','']
+            if (changeEquip[tid][4] != nextHeatingSetpoint)			 { data << [nextHeatingSetpoint: nextHeatingSetpoint];	changeEquip[tid][4] = nextHeatingSetpoint;	eqpChanged = true; }
+			if (changeEquip[tid][5] != nextCoolingSetpoint)			 { data << [nextCoolingSetpoint: nextCoolingSetpoint];	changeEquip[tid][5] = nextCoolingSetpoint;	eqpChanged = true; }
+            if (changeEquip[tid][6] != nextProgramName)				 { data << [nextProgramName: nextProgramName];			changeEquip[tid][6] = nextProgramName;		eqpChanged = true; }
+			if (equipStatus && (changeEquip[tid][0] != equipStatus)) { data << [equipmentStatus: equipStatus];				changeEquip[tid][0] = equipStatus; 			eqpChanged = true; }
+			if (thermOpStat && (changeEquip[tid][1] != thermOpStat)) { data << [thermostatOperatingState: thermOpStat];		changeEquip[tid][1] = thermOpStat; 			eqpChanged = true; }
+			if (equipOpStat && (changeEquip[tid][2] != equipOpStat)) { data << [equipmentOperatingState: equipOpStat];		changeEquip[tid][2] = equipOpStat; 			eqpChanged = true; }
 			// changeEquip[tid][3] = statMode
 			if (eqpChanged) {
 				atomicState.changeEquip = changeEquip
@@ -3896,7 +3969,7 @@ void updateThermostatData() {
 		
 		// SmartApp configuration settings that almost never change (Listed in order of frequency that they should change normally)
 		Integer dbgLevel = getDebugLevel()
-		String tmpScale = getTemperatureScale()
+		String tmpScale = temperatureScale
 		boolean cfgsChanged = false
 		String timeOfDay = atomicState.timeZone ? getTimeOfDay() : getTimeOfDay(tid)
 		boolean userPChanged = false
@@ -3981,7 +4054,7 @@ void updateThermostatData() {
 		boolean needPrograms = false
 		def changeRarely = (atomicState.changeRarely ?: [:]) as HashMap
 		if (thermostatUpdated || runtimeUpdated ||	equipUpdated || forcePoll || settingsUpdated || eventsUpdated || programUpdated || rtReallyUpdated || extendRTUpdated || (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {	
-			if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+			if (changeRarely[tid] == null) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
 			// The order of these is IMPORTANT - Do setpoints and all equipment changes before notifying of the hold and program change...
 			if ((tempHeatingSetpoint != null) && (forcePoll || (changeRarely[tid][19] != tempHeatingSetpoint) || userPChanged))	{ 
 				needPrograms = true
@@ -4040,24 +4113,25 @@ void updateThermostatData() {
 		def lastOList = []
 		def changeOften = (atomicState.changeOften ?: [:]) as HashMap
 		lastOList = changeOften[tid]
-		if ( !lastOList || (lastOList.size() < 14)) lastOList = [999,'null',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1,-1,-1]
+		if ( !lastOList || (lastOList.size() < 14)) lastOList = [999,'null',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1,-1,-1,'null']
 		if (sensorsUpdated && (lastOList[1] != occupancy)) data << [motion: occupancy]
-		if (rtReallyUpdated || forcePoll || weatherUpdated || extendRTUpdated) { // || (tempHeatingSetpoint != 0.0) || (tempCoolingSetpoint != 999.0)) {
+		if (rtReallyUpdated || forcePoll || weatherUpdated || extendRTUpdated) { 
 			String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
 			def oftenList = [tempTemperature,occupancy,runtime?.actualHumidity,null,timeOfDay,wSymbol,tempWeatherTemperature,tempWeatherHumidity,tempWeatherDewpoint,
-								tempWeatherPressure,humiditySetpoint,dehumiditySetpoint,humiditySetpointDisplay,userPrecision]
+								tempWeatherPressure,humiditySetpoint,dehumiditySetpoint,humiditySetpointDisplay,userPrecision,tempWeatherLowForecast]
 			
-			if ((tempTemperature != null) && ((lastOList[0] != tempTemperature) || forcePoll)) data << [temperature: tempTemperature] // roundIt(tempTemperature, apiPrecision)] // String.format("%.${apiPrecision}f", roundIt(tempTemperature, apiPrecision))]
+			if ((tempTemperature != null) && ((lastOList[0] != tempTemperature) || forcePoll)) data << [temperature: tempTemperature]
 			if (forcePoll || (lastOList[2] != runtime.actualHumidity)) data << [humidity: runtime.actualHumidity]
 			if (humiditySetpointDisplay && (lastOList[12] != humiditySetpointDisplay)) data << [humiditySetpointDisplay: humiditySetpointDisplay]
 			if (lastOList[10] != humiditySetpoint) data << [humiditySetpoint: humiditySetpoint]
-			if (lastOList[11] != dehumiditySetpoint) data << [dehumiditySetpoint: dehumiditySetpoint]		// dehumidityLevel: dehumiditySetpoint, dehumidifierLevel: dehumiditySetpoint]
+			if (lastOList[11] != dehumiditySetpoint) data << [dehumiditySetpoint: dehumiditySetpoint]
 			if (weatherUpdated) {
 				if (wSymbol && ((lastOList[5] != wSymbol) || (timeOfDay != lastOList[4]))) data << [timeOfDay: timeOfDay, weatherSymbol: wSymbol]
-				if ((tempWeatherTemperature != null) && ((lastOList[6] != tempWeatherTemperature) || userPChanged)) data << [weatherTemperature: roundIt(tempWeatherTemperature, userPrecision)] //String.format("%0${userPrecision+2}.${userPrecision}f", roundIt(tempWeatherTemperature, userPrecision))]
-				if ((tempWeatherHumidity != null) && (lastOList[7] != tempWeatherHumidity)) data << [weatherHumidity: tempWeatherHumidity]
-				if ((tempWeatherDewpoint != null) && ((lastOList[8] != tempWeatherDewpoint) || userPChanged)) data << [weatherDewpoint: roundIt(tempWeatherDewpoint, userPrecision)] // String.format("%0${userPrecision+2}.${userPrecision}f",roundIt(tempWeatherDewpoint,userPrecision))]
-				if ((tempWeatherPressure != null) && (lastOList[9] != tempWeatherPressure)) data << [weatherPressure: tempWeatherPressure]
+				if ((tempWeatherTemperature != null)	&& ((lastOList[6] != tempWeatherTemperature) || userPChanged)) 	data << [weatherTemperature:	roundIt(tempWeatherTemperature, userPrecision)]
+				if ((tempWeatherHumidity != null) 		&& (lastOList[7] != tempWeatherHumidity)) 						data << [weatherHumidity: 		tempWeatherHumidity]
+				if ((tempWeatherDewpoint != null) 		&& ((lastOList[8] != tempWeatherDewpoint) || userPChanged)) 	data << [weatherDewpoint: 		roundIt(tempWeatherDewpoint, userPrecision)]
+				if ((tempWeatherPressure != null) 		&& (lastOList[9] != tempWeatherPressure)) 						data << [weatherPressure: 		tempWeatherPressure]
+                if ((tempWeatherLowForecast != null) 	&& (lastOList[14] != tempWeatherLowForecast)) 					data << [weatherTempLowForecast:tempWeatherLowForecast]
 			}
 			if (changeOften[tid] != oftenList) {
 				changeOften[tid] = oftenList
@@ -4407,7 +4481,8 @@ boolean resumeProgram(child, String deviceId, resumeAll=true) {
 							coolingSetpoint:	tempCoolingSetpoint, // String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision)),
 							currentProgramName: climateName,
 							currentProgram:		climateName,
-							currentProgramId:	climateId ]
+							currentProgramId:	climateId,
+                          ]
 			LOG("resumeProgram(${statName}) ${updates}",2,null,'info')
 			child.generateEvent(updates)			// force-update the calling device attributes that it can't see
 		}
@@ -4775,7 +4850,7 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 		// must resume program first
 		resumeProgram(child, deviceId, true)
 	}
-	def isMetric = (getTemperatureScale() == "C")
+	def isMetric = (temperatureScale == "C")
 	def h = roundIt((isMetric ? (cToF(heating) * 10.0) : (heating * 10.0)), 0)		// better precision using BigDecimal round-half-up
 	def c = roundIt((isMetric ? (cToF(cooling) * 10.0) : (cooling * 10.0)), 0)
 	
@@ -4841,7 +4916,7 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
 	}
 	
 	LOG("setFanMode(${fanMode}) for ${child} (${deviceId})", 5, null, 'trace') 
-	boolean isMetric = (getTemperatureScale() == "C")
+	boolean isMetric = (temperatureScale == "C")
 	boolean ST = atomicState.isST
 	
 	def currentThermostatHold = ST ? child.device.currentValue('thermostatHold') : child.device.currentValue('thermostatHold', true)
@@ -5114,7 +5189,7 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
 	}
 	
 	// convert C temps to F
-	def isMetric = (getTemperatureScale() == "C")
+	def isMetric = (temperatureScale == "C")
 	// log.debug "hs: ${heatingSetpoint}, null? ${(heatingSetpoint != null)}, bigD? ${heatingSetpoint.isBigDecimal()}, *10: ${(heatingSetpoint * 10.0)}" // , ri: ${roundIt((heatingSetpoint * 10.0), 0)}"
 	def ht = (heatingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(heatingSetpoint.toBigDecimal()) * 10.0) : (heatingSetpoint.toBigDecimal() * 10.0)), 0)) : null )		// better precision using BigDecimal round-half-up
 	def ct = (coolingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(coolingSetpoint.toBigDecimal()) * 10.0) : (coolingSetpoint.toBigDecimal() * 10.0)), 0)) : null )
@@ -5243,7 +5318,7 @@ boolean setEcobeeSetting(child, String deviceId, String name, String value) {
 	if (EcobeeTempSettings.contains(name)) {
 		// Is a temperature setting - need to convert to F*10 for Ecobee
 		found = true
-		def isMetric = (getTemperatureScale() == "C")
+		def isMetric = (temperatureScale == "C")
 		sendValue = ((value != null) && value.isBigDecimal()) ? (roundIt((isMetric ? (cToF(value as BigDecimal) * 10.0) : ((value as BigDecimal) * 10.0)), 0)) : null
 	} else if (EcobeeSettings.contains(name)) {
 		found = true
@@ -5399,16 +5474,13 @@ boolean sendJson(child=null, String jsonBody) {
 
 boolean sendJsonRetry() {
 	LOG("sendJsonRetry() called", 4)
-	def child = null
-	if (atomicState.savedActionChild) {
-		child = getChildDevice(atomicState.savedActionChild)
-	}
+	String child = atomicState.savedActionChild ? getChildDevice(atomicState.savedActionChild) as String : ""
 	
-	if (child == null) {
+	if (!child) {
 		LOG("sendJsonRetry() - no savedActionChild!", 2, child, "warn")
-		// return false
+		return false
 	}
-	if (atomicState.savedActionJsonBody == null) {
+	if (!atomicState.savedActionJsonBody) {
 		LOG("sendJsonRetry() - no saved JSON Body to send!", 2, child, "warn")
 		return false
 	}	   
@@ -5605,29 +5677,24 @@ def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
 		LOG("Illegal sensorValue (null)", 2, null, "error")
 		return null
 	}
-	if ( (cmdScale != "F") && (cmdScale != "C") && (cmdScale != "dC") && (cmdScale != "dF") ) {
-		// We do not have a valid Scale input, throw a debug error into the logs and just return the passed in value
-		LOG("Invalid temp scale used: ${cmdScale}", 2, null, "error")
-		return roundIt(scaledSensorValue, precision)
+    if ( (cmdScale != 'F') && (cmdScale != 'C') ) {
+    	if (cmdScale == 'dF') { 
+        	cmdScale = 'F' 		// Normalize
+        } else if (cmdScale == 'dC') { 
+        	cmdScale = 'C'		// Normalize
+        } else {
+			LOG("Invalid temp scale used: ${cmdScale}", 2, null, "error")
+			return roundIt(scaledSensorValue, precision)
+        }
 	}
-
-	def returnSensorValue 
-	
-	// Normalize the input
-	if (cmdScale == "dF") { cmdScale = "F" }
-	if (cmdScale == "dC") { cmdScale = "C" }
-
-	LOG("About to convert/scale temp: ${scaledSensorValue}", 5, null, "trace", false)
-	if (cmdScale == getTemperatureScale() ) {
+	if (cmdScale == temperatureScale) {
 		// The platform scale is the same as the current value scale
-		returnSensorValue = roundIt(scaledSensorValue, precision)
-	} else if (cmdScale == "F") {				
-		returnSensorValue = roundIt(fToC(scaledSensorValue), precision)
+        return roundIt(scaledSensorValue, precision)
+	} else if (cmdScale == 'F') {				
+        return roundIt(fToC(scaledSensorValue), precision)
 	} else {
-		returnSensorValue = roundIt(cToF(scaledSensorValue), precision)
+        return roundIt(cToF(scaledSensorValue), precision)
 	}
-	LOG("returnSensorValue == ${returnSensorValue}", 5, null, "trace", false)
-	return returnSensorValue
 }
 def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
@@ -5636,17 +5703,13 @@ def roundIt( BigDecimal value, decimals=0) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 boolean wantMetric() {
-	return (getTemperatureScale() == "C")
+	return (temperatureScale == 'C')
 }
 def cToF(temp) {
-	if (debugLevel(5)) LOG("cToF entered with ${temp}", 5, null, "info")
-	if (temp) { return (temp * 1.8 + 32) } else { return null } 
-	// return celsiusToFahrenheit(temp)
+	return (temp != null) ? ((temp * 1.8) + 32) : null
 }
 def fToC(temp) {	
-	if (debugLevel(5)) LOG("fToC entered with ${temp}", 5, null, "info")
-	if (temp) { return (temp - 32) / 1.8 } else { return null } 
-	// return fahrenheitToCelsius(temp)
+	return (temp != null) ? ((temp - 32) / 1.8) : null
 }
 
 // Establish the minimum amount of time to wait to do another poll
@@ -5687,12 +5750,12 @@ Integer getHoldHours() {
 
 String getTimestamp() {
 	// There seems to be some possibility that the timeZone will not be returned and will cause a NULL Pointer Exception
-	def timeZone = location?.timeZone ? location.timeZone : ""
-	// LOG("timeZone found as ${timeZone}", 5)
-	if (timeZone == "") {
+	//def timeZone = location?.timeZone ?: ""
+	//if (timeZone == "") {
+    if (!location?.timeZone) {
 		return new Date().format("yyyy-MM-dd HH:mm:ss z")
 	} else {
-		return new Date().format("yyyy-MM-dd HH:mm:ss z", timeZone)
+		return new Date().format("yyyy-MM-dd HH:mm:ss z", location.timeZone)
 	}
 }
 
@@ -5856,33 +5919,27 @@ String childType(child) {
 }
 
 def getFanMinOnTime(child) {
-	if (debugLevel(4)) LOG("getFanMinOnTime() - Looking up current fanMinOnTime for ${child.device?.displayName}", 1, child)
+	boolean debugLevelFour = debugLevel(4)
+	if (debugLevelFour) LOG("getFanMinOnTime() - Looking up current fanMinOnTime for ${child.device?.displayName}", 1, child)
 	String devId = getChildThermostatDeviceIdsString(child)
-	LOG("getFanMinOnTime() Looking for ecobee thermostat ${devId}", 5, child, "trace")
-	
 	def fanMinOnTime = atomicState.settings[devId]?.fanMinOnTime
-	if (debugLevel(4)) LOG("getFanMinOnTime() fanMinOnTime is ${fanMinOnTime} for therm ${devId}", 1, child)
+	if (debugLevelFour) LOG("getFanMinOnTime() fanMinOnTime is ${fanMinOnTime} for therm ${devId}", 1, child)
 	return fanMinOnTime
 }
 
 String getHVACMode(child) {
-	if (debugLevel(4)) LOG("Looking up current hvacMode for ${child.device?.displayName}", 1, child)
-	String devId = getChildThermostatDeviceIdsString(child)
-	// LOG("getHVACMode() Looking for ecobee thermostat ${devId}", 5, child, "trace")
-	
-	def hvacMode = atomicState.settings[devId].hvacMode		// FIXME
-	if (debugLevel(4)) LOG("getHVACMode() hvacMode is ${hvacMode} for therm ${devId}", 1, child)
+	boolean debugLevelFour = debugLevel(4)
+	if (debugLevelFour) LOG("Looking up current hvacMode for ${child.device?.displayName}", 1, child)
+	String devId = getChildThermostatDeviceIdsString(child)	
+	def hvacMode = atomicState.settings[devId].hvacMode
+	if (debugLevelFour) LOG("getHVACMode() hvacMode is ${hvacMode} for therm ${devId}", 1, child)
 	return hvacMode
 }
 
 def getAvailablePrograms(thermostat) {
-	// TODO: Finish implementing this!
 	if (debugLevel(4)) LOG("Looking up the available Programs for this thermostat (${thermostat})", 4)
 	String devId = getChildThermostatDeviceIdsString(thermostat)
-	// LOG("getAvailablePrograms() Looking for ecobee thermostat ${devId}", 5, thermostat, "trace")
-
 	def climates = atomicState.program[devId]?.climates
-	
 	return climates?.collect { it.name }
 }
 
