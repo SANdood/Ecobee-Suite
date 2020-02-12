@@ -1,5 +1,5 @@
 /**
- *  ecobee Suite Smart Circulation
+ *  ecobee Suite Smart Vents
  *
  *  Copyright 2017 Barry A. Burke
  *
@@ -13,50 +13,48 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.4.0  - Renamed parent Ecobee Suite Manager
- *	1.4.01 - Tweaked supportedThermostatModes handling
- *	1.4.02 - Added install warning to description
- *	1.4.03 - Optimizations for multiple simultaneous updates
- *	1.4.04 - Minor tweaks
- *	1.4.05 - Added Quiet Time Helper integration
- *	1.5.00 - Release number synchronization
- *	1.5.01 - Allow Ecobee Suite Thermostats only
- *	1.5.02 - Converted all math to BigDecimal
- *	1.5.03 - Miscellaneous bug fixes
- *	1.5.04 - Added 'circOff' and 'vacaCircOff' reservation handling (applies to quiet time only)
- *	1.6.00 - Release number synchronization
- *	1.6.01 - Fix reservation initialization error
- *	1.6.02 - REALLY fix reservations initialization error
- *	1.6.03 - Really, REALLY fix reservations initialization error
- *	1.6.10 - Converted to parent-based reservations
- *	1.6.11 - Clear reservations when disabled
- *	1.6.12 - Minor optimizations
- *	1.6.13 - Added humidity restrictor
- *	1.6.14 - Fixed resetting fanMinOnTime when minFanOnTime==maxFanOnTime
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *  1.7.01 - nonCached currentValue() for HE
- *  1.7.02 - more nonCached cases for HE
- *	1.7.03 - Fixing private method issue caused by grails
- *	1.7.04 - Fix error message when temps don't converge
- *	1.7.05 - Fix adjustments down (was getting stuck unless delta < 1.0), fix broken mode handler, reservations work, fix 'Vacation'
- *  1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.07 - Added option to require ALL or ANY of the Modes/Programs restrictions
- *	1.7.08 - Fixed typos and formatting
- *	1.7.09 - Optimized isST/isHE, added Global Pause, misc optimizations
+ *	1.7.05 - More code optimizations
+ *	1.7.06 - Added generic switch control (e.g., to control a fan)
+ *	1.7.07 - Update vent status (refresh) before & after taking actions, display vent status in appLabel
+ *	1.7.08 - Optimized checks when nothing changes; added vent open/close option for 'fan only'
+ *	1.7.09 - Removed redundant log.debug text, fixed new fan only vent option
+ *	1.7.10 - Added option to disable local display of log.debug() logs, tweaked myLabel handling
+ *	1.7.11 - Check both hasCapability('switchLevel') & hasCommand('setLevel')
+ *	1.7.12 - Fix typo in ventsOn(); set 100 instead of 99
+ *	1.7.13 - Optimized checkTemperature() to avoid timeout errors on ST
+ *	1.7.14 - Added maximumVentLevel and fanOnlyState; more optimizations
+ *	1.7.15 - More bugs squashed, settings page cleaned up
+ *	1.7.16 - Fixed vents not changing 
+ *	1.7.17 - Fixed vents not changing when both minLevel & maxLevel are set
+ *	1.7.18 - Added conditional support for "contact sensor" capability, so vents show logical state in HomeKit (as blinds)
+ *	1.7.19 - Fixed helper labelling
+ *	1.7.20 - Added support for HubConnected EcoVents and Keen Vents; optimized Keen Vent handling; new Fan Only percentage setting
+ *	1.7.21 - Fix HubConnect EcoVent selector
+ *	1.7.22 - Added optional Ecobee Programs exception & auto Sensor enrollments; show open percentage in label
+ *	1.7.23 - Enable Smart Recovery handling when *nextClimate* is enabled (but currently running Program is not), default min/maxVentLevel to 1/98 for silent operation
+ *	1.7.24 - Remove extraneous log.debug, fix app.label handling of levels, added 'percentage' as option for Paused
+ *	1.7.25 - Fixed labels (again), fixed open contacts, and updated configuration layout, added intro ***
+ *	1.7.26 - Integrated with Smart Room and ES Sensors
+ *	1.7.27 - Added atomic updateSensorPrograms - add/remove in 1 call
+ *	1.7.28 - Added reservation serializer for climate/sensor changes (program.climates)
+ *	1.7.29 - Added Mode restriction
+ *	1.8.00 - Version synchronization, updated settings look & feel
  */
-String getVersionNum() { return "1.7.09e" }
-String getVersionLabel() { return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
-import groovy.json.*
+String getVersionNum()		{ return "1.8.00c" }
+String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+import groovy.json.JsonSlurper
 
 definition(
-	name: 			"ecobee Suite Smart Circulation",
+	name: 			"ecobee Suite Smart Vents",
 	namespace: 		"sandood",
 	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAdjust fan circulation time based on temperature delta between 2 or more rooms.",
+	description:	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled vents to meet a target temperature in a room.",
 	category: 		"Convenience",
 	parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	iconUrl:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 	singleInstance: false,
     pausable: 		true
 )
@@ -69,677 +67,1073 @@ preferences {
 def mainPage() {
 	boolean ST = isST
 	boolean HE = !ST
+    def vc = 0			// vent counter
+    def unit = temperatureScale
+    String defaultName = "Smart Vents & Switches"
 	
-	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
-    	section(title: "") {
-			String defaultLabel = "Smart Circulation"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
+    	section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
+        	if (ST) {
+				paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
+            } else {
+				paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
+            }
+			paragraph("This Helper dynamically adjusts the vent open percentage based on room temperature relative to an Ecobee Suite Thermostat's setpoints, or to pre-defined cooling & heating setpoints. "+
+            		  "It will also automatically register the room's Ecobee Suite Sensor(s) to the chosen ES Thermostat programs while active, and unregister while the Helper is Paused. "+
+                      "There should be one instance of this Helper for each room with a ${getHubPlatform()}-controlled adjustable vent, ideally (but optionally) with an Ecobee Suite Sensor "+
+                      "in the room (multiple sensors will be averaged).")
+		}
+		section(title: sectionTitle("Naming${!settings.tempDisable?' & Sensor Selection':''}")) {
+			String defaultLabel
+			if (!atomicState?.appDisplayName) {
+				defaultLabel = defaultName
+				app.updateLabel(defaultName)
+				atomicState?.appDisplayName = defaultName
+			} else {
+				defaultLabel = atomicState.appDisplayName
+			}
+			label(title: inputTitle("Name for this ${defaultName} Helper"), required: false, submitOnChange: true, defaultValue: defaultLabel, width: 6)
             if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
-			}
+			} else {
+            	atomicState.appDisplayName = app.label
+            }
 			if (HE) {
 				if (app.label.contains('<span ')) {
-					if (atomicState?.appDisplayName != null) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
 						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
 						atomicState.appDisplayName = myLabel
 						app.updateLabel(myLabel)
 					}
-				}
+				} else {
+                	atomicState.appDisplayName = app.label
+                }
 			} else {
-            	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+				def opts = [' (paused', ' (open', ' (closed']
+				String flag
+				opts.each {
+					if (!flag && app.label.contains(it)) flag = it
+				}
+				if (flag) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(flag)) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        String myLabel = app.label.substring(0, app.label.indexOf(flag))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
-        	if(settings?.tempDisable) { paragraph "WARNING: Temporarily Paused - re-enable below." }
+            if (settings?.tempDisable) { paragraph "WARNING: Temporarily Paused; Resume below" }
             else {
-        		input(name: "theThermostat", type:"${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", required: true, multiple: false, 
-                submitOnChange: true)
+            	paragraph("Select 1 or more temperature sensors, ideally at least 1 of which is an Ecobee Suite Sensor")
+        		input(name: "theSensors", type:"capability.temperatureMeasurement", title: inputTitle("Select Temperature Sensor(s)"), required: true, multiple: true, submitOnChange: true)
+				if (settings?.theSensors) paragraph "The current ${settings.theSensors?.size()>1?'average ':''}temperature for ${settings.theSensors?.size()==1?'this sensor':'these sensors'} is ${getAverageTemperature()}°"
             }
 		}
         
-        if (!settings.tempDisable && settings.theThermostat) {
-        	section(title: (HE?'<b>':'') + "Select Indoor Temperature Sensors" + (HE?'</b>':'')) {
-            	input(name: "theSensors", title: "Use which indoor temperature sensor(s)", type: "capability.temperatureMeasurement", required: true, multiple: true, submitOnChange: true)
-				if (HE) paragraph ''
+        if (!settings.tempDisable && settings?.theSensors) {      
+        	section(title: sectionTitle("Configuration")+(ST?"\n":'')+smallerTitle("Vents")) {
+        		paragraph("Selected vents will be opened while the HVAC system is heating or cooling until target temperature is achieved, and then closed")
+				input(name: "theEconetVents", type: "${ST?'device.econetVent':'device.EcoNetVent'}", title: inputTitle("Select EcoNet Vent(s)?"), multiple: true, submitOnChange: true, 
+                	  hideWhenEmpty: true, required: (!settings.theHCEcoVents && !settings.theKeenVents && !settings.theHCKeenVents && !settings.theGenericVents && !settings.theGenericSwitches))
+                if (settings.theEconetVents) vc = settings.theEconetVents.size()
+                input(name: "theHCEcoVents", type: "${ST?'device.hubconnectEcovent':'device.HubConnectEcoVent'}", title: inputTitle("Select HubConnect EcoNet Vent(s)?"), multiple:true, 
+                	  submitOnChange: true, hideWhenEmpty: true, required: (!settings.theEconetVents && !settings.theKeenVents && !settings.theHCKeenVents && !settings.theGenericVents && !settings.theGenericSwitches))
+            	if (settings.theHCEcoVents) vc = vc + settings.theHCEcoVents.size()
+				input(name: "theKeenVents", type: "${ST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: inputTitle("Select Keen Home Smart Vent(s)?"), multiple:true, 
+                	  submitOnChange: true, hideWhenEmpty: true, required: (!settings.theEconetVents && !settings.theHCEcoVents && !settings.theKeenVents && !settings.theHCKeenVents && !settings.theGenericVents && !settings.theGenericSwitches))
+            	if (settings.theKeenVents) vc = vc + settings.theKeenVents.size()
+                input(name: "theHCKeenVents", type: "${ST?'device.hubconnectKeenHomeSmartVent':'device.HubConnectKeenHomeSmartVent'}", title: inputTitle("Select HubConnect Keen Home Smart Vent(s)?"), multiple:true, 
+                	  submitOnChange: true, hideWhenEmpty: true, required: (!settings.theEconetVents && !settings.theHCEcoVents && !settings.theKeenVents && !settings.theGenericVents && !settings.theGenericSwitches))
+            	if (settings.theHCKeenVents) vc = vc + settings.theHCKeenVents.size()
+                input(name: "theGenericVents", type: 'capability.switchLevel', title: inputTitle("Select Generic (dimmer) Vent(s)"), multiple: true, submitOnChange: true, hideWhenEmpty: true, 
+                	  required: (!settings.theEconetVents && !settings.theHCEcoVents && !settings.theKeenVents && !settings.theHCKeenVents && !settings.theGenericSwitches))
+                if (settings.theGenericVents) vc = vc + settings.theGenericVents.size()
+				input(name: "theGenericSwitches", type: 'capability.switch', title: inputTitle("Select Switch(es)"), multiple: true, submitOnChange: true, hideWhenEmpty: true,
+                	  required: (!settings.theEconetVents && !settings.theHCEcoVents && !settings.theKeenVents && !settings.theHCKeenVents && !settings.theGenericVents))
+                if (settings.theGenericSwitches) vc = vc + settings.theGenericSwitches.size()
+                def s = ((vc == 0) || (vc > 1)) ? 's' : ''
+                paragraph "${vc} vent${s}/switch${s=='s'?'es':''} selected"
+                
+            	if (settings.theEconetVents || settings.theHCEcoVents || settings.theKeenVents || settings.theHCKeenVents || settings.theGenericVents ) {
+            		paragraph('The default settings are optimized for silent operation of most vents (1-98). However, fully closing too many vents at once may be detrimental to your HVAC system. ' +
+                    		  'You may want to increase the minimum closed percentage.')
+            		input(name: "minimumVentLevel", type: "number", title: inputTitle("Minimum vent level when closed?"), required: true, defaultValue:1, description: '1', range: "0..100")
+                    input(name: "maximumVentLevel", type: "number", title: inputTitle("Maximum vent level when open?"), required: true, defaultValue:98, description: '98', range: "0..100")
+                    if (settings?.minimumVentLevel == null) {app.updateSetting('minimumVentLevel',1); settings?.minimumVentLevel = 1; }
+                    if (settings?.maximumVentLevel == null) {app.updateSetting('maximumVentLevel',98); settings?.maximumVentLevel = 98; }
+            	}
 			}
-        
-       		section(title: (HE?'<b>':'') + "Fan On Time Automation Configuration" + (HE?'</b>':'')) {
-        		paragraph("Increase Circulation time (min/hr) when the difference between the maximum and the minimum temperature reading of the above sensors is more than this.")
-            	input(name: "deltaTemp", type: "enum", title: "Select temperature delta", required: true, defaultValue: "2.0", multiple:false, options:["1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0", "7.5", "10.0"])
-            	paragraph("Minimum Circulation time (min/hr). Includes heating, cooling and fan only minutes.")
-            	input(name: "minFanOnTime", type: "number", title: "Set minimum fan on min/hr (0-${settings.maxFanOnTime!=null?settings.maxFanOnTime:55})", required: true, defaultValue: "5", description: "5", 
-					  range: "0..${settings.maxFanOnTime!=null?settings.maxFanOnTime:55}", submitOnChange: true)
-            	paragraph("Maximum Circulation time (min/hr).")
-            	input(name: "maxFanOnTime", type: "number", title: "Set maximum fan on min/hr (${settings.minFanOnTime!=null?settings.minFanOnTime:5}-55)", required: true, defaultValue: "55", description: "55", 
-					  range: "${settings.minFanOnTime!=null?settings.minFanOnTime:5}..55", submitOnChange: true)
-            	paragraph("Adjust Circulation time (min/hr) by this many minutes each adjustment.")
-            	input(name: "fanOnTimeDelta", type: "number", title: "Minutes per adjustment (1-20)", required: true, defaultValue: "5", description: "5", range: "1..20")
-            	paragraph("Minimum number of minutes between adjustments.")
-            	input(name: "fanAdjustMinutes", type: "number", title: "Time adjustment frequency in minutes (5-60)", required: true, defaultValue: "10", description: "15", range: "5..60")
-				if (HE) paragraph ''
-        	}
-            
-            section(title: (HE?'<b>':'') + "Indoors/Outdoors Temperature Delta" + (HE?'</b>':'')) {
-            	paragraph("To apply above adjustments based on inside/outside temperature difference, first select an outside temperature source (indoor temperature will be the average of the sensors selected above).")
-                input(name: "outdoorSensor", title: "Use which outdoor temperature sensor", type: "capability.temperatureMeasurement", required: false, multiple: false, submitOnChange: true)
-                if (settings.outdoorSensor) {
-                	paragraph("Select the indoor/outdoor delta temperature range for which you want to apply the above automated adjustments.")
-                    input(name: "adjRange", type: "enum", title: "Adjust fan on times only when outside delta is in this range", multiple: false, required: true, 
-							options: ["More than 10 degrees warmer", "5 to 10 degrees warmer", "0 to 4.9 degrees warmer", "-4.9 to -0.1 degrees cooler",
-                            			"-10 to -5 degrees cooler", "More than 10 degrees cooler"], submitOnChange: true)
-                }
-				if (HE) paragraph ''
+            section(title: smallerTitle("Windows & Doors")) {
+        		paragraph("Open Windows and Doors will temporarily deactivate (close) the vent${vc>1?'s':''}, except during 'Fan Only'")
+            	input(name: "theWindows", type: "capability.contactSensor", title: inputTitle("Monitor these Window/Door contact sensor(s)?")+'(optional)', required: false, multiple: true)
+			}
+            section(title: smallerTitle("Thermostat")) {
+				paragraph("Specify which Ecobee Suite Thermostat to monitor for operating state, mode and setpoint change events")
+				input(name: "theThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat"),
+					  multiple: false, required: true, submitOnChange: true)
+            	paragraph "If you want the vents to be adjusted at any time, based entirely on the room temperature and target setpoints (ignoring the thermostat's operating state), enable this option"
+            	input(name: "adjustAlways", type: 'bool', title: inputTitle("Always adjust vents/switches?"), defaultValue: false, submitOnChange: true)
+                if (settings.adjustAlways) paragraph "NOTE: this setting does not override the Modes or Programs restrictions below"
             }
-       
-        	section(title: (HE?'<b>':'') + "Vacation Hold Override" + (HE?'</b>':'')) {
-        		paragraph("The thermostat's Circulation setting is overridden when a Vacation is in effect. If you would like to automate the Circulation time during a Vacation hold, enable this setting.")
-            	input(name: "vacationOverride", type: "bool", title: "Override fan during Vacation hold?", defaulValue: false)
-				if (HE) paragraph ''
-        	}
-       
-			section(title: (HE?'<b>':'') + "Enable only for specific modes or programs?" + (HE?'</b>':'')) {
-				def multiple = false
-            	input(name: "theModes", type: "mode", title: "Only when the Location Mode is", multiple: true, required: false, submitOnChange: true)
-                input(name: "statModes", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Mode is", multiple: true, required: false, submitOnChange: true, options: getThermostatModesList())
-            	input(name: "thePrograms", type: "enum", title: "Only when the ${settings.theThermostat!=null?settings.theThermostat:'thermostat'}'s Program is", multiple: true, required: false, subbmitOnChange: true, options: getProgramsList())
-				if ((settings.theModes && settings.statModes) || (settings.statModes && settings.thePrograms) || (settings.thePrograms && settings.theModes)) {
-					multiple = true
-					input(name: 'needAll', type: 'bool', title: 'Require ALL conditions to be met?', required: true, defaultValue: false, submitOnChange: true)
-				}
-				if (!multiple) {
-					paragraph("Circulation time (min/hr) will only be adjusted when the above condition is met.")
+            section(title: smallerTitle("Modes")) {
+            	def modes = getThermostatModes()
+            	paragraph
+                input(name: 'theModes', type: 'enum', title: inputTitle("Make vent adjustments only during these thermostat Modes")+' (optional)', required: false, submitOnChange: true,
+                	  multiple: true, options: modes, width: 6)
+                if (settings?.theModes) {
+                	input(name: 'notModeState', type: 'enum', title: inputTitle("Vent state for excluded Modes?"), required: true, submitOnChange: true, defaultValue: 'unchanged',
+                		  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 3)
+                	if (notModeState == 'percentage') {
+                		input(name: 'notModeLevel', type: "number", title: inputTitle("Vent level for excluded Modes?"), required: true, defaultValue:50, description: '50', range: "0..100", width: 3)
+                    }
+                }
+            }
+            section(title: smallerTitle("Programs")) {
+                def programs = getThermostatPrograms()
+                programs = programs + ["Vacation"]
+                input(name: "theClimates", type: 'enum', title: inputTitle("Make vent adjustments only during these thermostat Programs")+" (optional)", required: false, submitOnChange: true, 
+					  multiple: true, options: programs, width: 6)
+                if (settings?.theClimates && (settings?.theClimates.size() != programs.size())) {
+                	input(name: 'notClimateState', type: 'enum', title: inputTitle("Vent state for excluded Programs?"), required: true, submitOnChange: true, defaultValue: 'unchanged',
+                		  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 3)
+                	if (notClimateState == 'percentage') {
+                		input(name: 'notClimateLevel', type: "number", title: inputTitle("Vent level for excluded Programs?"), required: true, defaultValue:50, description: '50', range: "0..100", width: 3)
+                    }
+                }
+                
+                if (settings.theSensors) {
+                	def ecobeeSensors = []
+                    settings.theSensors.each { 
+                    	if (it.hasCommand('updateSensorPrograms')) {
+                        	ecobeeSensors << it
+                        }
+                    }
+                	if (ecobeeSensors.size() == 1) {
+                		if (settings.theClimates) input(name: "enrollClimates", type: 'bool', title: inputTitle("Automatically include sensor ${ecobeeSensors[0].displayName} in the above Programs?"),
+                        								defaulValue: true, submitOnChange: true, width: 6)     
+                        if (settings.enrollClimates && settings.theClimates) {
+                        	def notTheseClimates = programs - theClimates - ['Vacation']
+                            //def these = settings.theClimates.contains(['Vacation']) ? settings.theClimates - ['Vacation'] : settings.theClimates
+                            def these = settings.theClimates - ['Vacation']
+                            String notThese = ''
+                            if (notTheseClimates) notThese = " and removed from (" + notTheseClimates.toString()[1..-2].replace(',',', ') + ')'
+                        	paragraph "${ecobeeSensors[0].displayName} will be added to (${these.toString()[1..-2].replace('"','').replace(',',', ')})${notThese} for ${theThermostat.displayName}. " +
+                        									"It will also be removed from ALL Programs when this Helper is Paused."
+                    	}
+                    } else {
+                    	paragraph("You have selected more than 1 Ecobee Suite Sensor. At this time, this Helper only supports automatically enrolling a single sensor into Ecobee Programs.")
+                        app.updateSetting('enrollClimates', false)
+                        settings.enrollClimates = false
+                    }
+                }
+			}
+		
+			section(title: smallerTitle("Thermostat Setpoints")) {
+            	def cSetpoint
+				def cHeatSetpoint
+				def cCoolSetpoint
+				def cMode
+                def cProgram
+                def cLastRunMode
+            	
+				input(name: "useThermostat", type: "bool", title: inputTitle("Follow the setpoints on ${settings?.theThermostat?settings.theThermostat.displayName:'the thermostat'}?"), required: true, 
+					  defaultValue: true, submitOnChange: true, width: 6)
+                def heatAt = null
+                def coolAt = null
+				if (!settings?.useThermostat) {
+                	input(name: "useVirtualStat", type: "bool", title: inputTitle("Follow the setpoints on a different thermostat?"), width: 6, required: true, 
+						  defaultValue: false, submitOnChange: true)
+                    if (settings?.useVirtualStat == true){
+                    	input(name: "theVirtualStat", type: "capability.thermostat", title: inputTitle("Select a thermostat"),  multiple: false, required: true, submitOnChange: true)
+                    }
+                }
+				if (settings?.useThermostat && settings?.theThermostat) {
+					cSetpoint = 	ST ? settings.theThermostat.currentValue('thermostatSetpoint') 	: 	settings.theThermostat.currentValue('thermostatSetpoint', true)
+					cHeatSetpoint = ST ? settings.theThermostat.currentValue('heatingSetpoint') 	: 	settings.theThermostat.currentValue('heatingSetpoint', true)
+					cCoolSetpoint = ST ? settings.theThermostat.currentValue('coolingSetpoint') 	: 	settings.theThermostat.currentValue('coolingSetpoint', true)
+					cMode = 		ST ? settings.theThermostat.currentValue('thermostatMode') 		: 	settings.theThermostat.currentValue('thermostatMode', true)
+                    cProgram = 		ST ? settings.theThermostat.currentValue('currentProgram') 		: 	settings.theThermostat.currentValue('currentProgram', true)
+                    cLastRunMode = 	ST ? settings.theThermostat.currentValue('lastRunningMode') 	: 	settings.theThermostat.currentValue('lastRunningMode', true)
+					paragraph("${settings.theThermostat.displayName} is in '${cMode}' mode running the '${cProgram}' program. The heating setpoint is ${cHeatSetpoint}°${unit}, " +
+                    		  "the cooling setpoint is ${cCoolSetpoint}°${unit}, and the last operation was '${cLastRunMode}'")
+                } else if (settings?.useVirtualStat && settings?.theVirtualStat) {
+                	cSetpoint = 	ST ? settings.theVirtualStat.currentValue('thermostatSetpoint') : 	settings.theVirtualStat.currentValue('thermostatSetpoint', true)
+					cHeatSetpoint = ST ? settings.theVirtualStat.currentValue('heatingSetpoint') 	: 	settings.theVirtualStat.currentValue('heatingSetpoint', true)
+					cCoolSetpoint = ST ? settings.theVirtualStat.currentValue('coolingSetpoint') 	: 	settings.theVirtualStat.currentValue('coolingSetpoint', true)
+					cMode = 		ST ? settings.theVirtualStat.currentValue('thermostatMode') 	: 	settings.theVirtualStat.currentValue('thermostatMode', true)
+                    cProgram = 		ST ? settings.theVirtualStat.currentValue('schedule') 			: 	settings.theVirtualStat.currentValue('schedule', true)
+                    //cLastRunMode = 	ST ? settings.theVirtualStat.currentValue('lastRunningMode') 	: 	settings.theVirtualStat.currentValue('lastRunningMode', true)
+					paragraph("${settings.theVirtualStat.displayName} is in '${cMode}' mode${(cProgram && (cProgram!='null')) ? ' running the \''+cProgram+'\' program':''}. The heating setpoint is ${cHeatSetpoint}°${unit} " +
+                    		  "and the cooling setpoint is ${cCoolSetpoint}°${unit}")
+                }
+                /////////////////////////////////////////////
+                //
+                // TODO
+                // Do I need a setting for non-Program holds (e.g., Temp, Auto, etc.)
+                //
+                ////////////////////////////////////////////
+                if (!settings?.useThermostat && !settings?.useVirtualStat) {  
+					paragraph "\n"+smallerTitle("Manual Setpoints")
+					input(name: "heatingSetpoint", type: "decimal", title: inputTitle("Target heating setpoint?"), required: true, submitOnChange: true, width: 4)
+					input(name: "coolingSetpoint", type: "decimal", title: inputTitle("Target cooling setpoint?"), required: true, submitOnChange: true, width: 4)
+                    if (settings.heatingSetpoint) heatAt = settings.heatingSetpoint
+                    if (settings.coolingSetpoint) coolAt = settings.coolingSetpoint
 				} else {
-					paragraph("Circulation time (min/hr) will ${settings.needAll?'only ':''}be adjusted when ${settings.needAll?'ALL':'ANY'} of the above conditions are met.")	 
+					if (HE) {
+                    	paragraph(smallerTitle("Setpoint Offsets"))
+                		paragraph("Setpoint offsets are ADDED to the current thermostat's heating/cooling setpoint. Use negative numbers to reduce the target setpoint, positive to increase it.", width: 9)
+                    } else paragraph(title: "Setpoint Offsets", "Setpoint offsets are ADDED to the current thermostat's heating/cooling setpoint. Use negative numbers to reduce the target setpoint, positive to increase it.", width: 9)
+                	input(name: "heatOffset", type: "decimal", title: inputTitle("Heating Setpoint Offset?"), defaultValue: 0.0, required: true, range: "-10..10", submitOnChange: true, width: 4)
+					input(name: "coolOffset", type: "decimal", title: inputTitle("Cooling Setpoint Offset?"), defaultValue: 0.0, required: true, range: "-10..10", submitOnChange: true, width: 4)
+                    if (!settings?.heatOffset) {settings.heatOffset = 0.0; app.updateSetting('heatOffset', 0.0); }
+                    if (!settings?.coolOffset) {settings.coolOffset = 0.0; app.updateSetting('coolOffset', 0.0); }
+                    if (cHeatSetpoint && (settings.heatOffset != null)) heatAt = cHeatSetpoint + settings.heatOffset
+                    if (cCoolSetpoint && (settings.coolOffset != null)) coolAt = cCoolSetpoint + settings.coolOffset
+                    if (heatAt && coolAt) paragraph "In the '${cProgram}' program, the vent${vc>1?'s':''} will open when the observed ambient temperature at the selected " +
+                								"sensor${settings.theSensors?.size()>1?'s':''} is less than ${heatAt}°${unit} or more than ${coolAt}°${unit}"
+                    def overCool
+                    def overCoolOffset
+                    if (settings?.theThermostat) {
+                        overCool = theThermostat.currentValue('dehumidifyWithAC')
+                        overCoolOffset = theThermostat.currentValue('dehumidifyOvercoolOffset')
+                        overCool = ((overCool != null) && ((overCool == true) || (overCool == 'true'))) ? true : false
+                        if (overCool && !overCoolOffset) overCool = false 	// if no offset, or offset is 0.0, then we're not overcooling
+                        if (overCool) {
+                            paragraph "${theThermostat.displayName} is configured to dehumidify using the HVAC to over-cool as much as ${overCoolOffset}°${temperatureScale} lower than the cooling setpoint"
+                            input(name: "overCoolToo", type: "bool", title: "Would you like to overcool this room also?", required: true, defaultValue: false, submitOnChange: true, width: 6)
+                        }
+                    }
 				}
-				if (HE) paragraph ''
-        	}
-            
-            section(title: (HE?'<b>':'') + "Enable only when relative humidity is high?" + (HE?'</b>':'')) {
-            	paragraph("Circulation time (min/hr) is adjusted only when the relative humidity is higher than a specified value")
-                input(name: "theHumidistat", type: "capability.relativeHumidityMeasurement", title: "Use this humidity sensor (blank to disable)", multiple: false, required: false, submitOnChange: true)
-                if (settings.theHumidistat) {
-                	input( name: "highHumidity", type: "number", title: "Adjust circulation only when ${settings.theHumidistat.displayName}'s Relative Humidity is higher than:", range: "0..100", required: true)
+    		}
+            section(title: smallerTitle("Fan Only State")) {
+				//if (false) input(name: 'closedFanOnly', type: 'bool', title: "Close the vent${vc>1?'s':''} while HVAC is 'fan only'?", defaultValue: false)
+                String foDefault = (settings?.closedFanOnly != null) ? (settings.closedFanOnly ? 'closed' : 'unchanged') : 'unchanged'
+                input(name: 'fanOnlyState', type: 'enum', title: inputTitle("Vent state for 'Fan Only' operation?"), required: true, submitOnChange: true, defaultValue: foDefault,
+                	  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 4)
+                if (fanOnlyState == 'percentage') {
+                	input(name: 'fanOnlyLevel', type: "number", title: inputTitle("Fan Only Vent level?"), required: true, defaultValue:50, description: '50', range: "0..100", submitOnChange: true, width: 4)
                 }
-				if (HE) paragraph ''
+			}
+        }
+        section( title: sectionTitle("Operations")) {
+            input(name: "tempDisable", title: inputTitle("Pause this Helper?"), type: "bool", description: "", defaultValue: false, submitOnChange: true, width: 4)
+            if (settings.tempDisable) {
+                if (settings.theEconetVents || settings.theHCEcoVents || settings.theKeenVents || settings.theHCKeenVents || settings.theGenericVents || settings.theGenericSwitches) {
+                    input(name: 'disabledVents', type: 'enum', title: inputTitle('Paused, desired vent state'), options:['open': 'open/on','closed': 'closed/off','percentage': 'percentage','unchanged': 'unchanged'], 
+                          required: true, multiple: false, defaultValue: 'closed', submitOnChange: true, width: 4)
+                    if (disabledVents == 'percentage') {
+                        input(name: 'disabledLevel', type: "number", title: inputTitle("Paused Vent level?"), required: true, defaultValue:50, description: '50', range: "0..100", submitOnChange: true, width: 4)
+                    }
+                    if (HE) paragraph ''
+                }
             }
-            
-            section(title: (HE?'<b>':'') + "'Quiet Time' Integration" + (HE?'</b>':'')) {
-            	paragraph("You can configure this Helper to integrate with one or more instances of the Ecobee Suite Quiet Time Helper: This helper will stop updating circulation when one or more Quiet Time switch(es) are enabled.")
-            	input(name: "quietSwitches", type: "capability.switch", title: "Select Quiet Time control switch(es)", multiple: true, required: false, submitOnChange: true)
-                if (settings.quietSwitches) {
-                	paragraph("All selected Quiet Time switches must use the same state to turn on Quiet Time.")
-                	input(name: "qtOn", type: "enum", title: "Disable circulation when any of these Quiet Switches is:", defaultValue: 'on', required: true, multiple: false, options: ["on","off"])
-                }
-				if (HE) paragraph ''
+            input(name: "debugOff", title: 	inputTitle("Disable debug logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 4)
+            input(name: "infoOff", title: 	inputTitle("Disable info logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 4)
+        }         
+		// Standard footer
+        if (ST) {
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke, all rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+        } else {
+        	section() {
+        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke, all rights reserved.</small><br>"+
+                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
             }
 		}
-        
-		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
-        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
-        }
-        
-		section (getVersionLabel()) {}
     }
 }
 
 // Main functions
-def installed() {
-	LOG("installed() entered", 4, "", 'trace')
-    
-    // initialize the min/max trackers...plan to use these to optimize the decrease cycles
-    atomicState.maxMax = 0.0
-    atomicState.minMin = 100.0
-    atomicState.maxDelta = 0.0
-    atomicState.minDelta = 100.0    
-	initialize()  
+void installed() {
+	LOG("Installed with settings: ${settings}", 4, null, 'trace')
+    initialize()
 }
-
-def uninstalled() {
-	clearReservations()
-}
-def clearReservations() {
-	cancelReservation( getDeviceId(theThermostat?.deviceNetworkId), 'circOff' )
-    cancelReservation( getDeviceId(theThermostat?.deviceNetworkId), 'vacaCircOff' )
-}
-def updated() {
-	LOG("updated() entered", 4, "", 'trace')
+void updated() {
+	LOG("Updated with settings: ${settings}", 4, null, 'trace')
 	unsubscribe()
     unschedule()
     initialize()
 }
-def pauseOn() {
-	// Pause this Helper
-	boolean wasAlreadyPaused = settings.tempDisable
-	atomicState.wasAlreadyPaused = wasAlreadyPaused
-	if (!wasAlreadyPaused) {
-		LOG("performing Global Pause",2,null,'info')
-		app.updateSetting("tempDisable", true)
-		runIn(2, updated, [overwrite: true])
-	} else {
-		LOG("was already paused, ignoring Global Pause",2,null,'info')
-	}
+void uninstalled() {
+	// generateSensorsEvents([doors:'default', windows:'default', vents:'default',SmartRoom:'default'])
+    unenrollSensors()
 }
-def pauseOff() {
-	// Un-pause this Helper
-	def wasAlreadyPaused = atomicState.wasAlreadyPaused
-	if (!wasAlreadyPaused) { // && settings.tempDisable) {
-		LOG("performing Global Unpause",2,null,'info')
-		app.updateSetting("tempDisable", false)
-		runIn(2, updated, [overwrite: true])
-	} else {
-		LOG("was already paused, ignoring Global Unpause",2,null,'info')
-	}
-}
-def getProgramsList() {
-	def programs = ["Away","Home","Sleep"]
-	if (theThermostat) {
-    	def pl = theThermostat.currentValue('programsList')
-        if (pl) programs = new JsonSlurper().parseText(pl)
-    }
-    return programs.sort(false)
-}
-
-def getThermostatModesList() {
-	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
-    if (settings.theThermostat) {
-    	def tempModes = theThermostat.currentValue('supportedThermostatModes')
-        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
-    }
-    return statModes.sort(false)
-}
-
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 3, "", 'info')
-	boolean ST = atomicState.isST
-	atomicState.amIRunning = null // Now using runIn to collapse multiple calls into single calcTemps()
-    def mode = location.mode
-	updateMyLabel()
-    
-	// Now, just exit if we are disabled...
-	if (tempDisable == true) {
-    	clearReservations()
-    	LOG("Temporarily Paused", 2, null, "warn")
-    	return true
-    }
-    
-    // Initialize as if we haven't checked in more than fanAdjustMinutes
-    atomicState.lastAdjustmentTime = now() // - (60001 * fanAdjustMinutes.toLong()).toLong() // make sure we run on next deltaHandler event    
-    subscribe(theThermostat, "thermostatOperatingState", modeOrProgramHandler)		// so we can see when the fan runs
-    if (thePrograms) subscribe(theThermostat, "currentProgram", modeOrProgramHandler)
-    // subscribe(theThermostat, "thermostatHold", modeOrProgramHandler)
-    // subscribe(location, "routineExecuted", modeOrProgramHandler)    
-    if (theModes) subscribe(location, "mode", modeOrProgramHandler)
-    if (statModes) subscribe(theThermostat, "thermostatMode", modeOrProgramHandler)
-    
-    if (settings.quietSwitches) {
-    	subscribe(quietSwitches, "switch.${qtOn}", quietOnHandler)
-        def qtOff = settings.qtOn == 'on' ? 'off' : 'on'
-        subscribe(quietSwitches, "switch.${off}", quietOffHandler)
-        atomicState.quietNow = (settings.quietSwitches.currentSwitch.contains(settings.qtOn)) ? true : false
-    } else {
-    	atomicState.quietNow = false
-    }
-    
-    subscribe(theSensors, "temperature", deltaHandler)
-    if (outdoorSensor) {
-    	if (outdoorSensor.id == theThermostat.id) {
-        	LOG("Using Ecobee-supplied external weatherTemperature from ${theThermostat.displayName}.",1,null,'info')
-        	subscribe(theThermostat, "weatherTemperature", deltaHandler)
-        } else {
-        	LOG("Using external temperature from ${outdoorSensor.displayName}.",1,null,'info')
-        	subscribe(outdoorSensor, "temperature", deltaHandler)
-        }
-    }
+	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+    boolean ST = isST
+    boolean HE = !ST
 
-	Integer fanOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
-    Integer currentOnTime = fanOnTime ?: 0
-	String currentProgramName = ST ? theThermostat.currentValue("currentProgramName") : theThermostat.currentValue("currentProgramName", true)
-    boolean vacationHold = (currentProgramName == "Vacation")
-    
-	// log.debug "settings ${theModes}, location ${location.mode}, programs ${thePrograms} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}, currentOnTime ${currentOnTime}, quietSwitch ${quietSwitches.displayName}, quietState ${quietState}"
-   
-	// Allow adjustments if Location Mode or Thermostat Program or Thermostat Mode is currently as configured
-    // Also allow if none are configured
-    boolean isOK = true
-    if (theModes || thePrograms  || statModes) {
-		String currentProgram = ST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
-		String thermostatMode = ST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
-		if (settings.needAll) {
-			isOK = 				settings.theModes ?		settings.theModes.contains(location.mode) 		: true
-			if (isOK) isOK = 	settings.thePrograms ?	settings.thePrograms.contains(currentProgram) 	: true
-			if (isOK) isOK = 	settings.statModes ?	settings.statModes.contains(thermostatMode)		: true
-		} else {
-			isOK = 				(theModes && theModes.contains(location.mode))
-			if (!isOK) isOK = 	(thePrograms && thePrograms.contains(currentProgram))
-			if (!isOK) isOK = 	(statModes && statModes.contains(thermostatMode))
-		}
-		if (!isOK) LOG("Not in specified Modes ${settings.needAll?'and':'or'} Programs, not adjusting", 3, null, "info")
-    }
-    
-    // Check the humidity?
-    if (isOK && settings.theHumidistat) {
-		def ncCh = ST ? settings.theHumidistat.currentValue('humidity') : settings.theHumidistat.currentValue('humidity', true)
-    	if (ncCh.toInteger() <= settings.highHumidity) {
-        	isOK == false
-            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
-		} else {
-			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${ncCh}% (${settings.highHumidity}% set), adjusting", 3, null, "info")
-		}
-    }
-    
-    // Quiet Time?
-    if (isOK ){
-    	isOK = settings.quietSwitches ? (atomicState.quietNow != true) : true
-        if (!isOK) LOG("Quiet time active, not adjusting", 3, null, "info")
-    }
-    atomicState.isOK = isOK
-    
-    def tid = getDeviceId(theThermostat.deviceNetworkId)
-    if (isOK) {	
-		if (currentOnTime < settings.minFanOnTime) {
-    		if (vacationHold && settings.vacationOverride) {
-            	cancelReservation( tid, 'vacaCircOff')
-        		theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
-            	currentOnTime = settings.minFanOnTime
-                atomicState.lastAdjustmentTime = now() 
-        	} else if (!vacationHold) {
-            	cancelReservation( tid, 'circOff')
-    			theThermostat.setFanMinOnTime(settings.minFanOnTime)
-            	currentOnTime = settings.minFanOnTime
-                atomicState.lastAdjustmentTime = now() 
-        	}
-    	} else if (currentOnTime > settings.maxFanOnTime) {
-    		if (vacationHold && settings.vacationOverride) {
-            	cancelReservation( tid, 'vacaCircOff')
-        		theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime)
-        		currentOnTime = settings.maxFanOnTime
-                atomicState.lastAdjustmentTime = now() 
-        	} else if (!vacationHold) {
-            	cancelReservation( tid, 'circOff')
-    			theThermostat.setFanMinOnTime(settings.maxFanOnTime)
-        		currentOnTime = settings.maxFanOnTime
-                atomicState.lastAdjustmentTime = now() 
-        	}
-    	} else {
-        	atomicState.fanSinceLastAdjustment = true
-			deltaHandler()
-            currentOnTime = -1
+    // Housekeeping
+    if (settings.closedFanOnly != null) {
+    	if (settings.fanOnlyState == null) {
+        	def vs = settings.closedFanOnly ? 'closed' : 'unchanged'
+            settings.fanOnlyState = vs
+            app.updateSetting('fanOnlyState', vs)
         }
-    } else if (atomicState.quietNow) {
-    	if (currentOnTime != 0) {
-    		if (vacationHold && settings.vacationOverride) {
-            	makeReservation(tid, 'vacaCircOff')
-        		theThermostat.setVacationFanMinOnTime(0)
-        	} else if (!vacationHold) {
-                makeReservation(tid, 'circOff')
-                theThermostat.setFanMinOnTime(0)
-        	}
+        settings.closedFanOnly = null
+        if (HE) app.removeSetting('closedFanOnly')
+    }
+    atomicState.version = getVersionLabel()
+    atomicState.scheduled = false
+    // Now, just exit if we are disabled...
+	if (settings.tempDisable) {
+        if (settings.disabledVents && (settings.disabledVents != 'unchanged')) {
+			if (settings.disabledVents == 'open') {
+            	setTheVents('open')
+            } else if (settings.disabledVents == 'closed') {
+            	setTheVents('closed')
+            } else if (settings.disabledVents == 'percentage') {
+            	setTheVents(settings.disabledLevel ?: 50)
+            }
+            LOG("Temporarily Paused, setting vents to (${atomicState.ventState} ${atomicState.ventLevel})", 3, null, 'info')
+        } else {
+        	LOG("Temporarily Paused, vents unchanged", 3, null, 'info')
+        }
+		updateMyLabel()
+        if (settings.theClimates && settings.enrollClimates) {
+        	log.trace "initialize(): Calling unenrollSensors()"
+        	unenrollSensors()
+        }
+        return true
+    }
+	if (settings.debugOff) log.info "log.debug() logging disabled"
+	
+    // Ecobee sensors are special: we update the vent status there if SmartRoom is enabled on them
+    if (settings.theSensors) {
+        def ecobeeSensors = []
+        settings.theSensors.each { 
+           	if (it.hasAttribute('SmartRoom')) {
+              	ecobeeSensors << it.deviceNetworkId
+            }
+        }
+        atomicState.ecobeeSensors = ecobeeSensors
+    }
+    
+	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
+    				(settings.theKeenVents ?: []) + (settings.theHCKeenVents ?: []) + 
+                     (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
+
+	
+    subscribe(settings.theSensors, 			'temperature', 				changeHandler)	
+	subscribe(settings.theThermostat, 		'thermostatOperatingState', changeHandler)
+    //subscribe(theThermostat, 				'temperature', 				changeHandler)
+	subscribe(settings.theThermostat,		'thermostatMode', 			changeHandler)
+    //subscribe(theThermostat,				'currentProgram',			changeHandler)
+    subscribe(settings.theVents, 			'level', 					changeHandler)	// In case someone changes them on us
+    subscribe(settings.theVents, 			'switch', 					changeHandler)
+	if (settings.theWindows) {
+    	subscribe(settings.theWindows, 		'contact',					changeHandler)
+    }
+    if (settings.useThermostat) {
+    	subscribe(settings.theThermostat,	'heatingSetpoint', 			changeHandler)
+        subscribe(settings.theThermostat,	'coolingSetpoint', 			changeHandler)
+    //  subscribe(theThermostat, 			'thermostatSetpoint', 		changeHandler)
+    } else if (settings.useVirtualStat) {
+    	subscribe(settings.theVirtualStat,	'thermostatOperatingState', changeHandler)
+		subscribe(settings.theVirtualStat,	'thermostatMode', 			changeHandler)
+    	subscribe(settings.theVirtualStat,	'heatingSetpoint', 			changeHandler)
+        subscribe(settings.theVirtualStat,	'coolingSetpoint', 			changeHandler)
+    }
+    
+    // These don't change much, and we need them frequently, so stash them away and track their changes
+    atomicState.heatDifferential = 0.0	// NO LONGER USED theThermostat.currentValue('heatDifferential')
+    atomicState.coolDifferential = 0.0	// theThermostat.currentValue('coolDifferential') 
+    def dehumidifyWithAC = theThermostat.currentValue('dehumidifyWithAC')
+    def overcoolOffset = theThermostat.currentValue('dehumidifyOvercoolOffset') ?: 0.0
+    if ((overcoolOffset && (overcoolOffset != 0.0)) && dehumidifyWithAC && ((dehumidifyWithAC == true) || (dehumidifyWithAC == 'true'))) {
+    	atomicState.dehumidifyWithAC = true
+        atomicState.dehumidifyOvercoolOffset = overcoolOffset
+    } else {
+    	atomicState.dehumidifyWithAC = false
+        atomicState.dehumidifyOvercoolOffset = 0.0
+    }
+        
+    //subscribe(theThermostat, 'heatDifferential', atomicHandler)
+    //subscribe(theThermostat, 'coolDifferential', atomicHandler)
+    subscribe(theThermostat, 				'dehumidifyOvercoolOffset', atomicHandler)
+    subscribe(theThermostat, 				'dehumidifyWithAC', atomicHandler)
+    
+	atomicState.currentStatus = [:]
+	atomicState.heatOrCool = null
+
+	if (settings.theClimates && settings.enrollClimates) {
+    	log.trace "initialize(): Calling enrollSensors()"
+    	enrollSensors()
+    }
+    
+    if (atomicState.lastLevel == null) {
+    	String ventState = atomicState.ventState
+    	if (ventState != null) {
+        	ventState = ventState.isNumber()? "${ventState}%" : (ventState == 'open'? "${settings.maximumVentLevel}%" : "${settings.minimumVentLevel}%")
+            atomicState.lastLevel = ventState
         }
     }
-    if (currentOnTime > -1) {
-    	def vaca = vacationHold ? " is in Vacation mode, " : " "    
-    	LOG("thermostat ${theThermostat}${vaca}circulation time is now ${currentOnTime} min/hr",2,"",'info')
-    }
-    LOG("Initialization complete", 4, "", 'trace')
+    
+    setTheVents(checkTemperature())
+	updateMyLabel()
     return true
 }
 
-def quietOnHandler(evt) {
-	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
-	if (!atomicState.quietNow) {
-    	atomicState.quietNow = true
-		Integer fanOnTime = (atomicState.isST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
-        Integer currentOnTime = fanOnTime?: 0	
-        atomicState.quietOnTime = currentOnTime
-        LOG("Quiet Time enabled, ${app.name} will stop updating circulation time", 3, null, 'info')
-        // NOTE: Quiet time will actually pull the circOff reservation and set circulation time to 0
-    } else {
-    	LOG('Quiet Time already enabled', 3, null, 'info')
+void atomicHandler(evt) {
+	def value = evt.value
+    if 		(value == 'true') 	value = true
+    else if (value == 'false') 	value = false
+    else if (value == 'null')	value = ""
+	atomicState."${evt.name}" = value		// Clever, no?
+}
+// The following code handles the intricacies of changing the ecobee program.climates maps, without stepping on other Helpers that
+// might also be doing the same. This is necessary because adding/removing sensors to climates requires modifying and resending the
+// entire programs.* Map - we need to make sure changes are serialized and atomic...
+def enrollSensors() {
+	if (settings.theClimates.size() != 0) {
+	    settings.theSensors.each { sensor ->
+        	// N.B there can only be 1 ES Sensor
+            if (sensor.hasCommand('updateSensorPrograms')) {
+              	List notPrograms = getThermostatPrograms() - settings.theClimates
+    			LOG(("enrolling ${sensor.displayName} in ${settings.theClimates.toString()[1..-2].replaceAll('"','').replaceAll(',',', ')}"+(notPrograms?" and unenrolling from ${notPrograms.toString()[1..-2]}":'')),3,null,'info')
+                String tid = sensor.currentValue('thermostatId').toString()
+                if (needClimateChange( sensor, settings.theClimates, notPrograms )) {
+                	boolean anyReserved = anyReservations( tid, 'programChange' )
+                    if (!anyReserved || haveReservation( tid, 'programChange' )) {
+                    	// Nobody has a reservation, or the reservation is mine
+                    	if (!anyReserved) makeReservation(tid, 'programChange')	
+						makeClimateChange( sensor, settings.theClimates, notPrograms)
+                        if (!notPrograms) notPrograms = ['(none)']
+                    	LOG("Sensor ${sensor.displayName} added to ${settings.theClimates.toString()[1..-2].replaceAll('"','').replaceAll(',',', ')} and removed from ${notPrograms.toString()[1..-2]}",3,null,'debug')
+                	} else {
+            			// somebody else has a reservation - we have to wait
+                    	atomicState.pendedUpdates = [add: settings.theClimates, remove: notPrograms]
+                		subscribe(sensor, 'climatesUpdated', programWaitHandler)
+                        if (!notPrograms) notPrograms = ['(none)']
+                    	LOG("Delayed: Sensor ${sensor.displayName} will be added to ${settings.theClimates.toString()[1..-2].replaceAll('"','').replaceAll(',',', ')} and removed from ${notPrograms.toString()[1..-2]} when pending changes complete",2,null,'info')
+                    }
+            	} else {
+                	// No changes required
+                    cancelReservation( tid, 'programChange' )
+                }
+                return	// only does the first Ecobee Sensor
+            }
+        } 
     }
 }
-
-def quietOffHandler(evt) {
-	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
-    // NOTE: Quiet time will release its circOff reservation and set circulation time to whatever it was
-    if (atomicState.quietNow) {
-    	if (!settings.quietSwitches.currentSwitch.contains(settings.qtOn)) {
-	    	// All the switches are "off"
-            atomicState.quietNow = false
-            LOG("Quiet Time disabled, ${app.name} will resume circulation time updates", 3, null, 'info')
-            modeOrProgramHandler(null)
-        } else {
-        	def qtOff = settings.qtOn == 'on' ? 'off' : 'on'
-        	LOG("All Quiet Time switches are not ${qtOff}, Quiet Time continues", 3, null, 'info')
+def unenrollSensors() {
+    settings.theSensors.each { sensor ->
+    	// N.B., there can only be 1 ES Sensor
+    	if (sensor.hasCommand('updateSensorPrograms')) {
+        	List programs = getThermostatPrograms()
+            if (needClimateChange( sensor, [], programs)) {
+            	LOG("unenrolling ${sensor.displayName} from all programs (${programs.toString()[1..-2]})",3,null,'info')
+        		String tid = sensor.currentValue('thermostatId').toString()
+            	boolean anyReserved = anyReservations( tid, 'programChange' )
+            	if (!anyReserved || haveReservation( tid, 'programChange' )) {
+                	// Nobody has a reservation, or the reservation is mine
+                	if (!anyReserved) makeReservation( tid, 'programChange' )
+                    makeClimateChange( sensor, [], programs )
+       		     	LOG("Sensor ${sensor.displayName} removed from ${programs.toString()[1..-2]}",3,null,'debug')
+                } else {
+                    // somebody else has a reservation - we have to wait
+                    atomicState.pendedUpdates = [add: [], remove: programs]
+                    subscribe(sensor, 'climatesUpdated', programWaitHandler)	// wait until somebody updates the climates
+                    LOG("Delayed: Sensor ${sensor.displayName} will be removed from ${programs.toString()[1..-2]} when pending changes complete", 3, null, 'info')
+                }
+        	} else {
+            	// No active climates = nothing to do except cleanup
+                LOG("no active programs",3,null,'info')
+                cancelReservation(tid, 'programChange')
+        	}
+            return	// Only does the first Ecobee Sensor...
         }
+    }
+}
+def programUpdateHandler(evt) {
+	// Clear our reservation once we know that the Ecobee Cloud has updated our thermostat's climates
+    cancelReservation(evt.device.currentValue('thermostatId') as String, 'programChange')
+    unschedule(clearReservation)
+    unsubscribe(evt.device)
+    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler)
+    def pendingRequest = atomicState.updateSensorRequest
+    if (pendingRequest != null) {
+    	atomicState.updateSensorRequest = null
+	   	LOG("${pendingRequest} operation completed",3,null,'info')
+    }
+}
+def programWaitHandler(evt) {
+    unsubscribe(evt.device)
+    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler)
+    String tid = evt.device.currentValue('thermostatId') as String
+    def count = countReservations(tid, 'programChange')
+    if ((count > 0) && !haveReservation( tid, 'programChange' )) {
+    	atomicState.programWaitCounter = 0
+    	runIn(5, checkReservations, [overwrite: true, data: [tid:tid, type:'programChange']])
+        LOG("programWaitHandler(): There are still ${count} reservations for 'programChange', waiting...", 3, null, 'debug')
     } else {
-    	LOG("Weird, ${app.name} is not in Quiet Time", 1, null, 'warn')
+    	makeReservation(tid, 'programChange')
+        LOG("programWaitHandler(): 'programChange' reservation secured, sending pended updates", 3, null, 'debug')
+    	doPendedUpdates()
     }
 }
-
-def modeOrProgramHandler(evt=null) {
-	// Just exit if we are disabled...
-	if(settings.tempDisable == true) {
-    	LOG("${app.name} temporarily disabled as per request.", 2, null, "warn")
-    	return true
+void checkReservations(data) {
+    def count = countReservations(data.tid, data.type)
+    def counter = atomicState.programWaitCounter
+	if ((count > 0) && !haveReservation(data.tid, data.type)  && (counter <= 60)) {	// Try for up to 5.0 minutes... others will clear their reservations after 2.5 minutes
+    	// Need to wait longer
+        runIn(5, checkReservations, [overwrite: true, data: [tid: (data.tid), type: (data.type)]])
+        counter++
+        atomicState.programWaitCounter = counter
+        if ((counter % 12) == 0) runIn(2, doRefresh, [overwrite: true])	// force a refresh every minute if we don't get updated
+        LOG("checkReservations(): There are still ${count} reservations for 'programChange', waiting...", 3, null, 'debug')
+    } else {
+    	makeReservation(data.tid, data.type)
+    	atomicState.programWaitCounter = 0
+        LOG("checkReservation()(): 'programChange' reservation secured, sending pended updates", 3, null, 'debug')
+        doPendedUpdates()
     }
-    boolean ST = atomicState.isST
-	
-	// Allow adjustments if Location Mode and/or Thermostat Program and/or Thermostat Mode is currently as configured
-    // Also allow if none are configured
-    boolean isOK = true
-    if (theModes || thePrograms  || statModes) {
-		String currentProgram = ST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
-		String thermostatMode = ST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
-		if (settings.needAll) {
-			isOK = 				settings.theModes ?		settings.theModes.contains(location.mode) 		: true
-			if (isOK) isOK = 	settings.thePrograms ?	settings.thePrograms.contains(currentProgram) 	: true
-			if (isOK) isOK = 	settings.statModes ?	settings.statModes.contains(thermostatMode)		: true
-		} else {
-			isOK = 				(theModes && theModes.contains(location.mode))
-			if (!isOK) isOK = 	(thePrograms && thePrograms.contains(currentProgram))
-			if (!isOK) isOK = 	(statModes && statModes.contains(thermostatMode))
-		}
-		if (!isOK) LOG("Not in specified Modes ${settings.needAll?'and':'or'} Programs, not adjusting", 3, null, "info")
-    }
-    
-    // Check the humidity?
-    if (isOK && settings.theHumidistat) {
-		def currentHumidity = ST ? settings.theHumidistat.currentValue('humidity') : settings.theHumidistat.currentValue('humidity', true)
-    	if ((currentHumidity as Integer) <= settings.highHumidity) {
-        	isOK == false
-            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
-		} else {
-			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${ncCh}% (${settings.highHumidity}% set), adjusting enabled", 3, null, "info")
-		}
-    }
-    
-    // Quiet Time?
-    if (isOK ){
-    	isOK = settings.quietSwitches ? (atomicState.quietNow != true) : true
-        if (!isOK) LOG("Quiet time active, not adjusting", 3, null, "info")
-    }
-    atomicState.isOK = isOK
-    
-    if (evt && (evt.name == "thermostatOperatingState") && !atomicState.fanSinceLastAdjustment) {
-    	if ((evt.value != 'idle') && (!evt.value.contains('ending'))) atomicState.fanSinceLastAdjustment = true // [fan only, heating, cooling] but not [idle, pending heat, pending cool]
-    }
-	deltaHandler(evt)
 }
-
-def deltaHandler(evt=null) {
-	// Just exit if we are disabled...
-	if(settings.tempDisable == true) {
-    	LOG("temporarily disabled as per request.", 2, null, "warn")
-    	return true
+void clearReservation() {
+	settings.theSensors.each { sensor ->
+        // N.B., there can only be 1 ES Sensor
+        if (sensor.hasCommand('updateSensorPrograms')) {
+        	def tid = sensor.currentValue('thermostatId') as String
+            cancelReservation(tid, 'programChange')
+        }
     }
-
-    // Make sure it is OK for us to e changing circulation times
-	if (!atomicState.isOK) return
-    // boolean ST = atomicState.isST
-	
-	// String currentProgramName = ST ? theThermostat.currentValue('currentProgramName') : theThermostat.currentValue('currentProgramName', true)
-	String currentProgramName = theThermostat.currentValue('currentProgramName')
-    boolean vacationHold = (currentProgramName && (currentProgramName == 'Vacation'))
-	if (vacationHold && !settings.vacationOverride) {
-    	LOG("${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
-        return
-    }
-    def tid = getDeviceId(theThermostat.deviceNetworkId)
-	
-	// Integer fanMinOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
-	Integer fanMinOnTime = theThermostat.currentValue('fanMinOnTime') as Integer
-    if (!vacationHold) {
-        if (anyReservations(tid, 'circOff') && (fanMinOnTime == 0)) {
-            // Looks like somebody else has turned off circulation
-            if (!haveReservation(tid, 'circOff')) {		// is it me?
-                // Not me, so we can't be changing circulation
-				return
+}
+void doRefresh() {
+	settings?.theThermostat?.doRefresh(true) // do a forced refresh
+}
+void doPendedUpdates() {
+	LOG("doPendedUpdates() @ ${now()}: ${atomicState.pendedUpdates}",4,null,'debug')
+    def updates = atomicState.pendedUpdates
+    if (updates?.remove || updates?.add) {
+    	// Find the sensor
+        settings.theSensors.each { sensor ->
+    		// N.B., there can only be 1 ES Sensor
+            if (sensor.hasCommand('updateSensorPrograms')) {
+            	if (needClimateChange( sensor, updates.add, updates.remove )) {
+					makeClimateChange( sensor, updates.add, updates.remove )
+                } else {
+                    // Nothing to do - release the reservation now
+                    def tid = sensor.currentValue('thermostatId') as String
+                    cancelReservation(tid, 'programChange')
+                }
             }
         }
+        atomicState.pendedUpdates = null
+    }            	
+}
+def makeClimateChange( sensor, adds, removes ) {
+    subscribe( sensor, 'activeClimates', programUpdateHandler )
+    atomicState.updateSensorRequest = adds ? 'enroll' : 'unenroll'
+    sensor.updateSensorPrograms( adds, removes)
+    runIn(150, clearReservation, [overwrite: true])		// failsafe/watchdog - clear the reservation if we don't hear back within 2.5 minutes
+    if (!adds) {
+        LOG("Sensor ${sensor.displayName} removed from ${removes.toString()[1..-2]}",3,null,'info')
     } else {
-    	if (anyReservations(tid, 'vacaCircOff') && (fanMinOnTime == 0)) {
-            // Looks like somebody else has turned off circulation
-            if (!haveReservation(tid, 'vacaCircOff')) {		// is it me?
-                // Not me, so we can't be changing circulation
-				return
+    	if (!removes) removes = ['(none)']
+        LOG("Sensor ${sensor.displayName} added to ${adds.toString()[1..-2]} and removed from ${removes.toString()[1..-2]}",3,null,'info')
+    }
+    // programUpdateHandler will release the reservation for us
+}
+boolean needClimateChange(sensor, List adds, List removes) {
+	if (!adds && !removes) return false
+    String ac = isST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
+    def activeClimates = ac ? ((ac == '[]') ? [] : ac[1..-2].tokenize(', ').sort(false)) : []
+    log.debug "activeClimates: ${activeClimates}"
+    boolean updatesToDo = false
+    if (!activeClimates) {
+        // Easy one: no active climates, and we have climates to add
+        if (adds) {
+            updatesToDo = true
+        }
+    } else { // we have some activeClimates - do we need to adjust them?
+        if (!adds && removes) {	
+            // Easy one: there are active climates, and we aren't adding any, thus we know that we are removing ALL of them
+            updatesToDo = true
+        } else {
+            // Hardest one: we have some active climates, and we have some adds and some removes to do - figure out if we need to change anything
+            activeClimates.each { climate ->
+                if (!updatesToDo) {
+                    if (adds) {
+                        // are there any active climates that we don't want active?
+                        if (!adds.contains(climate)) updatesToDo = true		// need to remove at least one
+                    } else if (removes) {
+                        // or any active climates that we want inactive?
+                        if (removes.contains(climate)) updatesToDo = true	// need to remove at least one
+                    }
+                }
             }
         }
     }
+	return updatesToDo
+}
 
-	if (evt) {
-    	if (evt.name == 'currentProgram') {
-        	LOG("Thermostat Program changed to my Program (${evt.value})",3,null,'info')
-        } else if (evt.name == 'mode') {
-        	LOG("Location Mode changed to my Mode (${evt.value})",3,null,'info')
-        } else {
-        	LOG("Called with ${evt.device} ${evt.name} ${evt.value}",3,null,'trace')
+void changeHandler(evt) {
+	//log.debug "changeHandler(): ${evt.displayName} ${evt.name} ${evt.value}"
+	updateTheVents()
+	runIn( 2, checkAndSet, [overwrite: true])		// collapse multiple inter-related events into a single thread
+}
+
+void checkAndSet() {
+	if (!atomicState.version || (atomicState.version != getVersionLabel())) {
+    	LOG('Helper version changed, re-initializing...',1,null,'info')
+    	updated()
+    }
+	setTheVents(checkTemperature())
+}
+
+String checkTemperature() {
+	boolean ST = isST
+    
+    // Check if we're supposed to do anything during the currently active Ecobee Program (or the upcoming Program if in Smart Recovery)
+    if (settings?.theClimates) {
+    	def currentProgram = ST ? theThermostat.currentValue('currentProgram') 		: theThermostat.currentValue('currentProgram', true)
+        if (!settings.theClimates.contains(currentProgram)) {
+            // If we are in (Smart Recovery), check to see if we're supposed to be adjusting during the upcoming program
+            def nextProgram = ST ? theThermostat.currentValue('nextProgramName') 	: theThermostat.currentValue('nextProgramName', true)
+            if (!nextProgram || !settings.theClimates.contains(nextProgram)) {
+                LOG("${theThermostat.displayName} is currently running a Program (${currentProgram}) that we're not configured for (${settings.theClimates.toString()[1..-2].replaceAll('"','').replaceAll(',',', ')})",3,null,'info')
+                if (settings.notClimateState) {
+                    if (settings.notClimateState != 'percentage') {
+                        return settings.notClimateState
+                    } else {
+                        return settings.notClimateLevel ?: 50
+                    }
+                } else {
+                	return 'unchanged'
+                }
+            }
         }
-        if (settings.minFanOnTime == settings.maxFanOnTime) {
-        	if (fanMinOnTime == settings.minFanOnTime.toInteger()) {
-    			LOG('Configured min==max==fanMinOnTime, nothing to do, skipping...',2,null,'info')
-        		return // nothing to do
+    }
+    
+    if (settings.theModes) {
+        def currentMode = 	 ST ? theThermostat.currentValue('thermostatMode') 		: theThermostat.currentValue('thermostatMode', true)
+        if (!settings.theModes.contains(currentMode)) {
+        	 LOG("${theThermostat.displayName} is currently running a Mode (${currentMode}) that we're not configured for (${settings.theModes.toString()[1..-2]})",3,null,'info')
+            if (settings.notModeState) {
+                if (settings.notModeState != 'percentage') {
+                    return settings.notModeState
+                } else {
+                    return settings.notModeLevel ?: 50
+                }
             } else {
-                LOG("Configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
-                if (vacationHold && settings.vacationOverride) {
-                	cancelReservation( tid, 'vacaCircOff')
-        			theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
-        		} else if (!vacationHold) {
-                	cancelReservation( tid, 'circOff')
-    				theThermostat.setFanMinOnTime(settings.minFanOnTime)
-        		}
-                return
+            	return 'unchanged'
+            }
+        }
+    }
+    
+    def lastHVAC = atomicState.lastHVAC
+    
+    def cTemp = getAverageTemperature()
+    def vents = 'unchanged'			// if not heating/cooling/fan, then no change to current vents
+    if (cTemp != null) {		// only if valid temperature readings (Ecosensors can return "unknown")
+        // Be smarter if we are in Smart Recovery mode: follow the thermostat's temperature instead of watching the current setpoint. Otherwise the room won't get the benefits of heat/cool
+        // Smart Recovery. Also, we add the heat/cool differential to try and get ahead of the Smart Recovery curve (otherwise we close too early or too often)
+
+        String smarter = 	ST ? theThermostat.currentValue('thermostatOperatingStateDisplay')	: theThermostat.currentValue('thermostatOperatingStateDisplay', true)
+        boolean beSmart = 	(smarter?.contains('mart'))	// "(Smart Recovery)"
+        boolean beCool = (smarter?.contains('verc'))	// "(Overcooling)"
+        String cOpState = 	ST ? theThermostat.currentValue('thermostatOperatingState') 		: theThermostat.currentValue('thermostatOperatingState', true)
+        def cTemperature = 	ST ? theThermostat.currentValue('temperature')						: theThermostat.currentValue('temperature', true)
+        def coolSP = 		ST ? theThermostat.currentValue('coolingSetpoint') 					: theThermostat.currentValue('coolingSetpoint', true)
+        def heatSP = 		ST ? theThermostat.currentValue('heatingSetpoint') 					: theThermostat.currentValue('heatingSetpoint', true)
+        String cMode = 		ST ? theThermostat.currentValue('thermostatMode') 					: theThermostat.currentValue('thermostatMode', true)
+        def nextHeatSP
+        def nextCoolSP
+        if (settings.useThermostat) {
+        	nextHeatSP = 	ST ? theThermostat.currentValue('nextHeatingSetpoint') : theThermostat.currentValue('nextHeatingSetpoint', true)
+        	nextCoolSP = 	ST ? theThermostat.currentValue('nextCoolingSetpoint') : theThermostat.currentValue('nextCoolingSetpoint', true)       
+        }
+        def currentStatus = [s: smarter, bs: beSmart, bc: beCool, op: cOpState, md: cMode, t: cTemp, h: heatSP, c: coolSP, nh: nextHeatSP, nc: nextCoolSP] as HashMap
+        if (cOpState == 'heating') { atomicState.heatOrCool = 'heat' } else if (cOpState == 'cooling') { atomicState.heatOrCool == 'cool' }
+        if (atomicState.heatOrCool == null) atomicState.heatOrCool = cMode
+        
+        if (atomicState.currentStatus == currentStatus) { 
+            LOG("Status unchanged...",3,null,'info')
+            return 'unchanged'			// ignore - identical to last time
+        } else {
+            atomicState.currentStatus = currentStatus
+            LOG("currentStatus: ${currentStatus}",3,null,'debug')
+        }
+        def offset 
+    	if ((cOpState == 'heating') || (settings.adjustAlways && (atomicState.heatOrCool == 'heat'))) {
+        	offset = settings.heatOffset ?: 0.0
+    		def heatTarget 
+            if (settings.useThermostat) {
+            	if (beSmart) {
+                	// Smart Recovery - we're heating to the "next" heatingSetpoint
+                	heatTarget = nextHeatSP + offset // + atomicState.heatDifferential
+                } else {
+                	// Normal - just heating to the heatingSetpoint
+                	heatTarget = heatSP + offset // + atomicState.heatDifferential
+                }
+            } else if (useVirtualStat) {
+				heatTarget = ((ST ? theVirtualStat.currentValue('heatingSetpoint') : theVirtualStat.currentValue('heatingSetpoint', true)) as BigDecimal) + offset
+            } else {
+            	heatTarget = settings.heatingSetpoint
+            }
+			vents = (cTemp <= heatTarget) ? 'open' : 'closed'
+        	LOG("${theThermostat.displayName} is heating, target temperature is ${heatTarget}°${beSmart?' (smart recovery)':''}, room temperature is ${cTemp}°",3,null,'info')
+    	} else if ((cOpState == 'cooling') || (settings.adjustAlways && (atomicState.heatOrCool == 'cool'))) {
+        	offset = settings.coolOffset ?: 0.0
+            def coolTarget 
+            if (settings.useThermostat) {
+            	if (beSmart) {
+                	// Smart Recovery - we're cooling to the "next" coolingSetpoint
+                	coolTarget = nextCoolSP + offset // - atomicState.coolDifferential
+                } else if (beCool) {
+                	// Overcooling (to dehumidify) - we're cooling to the current coolingSetpoint - overcoolOffset
+                	coolTarget = coolSP + offset - (settings.overCoolToo ? atomicState.dehumidifyOvercoolOffset : 0.0)
+                } else {
+                	// Normal - just cooling to the coolingSetpoint
+                	coolTarget = coolSP + offset //- atomicState.coolDifferential
+                }
+            } else if (useVirtualStat) {
+            	coolTarget = ((ST ? theVirtualStat.currentValue('coolingSetpoint') : theVirtualStat.currentValue('coolingSetpoint', true)) as BigDecimal) + offset
+            } else {
+            	coolTarget = settings.coolingSetpoint
+            }
+			vents = (cTemp >= coolTarget) ? 'open' : 'closed'
+        	LOG("${theThermostat.displayName} is cooling, target temperature is ${coolTarget}°${beSmart?' (smart recovery)':''}${beCool?' (overcooling)':''}, room temperature is ${cTemp}°",3,null,'info')
+		} else if (cOpState == 'idle') {
+    		LOG("${theThermostat.displayName} is idle, room temperature is ${cTemp}°, vents-->unchanged",3,null,'info')
+            vents = 'unchanged'	// fix it next time the fan goes on
+		} else if (/*(vents == 'unchanged') && */(cOpState == 'fan only')) {
+        	if (!settings.fanOnlyState) {
+                if (!settings.closedFanOnly) {
+                    vents = 'unchanged'
+                    LOG("${theThermostat.displayName} is running 'Fan Only', room temperature is ${cTemp}°, vents-->unchanged",3,null,'info')
+                } else {
+                    vents = 'closed'
+                    LOG("${theThermostat.displayName} is running 'Fan Only', room temperature is ${cTemp}°, vents-->closed",3,null,'info')
+                }
+            } else {
+            	// New Fan Only selector is in use
+                vents = settings.fanOnlyState
+                if (!vents) vents = 'unchanged'
+                if (vents == 'percentage') vents = (settings.fanOnlyLevel ?: 50) as Integer
+                LOG("${theThermostat.displayName} is running 'Fan Only', room temperature is ${cTemp}°, vents-->${vents}${settings?.fanOnlyState == 'percentage'?'%':''}",3,null,'info')
+            }
+		}    
+		if ((vents == 'open') && (settings.adjustAlways || (cOpState != 'fan only'))) { // let 'Fan Only' run even if windows are open || (vents.isNumber())) {
+        	if (settings.theWindows) {
+            	boolean openWindows = ST ? settings.theWindows*.currentValue('contact').contains('open') : settings.theWindows*.currentValue('contact', true).contains('open')
+                if (openWindows) {
+					vents = 'closed'	// but if a window is open, close the vents
+        			LOG("${(theWindows.size()>1)?'A':'The'} window/contact is open",3,null,'info')
+                }
             }
     	}
-    } else {
-    	LOG("Called directly", 4, "", 'trace')
+		LOG("Vents should be ${vents?:'unchanged'}",3,null,'info')
+		//return vents
     }
-	runIn(2,'calcTemps',[overwrite: true])
+    return vents
 }
 
-def calcTemps() {
-	LOG('Calculating temperatures...', 3, null, 'info')
-    boolean ST = atomicState.isST
-	
-    // Makes no sense to change fanMinOnTime while heating or cooling is running - take action ONLY on events while idle or fan is running
-    // def statState = ST ? theThermostat.currentValue("thermostatOperatingState") : theThermostat.currentValue("thermostatOperatingState", true)
-	def statState = theThermostat.currentValue("thermostatOperatingState")
-    if (statState && (statState.contains('ea') || statState.contains('oo'))) {
-    	LOG("${theThermostat} is ${statState}, no adjustments made", 4, "", 'info' )
-        return
-    }
+def getAverageTemperature() {
+	boolean ST = isST
     
-  	// Check if it has been long enough since the last change to make another...
-    if (atomicState.lastAdjustmentTime) {
-        def timeNow = now()
-        def minutesLeft = fanAdjustMinutes - ((timeNow - atomicState.lastAdjustmentTime) / 60000).toInteger()
-        if (minutesLeft >0) {
-            LOG("Not time to adjust yet - ${minutesLeft} minutes left",4,'','info')
-            return
-		}
-	}
-    // atomicState.lastCheckTime = now() 
-    
-    // parse temps - ecobee sensors can return "unknown", others may return
-    def temps = []
-    def total = 0.0 as BigDecimal
-    def i=0
-    theSensors.each {
-    	// def temp = ST ? it.currentValue("temperature") : it.currentValue("temperature", true)
-		def temp = it.currentValue("temperature")
-    	if (temp && (temp > 0)) {
-			temp = temp as BigDecimal
-        	temps += [temp]	// we want to deal with valid inside temperatures only
-            total += temp
+	def tTemp = 0.0G
+    Integer i = 0
+	settings.theSensors.each {
+		def t = ST ? it.currentValue('temperature') : it.currentValue('temperature', true)
+		if (t != null) {
+        	tTemp += t as BigDecimal
             i++
         }
-    }
-    def avg = 0.0 as BigDecimal
-    if (i > 1) {
-    	avg = roundIt((total / i.toBigDecimal()), 2) 
-	    LOG("Current temperature readings: ${temps}, average is ${String.format("%.2f",avg)}°", 4, "", 'trace')
-    } else {
-    	LOG("Only recieved ${temps.size()} valid temperature readings, skipping...",3,"",'warn')
-        return 
-    }
-    
-    // Skip if the in/out delta doesn't match our settings
-    if (outdoorSensor) {
-    	def outTemp 
-        if (outdoorSensor.id == theThermostat.id) {
-        	// outTemp = ST ? theThermostat.currentValue("weatherTemperature") : theThermostat.currentValue("weatherTemperature", true)
-			outTemp = theThermostat.currentValue("weatherTemperature")
-            LOG("Using ${theThermostat.displayName}'s weatherTemperature (${outTemp}°)",4,null,"info")
-        } else {
-        	outTemp = outdoorSensor.currentValue("temperature")
-            LOG("Using ${outdoorSensor.displayName}'s temperature (${outTemp}°)",4,null,"info")
-        }
-        def inoutDelta = null
-        if (outTemp != null) {
-        	inoutDelta = roundIt((outTemp.toBigDecimal() - avg), 2)
-        }
-        if (inoutDelta == null) {
-        	LOG("Invalid outdoor temperature, skipping...",1,"","warn")
-        	return
-        }
-        LOG("Outside temperature is currently ${outTemp}°, inside temperature average is ${String.format("%.2f",avg)}°",4,null,'trace')
-        // More than 10 degrees warmer", "5 to 10 degrees warmer", "0 to 4.9 degrees warmer", "-4.9 to -0.1 degrees cooler", -10 to -5 degrees cooler", "More than 10 degrees cooler"
-    	def inRange = false
-        if (adjRange.endsWith('mer')) {
-        	if (adjRange.startsWith('M')) {
-            	if (inoutDelta > 10.0) { inRange = true }
-            } else if (adjRange.startsWith('5')) {
-            	if ((inoutDelta <= 10.0) && (inoutDelta >= 5.0)) { inRange = true }
-            } else { // 0-4.9
-            	if ((inoutDelta < 5.0) && (inoutDelta >= 0.0)) { inRange = true }
-            }
-        } else {
-        	if (adjRange.startsWith('M')) {
-            	if (inoutDelta < -10.0) { inRange = true }
-            } else if (adjRange.startsWith('-1')) {
-            	if ((inoutDelta <= -5.0) && (inoutDelta >= -10.0)) { inRange = true }
-            } else { // -4.9 -0.1
-            	if ((inoutDelta > -5.0) && (inoutDelta < 0.0)) { inRange = true }
-            }
-        }
-        if (!inRange) {
-        	LOG("In/Out temperature delta (${inoutDelta}°) not in range (${adjRange}), skipping...", 4, null, "trace")
-            return
-        } else {
-        	LOG("In/Out temperature delta (${inoutDelta}°) is in range (${adjRange}), adjusting...", 4, null, "trace")
-        }
-    }
-    
-    def min = 	roundIt(temps.min(), 2) as BigDecimal
-	def max = 	roundIt(temps.max(), 2) as BigDecimal
-	def delta = roundIt((max - min), 2) as BigDecimal
-    
-    atomicState.maxMax = 	atomicState.maxMax   > max   ? roundIt(atomicState.maxMax, 2)   : max 
-    atomicState.minMin = 	atomicState.minMin 	 < min   ? roundIt(atomicState.minMin, 2)   : min
-    atomicState.maxDelta = 	atomicState.maxDelta > delta ? roundIt(atomicState.maxDelta, 2) : delta 
-    atomicState.minDelta = 	atomicState.minDelta < delta ? roundIt(atomicState.minDelta, 2) : delta
-    
-    Integer currentOnTime
-    if (atomicState.quietOnTime) {
-    	// pick up where we left off at the start of Quiet Time
-    	currentOnTime = roundIt(atomicState.quietOnTime, 0) as Integer
-        atomicState.quietOnTime = null
-    } else {
-		// Integer fanMinOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
-		Integer fanMinOnTime = theThermostat.currentValue('fanMinOnTime') as Integer
-    	currentOnTime = fanMinOnTime ?: 0	// Ecobee Suite Manager will populate this with Vacation.fanMinOnTime if necessary
 	}
-    Integer newOnTime = currentOnTime
-	String tid = getDeviceId(theThermostat.deviceNetworkId)
-	
-	if (delta >= settings.deltaTemp.toBigDecimal()) {			// need to increase recirculation (fanMinOnTime)
-    	log.trace "Need to increase fanMinOnTime (${delta}), it is currently ${currentOnTime}"
-		if (currentOnTime < (settings.maxFanOnTIme as Integer)) {
-			newOnTime = currentOnTime + (settings.fanOnTimeDelta as Integer)
-			if (newOnTime > (settings.maxFanOnTime as Integer)) newOnTime = settings.maxFanOnTime as Integer
-			if (currentOnTime != newOnTime) {
-				LOG("Temperature delta is ${delta}°/${settings.deltaTemp}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
-				if (vacationHold) {
-					cancelReservation( tid, 'vacaCircOff')
-					theThermostat.setVacationFanMinOnTime(newOnTime)
-				} else {
-					cancelReservation( tid, 'circOff')
-					theThermostat.setFanMinOnTime(newOnTime)
-				}
-				atomicState.fanSinceLastAdjustment = false
-				atomicState.lastAdjustmentTime = now()
-				return
-			} else {
-				LOG("Looks like we're maxed out - cur: ${currentOnTime}, new: ${newOnTime}, max: ${settings.maxFanOnTime}",3,null,'info')
-				return
-			}
-		} else {
-			LOG("Curr (${currentOnTime}) >= max (${settings.maxFanOnTime}), no adjustment made",3,null,'info')
-			return
-		}
-	} else {
-    	log.trace "Can we decrease fanMinOnTime? (${delta})"
-		if (currentOnTime > (settings.minFanOnTime as Integer)) {
-			def target = settings.deltaTemp as BigDecimal
-			if (delta <= target) {			// start adjusting back downwards once we get within 1F or .5556C of the target delta
-				newOnTime = currentOnTime - (settings.fanOnTimeDelta as Integer)
-				if (newOnTime < (settings.minFanOnTime as Integer)) newOnTime = settings.minFanOnTime as Integer
-				if (currentOnTime != newOnTime) {
-					LOG("Temperature delta is ${delta}°/${target}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,null,'info')
-					if (vacationHold) {
-						LOG("Calling setVacationFanMinOnTime(${newOnTime})",3,null,'info')
-						cancelReservation( tid, 'vacaCircOff')
-						theThermostat.setVacationFanMinOnTime(newOnTime)
-					} else {
-						LOG("Calling setFanMinOnTime(${newOnTime})",3,null,'info')
-						cancelReservation( tid, 'circOff')
-						theThermostat.setFanMinOnTime(newOnTime)
-					}
-					atomicState.fanSinceLastAdjustment = false
-					atomicState.lastAdjustmentTime = now()
-					return
-				} else {
-					LOG("Looks like we are as close as we can be - curr: ${currentOnTime}, new: ${newOnTime}, min: ${settings.minFanOnTime}",3,null,'info')
-					return
-				}
-			} else {
-				LOG("Looks like we just need to wait - delta: ${delta}, targetDelta: ${target}, curr: ${currentOnTime}",3,null,'info')
-				return
-			}
-		} else {
-			LOG("Curr (${currentOnTime}) <= min (${settings.minFanOnTime}), no adjustment made",3,null,'info')
-			return
-		}
-	}
+	if (i > 1) tTemp = tTemp / i // average all the sensors, if more than 1
+    if (i > 0) {
+		return roundIt(tTemp, 1)
+    } else {
+    	LOG("No valid temperature readings from ${settings.theSensors}",1,null,'warn')
+    	return null
+    }
 }
 
-void updateMyLabel() {
-	boolean ST = atomicState.isST
-	String flag = ST ? ' (paused)' : '<span '
-	
-	// Display Ecobee connection status as part of the label...
-	String myLabel = atomicState.appDisplayName
-	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
-		myLabel = app.label
-		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
-	} 
-	if (myLabel.contains(flag)) {
-		// strip off any connection status tag
-		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
-		atomicState.appDisplayName = myLabel
-	}
-	if (settings.tempDisable) {
-		def newLabel = myLabel + (!ST ? '<span style="color:red"> (paused)</span>' : ' (paused)')
-		if (app.label != newLabel) app.updateLabel(newLabel)
-	} else {
-		if (app.label != myLabel) app.updateLabel(myLabel)
-	}
+void setTheVents(ventState) {
+	def newVentState
+	if (!ventState) ventState = 'unchanged'
+	if (ventState == 'open') {
+        allVentsOpen()
+        newVentState = 'open'
+    } else if (ventState == 'closed') {
+        allVentsClosed()
+        newVentState = 'closed'
+	} else if (ventState.toString().isNumber()) {
+    	allVentsLevel(ventState as Integer)
+        newVentState = (ventState.toInteger() <= settings.minimumVentLevel.toInteger()) ? 'closed' : 'open'
+    } else if (ventState == 'unchanged') {
+    	boolean ST = isST	
+    	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
+    					(settings.theKeenVents ?: []) + (settings.theHCKeenVents ?: []) + 
+                    	 (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
+        def ventSwitch = ST ? theVents[0].currentValue('switch') : theVents[0].currentValue('switch', true) // assumption: all vents are in the same state
+        if (ventSwitch == 'on') {
+            newVentState = 'open'
+        	def hasLevel = theVents[0].hasAttribute('level')
+            if (hasLevel) {
+        		def currentLevel = (ST ? theVents[0].currentValue('level') : theVents[0].currentValue('level', true))?.toInteger()
+        		if (currentLevel <= minimumVentLevel.toInteger()) {
+                	// while physically 'open', we are set to the minimum vent level, so we are logically 'closed'
+	            	newVentState = 'closed'
+                }
+           	}
+        } else {
+        	// assert ventSwitch == 'off'
+        	newVentState = 'closed'
+        }
+        LOG("setTheVents('unchanged'), prior ventState: ${atomicState.ventState}, new ventState: ${newVentState}",3,null,'debug')
+    }
+	if (newVentState && (atomicState.ventState != newVentState)) {
+    	atomicState.ventState = newVentState
+        runIn(2, updateTheVents, [overwrite: true])
+        // Update VentState on the ES Sensors, if SmartRoom is active
+        List ecobeeSensors = atomicState.ecobeeSensors
+    	if (ecobeeSensors != []) {
+    		ecobeeSensors.each { dni ->
+        		def sensor = parent.getChildDevice(dni)
+                if (sensor) {
+            		def smartRoom = ST ? sensor.currentValue('SmartRoom') : sensor.currentValue('SmartRoom', true)
+            		if (smartRoom && smartRoom.contains('active')) {	// 'active' or 'inactive'
+                    	// update vents state unless SmartRoom is 'disabled' or 'default'
+            			parent.generateChildEvent(dni, [vents: newVentState])
+                    }
+            	}
+        	}
+    	}
+		updateMyLabel()
+    }
+}
+
+void updateTheVents() {
+	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
+    				// (settings.theKeenVents ?: []) + (settings.theHCKeenVents ?: []) + // Don't ping the Keen Vents...
+                     (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
+    theVents.each {
+		if (it.hasCommand('refresh')) {
+    		it.refresh()
+    	} else if (it.hasCommand('poll')) {
+    		it.poll()
+    	} else if (it.hasCommand('ping')) {
+    		it.ping()
+        }
+    }
+}
+
+void allVentsOpen() {
+	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
+    				(settings.theKeenVents ?: []) + (settings.theHCKeenVents ?: []) + 
+                     (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
+    //LOG("Opening the vent${theVents.size()>1?'s':''}",3,null,'info')
+	theVents.each { ventOn(it) }
+    if (theVents*.hasCommand('setLevel')) {
+    	atomicState.lastLevel = "${settings.maximumVentLevel ?: 98}%"
+    } else {
+    	atomicState.lastLevel = 'on'
+    }
+
+}
+
+void allVentsClosed() {
+	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
+    				(settings.theKeenVents ?: []) + (settings.theHCKeenVents ?: []) + 
+                     (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
+    //LOG("Closing the vent${theVents.size()>1?'s':''}",3,null,'info')
+	theVents.each { ventOff(it) }
+    if (theVents*.hasCommand('setLevel')) {
+    	atomicState.lastLevel = "${settings.minimumVentLevel ?: 1}%"
+    } else {
+    	atomicState.lastLevel = 'off'
+    }
+}
+
+void allVentsLevel(level) {
+	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
+    				(settings.theKeenVents ?: []) + (settings.theHCKeenVents ?: []) + 
+                     (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
+    //LOG("Opening the vent${theVents.size()>1?'s':''}",3,null,'info')
+	theVents.each { theVent ->
+    	ventLevel(theVent, level)
+        if (level == 0) {
+        	ventOff(theVent)
+        } else if (level >= 99) {
+        	ventOn(theVent)
+        }
+    }
+    atomicState.lastLevel = "${level}%"
+}
+
+void ventOff( theVent ) {
+	boolean ST = isST	
+    
+	def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
+    def minVentLevel = (settings.minimumVentLevel ?: 1) as Integer
+    if (minVentLevel == 0) {
+    	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+      	if (currentSwitch == 'on') {
+			if (hasSetLevel) {
+        		theVent.off()
+               	if (!settings?.theKeenVents?.contains(theVent) && !settings?.theHCKeenVents?.contains(theVent)) {
+                    // Don't refresh the Keen Vents - they are quite responsive
+                    if (theVent.hasCommand('refresh')) theVent.refresh()
+                }
+                def currentLevel = ST ? theVent.currentValue('level') : theVent.currentValue('level', true)
+                // Some vents will leave the level set even when switch is off
+				if (currentLevel?.toInteger() != 0) theVent.setLevel(0) // Belt & suspenders - make sure the level is reset to 0
+            	LOG("Closing ${theVent.displayName}",3,null,'info')
+			} else {
+				theVent.off()
+				LOG("Turning off ${theVent.displayName}",3,null,'info')
+			}
+            //if (theVent.hasCommand('refresh')) theVent.refresh()
+        } else {
+        	LOG("${theVent.displayName} is already closed/off",3,null,'info')
+        }
+    } else {
+		if (hasSetLevel) {
+        	def currentLevel = ST ? theVent.currentValue('level') : theVent.currentValue('level', true)
+			if (currentLevel?.toInteger() != minVentLevel) {
+        		theVent.setLevel(minVentLevel)	// make sure none of the vents are less than the specified minimum
+            	LOG("Closing ${theVent.displayName} to ${minVentLevel}%",3,null,'info')
+               // if (theVent.hasCommand('refresh')) theVent.refresh()
+        	} else {
+        		LOG("${theVent.displayName} is already closed to ${minVentLevel}%",3,null,'info')
+        	}
+		} else {
+        	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+			if (currentSwitch == 'on') {
+				theVent.off()
+				LOG("Turning off ${theVent.displayName}",3,null,'info')
+                //if (theVent.hasCommand('refresh')) theVent.refresh()
+			} else {
+				LOG("${theVent.displayName} is already off",3,null,'info')
+			}
+		}
+    }
+    // Display the contact as "closed", even if we are partially open (so that HomeKit shows open/closed Blinds)
+    if (theVent.hasAttribute('contact') && theVent.hasCommand('closeContact') && (theVent.currentValue('contact') != 'closed')) theVent.closeContact()
+}
+
+void ventOn( theVent ) {
+	boolean ST = isST
+    boolean changed = false
+    def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
+    def maxVentLevel = (settings.maximumVentLevel ?: 98) as Integer
+    def minVentLevel = (settings.minimumVentLevel ?: 1) as Integer
+	def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+    def currentLevel = (hasSetLevel ? ( ST ? theVent.currentValue('level') : theVent.currentValue('level', true) ) : ((currentSwitch == 'on') ? 100 : 0)) as Integer
+    if (maxVentLevel >= 99) {
+      	if ((currentSwitch == 'off') || (currentLevel < maxVentLevel)) {
+            if (hasSetLevel) {
+                if (currentLevel.toInteger() != maxVentLevel) { theVent.setLevel(maxVentLevel) } //some vents don't handle '100'
+                if (!settings?.theKeenVents?.contains(theVent) && !settings?.theHCKeenVents?.contains(theVent)) {
+                    // Don't refresh the Keen Vents - they are quite responsive
+                    if (theVent.hasCommand('refresh')) theVent.refresh()
+                }
+                currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+                if (currentSwitch != 'on') theVent.on()						// setLevel will turn on() for some devices, but not all
+                changed = true
+            } else {
+                theVent.on()
+                changed = true
+            }
+        	if (changed) {
+            	//if (theVent.hasCommand('refresh')) theVent.refresh()
+            	LOG("${hasSetLevel?'Opening':'Turning on'} ${theVent.displayName}",3,null,'info')
+        	} else {
+            	LOG("${theVent.displayName} is already ${hasSetLevel?'open':'on'}",3,null,'info')
+        	}
+        }
+    } else {
+    	// New feature: use configured maximum level
+        if (hasSetLevel) {
+        	if (currentLevel != maxVentLevel) {
+        		theVent.setLevel(maxVentLevel)	// make sure none of the vents are less than the specified minimum
+            	LOG("Opening ${theVent.displayName} to ${maxVentLevel}%",3,null,'info')
+                //if (theVent.hasCommand('refresh')) theVent.refresh()
+        	} else {
+        		LOG("${theVent.displayName} is already open to ${maxVentLevel}%",3,null,'info')
+        	}
+		} else {
+			if (currentSwitch == 'off') {
+				theVent.on()
+				LOG("Turning on ${theVent.displayName}",3,null,'info')
+			} else {
+				LOG("${theVent.displayName} is already on",3,null,'info')
+			}
+        }
+    }
+    // Display the contact as "open", even if we are only partially open (so that HomeKit shows open/closed Blinds)
+    if (theVent.hasAttribute('contact') && theVent.hasCommand('openContact') && (theVent.currentValue('contact') != 'open')) theVent.openContact()
+}
+
+void ventLevel( theVent, level=50 ) {
+	boolean ST = isST
+    if (level == 0) {
+    	ventOff(theVent)
+        return
+    }
+    boolean changed = false
+    def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
+    def maxVentLevel = (settings.maximumVentLevel ?: 98) as Integer
+    def minVentLevel = (settings.minimumVentLevel ?: 1) as Integer
+    if (level > maxVentLevel) level = maxVentLevel
+    if (level < minVentLevel) level = minVentLevel
+    def currentLevel = (hasSetLevel ? ( ST ? theVent.currentValue('level') : theVent.currentValue('level', true) ) : ((currentSwitch == 'on') ? 100 : 0)) as Integer
+	if (hasSetLevel) {
+    	if (currentLevel != level) {
+        	theVent.setLevel(level)
+            changed = true
+        }
+    	if (!settings?.theKeenVents?.contains(theVent) && !settings?.theHCKeenVents?.contains(theVent)) {
+    		// Don't refresh the Keen Vents - they are quite responsive
+    		if (theVent.hasCommand('refresh')) theVent.refresh()
+    	}
+    }
+    def currentSwitch = ST ? theVent.currentValue('switch') : theVent.currentValue('switch', true)
+    if (currentSwitch != 'on') {
+    	theVent.on()						// setLevel will turn on() for some devices, but not all
+    	changed = true
+    }
+    if (hasSetLevel) {
+    	if (changed) {
+            LOG("Opening ${theVent.displayName} to ${level}%",3,null,'info')
+        } else {
+        	LOG("${theVent.displayName} is already open to ${level}%",3,null,'info')
+        }
+    } else {
+        if (changed) {
+            LOG("Turning on ${theVent.displayName}",3,null,'info')
+        } else {
+            LOG("${theVent.displayName} is already on",3,null,'info')
+        }
+    }
+    // Display the vent's contact as "open", even if we are only partially open (so that HomeKit shows open/closed Blinds)
+    if (theVent.hasAttribute('contact') && theVent.hasCommand('openContact') && (theVent.currentValue('contact') != 'open')) theVent.openContact()
+}
+// Helper Functions
+// Ask our parents for help sending the events to our peer sensor devices
+void generateSensorEvents( Map dataMap ) {
+	LOG("generating ${dataMap} events for ${theSensors}",3,null,'debug')
+	theSensors.each { DNI ->
+        parent.getChildDevice(DNI)?.generateEvent(dataMap)
+    }
+}
+def getThermostatPrograms() {
+    def cl = settings?.theThermostat?.currentValue('climatesList')
+    return (cl ? ((cl == '[]') ? ['Away', 'Home', 'Sleep'] : cl.toString()[1..-2].tokenize(', ').sort(false)) : ['Away', 'Home', 'Sleep'])
+}
+
+def getThermostatModes() {
+    String tm = settings?.theThermostat?.currentValue('supportedThermostatModes')
+    return (tm ? ((tm == '[]') ? [] : tm[1..-2].tokenize(', ').sort(false)) : [])
+    //return theModes.sort(false)
 }
 
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
@@ -752,11 +1146,11 @@ void cancelReservation(String tid, String type='modeOff') {
 	parent.cancelReservation( tid, app.id as String, type )
 }
 // Do I have a reservation?
-boolean haveReservation(String tid, String type='modeOff') {
+Boolean haveReservation(String tid, String type='modeOff') {
 	return parent.haveReservation( tid, app.id as String, type )
 }
 // Do any Apps have reservations?
-boolean anyReservations(String tid, String type='modeOff') {
+Boolean anyReservations(String tid, String type='modeOff') {
 	return parent.anyReservations( tid, type )
 }
 // How many apps have reservations?
@@ -772,11 +1166,96 @@ List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
 
-// Helper Functions
-String getDeviceId(networkId) {
-    return networkId.split(/\./).last()
+void updateMyLabel() {
+	boolean ST = isST
+	
+	String flag
+	if (ST) {
+    	def opts = [' (paused', ' (open', ' (closed']
+		opts.each {
+			if (!flag && app.label.contains(it)) flag = it
+		}
+	} else {
+		flag = '<span '
+	}
+	
+	// Display vent status 
+	String myLabel = atomicState.appDisplayName
+	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
+    	//log.debug app.label
+		myLabel = app.label
+		if (!flag || !myLabel.contains(flag)) atomicState.appDisplayName = myLabel
+	} 
+	if (flag && myLabel.contains(flag)) {
+		// strip off any connection status tag
+		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
+		atomicState.appDisplayName = myLabel
+	}
+    String cLevel = atomicState.lastLevel
+    // log.debug "cLevel: ${cLevel}"
+    String newLabel
+	if (settings.tempDisable) {
+    	cLevel = ' (paused ' + cLevel + ')'
+		newLabel = myLabel + ( ST ? cLevel : '<span style="color:red">' + cLevel + '</span>' )
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else if (atomicState.ventState == 'open') {
+    	cLevel = ' (open ' + cLevel + ')'
+		newLabel = myLabel + ( ST ? cLevel : '<span style="color:green">' + cLevel + '</span>' )
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else if (atomicState.ventState == 'closed') { 
+    	cLevel = ' (closed ' + cLevel + ')'
+		newLabel = myLabel + ( ST ? cLevel : '<span style="color:green">' + cLevel + '</span>' )
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else {
+		if (app.label != myLabel) app.updateLabel(myLabel)
+	}
+    //log.debug "newLabel: " + newLabel + ", myLabel: " + myLabel + ", app.label: " + app.label
 }
 
+// Ask our parents for help sending the events to our peer sensor devices
+void generateSensorsEvents( Map dataMap ) {
+	LOG("generating ${dataMap} events for ${theSensors}",3,null,'info')
+	theSensors.each { DNI ->
+        parent.getChildDevice(DNI)?.generateEvent(dataMap)
+    }
+}
+def pauseOn() {
+	// Pause this Helper
+    log.debug "pauseOn()"
+	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	if (!settings.tempDisable) {
+		LOG("performing Global Pause",2,null,'info')
+		app.updateSetting("tempDisable", true)
+        settings.tempDisable = true
+		atomicState.globalPause = true
+		runIn(2, updated, [overwrite: true])
+        updateMyLabel()
+	} else {
+		LOG("was already paused, ignoring Global Pause",3,null,'info')
+	}
+}
+def pauseOff() {
+	// Un-pause this Helper
+    log.debug "pauseOff()"
+    log.debug "paused? ${settings.tempDisable}"
+	if (settings.tempDisable) {
+    log.debug "already? ${atomicState.wasAlreadyPaused}"
+		def wasAlreadyPaused = atomicState.wasAlreadyPaused
+		if (!wasAlreadyPaused) { // && settings.tempDisable) {
+			LOG("performing Global Unpause",2,null,'info')
+			app.updateSetting("tempDisable", false)
+            settings.tempDisable = false
+			runIn(2, updated, [overwrite: true])
+            updateMyLabel()
+		} else {
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+		}
+	} else {
+		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		atomicState.wasAlreadyPaused = false
+	}
+	atomicState.globalPause = false
+}
 def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
@@ -784,33 +1263,37 @@ def roundIt( BigDecimal value, decimals=0 ) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	message = "${app.label} ${message}"
-	if (logType == null) logType = 'debug'
-	parent.LOG(message, level, null, logType, event, displayEvent)
-    log."${logType}" message
+	String msg = "${atomicState.appDisplayName} ${message}"
+    if (logType == null) logType = 'debug'
+    if (logType == 'debug') {
+    	if (!settings?.debugOff) log.debug message
+    } else if (logType == 'info') {
+    	if (!settings?.infoOff) log.info message
+    } else log."${logType}" message
+	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
-// **************************************************************************************************************************
+String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
+String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
+String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
+String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getFormat(type, myText=""){
+	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
+	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+}
+
 // SmartThings/Hubitat Portability Library (SHPL)
-// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//    Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use atomicState so that it is universal
-//
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
 boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//  - "if (state.isST)" is more efficient than "if (isSTHub)"
-//
 String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
@@ -819,13 +1302,9 @@ String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-boolean getIsSTHub() { return atomicState.isST as boolean}					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE as boolean}					// if (isHEHub) ...
+boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
-//
-// **************************************************************************************************************************
