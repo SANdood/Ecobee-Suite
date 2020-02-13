@@ -13,38 +13,36 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.6.00 - Release number synchronization
- *	1.6.01 - Fix reservation initialization error
- *	1.6.02 - REALLY fix reservation initialization error
- *	1.6.03 - Really, REALLY fix reservation initialization error
- *	1.6.10 - Converted to parent-based reservations
- *	1.6.11 - Clear reservations when disabled
- *	1.6.12 - Clear reservations on manual override
- *	1.6.13 - Removed use of *SetpointDisplay
- *	1.6.14 - Fixed typo (thanks @jml923)
- *	1.6.15 - Added scheduled Auto Off for Quiet Time
  *	1.7.00 - Initial Release of Universal Ecobee Suite
  *	1.7.01 - Use nonCached currentValue() for stat attributes on Hubitat
  *	1.7.02 - Fixing private method issue caused by grails
- *  1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
+ *	1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
  *	1.7.04 - Optimized isST/isHE, added Global Pause
  *	1.7.05 - Added option to disable local display of log.debug() logs
  *	1.7.06 - Fixes for the auto-disable logic
+ *	1.7.07 - More fixes for autoOff
+ *	1.7.08 - Fix hasHumidifier
+ *	1.7.09 - Fixed Helper labelling
+ *  1.7.10 - Fixed labels (again), added infoOff, cleaned up preferences setup ***
+ *	1.7.11 - Added minimize UI
+ *	1.8.00 - Version synchronization, updated settings look & feel
  */
-String getVersionNum() { return "1.7.06" }
+String getVersionNum()		{ return "1.8.00a" }
 String getVersionLabel() { return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-	name: "ecobee Suite Quiet Time",
-	namespace: "sandood",
-	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets HVAC into user-specified 'Quiet Mode' when a specified switch (real or virtual) is enabled.",
-	category: "Convenience",
-	parent: "sandood:Ecobee Suite Manager",
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
+	name: 			"ecobee Suite Quiet Time",
+	namespace: 		"sandood",
+	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets HVAC into user-specified 'Quiet Mode' when a specified switch (real or virtual) is enabled.",
+	category: 		"Convenience",
+	parent: 		"sandood:Ecobee Suite Manager",
+	iconUrl:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
 	singleInstance: false,
-    pausable: true
+    pausable: 		true
 )
 
 preferences {
@@ -55,38 +53,68 @@ preferences {
 def mainPage() {
 	boolean ST = isST
 	boolean HE = !ST
+    boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
+    String defaultName = "Quiet Time"
 	
-	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
-    	section(title: "") {
-        	String defaultLabel = "Quiet Time"
-        	label(title: "Name for this ${defaultLabel} Helper", required: true, defaultValue: defaultLabel)
+	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
+    	if (maximize) {
+            section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
+                if (ST) {
+                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
+                } else {
+                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
+                }
+                paragraph("Ideal for watching movies, this Helper implements the concept of 'Quiet Time' for your Ecobee Suite-controlled HVAC system. Activated by a (real or virtual) switch, the Helper will "+
+                          "turn off the components of your system that create noise. The entire system can be turned off, as well as the fan, humidifier and dehumidifier. Alternately, setpoints can be changed "+
+                          "as another means of reducing the noise. Quiet Time supports integration with other Helpers (e.g., Smart Circulation), and also supports auto-off after a configurable delay.")
+            }
+        }
+		section(title: sectionTitle("Naming${!settings.tempDisable?' & Thermostat Selection':''}")) {
+			String defaultLabel
+			if (!atomicState?.appDisplayName) {
+				defaultLabel = defaultName
+				app.updateLabel(defaultName)
+				atomicState?.appDisplayName = defaultName
+			} else {
+				defaultLabel = atomicState.appDisplayName
+			}
+			label(title: inputTitle("Name for this ${defaultName} Helper"), required: false, submitOnChange: true, defaultValue: defaultLabel, width: 6)
             if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
-			}
+			} else {
+            	atomicState.appDisplayName = app.label
+            }
 			if (HE) {
 				if (app.label.contains('<span ')) {
-					if (atomicState?.appDisplayName != null) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
 						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
 						atomicState.appDisplayName = myLabel
 						app.updateLabel(myLabel)
 					}
-				}
+				} else {
+                	atomicState.appDisplayName = app.label
+                }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                    atomicState.appDisplayName = myLabel
-                    app.updateLabel(myLabel)
+                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
+						app.updateLabel(atomicState.appDisplayName)
+					} else {
+                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                        atomicState.appDisplayName = myLabel
+                        app.updateLabel(myLabel)
+                    }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
             }
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused - re-enable below." 
+				paragraph "WARNING: Temporarily Paused; Resume below" 
 			} else { 
-            	input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)
+            	input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
+					  required: true, multiple: true, submitOnChange: true)
             }          
 		}
     
@@ -94,64 +122,85 @@ def mainPage() {
 			def hasH = hasHumidifier()
 			def hasD = hasDehumidifier()
 			
-			section(title: (HE?'<b>':'') + 'Quiet Time Control Switch' + (HE?'</b>':'')) {
-				paragraph("Quiet Time is enabled by turning on (or off) a physical or virtual switch.")
-				input(name: 'qtSwitch', type: 'capability.switch', required: true, title: 'Which switch controls Quiet Time?', multiple: false, submitOnChange: true)
+			section(title: sectionTitle('Trigger')) {
+				if (maximize) paragraph("Quiet Time is enabled by turning on (or off) a physical or virtual switch.")
+				input(name: 'qtSwitch', type: 'capability.switch', required: true, title: inputTitle('Select a Switch to control this instance of Quiet Time'), multiple: false, submitOnChange: true, width: 4)
 				if (settings.qtSwitch) {
-					input(name: "qtOn", type: "enum", title: "Effect Quiet Time Actions when switch '${settings.qtSwitch.displayName}' is turned", defaultValue: 'on', required: true, multiple: false, submitOnChange: true,
-							options: ["on","off"])
-					input(name: "qtAutoOff", type: "enum", title: "Auto-disable Quiet Time after ", descriptionText: (settings?.qtAutoOff != null)?:'(Disabled)', defaultValue: '(Disabled)', required: true, multiple: false, submitOnChange: true,
-							options: ["(Disabled)", "10 Minutes", "15 Minutes", "30 Minutes", "45 Minutes", "1 Hour", "2 Hours", "3 Hours", "4 Hours", "6 Hours"])
+					input(name: "qtOn", type: "enum", title: inputTitle("Turn on Quiet Time when the Switch is"), defaultValue: 'on', required: true, 
+                    	  multiple: false, submitOnChange: true, options: ["on","off"], width: 6)
+					input(name: "qtAutoOff", type: "enum", title: inputTitle("Auto-disable Quiet Time after"), defaultValue: '(Disabled)', required: true, multiple: false, submitOnChange: true,
+						  options: ["(Disabled)", "10 Minutes", "15 Minutes", "30 Minutes", "45 Minutes", "1 Hour", "2 Hours", "3 Hours", "4 Hours", "6 Hours"], width: 6)
 				}
+                if (settings?.qtOn == null) {app.updateSetting('qtOn', 'on'); settings?.qtOn = 'on'; }
+                if (settings?.qtAutoOff == null) {app.updateSetting('qtAutoOff', '(Disabled)'); settings?.qtAutoOff = '(Disabled)'; }
 			}
 
-			section(title: (HE?'<b>':'') + "Quiet Time Actions" + (HE?'</b>':'')) {
-				input(name: 'hvacOff', type: "bool", title: "Turn off HVAC?", required: true, defaultValue: false, submitOnChange: true)
+			section(title: sectionTitle("Actions")) {
+				if (maximize) paragraph("Quiet Time can turn off most components of your HVAC system in order to minimize background noise", width: 12)
+				input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
 				if (settings.hvacOff) {
-					paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.")
-				}
+					if (maximize) paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. "+
+							  "\n\nHVAC Mode will be returned to its original state when Quiet Time ends.", width: 8)
+				} else if (HE) paragraph("", width: (maximize?8:12))
+				
 				if (!settings.hvacOff) {
-					input(name: 'hvacMode', type: 'bool', title: 'Change HVAC Mode?', required: true, defaultValue: false, submitOnChange: true)
+					input(name: 'hvacMode', type: 'bool', title: inputTitle('Change HVAC Mode?'), required: true, defaultValue: false, submitOnChange: true, , width: 4)
 					if (settings.hvacMode) {
-						input(name: 'quietMode', title: 'Set thermostat mode to', type: 'enum', required: true, multiple: false, 
-								options:getThermostatModes())
-						if (settings.quietMode) paragraph("HVAC mode will be set to ${settings.quietMode} Mode.${(settings.quietMode=='off')?' Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.':''}")
-					}
+						input(name: 'quietMode', title: inputTitle('Set thermostat mode to'), type: 'enum', required: true, multiple: false, 
+								options:getThermostatModes(), width: 4, submitOnChange: true)
+						if (settings.quietMode) {
+							if (HE) paragraph("", width: 4)
+							if (HE) paragraph("", width: 4)
+							if (maximize) paragraph("HVAC Mode will be set to ${settings.quietMode} Mode." + 
+									  "${(settings.quietMode=='off')?' Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.':''}"+
+									  "\n\nHVAC Mode will be returned to its original state when Quiet Time ends.", width: 8)
+						}
+					} else if (HE) paragraph("", width: 8)
 				}
-				if (settings.hvacOff || settings.hvacMode) paragraph("HVAC mode will be returned to its original value when Quiet Time ends")
+				//if (settings.hvacOff || settings.hvacMode) paragraph("HVAC mode will be returned to its original state when Quiet Time ends")
 
-				input(name: 'fanOff', type: "bool", title: "Turn off the Fan?", required: true, defaultValue: false, submitOnChange: true)
+				input(name: 'fanOff', type: "bool", title: inputTitle("Turn off the Fan?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
 				if (settings.fanOff) {
-					paragraph('Turning off the fan will not stop automatic circulation, even if the HVAC is also off.')
-					input(name: 'circOff', type: "bool", title: 'Also disable Circulation?', required: true, defaultValue: false, submitOnChange: true)
+					if (maximize) paragraph('Turning off the fan will not stop automatic circulation, even if the HVAC is also off.', width: 8)
+					input(name: 'circOff', type: "bool", title: inputTitle('Also disable Circulation?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (settings.circOff) {
-						paragraph("Circulation will also be disabled.")
+						paragraph("Circulation will also be disabled.", width: 4)
 					} else {
-						paragraph("Circulation will not be modified.")
+						paragraph("Circulation will not be modified.", width: 4)
 					}
-					paragraph("At the end of Quiet Time, the Fan Mode will be restored to its prior setting${settings.circOff?', and circulation will be re-enabled':''}.")
-				}
+					if (HE) paragraph("", width: 4)
+					if (HE) paragraph("", width: 4)
+					if (maximize) paragraph("At the end of Quiet Time, the Fan Mode will be restored to its prior setting${settings.circOff?', and circulation will be re-enabled':''}.", width: 8)
+				} else if (HE) paragraph("", width: 8)
+					
 				if (settings.hvacOff || settings.hvacMode || settings.fanOff) {
-					input(name: 'modeResume', type: 'bool', title: 'Also resume current program at the end of Quiet Time (recommended)?', defaultValue: true, required: true)
+					input(name: 'modeResume', type: 'bool', title: inputTitle('Also resume the Current Program at the end of Quiet Time (recommended)?'), defaultValue: true, required: true, width: 10)
 				}
 
 				if (!settings.hvacOff && !settings.hvacMode) {
-					input(name: 'adjustSetpoints', type: 'bool', title: 'Adjust heat/cool setpoints?', required: true, defaultValue: false, submitOnChange: true)
+					input(name: 'adjustSetpoints', type: 'bool', title: inputTitle('Adjust heat/cool setpoints?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (settings.adjustSetpoints) {
-						input(name: 'heatAdjust', type: 'decimal', title: 'Heating setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
-						input(name: 'coolAdjust', type: 'decimal', title: 'Cooling setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
-						input(name: 'setpointResume', type: 'enum', title: 'At the end of Quiet Time', description: 'Tap to choose...', multiple: false, required: true,
-								options: ['Restore prior Setpoints','Resume Current Program', 'Resume Scheduled Program'], submitOnChange: true)
-						if (settings.setpointResume) paragraph("At the end of Quiet Time, ${settings.setpointResume.startsWith('Resu')?'the currently scheduled program will be resumed.':'the prior setpoints will be restored.'}")
-					}
+						input(name: 'heatAdjust', type: 'decimal', title: inputTitle('Heating setpoint adjustment')+' (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
+						input(name: 'coolAdjust', type: 'decimal', title: inputTitle('Cooling setpoint adjustment')+' (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
+						if (HE) paragraph("", width: 4)
+						input(name: 'setpointResume', type: 'enum', title: inputTitle('At the end of Quiet Time'), /*description: 'Tap to choose...',*/ multiple: false, required: true,
+								options: ['Restore prior Setpoints','Resume Current Program', 'Resume Scheduled Program'], submitOnChange: true, width: 8)
+						if (settings.setpointResume) {
+							if (maximize) paragraph(width: 9, "At the end of Quiet Time, ${settings.setpointResume.startsWith('Resu')?'the currently scheduled program will be resumed.':'the prior setpoints will be restored.'}")
+						} else if (HE) paragraph("", width: 9)
+					} else if (HE) paragraph("", width: 8)
 				}
 				if ((settings.theThermostats?.size() != 0) && atomicState.hasHumidifier) {
-					input(name: 'humidOff', type: 'bool', title: 'Turn off the Humidifier?', required: true, defaultValue: false, submitOnChange: true)
-					if (settings.humidOff) paragraph("At the end of Quiet Time, the humidifier(s) will be turned back on.")
+					input(name: 'humidOff', type: 'bool', title: inputTitle('Turn off the Humidifier?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
+					if (settings.humidOff) {
+						if (maximize) paragraph("At the end of Quiet Time, the humidifier will be turned back on.", width: 8)
+					} else if (HE) paragraph("", width: 8)
 				}
 				if ((settings.theThermostats?.size() != 0) && atomicState.hasDehumidifier) {
-					input(name: 'dehumOff', type: 'bool', title: 'Turn off the Dehumidifier?', required: true, defaultValue: false, submitOnChange: true)
-					if (settings.dehumOff) paragraph("At the end of Quiet Time, the dehumidifier(s) will be turned back on.")
+					input(name: 'dehumOff', type: 'bool', title: inputTitle('Turn off the Dehumidifier?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
+					if (settings.dehumOff) {
+						if (maximize) paragraph("At the end of Quiet Time, the dehumidifier will be turned back on.", width: 8)
+					} else if (HE) paragraph("", width: 8)
 				}
 			}
 	//        section(title: 'Actions when Quiet Time Ends') {
@@ -197,13 +246,21 @@ def mainPage() {
 			}
 	*/
 		}
-		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
-			input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
+        section(title: sectionTitle("Operations")) {
+        	input(name: "minimize", 	title: inputTitle("Minimize the settings UI?"), type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper?"), 		type: "bool", required: false, description: "", 	submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+		}       
+		// Standard footer
+        if (ST) {
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+        } else {
+        	section() {
+        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+            }
 		}
-		section(title: "") {
-			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
-		}
-		section (getVersionLabel()) {}
     }
 }
 
@@ -232,7 +289,7 @@ void updated() {
 }
 def initialize() {
 	LOG("${getVersionLabel()}\nInitializing...", 2, null, 'info')
-    log.info "${app.name}, ${app.label}"
+    //log.info "${app.name}, ${app.label}"
 	updateMyLabel()
 	
 	if(tempDisable == true) {
@@ -395,14 +452,14 @@ def quietOnHandler(evt=null) {
 void turnOnQuietTime() {
 	LOG("Turning On Quiet Time",2,null,'info')
 	def statState = atomicState.statState
-	boolean ST = atomicState.isST
+	boolean ST = isST
 	
     clearReservations()			// clean slate
 	settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
         if (settings.hvacOff) {
+        	makeReservation(tid, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
         	statState[tid].thermostatMode = ST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
-            makeReservation(tid, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
             if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
             LOG("${stat.device.displayName} Mode is Off",3,null,'info')
         } else if (settings.hvacMode) {
@@ -419,14 +476,14 @@ void turnOnQuietTime() {
             }
         }
         if (settings.fanOff) { 
+        	makeReservation(tid, 'fanOff')						// reserve the fanOff also
         	statState[tid].thermostatFanMode = ST ? stat.currentValue('thermostatFanMode') : stat.currentValue('thermostatMode', true)
-            makeReservation(tid, 'fanOff')						// reserve the fanOff also
             stat.setThermostatFanMode('off','indefinite')
             LOG("${stat.device.displayName} Fan Mode is off",3,null,'info')
         }
         if (settings.circOff) { 
+        	makeReservation(tid, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
         	statState[tid].fanMinOnTime = ST ? stat.currentValue('fanMinOnTime') : stat.currentValue('fanMinOnTime', true)
-            makeReservation(tid, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
             stat.setFanMinOnTime(0)
             LOG("${stat.device.displayName} Circulation time is 0 mins/hour",3,null,'info')
         }
@@ -441,18 +498,18 @@ void turnOnQuietTime() {
             LOG("${stat.device.displayName} heatingSetpoint adjusted to ${h}, coolingSetpoint to ${c}",3,null,'info')
         }
         if (settings.humidOff && (stat.currentValue('hasHumidifier') == 'true')) { 
+        	makeReservation(tid, 'humidOff')
         	LOG("Turning off the humidifier",3,null,'info')
         	statState[tid].humidifierMode = stat.currentValue('humidifierMode')
-            makeReservation(tid, 'humidOff')
             stat.setHumidifierMode('off')
             LOG("${stat.device.displayName} humidifierMode is off",3,null,'info')
         }
         if (settings.dehumOff && (stat.currentValue('hasDehumidifier') == 'true')) {
         	def dehumNow = stat.currentValue('dehumidifierMode')
             if (dehumNow == 'on') {
-        		LOG("Turning off the dehumidifier",3,null,'info')
-        		statState[tid].dehumidifierMode = 'on'
             	makeReservation(tid, 'dehumOff')
+                LOG("Turning off the dehumidifier",3,null,'info')
+        		statState[tid].dehumidifierMode = 'on'
             	stat.setDehumidifierMode('off')
             	LOG("${stat.device.displayName} dehumidifierMode is off",3,null,'info')
             } else {
@@ -473,7 +530,7 @@ void turnOnQuietTime() {
     atomicState.statState = statState
     atomicState.isQuietTime = true
     
-    if ((settings.qtAutoOff == null) || (settings.qtAutoOff != '(Disabled)')) {
+    if ((settings.qtAutoOff != null) && (settings.qtAutoOff != '(Disabled)')) {
     	def seconds = settings.qtAutoOff.contains('Minute')? (settings.qtAutoOff.tokenize()[0].toInteger() * 60) : (settings.quAutoOff.tokenize()[0].toInteger() * 3600)
         LOG("Quiet Time Auto Off scheduled in ${seconds} seconds.",2,null,'info')
        	runIn( seconds, turnQuietOff, [overwrite: true])
@@ -494,9 +551,9 @@ def quietOffHandler(evt=null) {
         return
     }
 	LOG("Quiet Time Off requested",2,null,'info')
-	boolean ST = atomicState.isST
+	boolean ST = isST
     
-    if ((settings.qtAutoOff == null) || (settings.qtAutoOff != '(Disabled)')) { unschedule(turnQuietOff) }
+    if ((settings.qtAutoOff != null) && (settings.qtAutoOff != '(Disabled)')) { unschedule(turnQuietOff) }
    	atomicState.isQuietTime = false
    	// No delayed execution - 
    	// runIn(3, 'turnOffQuietTime', [overwrite: true])
@@ -605,7 +662,7 @@ boolean hasHumidifier() {
 			if ((hh != null) && ((hh == true) || (hh == 'true'))) result = true
         }
 	}
-	atomicState.hasDehumidifier = result
+	atomicState.hasHumidifier = result
     return result
 }	
 
@@ -782,9 +839,8 @@ def pauseOff() {
 	atomicState.globalPause = false
 }
 void updateMyLabel() {
-	boolean ST = atomicState.isST
-	boolean HE = !ST
-	
+	boolean ST = isST
+    
 	String flag = ST ? ' (paused)' : '<span '
 	
 	String myLabel = atomicState.appDisplayName
@@ -793,12 +849,11 @@ void updateMyLabel() {
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
 	if (myLabel.contains(flag)) {
-		// strip off any connection status tag
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + (HE ? '<span style="color:red"> (paused)</span>' : ' (paused)')
+		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
@@ -808,31 +863,35 @@ void updateMyLabel() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-	if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
+	if (logType == 'debug') {
+    	if (!settings?.debugOff) log.debug message
+    } else if (logType == 'info') {
+    	if (!settings?.infoOff) log.info message
+    } else log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
 
-// **************************************************************************************************************************
+String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
+String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
+String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
+String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getFormat(type, myText=""){
+	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
+	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+}
+
 // SmartThings/Hubitat Portability Library (SHPL)
-// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-// The following 3 calls are safe to use anywhere within a Device Handler or Application
-//  - these can be called (e.g., if (getPlatform() == 'SmartThings'), or referenced (i.e., if (platform == 'Hubitat') )
-//  - performance of the non-native platform is horrendous, so it is best to use these only in the metadata{} section of a
-//    Device Handler or Application
-//
-//	1.0.0	Initial Release
-//	1.0.1	Use atomicState so that it is universal
-//
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
 boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-//
-// The following 3 calls are ONLY for use within the Device Handler or Application runtime
-//  - they will throw an error at compile time if used within metadata, usually complaining that "state" is not defined
-//  - getHubPlatform() ***MUST*** be called from the installed() method, then use "state.hubPlatform" elsewhere
-//  - "if (state.isST)" is more efficient than "if (isSTHub)"
-//
 String getHubPlatform() {
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
@@ -845,9 +904,5 @@ boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
 boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	// def ST = (atomicState?.isST != null) ? atomicState?.isST : isST
-	//log.debug "isST: ${isST}, isHE: ${isHE}"
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
 }
-//
-// **************************************************************************************************************************
