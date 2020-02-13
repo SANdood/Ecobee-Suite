@@ -760,4 +760,4 @@ boolean getIsHEHub() { return atomicState.isHE as boolean}					// if (isHEHub) .
 
 def getParentSetting(String settingName) {
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
-}
+}  
