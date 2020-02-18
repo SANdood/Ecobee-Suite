@@ -33,9 +33,10 @@
  *	1.7.42 - Fixed labels (again), added debugOff/infoOff, cleaned up preferences setup, added Intro ***
  *	1.7.43 - Fixed numOpen() fatal error
  *	1.7.44 - Added minimize UI
+ *	1.7.45 - Made logging less chatty with debugOff && infoOff
  *	1.8.00 - Version synchronization, updated settings look & feel
  */
-String getVersionNum()		{ return "1.8.00" }
+String getVersionNum()		{ return "1.8.00a" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -435,14 +436,15 @@ def initialize() {
 	updateMyLabel()
     boolean ST = isST
     boolean HE = !ST
-    //log.debug "settings: ${settings}"
+    log.trace "Initializing with settings: ${settings}"
 	
 	if(settings.tempDisable == true) {
     	clearReservations()
 		LOG("Temporarily Paused", 4, null, 'info')
 		return true
 	}
-	if (settings.debugOff) log.info "log.debug() logging disabled"
+	if (settings.debugOff) log.trace "log.debug() logging is disabled"
+    if (settings.infoOff)  log.trace "log.info()  logging is disabled"
     // subscribe(app, appTouch)
 	
 	boolean contactOffState = false
@@ -554,7 +556,7 @@ def initialize() {
     }
     atomicState.thermSavedState = tmpThermSavedState
 	LOG("initialize() - thermSavedState: ${atomicState.thermSavedState}",4,null,'debug')
-	LOG("initialize() exiting",4,null,'trace')
+	LOG("Initialization complete! ",4,null,'trace')
 }
 
 def statModeChange(evt) {
@@ -635,7 +637,7 @@ def coolSPHandler( evt ) {
 
 // "sensorOpened" called when state change should turn HVAC off - routine name preserved for backwards compatibility with prior implementations
 void sensorOpened(evt=null) {
-	LOG("sensorOpened() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null, 'trace')
+	LOG("sensorOpened() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null, 'info')
     def HVACModeState = atomicState.HVACModeState
     if (HVACModeState == 'off_pending') return		// already in process of turning off
 
@@ -700,7 +702,7 @@ void sensorOpened(evt=null) {
 // "sensorClosed" called when state change should turn HVAC On (routine name preserved for backwards compatibility with prior implementations)
 void sensorClosed(evt=null) {
 	// Turn HVAC Off action has occured
-    LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null,'trace')
+    LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null,'info')
 	def HVACModeState = atomicState.HVACModeState
     boolean ST = isST
     
@@ -744,7 +746,7 @@ void sensorClosed(evt=null) {
             return
         }
 	    
-        LOG("All Contact Sensors & Switches are reset, initiating actions.", 3,null,'trace')		
+        LOG("All Contact Sensors & Switches are reset, initiating actions.", 3,null,'info')		
         
         atomicState.HVACModeState = 'on_pending'
 		// unschedule(openedScheduledActions)
@@ -756,7 +758,7 @@ void sensorClosed(evt=null) {
 			LOG("${theStats.toString()[1..-2]} will be turned on in ${delay} minutes", 3, null, 'info')
 		} else { turnOnHVAC(false) }
 	} else {
-    	LOG("No action to perform yet...", 5,null,'trace')
+    	LOG("No action to perform yet...", 5,null,'info')
     }
 }
 
@@ -767,12 +769,12 @@ void sensorClosed(evt=null) {
 
 void turnOffHVAC(quietly = false) {
 	// Save current states
-    LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'trace')
+    LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'info')
 	boolean ST = isST
 	
     if (allClosed() && (atomicState.HVACModeState == 'off_pending')) {
     	// Nothing is open, maybe got closed while we were waiting, abort the "off"
-        LOG("turnOffHVAC() called, but everything is closed/off, ignoring request & leaving HVAC on",3,null,warn)
+        LOG("turnOffHVAC() called, but everything is closed/off, ignoring request & leaving HVAC on",3,null,'info')
         atomicState.HVACModeState = 'on'
         return
     }
@@ -942,11 +944,11 @@ void turnOffHVAC(quietly = false) {
 
 void turnOnHVAC(quietly = false) {
 	// Restore previous state
-    LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'trace')
+    LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'debug')
 	boolean ST = isST
     
 	if (!allClosed() && (atomicState.HVACModeState == 'on_pending')) {
-    	LOG("turnOnHVAC() called, but somethings is still open/on, ignoring request & leaving HVAC off",3,null,warn)
+    	LOG("turnOnHVAC() called, but somethings is still open/on, ignoring request & leaving HVAC off",3,null,'info')
     	atomicState.HVACModeState = 'off'
     	return
     }
@@ -954,7 +956,7 @@ void turnOnHVAC(quietly = false) {
     atomicState.HVACModeState = 'on'
     String action = settings.whichAction ?: 'Notify Only'
     boolean doHVAC = action.contains('HVAC')
-	LOG("turnOnHVAC() - action: ${action}, doHVAC: ${doHVAC}", 3, null, 'info')
+	LOG("turnOnHVAC() - action: ${action}, doHVAC: ${doHVAC}", 3, null, 'debug')
     boolean notReserved = true
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 	def tstatNames = []
@@ -1284,7 +1286,7 @@ void sendMessage(notificationMessage) {
 			}
 		} 
 		if (settings.pushNotify) {
-			LOG("Sending Push to everyone", 3, null, 'warn')
+			LOG("Sending Push to everyone", 3, null, 'info')
 			sendPushMessage(msg)										// Push to everyone
 		}
 		if (settings.speak) {
@@ -1360,12 +1362,12 @@ def pauseOn() {
 	// Pause this Helper
 	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",3,null,'info')
+		LOG("performing Global Pause",3,null,'trace')
 		app.updateSetting("tempDisable", true)
 		atomicState.globalPause = true
 		runIn(2, updated, [overwrite: true])
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("was already paused, ignoring Global Pause",3,null,'trace')
 	}
 }
 def pauseOff() {
@@ -1373,14 +1375,14 @@ def pauseOff() {
 	if (settings.tempDisable) {
 		def wasAlreadyPaused = atomicState.wasAlreadyPaused
 		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",3,null,'info')
+			LOG("performing Global Unpause",3,null,'trace')
 			app.updateSetting("tempDisable", false)
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'trace')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("was already unpaused, skipping Global Unpause",3,null,'trace')
 		atomicState.wasAlreadyPaused = false
 	}
 	atomicState.globalPause = false
