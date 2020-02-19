@@ -55,14 +55,14 @@ On both platforms, the Ecobee Suite offers more than a dozen curated Helper appl
 	  - [Using a Virtual Switch with Quiet Time](#qt-virtual-switch)
   - [ecobee Suite Mode(/Routine)/Switches/Program Helper](#features-routines-sa) 
   - [ecobee Suite Smart Circulation Helper](#features-smart-circ-sa)
-  - [ecobee Suite Smart Humidity Helper](#features-smart-humid-sa)
+  - [ecobee Suite Smart Humidity Helper](#features-smart-humid-sa) ***New!***
   - [ecobee Suite Smart Mode, Program & Setpoints Helper](#smart-mode-sa)
   - [ecobee Suite Smart Room Helper](#features-smart-room-sa)
   - [ecobee Suite Smart Switches Helper](#features-smart-switches-sa)
   - [ecobee Suite Smart Vents & Switches Helper](#features-smart-vents-sa)
   - [ecobee Suite Smart Zones Helper](#features-smart-zone-sa)
-  - [ecobee Suite Thermal Comfort Helper](#features-thermal-comfort) ***New!***
-  - [ecobee Suite Working From Home Helper](#features-working-home) ***New!***
+  - [ecobee Suite Thermal Comfort Helper](#features-thermal-comfort) 
+  - [ecobee Suite Working From Home Helper](#features-working-home)
 - [<b>Troubleshooting</b>](#troubleshooting)
   - [Reporting Issues](#reporting-issues)
 - - [Quick Links](#quicklinks)
@@ -117,6 +117,9 @@ The following components are part of the Suite:
     - vent level can be individually configured for the "excluded" Modes, Programs and Fan Level. Level can be "on" or  "off" (using the configured min/max levels), "percentage" (using a specified level), or "unchanged"
     - can now automatically subscribe an ES Sensor to the selected programs that Smart Vents is configured for
     - can be automatically paused/unpaused by Smart Room when it disables/enables a Smart Room
+    * Optimized Smart Recovery handling - Smart Vents not only recognizes when the ES Thermostat is in Smart Recovery, it also "looks ahead" to determine the next scheduled program and is setpoints; if configured to run during the next scheduled program, Smart Vents will adjust the vents until the target setpoint is met.
+    * Now supports the use of "virtual thermostats" to set the target temperature setpoints instead of using the ES thermostat.
+    * Now supports remote "HubConnect Ecovent" and "HubConnect Keene Home Smart Vent" devices (PM me for more information)
 
 - **ecobee Suite Smart Zone**: Helper application that attempts to synchronize fan on time between two zones. Intended for use on multi-zones HVAC systems; running the fan on all the zones simultaneously could help reduce electricity consumption vs. having each zone run the fan independently.
 
@@ -129,7 +132,7 @@ The following components are part of the Suite:
 - **Ecobee Thermostat**: The device driver for the Ecobee Thermostat functions and attributes. Presents a much more detailed view of the thermostat/HVAC system status, including heat/cool stages, humidification & dehumidification status, fan circulation control, and active/inactive icons for many modes and states. Designed using icons representative of the Ecobee web and mobile apps. Also supports a broad suite of extended attributes and commands to allow WebCoRE, Rules Engine and native SmartThings SmartApps/Hubitat Apps to monitor and control the thermostat, allowing customization and integration within a users' Smart Home. 
   - **New in version 1.8.\*\***: Historically, the ES Thermostat would always display the *effective* target Humidity Setpoint value, which is basically the moving average setpoint over the past hour or so. With this release (and in support of the new Smart Humidity Helper), this has changed: when the humidifierMode is Manual (On) or Off, ES Thermostat now reports the actual setpoint setting. When the mode is Auto, the old moving average approach will continue to be applied (as per the Ecobee API documentation).
  
-    - **NOTE:** An Ecobee Suite user pointed out to me the fact that the humidity setpoint displayed on the Ecobee Thermostat itself (in the System menu) is limited to setting ***and displaying*** even numbered-values only (at least when not in Auto mode). Rest assured that the ES Thermostat device itself is updating the setpoint properly, and the thermostat does in fact report bback (and act on) odd-number humidity setpoints. *While I wish I could fix this, there's nothing that can be done by the API to address the misinformation.*
+  >**NOTE:** An Ecobee Suite user pointed out to me the fact that the humidity setpoint displayed on the Ecobee Thermostat itself (in the System menu) is limited to setting ***and displaying*** even numbered-values only (at least when not in Auto mode). Rest assured that the ES Thermostat device itself is updating the setpoint properly, and the thermostat does in fact report bback (and act on) odd-number humidity setpoints. *While I wish I could fix this, there's nothing that can be done by the API to address the misinformation.*
 
 - **Ecobee Sensor**: This implements the Device Handler for the Ecobee Sensor attributes (temperature and motion/occupancy). Includes indicators for current thermostat Program, buttons that allow adding/removing the zone from specific Programs (*aka* Comfort Setting, *aka* Schedule, *aka* Climate) and indicators that appear when Smart Room is configured for the room. This is also used to expose the internal sensors on the Thermostat to allow the actual temperature values (instead of only the average) to also be available. This is critically important for some applications such as Smart Vents.
    - **New in version 1.8.\*\***
@@ -928,13 +931,9 @@ The `ecobee Suite Smart Room` Helper will automate a normally unused room, Activ
 * 
 * **Version 1.8.00 additions & enhancements**
   * The ability to select specific ES Thermostat programs when the Helper should adjust the vent(s). It can also automatically enroll/unenroll an Ecobee Sensor into the selected ES Thermostats' programs.
-  * A new vent setting for fan only operations, unenrolled programs and temporary pause: in addition to **open**, **closed**, and **unchanged**, you can now also select the **percentage** option, and then specify any value between the minimum and maximum vent levels you have configured.
-  * Optimized Smart Recovery handling - Smart Vents not only recognizes when the ES Thermostat is in Smart Recovery, it also "looks ahead" to determine the next scheduled program and is setpoints; if configured to run during the next scheduled program, Smart Vents will adjust the vents until the target setpoint is met.
-  * A new "always adjust" option allows Smart Vents to react to other heat/cool sources that can change the ambient room temperature, closing down the vent (for example) when the room is being heated by a fireplace or wood-buring stove.
-  * Now supports the use of "virtual thermostats" to set the target temperature setpoints instead of using the ES thermostat.
-  * Now supports remote "HubConnect Ecovent" and "HubConnect Keene Home Smart Vent" devices (PM me for more information)
 
-### <a name="features-smart-zone-sa">`Smart Zones` Helper</a>
+
+### <a name="features-smart-zone-sa">Smart Zones Helper</a>
 
 `ecobee Suite Smart Zones` Provides functionality to allow one or more "slave" zones to leverage the operating state of a "master" zone. This is designed for multi-zoned HVAC systems with only a single air handler. In this configuration, running only 1 zone (e.g., to cool) can cause the other zone's temperature to increase a few 10ths of a degree. This Helper seeks to address that by turning on the Slave zones' fan, thereby allowing some of the cooled (or heated) air into the slave zone.
 - Slaves can be configured to turn on the fan any time the Master thermostat is running 'fan only'. 
@@ -1207,7 +1206,7 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | randomStart<br>DelayHeat | 0 | number | no | ES | If non-zero, the max minutes a heating random start can use |
 | remindMeDate | <small>2019-07-08</small> | string | no | ES | Date to send an alert reminder (HVAC service, filters, etc.) |
 | schedText | forever | string | yes | int | Internal text for how long the current hold is scheduled for |
-| schedule | Away | JSON_<br>OBJECT| yes | int | Same as `currenProgram` - use `setThermostatProgram()` or `setSchedule()` to change |
+| schedule | Away | <small>JSON_<br>OBJECT</small>| yes | int | Same as `currentProgram` - use `setThermostatProgram()` or `setSchedule()` to change. Note that when in a **Hold**, the `schedule` string will be in this form: <br><small>**`Hold: Away until 2020-02-19 18:30:00`**</small> |
 | scheduled<br>Program | Away | string | yes | int | The program that is scheduled to be running now (may be different than `currentProgram` |
 | scheduled<br>ProgramId | away | string | yes | int | Internal ID of the scheduled program |
 | scheduled<br>Program<br>Name | Away | string | yes | int | The proper name of the scheduled program |
