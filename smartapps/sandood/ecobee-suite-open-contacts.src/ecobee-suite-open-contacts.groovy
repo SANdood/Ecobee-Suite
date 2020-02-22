@@ -52,7 +52,7 @@ definition(
 	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
     iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
     importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
-    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#features-opencontact-sa",
 	singleInstance: 	false,
     pausable: 			true
 )
