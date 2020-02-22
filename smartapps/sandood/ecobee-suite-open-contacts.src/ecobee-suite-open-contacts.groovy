@@ -2,7 +2,7 @@
  *  ecobee Suite Open Contacts
  *
  *  Copyright 2016 Sean Kendall Schneyer
- *	Copyright 2017-19 Barry A. Burke *
+ *	Copyright 2017-2020 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you/**
  *  ecobee Suite Open Contacts
@@ -34,24 +34,27 @@
  *	1.7.43 - Fixed numOpen() fatal error
  *	1.7.44 - Added minimize UI
  *	1.7.45 - Made logging less chatty with debugOff && infoOff
+ *	1.7.46 - Layout tweaks for Hubitat
  *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum()		{ return "1.8.00a" }
+String getVersionNum()		{ return "1.8.01" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-	name: 			"ecobee Suite Open Contacts",
-	namespace: 		"sandood",
-	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nTurn HVAC on/off based on status of contact sensors or switches (e.g. doors, windows, or fans)",
-	category: 		"Convenience",
-	parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
-	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
-    iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
-	singleInstance: false,
-    pausable: 		true
+	name: 				"ecobee Suite Open Contacts",
+	namespace: 			"sandood",
+	author: 			"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nTurn HVAC on/off based on status of contact sensors or switches (e.g. doors, windows, or fans)",
+	category: 			"Convenience",
+	parent: 			"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
+	singleInstance: 	false,
+    pausable: 			true
 )
 
 preferences {
@@ -158,16 +161,18 @@ def mainPage() {
 							  'The Quiet Time Helper also offers additional control options (e.g.; fan/circulation off, dehumidifier off, etc.).')
                 	input(name: 'quietTime', type: 'bool', title: inputTitle('Enable Quiet Time?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
                 	if (settings.quietTime) {
-                		input(name: 'qtSwitch', type: 'capability.switch', required: true, title: inputTitle('Which switch controls Quiet Time?'), multiple: false, submitOnChange: true, width: 3)
+                		input(name: 'qtSwitch', type: 'capability.switch', required: true, title: inputTitle('Which switch controls Quiet Time?'), multiple: false, submitOnChange: true)
                     	if (settings.qtSwitch) {
                         	input(name: "qtOn", type: "enum", title: inputTitle("Enable Quiet Time when switch ${settings.qtSwitch.displayName} is:"), required: true, multiple: false, 
                         	  	  options: ["on","off"], submitOnChange: true, width: 3)
+							if (HE) paragraph("", width: 9)
                         	if (settings.qtOn != null) paragraph("Switch ${settings.qtSwitch.displayName} will be turned ${settings.qtOn?'On':'Off'} when HVAC Off Actions are taken.")
                     	}
 					}
                 } 
 				if (!settings.quietTime && !settings.adjustSetpoints) {
                 	input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: true, submitOnChange: true, width: 4)
+					//if (HE) paragraph("", width: 6)
                 	if ((settings.hvacOff == null) || settings.hvacOff) {
                     	if (maximize) paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. " +
 								  "Use the Quiet Time Helper for additional control options.\n\n"+
@@ -175,12 +180,6 @@ def mainPage() {
                 		  		  'off; the HVAC will remain Off when all the contacts & switches are reset.')
                     }
 				}
-                if ((settings?.contactSensors != null) || (settings?.theSwitches != null) || settings?.hvacOff) {
-					input(name: "offDelay", title: inputTitle("Select the Delay Time before turning off HVAC or Sending Notifications")+" (minutes)", type: "enum", required: true, 
-                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '5', width: 6)
-					input(name: "onDelay", title: inputTitle("Select the Delay Time before turning HVAC back on or Sending Notifications")+" (minutes)", type: "enum", required: true, 
-                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0', width: 6)
-	        	}
 				if (!settings.quietTime && !settings.hvacOff) {
                     input(name: 'adjustSetpoints', type: 'bool', title: inputTitle('Adjust heat/cool setpoints?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
                     if (adjustSetpoints) {
@@ -189,6 +188,13 @@ def mainPage() {
                         input(name: 'coolAdjust', type: 'decimal', title: inputTitle('Cooling setpoint adjustment')+' (+/-20°) ', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
                     }
            		}
+                if ((settings?.contactSensors != null) || (settings?.theSwitches != null) || settings?.hvacOff) {
+					input(name: "offDelay", title: inputTitle("Select the Delay Time before turning ${settings?.quietTime?'on Quiet Time':'off the HVAC'} or Sending Notifications")+" (minutes)", type: "enum", required: true, 
+                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '5', width: 6)
+					input(name: "onDelay", title: inputTitle("Select the Delay Time before turning ${settings?.quietTime?'off Quiet Time':'the HVAC back on'} or Sending Notifications")+" (minutes)", type: "enum", required: true, 
+                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0', width: 6)
+	        	}
+				
                 input(name: "whichAction", title: inputTitle("Select which Actions to run")+" (Default=Notify Only)", type: "enum", required: true, 
                       options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
                 if (settings?.whichAction == null) { app.updateSetting('whichAction', 'Notify Only'); settings?.whichAction = 'Notify Only'; }
@@ -255,10 +261,10 @@ def mainPage() {
 		} // End if (theThermostats?.size() > 0)
         
         section(title: sectionTitle("Operations")) {
-        	input(name: "minimize", 	title: inputTitle("Minimize the settings UI?"), type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper?"), 		type: "bool", required: false, description: "", 	submitOnChange: true, width: 3)                
-			input(name: "debugOff",	 	title: inputTitle("Disable debug logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-            input(name: "infoOff", 		title: inputTitle("Disable info logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+        	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper"), 		type: "bool", required: false, defaultValue: false,	submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
         if (ST) {
