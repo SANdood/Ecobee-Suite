@@ -2,7 +2,7 @@
  *  ecobee Suite Open Contacts
  *
  *  Copyright 2016 Sean Kendall Schneyer
- *	Copyright 2017-19 Barry A. Burke *
+ *	Copyright 2017-2020 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you/**
  *  ecobee Suite Open Contacts
@@ -30,22 +30,31 @@
  *	1.7.39 - Fixed typo that prevented announcements being sent or spoken in some cases
  *	1.7.40 - Fixed another issue preventing announcements
  *	1.7.41 - Fixed Helper labelling
+ *	1.7.42 - Fixed labels (again), added debugOff/infoOff, cleaned up preferences setup, added Intro ***
+ *	1.7.43 - Fixed numOpen() fatal error
+ *	1.7.44 - Added minimize UI
+ *	1.7.45 - Made logging less chatty with debugOff && infoOff
+ *	1.7.46 - Layout tweaks for Hubitat
+ *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum() 		{ return "1.7.41" }
+String getVersionNum()		{ return "1.8.01" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-	name: 			"ecobee Suite Open Contacts",
-	namespace: 		"sandood",
-	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nTurn HVAC on/off based on status of contact sensors or switches (e.g. doors, windows, or fans)",
-	category: 		"Convenience",
-	parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
-	singleInstance: false,
-    pausable: 		true
+	name: 				"ecobee Suite Open Contacts",
+	namespace: 			"sandood",
+	author: 			"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nTurn HVAC on/off based on status of contact sensors or switches (e.g. doors, windows, or fans)",
+	category: 			"Convenience",
+	parent: 			"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#features-opencontact-sa",
+	singleInstance: 	false,
+    pausable: 			true
 )
 
 preferences {
@@ -57,23 +66,42 @@ preferences {
 def mainPage() {
 	boolean ST = isST
 	boolean HE = !ST
-	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + getVersionLabel() + (HE?'</b>':''), uninstall: true, install: true) {
-    	section(title: "") {
-        	String defaultName = "Contacts & Switches"
-			String defaultLabel = atomicState?.appDisplayName ?: defaultName
-			String oldName = app.label
-			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
-			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
-				app.updateLabel(thisName)
-				atomicState.appDisplayName = thisName
-			} else if (!app.label) {
+    boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
+    String defaultName = "Contacts & Switches"
+    
+	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
+    	if (maximize) {
+            section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
+                if (ST) {
+                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
+                } else {
+                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
+                }
+                paragraph("This Helper automatically turns the HVAC system Off when doors/windows are left open for too long, and/or when (real or virtual) switch(es) are turned on or off. "+
+                          "The HVAC system is restored to its prior operation once all the doors/windows are closed and switch(es) are reversed, with a configurable delay "+
+                          "before turning the HVAC Off and back On.\n\n"+
+                          "If desired, custom notifications can be made via Notification Devices, Echo Speaks and/or other Speech & Music devices to alert (or remind) occupants of the open doors/windows." )
+            }
+        }
+        section(title: sectionTitle("Naming${!settings.tempDisable?' & Thermostat Selection':''}")) {
+			String defaultLabel
+			if (!atomicState?.appDisplayName) {
+				defaultLabel = defaultName
+				app.updateLabel(defaultName)
+				atomicState?.appDisplayName = defaultName
+			} else {
+				defaultLabel = atomicState.appDisplayName
+			}
+			label(title: inputTitle("Name for this ${defaultName} Helper"), required: false, submitOnChange: true, defaultValue: defaultLabel, width: 6)
+            if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
-			}
-			updateMyLabel()
+			} else {
+            	atomicState.appDisplayName = app.label
+            }
 			if (HE) {
 				if (app.label.contains('<span ')) {
-					if (atomicState?.appDisplayName != null) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
 						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
@@ -85,7 +113,7 @@ def mainPage() {
                 }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	if (atomicState?.appDisplayName != null) {
+                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
                         String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
@@ -96,15 +124,14 @@ def mainPage() {
                 	atomicState.appDisplayName = app.label
                 }
             }
-            updateMyLabel()
         	if (settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused - re-enable below." 
+				paragraph warningText + "Temporarily Paused; Resume below" 
 			} else { 
 				if (settings.theThermostats || !settings.myThermostats) {
-					input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", 
+					input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
                     		required: true, multiple: true, submitOnChange: true)
 				} else {
-            		input(name: "myThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat(s)", 
+            		input(name: "myThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
                     		required: true, multiple: true, submitOnChange: true)
 				}
                 if (HE) paragraph ''
@@ -112,259 +139,279 @@ def mainPage() {
 		}
     
 		if (!settings.tempDisable && ((settings.theThermostats?.size() > 0) || (settings.myThermostats?.size() > 0))) {
-
-			section(title: (HE?'<b>':'') + "Select HVAC Off Actions" + (HE?'</b>':'')) {
-            	paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle actions by turning on Quiet Time from this Helper instead of taking HVAC actions directly. The Quiet Time Helper also offers additional control options.')
-                input(name: 'quietTime', type: 'bool', title: 'Enable Quiet Time?', required: true, defaultValue: false, submitOnChange: true)
-                if (settings.quietTime) {
-                	input(name: 'qtSwitch', type: 'capability.switch', required: true, title: 'Which switch controls Quiet Time?', multiple: false, submitOnChange: true)
-                    if (settings.qtSwitch) {
-                        input(name: "qtOn", type: "enum", title: "Enable Quiet Time when switch ${settings.qtSwitch.displayName} is:", required: true, multiple: false, options: ["on","off"], submitOnChange: true)
-                        if (settings.qtOn != null) paragraph("Switch ${settings.qtSwitch.displayName} will be turned ${settings.qtOn?'On':'Off'} when HVAC Off Actions are taken.")
+			section(title: sectionTitle("Triggers")+(ST?"\n":'')+smallerTitle("Contact Sensors")) {
+				input(name: "contactSensors", title: inputTitle("Select Contact Sensors: "), type: "capability.contactSensor", required: false, multiple: true,  submitOnChange: true, width: 6)
+                if (settings.contactSensors) {
+                	input(name: 'contactOpen', type: 'bool', title: inputTitle("Trigger Actions when ${settings.contactSensors.size()>1?'any of the contacts are':'the contact is'} open?"), 
+                    	  required: true, defaultValue: true, submitOnChange: true, width: 8)
+                   	if (maximize) paragraph("Actions will run when a contact sensor is ${((settings.contactOpen==null)||settings.contactOpen)?'Open':'Closed'}.")
+                }
+			}
+            section(title: smallerTitle("Switches")) {
+            	input(name: "theSwitches", title: inputTitle("Select Switches: "), type: "capability.switch", required: false, multiple: true,  submitOnChange: true, width: 6)
+                if (settings.theSwitches) {
+                	input(name: 'switchOn', type: 'bool', title: inputTitle("Trigger Actions when ${settings.theSwitches.size()>1?'any of the switches are':'the switch is'} turned on?"), 
+                    	  required: true, defaultValue: true, submitOnChange: true, width: 8)
+                    if (maximize) paragraph("Actions will run when a switch is turned ${((settings.switchOn==null)||settings.switchOn)?'On':'Off'}")
+                }
+        	}
+			section(title: sectionTitle("Actions")) {
+								
+                input(name: "whichAction", title: inputTitle("Select which Actions to run")+" (Default=Notify Only)", type: "enum", required: true, 
+                      options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
+                if (settings?.whichAction == null) { app.updateSetting('whichAction', 'Notify Only'); settings?.whichAction = 'Notify Only'; }
+				
+				if (!settings.hvacOff && !settings.adjustSetpoints) {
+            		if (maximize) paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle Actions by turning on Quiet Time from this Helper instead of running HVAC Actions directly. '+
+							  'The Quiet Time Helper also offers additional control options (e.g.; fan/circulation off, dehumidifier off, etc.).')
+                	input(name: 'quietTime', type: 'bool', title: inputTitle('Enable Quiet Time?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
+                	if (settings.quietTime) {
+                		input(name: 'qtSwitch', type: 'capability.switch', required: true, title: inputTitle('Which switch controls Quiet Time?'), multiple: false, submitOnChange: true)
+                    	if (settings.qtSwitch) {
+                        	input(name: "qtOn", type: "enum", title: inputTitle("Enable Quiet Time when switch ${settings.qtSwitch.displayName} is:"), required: true, multiple: false, 
+                        	  	  options: ["on","off"], submitOnChange: true, width: 3)
+							if (HE) paragraph("", width: 9)
+                        	if (settings.qtOn != null) paragraph("Switch ${settings.qtSwitch.displayName} will be turned ${settings.qtOn?'On':'Off'} when HVAC Off Actions are taken.")
+                    	}
+					}
+                } 
+				if (!settings.quietTime && !settings.adjustSetpoints) {
+                	input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
+					//if (HE) paragraph("", width: 6)
+                	if ((settings?.hvacOff != null) && settings.hvacOff) {
+                    	if (maximize) paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. " +
+								  "Use the Quiet Time Helper for additional control options.\n\n"+
+                                  'Note that no Actions will be run if the HVAC Mode was already Off when the first contact sensor or switch would have turned it ' +
+                		  		  'off; the HVAC will remain Off when all the contacts & switches are reset.')
                     }
-                } else {
-                	input(name: 'hvacOff', type: "bool", title: "Turn off HVAC?", required: true, defaultValue: true, submitOnChange: true)
-                	if ((settings.hvacOff == null) || settings.hvacOff) {
-                    	paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. Use the Quiet Time Helper for additional control options.")
-                    } else {
-                    	input(name: 'adjustSetpoints', type: 'bool', title: 'Adjust heat/cool setpoints?', required: true, defaultValue: false, submitOnChange: true)
-                        if (adjustSetpoints) {
-                        	input(name: 'heatAdjust', type: 'decimal', title: 'Heating setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
-                            input(name: 'coolAdjust', type: 'decimal', title: 'Cooling setpoint adjustment (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20')
-                        }
+				}
+				if (!settings.quietTime && !settings.hvacOff) {
+                    input(name: 'adjustSetpoints', type: 'bool', title: inputTitle('Adjust heat/cool setpoints?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
+                    if (adjustSetpoints) {
+						//paragraph ("", width: 6)
+                        input(name: 'heatAdjust', type: 'decimal', title: inputTitle('Heating setpoint adjustment')+' (+/-20°) ', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
+                        input(name: 'coolAdjust', type: 'decimal', title: inputTitle('Cooling setpoint adjustment')+' (+/-20°) ', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
                     }
            		}
-				paragraph('Note that no HVAC On actions will be taken if the HVAC was already Off when the first contact sensor or switch would have turned it' +
-                		  'off; the HVAC will remain Off when all the contacts & switches are reset.')
-                if (HE) paragraph ''
-            }
-            
-			section(title: (HE?'<b>':'') + "Select Contact Sensors" + (HE?'</b>':'')) {
-				input(name: "contactSensors", title: "Contact Sensors: ", type: "capability.contactSensor", required: false, multiple: true,  submitOnChange: true)
-                if (settings.contactSensors) {
-                	input(name: 'contactOpen', type: 'bool', title: "Run HVAC Off Actions when ${settings.contactSensors.size()>1?'any of the contacts are':'the contact is'} open?", required: true, defaultValue: true, submitOnChange: true)
-                   	paragraph("HVAC Off Actions will be executed when a contact sensor is ${((settings.contactOpen==null)||settings.contactOpen)?'Open':'Closed'}.")
-                }
-                if (HE) paragraph ''
-			}
-            
-            section(title: (HE?'<b>':'') + "Select Switches" + (HE?'</b>':'')) {
-            	input(name: "theSwitches", title: "Switches: ", type: "capability.switch", required: false, multiple: true,  submitOnChange: true)
-                if (settings.theSwitches) {
-                	input(name: 'switchOn', type: 'bool', title: "Run HVAC Off Actions when ${settings.theSwitches.size()>1?'any of the switches are':'the switch is'} turned on?", required: true, defaultValue: true, submitOnChange: true)
-                    paragraph("HVAC Off Actions will be executed when a switch is turned ${((settings.switchOn==null)||settings.switchOn)?'On':'Off'}")
-                }
-				if (HE) paragraph ''
-        	}
-            
-            if ((settings.contactSensors != null) || (settings.theSwitches != null)) {
-				
-				section(title: (HE?'<b>':'') + "Timers" + (HE?'</b>':'')) {
-					input(name: "offDelay", title: "Delay time (in minutes) before turning off HVAC or Sending Notification [Default=5]", type: "enum", required: true, 
-                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '5')
-					input(name: "onDelay", title: "Delay time (in minutes) before turning HVAC back on  or Sending Notification [Default=0]", type: "enum", required: true, 
-                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0')
-                    if (HE) paragraph ''
+                if ((settings?.contactSensors != null) || (settings?.theSwitches != null) || settings?.hvacOff) {
+					input(name: "offDelay", title: inputTitle("Select the Delay Time before turning ${settings?.quietTime?'on Quiet Time':'off the HVAC'} or Sending Notifications")+" (minutes)", type: "enum", required: true, 
+                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '5', width: 6)
+					input(name: "onDelay", title: inputTitle("Select the Delay Time before turning ${settings?.quietTime?'off Quiet Time':'the HVAC back on'} or Sending Notifications")+" (minutes)", type: "enum", required: true, 
+                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0', width: 6)
 	        	}
-            
-            	section(title: (HE?'<b>':'') + "Action Preferences" + (HE?'</b>':'')) {
-            		input(name: "whichAction", title: "Select which actions to take [Default=Notify Only]", type: "enum", required: true, 
-                    	  options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
-					if (settings?.whichAction == null) {app.updateSetting('whichAction', 'Notify Only'); settings?.whichAction = 'Notify Only'; }
-                    if (HE) paragraph ''
-				}
-                        
-				if (settings?.whichAction != "HVAC Actions Only") {
-					if (ST) {
-						section("Notifications") {
-							paragraph "A notification will also be sent to the Hello Home log"
-							input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
-							input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, description: "Select notification devices", 
-                            	  required: (!settings.pushNotify && (settings.phone == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
-								  submitOnChange: true, hideWhenEmpty: true)
-							input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
-                            	  required: (!settings.pushNotify && (settings.notifiers == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
-                                  submitOnChange: true)
-                            input(name: "speak", type: "bool", title: "Spoken Notifications?", required: true, defaultValue: false, submitOnChange: true, hideWhenEmpty: (!"speechDevices" && !"musicDevices"))
-							if (settings.speak) {
-								input(name: "speechDevices", type: "capability.speechSynthesis", title: "Using these speech devices", multiple: true, 
-                                	  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.musicDevices == null)), 
-                                      submitOnChange: true, hideWhenEmpty: true)
-								input(name: "musicDevices", type: "capability.musicPlayer", title: "Using these music devices", multiple: true, 
-                                	  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.speechDevices == null)), 
-                                	  submitOnChange: true, hideWhenEmpty: true)
-								if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: false)
-							}
-                        	if (!settings.phone && !settings.pushNotify && !settings.speechDevices && !settings.musicDevices && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
-                        }
-					} else {		// HE
-						section("<b>Use Notification Device(s)</b>") {
-							input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, submitOnChange: true,
-                            	  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
-							paragraph ""
-						}
-						section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), "<b>Use Speech Device(s)</b>") {
-							input(name: "speak", type: "bool", title: "Speak messages?", required: !settings?.notifiers, defaultValue: false, submitOnChange: true)
-							if (settings.speak) {
-								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "Using these speech devices", 
-                                	  multiple: true, submitOnChange: true)
-								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "Using these music devices", 
-                                	  multiple: true, submitOnChange: true)
-								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-							}
-						}
-                        section(){
-                        	paragraph "A 'HelloHome' notification will also be sent to the Location Event log"
-                        }
-					}
-            	}
-				               
-                if (settings?.whichAction?.startsWith('Notify') && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
-					section() {
-						href name: "customNotifications", title: (HE?'<b>':'') + "Customize Notifications" + (HE?'</b>':''), page: "customNotifications", 
-							 description: "Customize notification messages", state: isCustomized()
-					}
+            }
+            if (ST) {
+                section("Notifications") {
+                    if (settings?.whichAction != "HVAC Actions Only") {
+                        input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, 
+                              required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
+                        input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
+                              required: ((settings.phone == null) && !settings.speak && !settings.pushNotify), multiple: true, submitOnChange: true)
+                        input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
+                              required: (!settings.pushNotify && !settings.notifiers && !settings.speak), submitOnChange: true)
+                    }
                 }
-            }          
+                if (settings?.whichAction != "HVAC Actions Only") {
+                    section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "") {
+                        input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+                        if (settings.speak) {
+                            input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", 
+                                  multiple: true, hideWhenEmpty: true, submitOnChange: true)
+                            input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", 
+                                  multiple: true, hideWhenEmpty: true, submitOnChange: true)
+                            if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+                        }
+                    }
+                }
+                if (maximize) {
+                	section() {
+                    	paragraph ( "A notification is always sent to the Hello Home log whenever an action is triggered")
+                	}
+                }
+            } else {		// HE
+                section(sectionTitle("Notifications")) {
+                    if (settings?.whichAction != "HVAC Actions Only") {
+                        input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true,
+                              required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+                    }
+                }
+                if (settings?.whichAction != "HVAC Actions Only") {
+                    section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "") {
+                        input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
+                        if (settings.speak) {
+                            input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select speech devices"), 
+                                  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+                            input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select music devices"), 
+                                  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+                            input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
+                        }
+                    }
+                }
+                if (maximize)  {
+                	section("A 'HelloHome' notification is always sent to the Location Event log whenever an action is triggered") {}
+                }
+            }
+            if (settings?.whichAction?.startsWith('Notify') && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
+                section() {
+                    href name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
+                         description: "Customize notification messages", state: isCustomized()
+                }
+            }        
 		} // End if (theThermostats?.size() > 0)
-
-		section(title: (HE?'<b>':'') + "Temporary Pause" + (HE?'</b>':'')) {
-			input(name: "tempDisable", title: "Pause this Helper? ", type: "bool", required: false, description: "", submitOnChange: true)                
-        }
-		section(title: "") {
-			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
-		}
         
-        section (getVersionLabel()) {}
+        section(title: sectionTitle("Operations")) {
+        	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper"), 		type: "bool", required: false, defaultValue: false,	submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+		}       
+		// Standard footer
+        if (ST) {
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+        } else {
+        	section() {
+        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+            }
+		}
     }
-	
 }
-def customNotifications(){
+def customNotifications() {
 	boolean ST = isST
 	boolean HE = !ST
-	dynamicPage(name: "customNotifications", uninstall: false, install: false) {
-		section((HE?'<b>':'') + "Customize Notifications" + (HE?'</b>':'')) {
-			input(name: "customPrefix", type: "enum", title: "Prefix text:", defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
-				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
-			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
-			if (settings.customPrefix == 'custom') {
-				input(name: "customPrefixText", type: "text", title: "Custom Prefix text", defaultValue: "", required: true, submitOnChange: true)
-			}      
+	String pageLabel = getVersionLabel()
+	pageLabel = pageLabel.take(pageLabel.indexOf(','))
+	dynamicPage(name: "customNotifications", title: pageTitle("${pageLabel}\nCustom Notifications"), uninstall: false, install: false) {
+        section(title: sectionTitle("Customizations") + (ST?"\n":'') + (smallerTitle("Notification Prefix"))) {
+            input(name: "customPrefix", type: "enum", title: inputTitle("Prefix text:"), defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
+                  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false, width: 4)
+            if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+            if (settings.customPrefix == 'custom') {
+                input(name: "customPrefixText", type: "text", title: inputTitle("Custom Prefix text"), defaultValue: "", required: true, submitOnChange: true, width: 4)
+            } 
+        }
+        section(smallerTitle("Contact Sensors")) {
 			if (settings?.contactSensors) {
-				input(name: "customContact", type: "enum", title: "Generally refer to Contact Sensors as", defaultValue: 'contact sensors', submitOnChange: true,
-					  options: ['contact sensors', 'doors', 'windows', 'doors and/or windows', 'custom'], multiple: false)
+				input(name: "customContact", type: "enum", title: inputTitle("Generally refer to Contact Sensors as"), defaultValue: 'contact sensors', submitOnChange: true,
+					  options: ['contact sensors', 'doors', 'windows', 'doors and/or windows', 'custom'], multiple: false, width: 4)
 				if (settings?.customContact == null) { app.updateSetting('customContact', 'contact sensors'); settings.customContact = 'contact sensors'; }
 				if (settings?.customContact == 'custom') {
-					input(name: "customContactText", type: "text", title: "Custom Contact Sensors text", defaultValue: "", required: true, submitOnChange: true)
+					input(name: "customContactText", type: "text", title: inputTitle("Custom Contact Sensors text"), defaultValue: "", required: true, submitOnChange: true, width: 4)
 				}
 			}
+        }
+        section(smallerTitle("Switches")) {
 			if (settings?.theSwitches) {
-				input(name: "customSwitch", type: "enum", title: "Generally refer to Switches as", defaultValue: 'switches', submitOnChange: true,
-					  options: ['switches', 'toggles', 'custom'], multiple: false)
+				input(name: "customSwitch", type: "enum", title: inputTitle("Generally refer to Switches as"), defaultValue: 'switches', submitOnChange: true,
+					  options: ['switches', 'toggles', 'custom'], multiple: false, width: 4)
 				if (settings?.customSwitch == null) { app.updateSetting('customSwitch', 'switches'); settings.customSwitch = 'switches'; }
 				if (settings.customSwitch == 'custom') {
-					input(name: "customSwitchText", type: "text", title: "Custom Switches text", defaultValue: "", required: true, submitOnChange: true)
+					input(name: "customSwitchText", type: "text", title: inputTitle("Custom Switches text"), defaultValue: "", required: true, submitOnChange: true, width: 4)
 				}
 			}
-			input(name: "useSensorNames", type: "bool", title: "Use device display names when possible?", defaultValue: true, submitOnChange: true)
-			if (settings?.useSensorNames) {
-            	input(name: "addThePrefix", type: "bool", title: "Add 'the' as prefix to device display names?", defaultValue: false, submitOnChange: true)
-				if (settings?.contactSensors) input(name: "contactCleaners", type: "enum", title: "Strip these words from Contact display names", multiple: true, required: false, 
-													submitOnChange: true, options: ['Contact', 'Monitor', 'Multi-Sensor', 'Multisensor', 'Multi', 'Sensor', 'Door', 'Window'])
-				if (settings?.theSwitches) input(name: "switchCleaners", type: "enum", title: "Strip these words from Switch display names", multiple: true, required: false, 
-												 submitOnChange: true, options: ['Switch', 'Toggle', 'Power', 'Meter'])
-			}
-			if ((settings?.onDelay != '0') || (settings?.offDelay != '0')) {
-				input(name: "includeDelays", type: "bool", title: "Include open/close delay times in notifications?", defaultValue: true, submitOnChange: true)
-			}
-			input(name: "customTstat", type: "enum", title: "Refer to the HVAC system as", defaultValue: "(thermostat names) is/are", options:
-				  ['the HVAC system', '(thermostat names) is/are', 'custom'], submitOnChange: true, multiple: false)
+        }
+        section(smallerTitle("Thermostats")) {
+			input(name: "customTstat", type: "enum", title: inputTitle("Refer to the HVAC system as"), defaultValue: "(thermostat names) is/are", options:
+				  ['the HVAC system', '(thermostat names) is/are', 'custom'], submitOnChange: true, multiple: false, width: 4)
 			if (settings?.customTstat == 'custom') {
-				input(name: "customTstatText", type: "text", title: "Custom HVAC system text", defaultValue: "", required: true, submitOnChange: true)
+				input(name: "customTstatText", type: "text", title: inputTitle("Custom HVAC system text"), defaultValue: "", required: true, submitOnChange: true, width: 4)
 			} 
 			if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat names) is/are'); settings.customTstat = '(thermostat names) is/are'; }
 			if (settings?.customTstat == '(thermostat names) is/are') {
-				input(name: "tstatCleaners", type: 'enum', title: "Strip these words from the Thermostat display names", multiple: true, required: false,
-					  submitOnChange: true, options: ['EcobeeTherm', 'EcoTherm', 'Thermostat', 'Ecobee'])
-				input(name: "tstatPrefix", type: 'enum', title: "Add this prefix to the Thermostat display names", multiple: false, required: false,
-					  submitOnChange: true, options: ['the', 'Ecobee', 'Thermostat', 'Ecobee Thermostat', 'the Ecobee', 'the Ecobee Thermostat', 'theThermostat']) 
-				input(name: "tstatSuffix", type: 'enum', title: "Add this suffix to the Thermostat display names", multiple: false, required: false,
-					  submitOnChange: true, options: ['Ecobee', 'HVAC', 'HVAC system', 'Thermostat', 'heating', 'cooling', 'A/C'])
+				input(name: "tstatCleaners", type: 'enum', title: inputTitle("Strip these words from the Thermostat display names"), multiple: true, required: false,
+					  submitOnChange: true, options: ['EcobeeTherm', 'EcoTherm', 'Thermostat', 'Ecobee'], width: 4)
+				input(name: "tstatPrefix", type: 'enum', title: inputTitle("Add this prefix to the Thermostat display names"), multiple: false, required: false,
+					  submitOnChange: true, options: ['the', 'Ecobee', 'Thermostat', 'Ecobee Thermostat', 'the Ecobee', 'the Ecobee Thermostat', 'theThermostat'], width: 4) 
+				input(name: "tstatSuffix", type: 'enum', title: inputTitle("Add this suffix to the Thermostat display names"), multiple: false, required: false,
+					  submitOnChange: true, options: ['Ecobee', 'HVAC', 'HVAC system', 'Thermostat', 'heating', 'cooling', 'A/C'], width: 4)
 			}
+        }
+        section(smallerTitle("Sensors")) {
+			input(name: "useSensorNames", type: "bool", title: inputTitle("Use device display names when possible?"), defaultValue: true, submitOnChange: true, width: 4)
+			if (settings?.useSensorNames) {
+            	input(name: "addThePrefix", type: "bool", title: inputTitle("Add 'the' as prefix to device display names?"), defaultValue: false, submitOnChange: true, width: 4)
+				if (settings?.contactSensors) input(name: "contactCleaners", type: "enum", title: inputTitle("Strip these words from Contact display names"), multiple: true, required: false, 
+													submitOnChange: true, options: ['Contact', 'Monitor', 'Multi-Sensor', 'Multisensor', 'Multi', 'Sensor', 'Door', 'Window'], width: 4)
+				if (settings?.theSwitches) input(name: "switchCleaners", type: "enum", title: inputTitle("Strip these words from Switch display names"), multiple: true, required: false, 
+												 submitOnChange: true, options: ['Switch', 'Toggle', 'Power', 'Meter'], width: 4)
+			}
+			if ((settings?.onDelay != '0') || (settings?.offDelay != '0')) {
+				input(name: "includeDelays", type: "bool", title: inputTitle("Include open/close delay times in notifications?"), defaultValue: true, submitOnChange: true, width: 4)
+			}
+        }
+        section(title: sampleTitle("Sample Notification Messages"), hideable: true, hidden: false) {
+            String thePrefix = getMsgPrefix()
+            String theContact = getMsgContact()
+            String theSwitch = getMsgSwitch()
+            String theTstat = getMsgTstat()
+            String samples = ""
 
-			paragraph "${HE?'<b><i>':''}Sample notification messages:${HE?'</i></b>':''}"
-			String thePrefix = getMsgPrefix()
-			String theContact = getMsgContact()
-			String theSwitch = getMsgSwitch()
-			String theTstat = getMsgTstat()
-			String samples = ""
-            
-			if (settings?.contactSensors) {
-				if (!useSensorNames) {
-					samples = thePrefix + "one or more " + theContact + " have been ${((settings.contactOpen==null)||settings?.contactOpen)?'open':'closed'} " +
-						(((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + ", ${theTstat}now off\n"
-				} else {
-                	def nameList = []
-                	if (settings?.addThePrefix) {
-						settings?.contactSensors.each {
-							nameList << ('the ' + it.displayName)
+            if (settings?.contactSensors) {
+                if (!useSensorNames) {
+                    samples = thePrefix + "one or more " + theContact + " have been ${((settings.contactOpen==null)||settings?.contactOpen)?'open':'closed'} " +
+                        (((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + ", ${theTstat}now off\n"
+                } else {
+                    def nameList = []
+                    if (settings?.addThePrefix) {
+                        settings?.contactSensors.each {
+                            nameList << ('the ' + it.displayName)
                         }
                     } else {
                         nameList = settings?.contactSensors*.displayName
                     }
-					String sensorStr = textListToString(nameList)
-					if (settings?.contactCleaners != []) {
-						settings?.contactCleaners.each{
-							sensorStr = sensorStr.replace(it, '').replace(it.toLowerCase(), '').trim()	// Strip out any unnecessary words
-						}
-					}
-					sensorStr = sensorStr.replace(':','').replace('  ', ' ').replace(' ,', ',').trim()           
-					samples = thePrefix + sensorStr + " ${settings?.contactSensors.size()>1?'have':'has'} been ${((settings.contactOpen==null)||settings?.contactOpen)?'open':'closed'} " +
-								(((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + 
-								", ${theTstat} now off\n"
-				}
-				if ((settings?.onDelay == '0') || !settings?.includeDelays) {
-					samples = samples.capitalize() + "${thePrefix}all ${theContact} are ${((settings.contactOpen==null)||settings?.contactOpen)?'closed':'open'}, ${theTstat} now on\n".capitalize()
-				} else {
-					samples = samples.capitalize() + "${thePrefix}all ${theContact} have been ${((settings.contactOpen==null)||settings?.contactOpen)?'closed':'open'} for ".capitalize() +
-						"${settings?.onDelay} minute${settings?.onDelay?.toInteger()>1?'s':''}, ${theTstat} now on\n"
-				}
-			}
-			if (settings?.theSwitches) {
-				String switchSample = ""
-				if (!useSensorNames) {
-					switchSample = thePrefix + "one or more " + theSwitch + " have been ${((settings.switchOn==null)||settings?.switchOn)?'on':'off'} " +
-						(((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + ", ${theTstat} now off\n"
-				} else {
-                	def nameList = []
-                	if (settings?.addThePrefix) {
-						settings?.theSwitches.each {
-							nameList << ('the ' + it.displayName)
+                    String sensorStr = textListToString(nameList)
+                    if (settings?.contactCleaners != []) {
+                        settings?.contactCleaners.each{
+                            sensorStr = sensorStr.replace(it, '').replace(it.toLowerCase(), '').trim()	// Strip out any unnecessary words
+                        }
+                    }
+                    sensorStr = sensorStr.replace(':','').replace('  ', ' ').replace(' ,', ',').trim()           
+                    samples = thePrefix + sensorStr + " ${settings?.contactSensors.size()>1?'have':'has'} been ${((settings.contactOpen==null)||settings?.contactOpen)?'open':'closed'} " +
+                                (((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + 
+                                ", ${theTstat} now off\n"
+                }
+                if ((settings?.onDelay == '0') || !settings?.includeDelays) {
+                    samples = samples.capitalize() + "${thePrefix}all ${theContact} are ${((settings.contactOpen==null)||settings?.contactOpen)?'closed':'open'}, ${theTstat} now on\n".capitalize()
+                } else {
+                    samples = samples.capitalize() + "${thePrefix}all ${theContact} have been ${((settings.contactOpen==null)||settings?.contactOpen)?'closed':'open'} for ".capitalize() +
+                        "${settings?.onDelay} minute${settings?.onDelay?.toInteger()>1?'s':''}, ${theTstat} now on\n"
+                }
+            }
+            if (settings?.theSwitches) {
+                String switchSample = ""
+                if (!useSensorNames) {
+                    switchSample = thePrefix + "one or more " + theSwitch + " have been ${((settings.switchOn==null)||settings?.switchOn)?'on':'off'} " +
+                        (((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + ", ${theTstat} now off\n"
+                } else {
+                    def nameList = []
+                    if (settings?.addThePrefix) {
+                        settings?.theSwitches.each {
+                            nameList << ('the ' + it.displayName)
                         }
                     } else {
                         nameList = settings?.theSwitches*.displayName
                     }
-					String switchStr = textListToString(nameList)
-					if (settings?.switchCleaners != []) {
-						settings?.switchCleaners.each{
-							switchStr = switchStr.replace(it, '').replace(it.toLowerCase(), '').trim()	// Strip out any unnecessary words
-						}
-					}
-					switchStr = switchStr.replace(':', '').replace('  ', ' ').replace(' ,', ',').trim()
-					switchSample = thePrefix + switchStr + " ${settings?.theSwitches.size()>1?'have':'has'} been ${((settings.switchOn==null)||settings?.switchOn)?'on':'off'} " +
-								(((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + 
-								", ${theTstat} now off\n"
-				}
-				if ((settings?.onDelay == '0') || !settings?.includeDelays) {
-					samples = samples + switchSample.capitalize() + "${thePrefix}all ${theSwitch} are ${((settings.contactOpen==null)||settings?.switchOn)?'off':'on'}, ${theTstat} now on\n".capitalize()
-				} else {
-					samples = samples + switchSample.capitalize() + "${thePrefix}all ${theSwitch} have been ${((settings.contactOpen==null)||settings?.switchOn)?'off':'on'} for ".capitalize() +
-						"${settings?.onDelay} minute${settings?.onDelay?.toInteger()>1?'s':''}, ${theTstat} now on\n"
-				}
-			}
-			paragraph samples
-		}
-	}
+                    String switchStr = textListToString(nameList)
+                    if (settings?.switchCleaners != []) {
+                        settings?.switchCleaners.each {
+                            switchStr = switchStr.replace(it, '').replace(it.toLowerCase(), '').trim()	// Strip out any unnecessary words
+                        }
+                    }
+                    switchStr = switchStr.replace(':', '').replace('  ', ' ').replace(' ,', ',').trim()
+                    switchSample = thePrefix + switchStr + " ${settings?.theSwitches.size()>1?'have':'has'} been ${((settings.switchOn==null)||settings?.switchOn)?'on':'off'} " +
+                                (((settings?.offDelay != '0') && settings?.includeDelays) ? "for ${offDelay} minute${settings?.offDelay?.toInteger()>1?'s':''}" : 'too long') + 
+                                ", ${theTstat} now off\n"
+                }
+                if ((settings?.onDelay == '0') || !settings?.includeDelays) {
+                    samples = samples + switchSample.capitalize() + "${thePrefix}all ${theSwitch} are ${((settings.contactOpen==null)||settings?.switchOn)?'off':'on'}, ${theTstat} now on\n".capitalize()
+                } else {
+                    samples = samples + switchSample.capitalize() + "${thePrefix}all ${theSwitch} have been ${((settings.contactOpen==null)||settings?.switchOn)?'off':'on'} for ".capitalize() +
+                        "${settings?.onDelay} minute${settings?.onDelay?.toInteger()>1?'s':''}, ${theTstat} now on\n"
+                }
+            }
+            paragraph samples
+        }
+    }
 }
 def isCustomized() {
 	return (customPrefix || customContact || customSwitch || customTstat || (includeDelays != null) || (useSensorNames != null)) ? "complete" : null
@@ -392,16 +439,17 @@ void updated() {
 def initialize() {
 	LOG("${getVersionLabel()} - Initializing...", 2, "", 'info')
 	updateMyLabel()
-    boolean ST = atomicState.isST
+    boolean ST = isST
     boolean HE = !ST
-    //log.debug "settings: ${settings}"
+    log.trace "Initializing with settings: ${settings}"
 	
 	if(settings.tempDisable == true) {
     	clearReservations()
 		LOG("Temporarily Paused", 4, null, 'info')
 		return true
 	}
-	if (settings.debugOff) log.info "log.debug() logging disabled"
+	if (settings.debugOff) log.trace "log.debug() logging is disabled"
+    if (settings.infoOff)  log.trace "log.info()  logging is disabled"
     // subscribe(app, appTouch)
 	
 	boolean contactOffState = false
@@ -496,7 +544,7 @@ def initialize() {
         theStats.each() { therm ->
     		def tid = getDeviceId(therm.deviceNetworkId)
             if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-            tmpThermSavedState[tid].mode = (atomicState.isST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true))
+            tmpThermSavedState[tid].mode = (ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true))
             tmpThermSavedState[tid].HVACModeState = 'off'
         }
         if (atomicState.HVACModeState != 'off') turnOffHVAC(true)
@@ -513,7 +561,7 @@ def initialize() {
     }
     atomicState.thermSavedState = tmpThermSavedState
 	LOG("initialize() - thermSavedState: ${atomicState.thermSavedState}",4,null,'debug')
-	LOG("initialize() exiting",4,null,'trace')
+	LOG("Initialization complete! ",4,null,'trace')
 }
 
 def statModeChange(evt) {
@@ -594,11 +642,11 @@ def coolSPHandler( evt ) {
 
 // "sensorOpened" called when state change should turn HVAC off - routine name preserved for backwards compatibility with prior implementations
 void sensorOpened(evt=null) {
-	LOG("sensorOpened() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null, 'trace')
+	LOG("sensorOpened() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null, 'info')
     def HVACModeState = atomicState.HVACModeState
     if (HVACModeState == 'off_pending') return		// already in process of turning off
 
-	boolean ST = atomicState.isST
+	boolean ST = isST
 	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
 	
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
@@ -659,9 +707,9 @@ void sensorOpened(evt=null) {
 // "sensorClosed" called when state change should turn HVAC On (routine name preserved for backwards compatibility with prior implementations)
 void sensorClosed(evt=null) {
 	// Turn HVAC Off action has occured
-    LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null,'trace')
+    LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null,'info')
 	def HVACModeState = atomicState.HVACModeState
-    boolean ST = atomicState.isST
+    boolean ST = isST
     
     if (allClosed() == true) {
     	if (HVACModeState == 'on_pending') return
@@ -703,7 +751,7 @@ void sensorClosed(evt=null) {
             return
         }
 	    
-        LOG("All Contact Sensors & Switches are reset, initiating actions.", 3,null,'trace')		
+        LOG("All Contact Sensors & Switches are reset, initiating actions.", 3,null,'info')		
         
         atomicState.HVACModeState = 'on_pending'
 		// unschedule(openedScheduledActions)
@@ -715,7 +763,7 @@ void sensorClosed(evt=null) {
 			LOG("${theStats.toString()[1..-2]} will be turned on in ${delay} minutes", 3, null, 'info')
 		} else { turnOnHVAC(false) }
 	} else {
-    	LOG("No action to perform yet...", 5,null,'trace')
+    	LOG("No action to perform yet...", 5,null,'info')
     }
 }
 
@@ -726,12 +774,12 @@ void sensorClosed(evt=null) {
 
 void turnOffHVAC(quietly = false) {
 	// Save current states
-    LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'trace')
-	boolean ST = atomicState.isST
+    LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'info')
+	boolean ST = isST
 	
     if (allClosed() && (atomicState.HVACModeState == 'off_pending')) {
     	// Nothing is open, maybe got closed while we were waiting, abort the "off"
-        LOG("turnOffHVAC() called, but everything is closed/off, ignoring request & leaving HVAC on",3,null,warn)
+        LOG("turnOffHVAC() called, but everything is closed/off, ignoring request & leaving HVAC on",3,null,'info')
         atomicState.HVACModeState = 'on'
         return
     }
@@ -901,11 +949,11 @@ void turnOffHVAC(quietly = false) {
 
 void turnOnHVAC(quietly = false) {
 	// Restore previous state
-    LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'trace')
-	boolean ST = atomicState.isST
+    LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'debug')
+	boolean ST = isST
     
 	if (!allClosed() && (atomicState.HVACModeState == 'on_pending')) {
-    	LOG("turnOnHVAC() called, but somethings is still open/on, ignoring request & leaving HVAC off",3,null,warn)
+    	LOG("turnOnHVAC() called, but somethings is still open/on, ignoring request & leaving HVAC off",3,null,'info')
     	atomicState.HVACModeState = 'off'
     	return
     }
@@ -913,7 +961,7 @@ void turnOnHVAC(quietly = false) {
     atomicState.HVACModeState = 'on'
     String action = settings.whichAction ?: 'Notify Only'
     boolean doHVAC = action.contains('HVAC')
-	LOG("turnOnHVAC() - action: ${action}, doHVAC: ${doHVAC}", 3, null, 'info')
+	LOG("turnOnHVAC() - action: ${action}, doHVAC: ${doHVAC}", 3, null, 'debug')
     boolean notReserved = true
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 	def tstatNames = []
@@ -1036,7 +1084,7 @@ void turnOnHVAC(quietly = false) {
 }
 
 boolean allClosed() {
-	boolean ST = atomicState.isST
+	boolean ST = isST
 	// Check if all Sensors are in "HVAC ON" state   
     def response = true
     String txt = ''
@@ -1070,6 +1118,7 @@ boolean allClosed() {
 }
 
 def numOpen() {
+	boolean ST = isST
 	def response = 0
 	if (settings.contactSensors) {
 		if (settings.contactOpen) {
@@ -1223,7 +1272,7 @@ void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 3, null, "info")
     String msg = getMsgPrefix() + notificationMessage
 	
-	if (atomicState.isST) {
+	if (isST) {
 		if (settings.notifiers != null) {
 			settings.notifiers.each {									// Use notification devices (if any)
 				it.deviceNotification(msg)
@@ -1242,7 +1291,7 @@ void sendMessage(notificationMessage) {
 			}
 		} 
 		if (settings.pushNotify) {
-			LOG("Sending Push to everyone", 3, null, 'warn')
+			LOG("Sending Push to everyone", 3, null, 'info')
 			sendPushMessage(msg)										// Push to everyone
 		}
 		if (settings.speak) {
@@ -1294,7 +1343,7 @@ void sendMessage(notificationMessage) {
 	}
 }
 void updateMyLabel() {
-	boolean ST = atomicState.isST
+	boolean ST = isST
     
 	String flag = ST ? ' (paused)' : '<span '
 	
@@ -1318,12 +1367,12 @@ def pauseOn() {
 	// Pause this Helper
 	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",3,null,'info')
+		LOG("performing Global Pause",3,null,'trace')
 		app.updateSetting("tempDisable", true)
 		atomicState.globalPause = true
 		runIn(2, updated, [overwrite: true])
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("was already paused, ignoring Global Pause",3,null,'trace')
 	}
 }
 def pauseOff() {
@@ -1331,14 +1380,14 @@ def pauseOff() {
 	if (settings.tempDisable) {
 		def wasAlreadyPaused = atomicState.wasAlreadyPaused
 		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",3,null,'info')
+			LOG("performing Global Unpause",3,null,'trace')
 			app.updateSetting("tempDisable", false)
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'trace')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("was already unpaused, skipping Global Unpause",3,null,'trace')
 		atomicState.wasAlreadyPaused = false
 	}
 	atomicState.globalPause = false
@@ -1358,8 +1407,30 @@ void clearReservations() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
+    if (logType == 'debug') {
+    	if (!settings?.debugOff) log.debug message
+    } else if (logType == 'info') {
+    	if (!settings?.infoOff) log.info message
+    } else log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
+}
+
+String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
+String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
+String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
+String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return isHE ? "<div style='color:red'><b>WARNING: </b></div>"	: "WARNING: " }
+String getFormat(type, myText=""){
+	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
+	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
