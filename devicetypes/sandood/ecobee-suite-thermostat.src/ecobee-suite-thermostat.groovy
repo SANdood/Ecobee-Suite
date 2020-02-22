@@ -1,7 +1,7 @@
 /**
  *	Based on original version Copyright 2015 SmartThings
  *	Additions Copyright 2016 Sean Kendall Schneyer
- *	Additions Copyright 2017-2018 Barry A. Burke
+ *	Additions Copyright 2017-2020 Barry A. Burke
  *
  *	Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *	in compliance with the License. You may obtain a copy of the License at:
@@ -21,7 +21,7 @@
  *	Date: 2015-12-23
  *
  *	Updates by Barry A. Burke (storageanarchy@gmail.com)
- *	Date: 2017 - 2018
+ *	Date: 2017 - 2020
  *
  *	See Github Changelog for complete change history
  *
@@ -49,9 +49,11 @@
  *	1.7.36 - Added lastRunningMode attribute for Google Home
  *	1.7.37 - Added *Updated attributes
  *	1.7.38 - debugEventFromParent messages are now in-line
+ *	1.7.39 - Added holdEndDate, schedule now uses this ('Hold: Home until 2020-02-14 18:30:00')
  *	1.8.00 - Release number sync-up
+ *	1.8.01 - General Release
  */
-String getVersionNum() 		{ return "1.8.00a" }
+String getVersionNum() 		{ return "1.8.01" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -262,6 +264,7 @@ metadata {
 		attribute 'heatingSetpointTile', 'NUMBER'		// Used to show heatAt/heatTo for MultiTile
 		attribute 'holdAction', 'STRING'
 		attribute 'holdEndsAt', 'STRING'
+        attribute 'holdEndDate', 'STRING'
 		attribute 'holdStatus', 'STRING'
 		attribute 'hotTempAlert', 'NUMBER'
 		attribute 'hotTempAlertEnabled', 'STRING'
@@ -305,7 +308,7 @@ metadata {
 		attribute 'randomStartDelayHeat', 'STRING'
 		attribute 'remindMeDate', 'STRING'
 		attribute 'schedText', 'STRING'
-		attribute 'schedule', 'STRING'					// same as 'currentProgram'
+		//attribute 'schedule', 'STRING'					// same as 'currentProgram'
 		attribute 'scheduledProgram','STRING'
 		attribute 'scheduledProgramId','STRING'
 		attribute 'scheduledProgramName', 'STRING'
@@ -1294,7 +1297,7 @@ def generateEvent(Map results) {
 					break;
 
 				case 'currentProgramName':
-					// LOG("currentProgramName: ${sendValue}", 3, null, 'info')
+					//LOG("currentProgramName: ${sendValue}", 1, null, 'debug')
 					// always update the button states, even if the value didn't change
 					String progText = ''
 					String priorProgramName = ST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
@@ -1339,7 +1342,11 @@ def generateEvent(Map results) {
 						event = eventFront + [value: sendValue, descriptionText: progText, displayed: true]
 						if (sendValue.endsWith('Temp')) enableAllProgramButtons()
 					}
-					sendEvent(name: 'schedule', value: sendValue + (ST?device.currentValue('schedText'):device.currentValue('schedText',true)), displayed: false)			// For Hubitat, we show	 schedule: "Hold: Home until today at 6:30pm"
+                    if ((sendValue != 'null') && (sendValue != '')) {
+                    	String schedText = ST ? device.currentValue('schedText') : device.currentValue('schedText',true)
+                        schedText = (schedText && (schedText != 'null')) ? ' ' + schedText : ''
+						sendEvent(name: 'schedule', value: sendValue + (schedText?:''), descriptionText: "Schedule is ${sendValue}${schedText?:''}", displayed: true)			// For Hubitat, we show	 schedule: "Hold: Home until today at 6:30pm"
+                    }
 					break;
 
 				case 'currentProgram':
@@ -1754,34 +1761,30 @@ def generateEvent(Map results) {
 						event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
 					}
 					break;
-
-				case 'holdEndsAt':
-					String schedText = ''
-					// log.debug "holdEndsAt: ${sendValue}"
-                    if ((sendValue != 'null') && (sendValue.startsWith('a l' /*ong time from now*/))) {
-                        // Record the lastHoldType for permanent holds effected through the Thermostat itself, the WebApp, or the Ecobee Mobile app
-                        sendEvent(name: 'lastHoldType', value: 'indefinite', displayed: false)
-                        schedText = ' forever'
-                        objectsUpdated++
+                    
+                case 'holdEndDate':
+                	String currentProgramName = ST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
+                    String schedText = ""
+                    if ((sendValue != "") && (sendValue != 'null')) {
+                    	schedText = 'until '+ sendValue
+                        event = eventFront + [value: sendValue, descriptionText: "Hold ends ${sendValue}", displayed: true]
                     } else {
-                        String currentProgramName = ST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
-                        if (currentProgramName != 'Offline') {
-                            if ((schedText == '') && (sendValue != 'null')) {
-                                def when = sendValue - 'today at '
-                                schedText = ' until ' + when
-                            } 
-                        }
+                    	event = eventFront + [value: "", descriptionText: "", displayed: false]
                     }
                     sendEvent(name: 'schedText', value: schedText, displayed: false)
-                    if (currentProgramName != '') {
-                        sendEvent(name: 'schedule', value: currentProgramName + schedText, displayed: false)
-                        objectsUpdated++
+                    if (schedText) schedText = ' ' + schedText
+                    if (currentProgramName  && ((currentProgramName != '') && (currentProgramName != 'null'))) {
+                        sendEvent(name: 'schedule', value: currentProgramName + (schedText?:''), descriptionText: "Schedule is ${currentProgramName}${schedText?:''}", displayed: true)
                     }
+                	break;
+
+				case 'holdEndsAt':                    
                     if (isChange || forceChange) {
                     	String sendText = sendValue != 'null' ? sendValue : ''
-                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, displayed: false]
+                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, displayed: false, isStateChange: true]
                     }
 					break;
+
 
 				case 'hasDehumidifier':
 					if (sendValue == 'false') {
