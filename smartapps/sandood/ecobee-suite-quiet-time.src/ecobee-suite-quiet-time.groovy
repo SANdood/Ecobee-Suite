@@ -42,7 +42,7 @@ definition(
 	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
     iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
     importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
-    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#features-quiet-time-sa",
 	singleInstance: 	false,
     pausable: 			true
 )
