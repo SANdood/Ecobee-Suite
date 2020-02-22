@@ -17,7 +17,7 @@
  *	Original Author: scott
  *	Date: 2013
  *
- *	Updates by Barry A. Burke (storageanarchy@gmail.com) 2016, 2017, 2018 & 2019
+ *	Updates by Barry A. Burke (storageanarchy@gmail.com) 2016 - 2020
  *
  *	See Github Changelog for complete change history
  *	<snip>
@@ -49,8 +49,9 @@
  *	1.7.51 - Added ***Updated timestamps; track updates by Tid; 
  *	1.7.52 - Added managementSet support for EMS thermostats
  *	1.8.00 - Version synchronization, new Smart Humidity Helper, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum()		{ return "1.8.00x" }
+String getVersionNum()		{ return "1.8.01" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -101,18 +102,19 @@ def getHelperSmartApps() {
 }
  
 definition(
-	name:			"Ecobee Suite Manager",
-	namespace:		myNamespace,
-	author:			"Barry A. Burke (storageanarchy@gmail.com)",
-	description:	"Connect your Ecobee thermostats and sensors to ${isST?'SmartThings':'Hubitat'}, along with a Suite of Helper ${isST?'Smart':''}Apps.",
-	category:		"My Apps",
-	iconUrl:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
-	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
-    iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
-	singleInstance: true,
-	oauth:			true,
-	pausable:		false
+	name:				"Ecobee Suite Manager",
+	namespace:			myNamespace,
+	author:				"Barry A. Burke (storageanarchy@gmail.com)",
+	description:		"Connect your Ecobee thermostats and sensors to ${isST?'SmartThings':'Hubitat'}, along with a Suite of Helper ${isST?'Smart':''}Apps.",
+	category:			"My Apps",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
+	singleInstance: 	true,
+	oauth:				true,
+	pausable:			false
 ) {
 	appSetting "clientId"
 }
@@ -1467,8 +1469,8 @@ def createChildrenSensors() {
 // somebody pushed my button - do a force poll
 def appHandler(evt) {
 	if (evt.value == 'touch') {
-    	atomicState.runningCallQueue = false
-    	runCallQueue()
+    	//atomicState.runningCallQueue = false
+    	//runCallQueue()
         //getMyChildren()
 		/*LOG('appHandler(touch) event, forced poll',2,null,'info')
 		def updatesLog = atomicState.updatesLog
@@ -1480,6 +1482,7 @@ def appHandler(evt) {
 		//atomicState.runningCallQueue = false
 		//atomicState.callQueue = [:]
 		//resumeProgram(null, '311019854581', true)
+        updated()
 	}
 }
 
@@ -3665,7 +3668,7 @@ void updateThermostatData() {
                 //if (TIMERS) log.debug "TIMER: Finished updating Sensors for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
             }
 
-            if (weatherUpdated) {
+            if (weatherUpdated || forcePoll) {
                 def weather = (atomicState.weather ? atomicState.weather[tid] : [:]	) as HashMap
                 if (weather) {
                     if (weather.temperature != null) {
@@ -3750,6 +3753,7 @@ void updateThermostatData() {
                           "scheduledClimateType: ${scheduledClimateType}, climatesList: ${climatesList.toString()}", 1, null, 'info')
 
             //log.debug "eventsUpdated: ${eventsUpdated}"
+            //log.debug "runningEvent[${tid}] before: ${runningEvent}"
             if (eventsUpdated || climatesUpdated || curClimRefUpdated || forcePoll) {
                 boolean vacationTemplate = false
                 if (events?.size()) {
@@ -3779,9 +3783,16 @@ void updateThermostatData() {
                     atomicState.runningEvent = tempRunningEvent
                 }
             }
-
+			//log.debug "runningEvent[${tid}] after: ${runningEvent}"
+            if (!runningEvent) {
+            	runningEvent = atomicState.runningEvent[tid]
+                if (!runningEvent || (runningEvent.running != true)) runningEvent = [:]
+            	//log.debug "runningEvent[${tid}] FIXED: ${runningEvent}"
+            }
+            
             String thermostatHold = 'null'
             String holdEndsAt = 'null'
+            String holdEndDate = 'null'
             //if (TIMERS) log.debug "TIMER: Finished updating currentClimate for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
             def isConnected = runtime?.connected
 
@@ -3806,7 +3817,7 @@ void updateThermostatData() {
                 // In this case, holdEndsAt is actually the date & time of the last valid update from the thermostat...
                 holdEndsAt = fixDateTimeString( disconnectedAt.take(10), disconnectedAt.drop(11), statTime[tid] )
                 if (forcePoll && settings.askAlexa) {
-                    // Let's send an Ask Alexa Alert for this as well - (Only on hourly/forcepolls, though, to minimize update overhead)
+                    // Let's send an Ask Alexa Alert for this as well - (Only on hourly/forcePolls, though, to minimize update overhead)
                     String messageID = tid.toString()+'*disconnected'
                     def exHours = expire ? expire as int : 0
                     def exSec=exHours * 3600
@@ -3857,13 +3868,14 @@ void updateThermostatData() {
             //if (TIMERS) log.debug "TIMER: Finished updating Alerts for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
 
             if (runningEvent && isConnected) {
-                debugLevelFour = true
-                if (debugLevelFour) LOG("Found a running Event: ${runningEvent}", 1, null, 'trace') 
+                // debugLevelFour = true
+                if (debugLevelFour) LOG("Found a running Event: ${runningEvent}", 1, null, 'trace')
+                holdEndDate = runningEvent.endDate + ' ' + runningEvent.endTime
                 holdEndsAt = fixDateTimeString( runningEvent.endDate, runningEvent.endTime, statTime[tid])
                 thermostatHold = runningEvent.type
                 String tempClimateRef = runningEvent.holdClimateRef ?: ''
                 def holdClimateRef = ((tempClimateRef != '') ? climates.find { it.climateRef == tempClimateRef } : [:]) as HashMap
-                log.debug "runningEvent.type: ${runningEvent.type}"
+                //log.debug "runningEvent.type: ${runningEvent.type}"
                 switch (runningEvent.type) {
                     case 'hold':
                         if (tempClimateRef != '') {
@@ -3873,6 +3885,7 @@ void updateThermostatData() {
                             currentClimateType = holdClimateRef?.type
                         } else if ((runningEvent.name=='auto')||(runningEvent.name=='hold')) {		// Handle the "auto" climates (includes fan on overrides)
                             currentClimateType = 'hold'
+                            currentClimate = 'Hold'
                             if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false)) {
                                 if (runningEvent.fan == 'on') {
                                     currentClimateName = 'Hold: Fan On'
@@ -3950,7 +3963,7 @@ void updateThermostatData() {
                 }
             }
             if (debugLevelFour) LOG("updateThermostatData(${tstatName} ${tid}) - currentClimate: ${currentClimate}, currentClimateName: ${currentClimateName}, currentClimateId: ${currentClimateId}, " +
-                                    "currentClimateOwner: ${currentClimateOwner}, currentClimateType: ${currentClimateType}", 1, null, 'trace')
+                                    "currentClimateOwner: ${currentClimateOwner}, currentClimateType: ${currentClimateType}, thermostatHold: ${thermostatHold}", 1, null, 'trace')
 
             // Note that fanMode == 'auto' might be changed by the Thermostat DTH to 'off' or 'circulate' dependent on  HVACmode and fanMinRunTime
             if (runningEvent) {
@@ -4189,6 +4202,8 @@ void updateThermostatData() {
             // And we send the nextSetpoints before the status, so that SmartRecovery has them initialized (for targeting in Smart Vents)
             if (equipUpdated || smartRecovery || curClimRefUpdated || eventsUpdated || forcePoll || climatesUpdated || (atomicState.wasConnected != isConnected)) { 
                 def changeEquip = (atomicState.changeEquip ? atomicState.changeEquip : [:])
+                // [idle, idle, idle, null, null, null, null]
+                // 0: equipStatus, 1:thermOpState, 2:equipOpState, 3: , 4: nextHeatSP, 5: nextCoolSP, 6: nextProgName
                 atomicState.wasConnected = isConnected
                 boolean eqpChanged = false
                 if (!changeEquip || !changeEquip.containsKey(tid) || !changeEquip[tid]) changeEquip[tid] = ['null','null','null','null','','','']
@@ -4217,10 +4232,10 @@ void updateThermostatData() {
             }
             def changeCloud =  (atomicState.changeCloud	? atomicState.changeCloud  : [:])
             if (!changeCloud || !changeCloud.containsKey(tid) || !changeCloud[tid]) changeCloud[tid] = ['null','null','null','null']
-            if (changeCloud[tid][0] != lastPoll)		{ data << [lastPoll: lastPoll];				changeCloud[tid][0] = lastPoll; cldChanged = true; }
-            if (changeCloud[tid][1] != apiConnection)	{ data << [apiConnected: apiConnection];	changeCloud[tid][1] = apiConnection; cldChanged = true; }
-            if (changeCloud[tid][2] != isConnected)		{ data << [ecobeeConnected: isConnected];	changeCloud[tid][2] = isConnected; cldChanged = true; }
-            if (changeCloud[tid][3] != checkInterval)	{ data << [checkInterval: checkInterval];	changeCloud[tid][3] = checkInterval; cldChanged = true; }
+            if (changeCloud[tid][0] != lastPoll)		{ data << [lastPoll: lastPoll];				changeCloud[tid][0] = lastPoll; 		cldChanged = true; }
+            if (changeCloud[tid][1] != apiConnection)	{ data << [apiConnected: apiConnection];	changeCloud[tid][1] = apiConnection; 	cldChanged = true; }
+            if (changeCloud[tid][2] != isConnected)		{ data << [ecobeeConnected: isConnected];	changeCloud[tid][2] = isConnected; 		cldChanged = true; }
+            if (changeCloud[tid][3] != checkInterval)	{ data << [checkInterval: checkInterval];	changeCloud[tid][3] = checkInterval; 	cldChanged = true; }
             if (cldChanged) {
                 atomicState.changeCloud = changeCloud
             }
@@ -4352,11 +4367,11 @@ void updateThermostatData() {
             def changeConfig = atomicState.changeConfig ?: [:]
             if (!changeConfig || !changeConfig.containsKey(tid) || !changeConfig[tid]) changeConfig[tid] = ['null','null','null','null','null']
 
-            if (changeConfig[tid][0] != timeOfDay)		{ data << [timeOfDay: timeOfDay];				changeConfig[tid][0] = timeOfDay; cfgsChanged = true; }
-            if (changeConfig[tid][1] != userPrecision)	{ data << [decimalPrecision: userPrecision];	changeConfig[tid][1] = userPrecision; cfgsChanged = true; userPChanged = true; }
-            if (changeConfig[tid][2] != dbgLevel)		{ data << [debugLevel: dbgLevel];				changeConfig[tid][2] = dbgLevel; cfgsChanged = true; }
-            if (changeConfig[tid][3] != tmpScale)		{ data << [temperatureScale: tmpScale];			changeConfig[tid][3] = tmpScale; cfgsChanged = true; }
-            if (changeConfig[tid][4] != settings.mobile){ data << [mobile: settings.mobile];			changeConfig[tid][4] = settings.mobile; cfgsChanged = true; }
+            if (changeConfig[tid][0] != timeOfDay)		{ data << [timeOfDay: timeOfDay];				changeConfig[tid][0] = timeOfDay; 			cfgsChanged = true; }
+            if (changeConfig[tid][1] != userPrecision)	{ data << [decimalPrecision: userPrecision];	changeConfig[tid][1] = userPrecision; 		cfgsChanged = true; userPChanged = true; }
+            if (changeConfig[tid][2] != dbgLevel)		{ data << [debugLevel: dbgLevel];				changeConfig[tid][2] = dbgLevel; 			cfgsChanged = true; }
+            if (changeConfig[tid][3] != tmpScale)		{ data << [temperatureScale: tmpScale];			changeConfig[tid][3] = tmpScale; 			cfgsChanged = true; }
+            if (changeConfig[tid][4] != settings.mobile){ data << [mobile: settings.mobile];			changeConfig[tid][4] = settings.mobile; 	cfgsChanged = true; }
             if (cfgsChanged) {
                 atomicState.changeConfig = changeConfig
             }
@@ -4373,40 +4388,32 @@ void updateThermostatData() {
                     def statHoldAction = statSettings?.holdAction			// thermsotat's preference setting for holdAction:
                                                                             // useEndTime4hour, useEndTime2hour, nextPeriod, indefinite, askMe
                     // if (changeNever[tid][0] != statMode)			{ data << [thermostatMode: statMode];			changeNever[tid][0] = statMode; nvrChanged = true; }
-                    if (changeNever[tid][1] != autoMode)		{ data << [autoMode: autoMode];					changeNever[tid][1] = autoMode; nvrChanged = true; }
-                    if (changeNever[tid][2] != statHoldAction)	{ data << [statHoldAction: statHoldAction];		changeNever[tid][2] = statHoldAction; nvrChanged = true; }
+                    if (changeNever[tid][1] != autoMode)		{ data << [autoMode: autoMode];					changeNever[tid][1] = autoMode; 				nvrChanged = true; }
+                    if (changeNever[tid][2] != statHoldAction)	{ data << [statHoldAction: statHoldAction];		changeNever[tid][2] = statHoldAction; 			nvrChanged = true; }
                     if (changeNever[tid][3] != coolStages)		{ data << [coolStages: coolStages, 
-                                                                            coolMode: (coolStages > 0)];		changeNever[tid][3] = coolStages; nvrChanged = true; }
+                                                                            coolMode: (coolStages > 0)];		changeNever[tid][3] = coolStages; 				nvrChanged = true; }
                     if (changeNever[tid][4] != heatStages)		{ data << [heatStages: heatStages,
-                                                                            heatMode: (heatStages > 0)];		changeNever[tid][4] = heatStages; nvrChanged = true; }
+                                                                            heatMode: (heatStages > 0)];		changeNever[tid][4] = heatStages; 				nvrChanged = true; }
                     if (changeNever[tid][5] != heatRange)		{ data << [heatRange: heatRange,
                                                                             heatRangeHigh: heatHigh,
-                                                                            heatRangeLow: heatLow];				changeNever[tid][5] = heatRange; nvrChanged = true; }
+                                                                            heatRangeLow: heatLow];				changeNever[tid][5] = heatRange; 				nvrChanged = true; }
                     if (changeNever[tid][6] != coolRange)		{ data << [coolRange: coolRange,
                                                                             coolRangeHigh: coolHigh,
-                                                                            coolRangeLow: coolLow];				changeNever[tid][6] = coolRange; nvrChanged = true; }
-                    if (changeNever[tid][11] != tempHeatDiff)	{ data << [heatDifferential: tempHeatDiff];
-                                                                           // roundIt(tempHeatDiff, apiPrecision)];
-                                                                           // String.format("%.${apiPrecision}f", roundIt(tempHeatDiff, apiPrecision))];	
-                                                                                                                changeNever[tid][11] = tempHeatDiff; nvrChanged = true; }
-                    if (changeNever[tid][12] != tempCoolDiff)	{ data << [coolDifferential: tempCoolDiff];
-                                                                           // roundIt(tempCoolDiff, apiPrecision)];
-                                                                           // String.format("%.${apiPrecision}f", roundIt(tempCoolDiff, apiPrecision))]; 
-                                                                                                                changeNever[tid][12] = tempCoolDiff; nvrChanged = true; }
+                                                                            coolRangeLow: coolLow];				changeNever[tid][6] = coolRange; 				nvrChanged = true; }
+                    if (changeNever[tid][11] != tempHeatDiff)	{ data << [heatDifferential: tempHeatDiff];		changeNever[tid][11] = tempHeatDiff; 			nvrChanged = true; }
+                    if (changeNever[tid][12] != tempCoolDiff)	{ data << [coolDifferential: tempCoolDiff];		changeNever[tid][12] = tempCoolDiff;			nvrChanged = true; }
                     if (changeNever[tid][13] != tempHeatCoolMinDelta){ data << [heatCoolMinDelta: tempHeatCoolMinDelta];
-                                                                                // roundIt(tempHeatCoolMinDelta, apiPrecision)];
-                                                                                // String.format("%.${apiPrecision}f", roundIt(tempHeatCoolMinDelta, apiPrecision))]; 
-                                                                                                                changeNever[tid][13] = tempHeatCoolMinDelta; nvrChanged = true; }
-                    if (changeNever[tid][8] != auxHeatMode)		{ data << [auxHeatMode: auxHeatMode];			changeNever[tid][8] = auxHeatMode; nvrChanged = true; }
-                    if (changeNever[tid][9] != hasHumidifier)	{ data << [hasHumidifier: hasHumidifier];		changeNever[tid][9] = hasHumidifier; nvrChanged = true; }
-                    if (changeNever[tid][10] != hasDehumidifier){ data << [hasDehumidifier: hasDehumidifier];	changeNever[tid][10] = hasDehumidifier; nvrChanged = true;}
+                    																							changeNever[tid][13] = tempHeatCoolMinDelta; 	nvrChanged = true; }
+                    if (changeNever[tid][8] != auxHeatMode)		{ data << [auxHeatMode: auxHeatMode];			changeNever[tid][8] = auxHeatMode; 				nvrChanged = true; }
+                    if (changeNever[tid][9] != hasHumidifier)	{ data << [hasHumidifier: hasHumidifier];		changeNever[tid][9] = hasHumidifier; 			nvrChanged = true; }
+                    if (changeNever[tid][10] != hasDehumidifier){ data << [hasDehumidifier: hasDehumidifier];	changeNever[tid][10] = hasDehumidifier; 		nvrChanged = true;}
                 }
                 if (forcePoll || climatesUpdated) {
                     // REMINDER: updateSensorData is using atomicState.changeNever[tid][7] to send the programsList to the Sensor devices
                     // programsList is '["Away","Home","Sleep"]'
-                    if (programsList && (changeNever[tid][7] != programsList))	{ data << [programsList: programsList]; changeNever[tid][7] = programsList; nvrChanged = true; }
+                    if (programsList && (changeNever[tid][7] != programsList))	{ data << [programsList: programsList]; changeNever[tid][7] = programsList; 	nvrChanged = true; }
                     // climatesList is ['Away','Home','Sleep']
-                    if (climatesList && (changeNever[tid][14] != climatesList))	{ data << [climatesList: climatesList]; changeNever[tid][14] = climatesList; nvrChanged = true; }
+                    if (climatesList && (changeNever[tid][14] != climatesList))	{ data << [climatesList: climatesList]; changeNever[tid][14] = climatesList; 	nvrChanged = true; }
                 }
                 if (nvrChanged) {
                     atomicState.changeNever = changeNever
@@ -4432,7 +4439,9 @@ void updateThermostatData() {
             def changeRarely = (atomicState.changeRarely ?: [:]) as HashMap
             //if (thermostatUpdated || runtimeUpdated ||	equipUpdated || forcePoll || /*settingsUpdated || eventsUpdated || programUpdated || runtimeUpdated || extendRTUpdated ||*/ (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {	
             if (programUpdated || runtimeUpdated || eventsUpdated || equipUpdated || settingsUpdated || forcePoll || !changeRarely || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {	
-                if (!changeRarely[tid]) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+                if (!changeRarely[tid]) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+                
+                //log.debug "changeRarely[${tid}] before: ${changeRarely[tid]}"
                 // The order of these is IMPORTANT - Do setpoints and all equipment changes before notifying of the hold and program change...
                 if (tempHeatingSetpoint && (forcePoll || (changeRarely[tid][19] != tempHeatingSetpoint) || userPChanged))	{ 
                     needPrograms = true
@@ -4446,34 +4455,35 @@ void updateThermostatData() {
                     data << [coolingSetpoint: roundIt(tempCoolingSetpoint, userPrecision)] //String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision))] 
                     rareChanged = true
                 }
-                if (changeRarely[tid][4]  != statMode)					{ data << [thermostatMode: statMode];						changeRarely[tid][4]  = statMode;				rareChanged = true; }
-                if (changeRarely[tid][12] != currentFanMode)			{ data << [thermostatFanMode: currentFanMode];				changeRarely[tid][12] = currentFanMode;			rareChanged = true; }
-                if (changeRarely[tid][13] != currentVentMode)			{ data << [vent: currentVentMode];							changeRarely[tid][13] = currentVentMode;		rareChanged = true; }
-                if (changeRarely[tid][14] != ventMinOnTime)				{ data << [ventilatorMinOnTime: ventMinOnTime];				changeRarely[tid][14] = ventMinOnTime;			rareChanged = true; }
-                if (changeRarely[tid][0]  != fanMinOnTime)				{ data << [fanMinOnTime: fanMinOnTime];						changeRarely[tid][0]  = fanMinOnTime;			rareChanged = true; }
-                if (changeRarely[tid][5]  != humidifierMode)			{ data << [humidifierMode: humidifierMode];					changeRarely[tid][5]  = humidifierMode;			rareChanged = true; }
-                if (changeRarely[tid][6]  != dehumidifierMode)			{ data << [dehumidifierMode: dehumidifierMode];				changeRarely[tid][6]  = dehumidifierMode;		rareChanged = true; }
-                if (changeRarely[tid][1]  != thermostatHold)			{ data << [thermostatHold: thermostatHold];					changeRarely[tid][1]  = thermostatHold;			rareChanged = true; }
-                if (changeRarely[tid][2]  != holdEndsAt)				{ data << [holdEndsAt: holdEndsAt];							changeRarely[tid][2]  = holdEndsAt;				rareChanged = true; }
-                if (changeRarely[tid][3]  != statusMsg)					{ data << [holdStatus: statusMsg];							changeRarely[tid][3]  = statusMsg;				rareChanged = true; }
-                // NB: Now that we know if Climates or Schedules were updated, perhaps can further optimize these checks
-                // maybe (curClimRefUpdated || climatesUpdated || eventsUpdated)
-                if (/* programUpdated || */ curClimRefUpdated || climatesUpdated || eventsUpdated) {
-                    if (changeRarely[tid][7]  != currentClimate)		{ data << [currentProgram: currentClimate];					changeRarely[tid][7]  = currentClimate;			rareChanged = true; }
-                    if (changeRarely[tid][8]  != currentClimateName)	{ data << [currentProgramName: currentClimateName];			changeRarely[tid][8]  = currentClimateName;		rareChanged = true; }
-                    if (changeRarely[tid][9]  != currentClimateId)		{ data << [currentProgramId: currentClimateId];				changeRarely[tid][9]  = currentClimateId;		rareChanged = true; }
-                    if (changeRarely[tid][15] != currentClimateOwner)	{ data << [currentProgramOwner: currentClimateOwner];		changeRarely[tid][15] = currentClimateOwner;	rareChanged = true; }
-                    if (changeRarely[tid][16] != currentClimateType)	{ data << [currentProgramType: currentClimateType];			changeRarely[tid][16] = currentClimateType;		rareChanged = true; }
-                }
-                if (curClimRefUpdated || climatesUpdated) {
-                //if (programUpdated) {
-                    if (changeRarely[tid][10] != scheduledClimateName)	{ data << [scheduledProgramName: scheduledClimateName,
-                                                                                   scheduledProgram: scheduledClimateName];			changeRarely[tid][10] = scheduledClimateName;	rareChanged = true; }
-                    if (changeRarely[tid][11] != scheduledClimateId)	{ data << [scheduledProgramId: scheduledClimateId];			changeRarely[tid][11] = scheduledClimateId;		rareChanged = true; }
-                    if (changeRarely[tid][17] != scheduledClimateOwner) { data << [scheduledProgramOwner: scheduledClimateOwner];	changeRarely[tid][17] = scheduledClimateOwner;	rareChanged = true; }
-                    if (changeRarely[tid][18] != scheduledClimateType)	{ data << [scheduledProgramType: scheduledClimateType];		changeRarely[tid][18] = scheduledClimateType;	rareChanged = true; }
-                }
+                if (changeRarely[tid][4]  != statMode)					{ data << [thermostatMode: statMode];						changeRarely[tid][4]  = statMode;				if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][12] != currentFanMode)			{ data << [thermostatFanMode: currentFanMode];				changeRarely[tid][12] = currentFanMode;			if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][13] != currentVentMode)			{ data << [vent: currentVentMode];							changeRarely[tid][13] = currentVentMode;		if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][14] != ventMinOnTime)				{ data << [ventilatorMinOnTime: ventMinOnTime];				changeRarely[tid][14] = ventMinOnTime;			if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][0]  != fanMinOnTime)				{ data << [fanMinOnTime: fanMinOnTime];						changeRarely[tid][0]  = fanMinOnTime;			if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][5]  != humidifierMode)			{ data << [humidifierMode: humidifierMode];					changeRarely[tid][5]  = humidifierMode;			if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][6]  != dehumidifierMode)			{ data << [dehumidifierMode: dehumidifierMode];				changeRarely[tid][6]  = dehumidifierMode;		if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][1]  != thermostatHold)			{ data << [thermostatHold: thermostatHold];					changeRarely[tid][1]  = thermostatHold;			if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][2]  != holdEndsAt)				{ data << [holdEndsAt: holdEndsAt];							changeRarely[tid][2]  = holdEndsAt;				if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][3]  != statusMsg)					{ data << [holdStatus: statusMsg];							changeRarely[tid][3]  = statusMsg;				if (!rareChanged) rareChanged = true; }
+                if (changeRarely[tid][21] != holdEndDate)				{ data << [holdEndDate: holdEndDate];						changeRarely[tid][21] = holdEndDate;			if (!rareChanged) rarechanged = true; }
 
+                //log.debug "currentClimateName: ${currentClimateName}"
+            	if (curClimRefUpdated || climatesUpdated || eventsUpdated || forcePoll) {
+                    if (changeRarely[tid][7]  != currentClimate)		{ data << [currentProgram: currentClimate];					changeRarely[tid][7]  = currentClimate;			if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][8]  != currentClimateName)	{ data << [currentProgramName: currentClimateName];			changeRarely[tid][8]  = currentClimateName;		if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][9]  != currentClimateId)		{ data << [currentProgramId: currentClimateId];				changeRarely[tid][9]  = currentClimateId;		if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][15] != currentClimateOwner)	{ data << [currentProgramOwner: currentClimateOwner];		changeRarely[tid][15] = currentClimateOwner;	if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][16] != currentClimateType)	{ data << [currentProgramType: currentClimateType];			changeRarely[tid][16] = currentClimateType;		if (!rareChanged) rareChanged = true; }
+                }
+                
+                if (curClimRefUpdated || climatesUpdated || forcePoll) {
+                    if (changeRarely[tid][10] != scheduledClimateName)	{ data << [scheduledProgramName: scheduledClimateName,
+                                                                                   scheduledProgram: scheduledClimateName];			changeRarely[tid][10] = scheduledClimateName;	if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][11] != scheduledClimateId)	{ data << [scheduledProgramId: scheduledClimateId];			changeRarely[tid][11] = scheduledClimateId;		if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][17] != scheduledClimateOwner) { data << [scheduledProgramOwner: scheduledClimateOwner];	changeRarely[tid][17] = scheduledClimateOwner;	if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][18] != scheduledClimateType)	{ data << [scheduledProgramType: scheduledClimateType];		changeRarely[tid][18] = scheduledClimateType;	if (!rareChanged) rareChanged = true; }
+                }
+				//log.debug "changeRarely[${tid}] after: ${changeRarely[tid]}"
                 if (rareChanged) {
                     atomicState.changeRarely = changeRarely
                 }
@@ -4483,7 +4493,7 @@ void updateThermostatData() {
                 // collected on the next poll, if they weren't collected in this poll.
                 atomicState.needPrograms = (needPrograms && (!thermostatUpdated && !forcePoll))
 
-                if (programUpdated || eventsUpdated || forcepoll) {
+                if (programUpdated || eventsUpdated || forcePoll) {
                     // Save the Program when it changes so that we can get to it easily for the child sensors
                     def tempProgram = [:] as HashMap
                     tempProgram[tid] = currentClimateName
@@ -4501,6 +4511,8 @@ void updateThermostatData() {
             def lastOList = []
             def changeOften = atomicState.changeOften ?: [:]
             lastOList = changeOften[tid]
+            // 69.0,   inactive,               44, null,          day,              6,       null,        null,           null,           null,                   44,                  60,                       44,    1,    null
+            // 0:temp, 1:motion, 2:actualHumidity, 3: , 4: weatherToD, 5: weatherIcon, 6: outTemp, 7: putHumid, 8: outDewpoint, 9: outPressure, 10: humiditySetpoint, 11: dehumidSetpoint, 12: humidSetpointDisplay, 13: , 14: outLowFc
             if ( !lastOList || (lastOList.size() < 14)) lastOList = [999,'null',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1,-1,-1,'null']
             if (sensorsUpdated && (lastOList[1] != occupancy)) data << [motion: occupancy]
             if (runtimeUpdated || forcePoll || weatherUpdated || extendRTUpdated) { 
@@ -4513,7 +4525,7 @@ void updateThermostatData() {
                 if (humiditySetpointDisplay && (lastOList[12] != humiditySetpointDisplay)) data << [humiditySetpointDisplay: humiditySetpointDisplay]
                 if (lastOList[10] != humiditySetpoint) data << [humiditySetpoint: humiditySetpoint]
                 if (lastOList[11] != dehumiditySetpoint) data << [dehumiditySetpoint: dehumiditySetpoint]
-                if (weatherUpdated) {
+                if (weatherUpdated || forcePoll) {
                     if (wSymbol && ((lastOList[5] != wSymbol) || (timeOfDay != lastOList[4]))) data << [timeOfDay: timeOfDay, weatherSymbol: wSymbol]
                     if ((tempWeatherTemperature != null)	&& ((lastOList[6] != tempWeatherTemperature) || userPChanged)) 	data << [weatherTemperature:	roundIt(tempWeatherTemperature, userPrecision)]
                     if ((tempWeatherHumidity != null) 		&& (lastOList[7] != tempWeatherHumidity)) 						data << [weatherHumidity: 		tempWeatherHumidity]
