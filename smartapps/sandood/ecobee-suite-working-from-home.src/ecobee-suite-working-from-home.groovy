@@ -1,7 +1,7 @@
 /**
  *  Ecobee Suite Working From Home
  *
- *	Copyright 2017 Barry A. Burke
+ *	Copyright 2017-2020 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -31,25 +31,27 @@
  *	1.7.16 - Fixed labels (again), added infoOff, cleaned up preferences setup
  *	1.7.17 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum()	{ return "1.8.00" }
+String getVersionNum()	{ return "1.8.01" }
 String getVersionLabel() { return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
-    name: 			"ecobee Suite Working From Home",
-    namespace: 		"sandood",
-    author: 		"Barry A. Burke",
-    description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nIf, after thermostat mode change to 'Away' and/or at a particular time of day, anyone is still at home, " +
-    			 	"${isST?'trigger a \'Working From Home\' Routine (opt), ':''}, change the Location mode (opt), and/or reset thermostat(s) to 'Home' program (opt).",
-    category: 		"Convenience",
-    parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
-	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
-    iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
-	singleInstance: false,
-    pausable: 		true
+    name: 				"ecobee Suite Working From Home",
+    namespace: 			"sandood",
+    author: 			"Barry A. Burke",
+    description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nIf, after thermostat mode change to 'Away' and/or at a particular time of day, anyone is still at home, " +
+    			 		"${isST?'trigger a \'Working From Home\' Routine (opt), ':''}, change the Location mode (opt), and/or reset thermostat(s) to 'Home' program (opt).",
+    category: 			"Convenience",
+    parent: 			"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#features-working-home",
+	singleInstance: 	false,
+    pausable: 			true
 )
 
 preferences {
@@ -130,9 +132,9 @@ def mainPage() {
 		if (settings?.myThermostats && !settings?.tempDisable) {
             section (title: sectionTitle("Triggers")) {
                 input(name: "people", type: "capability.presenceSensor", title: inputTitle("When any of these are present..."),  multiple: true, required: true, submitOnChange: true, width: 6)
-				input(name: "timeOfDay", type: "time", title: inputTitle("At this time of day"),  required: !settings.onAway, submitOnChange: true, width: 6)
 				input(name: "onAway", type: "bool", title: inputTitle("When ${settings?.myThermostats?.size()>1?'any thermostats\'':'the thermostat\'s'} Program changes"), defaultValue: false, 
                 	  required: (settings.timeOfDay == null), submitOnChange: true, width: 6)
+				input(name: "timeOfDay", type: "time", title: inputTitle("At this time of day"),  required: !settings.onAway, submitOnChange: true, width: 6)
                 if (settings.onAway) {
                 	def programs = getEcobeePrograms()
                     programs = programs - ["Resume"]
@@ -244,7 +246,7 @@ def mainPage() {
                 }
 			} else {		// HE
 				section(sectionTitle("Notifications")) {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
+					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (settings.notify) {
 						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true,
 						  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
@@ -263,9 +265,7 @@ def mainPage() {
 					}
 				}
                 if (maximize) {
-					section(){
-						paragraph "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken"		
-					}
+					section("A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken"){}
                 }
 			}
             if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
@@ -276,10 +276,10 @@ def mainPage() {
 			}				
         }
         section(title: sectionTitle("Operations")) {
-        	input(name: "minimize", 	title: inputTitle("Minimize the settings UI?"), type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper?"), 		type: "bool", required: false, description: "", 	submitOnChange: true, width: 3)                
-			input(name: "debugOff",	 	title: inputTitle("Disable debug logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-            input(name: "infoOff", 		title: inputTitle("Disable info logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+        	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
         if (ST) {
