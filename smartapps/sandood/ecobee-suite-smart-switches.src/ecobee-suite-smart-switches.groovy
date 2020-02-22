@@ -1,7 +1,7 @@
 /**
  *  ecobee Suite Smart Switches
  *
- *  Copyright 2017 Barry A. Burke
+ *  Copyright 2017-2020 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -22,23 +22,29 @@
  *	1.7.06 - Added optional daily "Actions disabled" time window
  *	1.7.07 - Fixed between time calculation
  *	1.7.08 - Fixed helper labelling
+ *	1.7.09 - Fixed labels (again), added infoOff, cleaned up preferences setup
+ *	1.7.10 - Added minimizeUI
+ *	1.7.11 - Added comprehensive "reverse actions to prior state"
+ *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
- 
-String getVersionNum() { return "1.7.08" }
+String getVersionNum()		{ return "1.8.01" }
 String getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-	name: 			"ecobee Suite Smart Switches",
-	namespace: 		"sandood",
-	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled switches, dimmers and generic vents based on thermostat operating state",
-	category: 		"Convenience",
-	parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
-	singleInstance: false,
-    pausable: 		true
+	name: 				"ecobee Suite Smart Switches",
+	namespace: 			"sandood",
+	author: 			"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled switches, dimmers and generic vents based on thermostat operating state",
+	category: 			"Convenience",
+	parent: 			"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#features-smart-switches-sa",
+	singleInstance: 	false,
+    pausable: 			true
 )
 
 preferences {
@@ -49,24 +55,41 @@ preferences {
 def mainPage() {
 	boolean ST = isST
 	boolean HE = !ST
-	
-	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
-    	section(title: "") {
-        	String defaultName = "Smart Switch/Dimmer/Vent"
-			String defaultLabel = atomicState?.appDisplayName ?: defaultName
-			String oldName = app.label
-			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
-			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
-				app.updateLabel(thisName)
-				atomicState.appDisplayName = thisName
-			} else if (!app.label) {
+    boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
+	String defaultName = "Smart Switch/Dimmer/Vent"
+    
+	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
+    	if (maximize) {
+    		section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
+        	
+                if (ST) {
+                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
+                } else {
+                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
+                }
+                paragraph("This handy utility Helper automates changing of (real or virtual) switches, dimmers and generic vents based upon Operating State changes of one or more Ecobee Suite Thermostats. "+
+                          "For example, it will turn off (or on) an attic fan while the HVAC system is cooling.")
+        	}
+		}
+		section(title: sectionTitle("Naming${!settings.tempDisable?' & Thermostat Selection':''}")) {	
+			String defaultLabel
+			if (!atomicState?.appDisplayName) {
+				defaultLabel = defaultName
+				app.updateLabel(defaultName)
+				atomicState?.appDisplayName = defaultName
+			} else {
+				defaultLabel = atomicState.appDisplayName
+			}
+			label(title: inputTitle("Name for this ${defaultName} Helper"), required: false, submitOnChange: true, defaultValue: defaultLabel, width: 6)
+            if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
-			}
-			updateMyLabel()
+			} else {
+            	atomicState.appDisplayName = app.label
+            }
 			if (HE) {
 				if (app.label.contains('<span ')) {
-					if (atomicState?.appDisplayName != null) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
 						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
@@ -78,7 +101,7 @@ def mainPage() {
                 }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	if (atomicState?.appDisplayName != null) {
+                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
                         String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
@@ -89,62 +112,76 @@ def mainPage() {
                 	atomicState.appDisplayName = app.label
                 }
             }
-            updateMyLabel()
-            if (settings.tempDisable) {
-            	paragraph "WARNING: Temporarily Paused - re-enable below."
-            } else {
-				input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Monitor these Ecobee thermostat(s) for operating state changes:", 
+        	if(settings.tempDisable) { 
+				paragraph warningText + "Temporarily Paused; Resume below" 
+			} else { 
+				input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
 					  multiple: true, required: true, submitOnChange: true)
             }
 		}
         
         if (!settings.tempDisable && (settings?.theThermostats?.size() > 0)) {
         
-        	section(title: (HE?'<b>':'') + "Smart Switches: Operating State" + (HE?'</b>':'')) {
-        		input(name: "theOpState", type: "enum", title: "When ${settings?.theThermostats?settings.theThermostats.toString()[1..-2]:'thermostat'} changes to one of these Operating States", 
-					  options:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer'], required: true, multiple: true, submitOnChange: true)
-				// mode(title: "Enable only for specific mode(s)")
+        	section(title: sectionTitle("Trigger")) {
+        		input(name: "theOpState", type: "enum", title: inputTitle("When ${settings?.theThermostats?.size()>1?'any ':'the '} thermostat changes to one of these Operating States"), 
+					  options:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer'], required: true, multiple: true, submitOnChange: true, width: 6)
+				// mode(title: inputTitle("Enable only for specific mode(s)"))
         	}
        
-        	section(title: (HE?'<b>':'') + "Smart Switches: Actions" + (HE?'</b>':'')) {
-				input(name: 'theOnSwitches', type: 'capability.switch', title: "Turn On these switches", multiple: true, required: false, submitOnChange: true)
-          		input(name: 'theOnDimmers', type: 'capability.switchLevel', title: "Set level on these dimmers", multiple: true, required: false, submitOnChange: true)
+        	section(title: sectionTitle("Actions")) {
+				paragraph(smallerTitle("Turn on..."))
+				input(name: 'theOnSwitches', type: 'capability.switch', title: inputTitle("Turn On these switches"), multiple: true, required: false, submitOnChange: true, width: 4)
+          		input(name: 'theOnDimmers', type: 'capability.switchLevel', title: inputTitle("Set level on these dimmers"), multiple: true, required: false, submitOnChange: true, width: 4)
           		if (settings.theOnDimmers) {
-					input(name: 'onDimmerLevel', type: 'number', title: "Set dimmers to level...", range: "0..99", required: true)
-				}
-          		input(name: 'theOffSwitches', type: 'capability.switch', title: 'Turn Off these switches', multiple: true, required: false, submitOnChange: true)
-          		input(name:	'theOffDimmers', type: 'capability.switchLevel', title: "Set level on these dimmers", multiple: true, required: false, submitOnChange: true)
+					input(name: 'onDimmerLevel', type: 'number', title: inputTitle("Set dimmers to level...")+' (0-100)', range: "0..100", required: true, width: 4)
+				} else if (HE) paragraph("", width: 4)
+				paragraph(smallerTitle("Turn off..."))
+          		input(name: 'theOffSwitches', type: 'capability.switch', title: inputTitle('Turn Off these switches'), multiple: true, required: false, submitOnChange: true)
+          		input(name:	'theOffDimmers', type: 'capability.switchLevel', title: inputTitle("Set level on these dimmers"), multiple: true, required: false, submitOnChange: true, width: 4)
           		if (settings.theOffDimmers) {
-					input(name: 'offDimmerLevel', type: 'number', title: "Set dimmers to level...", range: "0..99", required: true)
-				}
+					input(name: 'offDimmerLevel', type: 'number', title: inputTitle("Set dimmers to level...")+' (0-100)', range: "0..100", required: true, width: 4)
+				} else if (HE) paragraph("")
             	if (!settings.theOpState?.contains('idle')) {
-            		input(name: 'reverseOnIdle', type: 'bool', title: "Reverse above Actions when ${settings.theThermostats?.size()>1?'all thermostats return':'thermostat returns'} to 'idle'?", 
-						  defaultValue: false, submitOnChange: true)
+            		input(name: 'reverseOnIdle', type: 'bool', title: inputTitle("Reverse above Actions when ${settings.theThermostats?.size()>1?'all thermostats return':'thermostat returns'} to 'idle'?"), 
+						  defaultValue: false, submitOnChange: true, width: 6)
             	}
+                if (settings.reverseOnIdle || settings.reverseAtFromTime) {
+                    //if (HE) paragraph("", width: 6)
+                    input(name: "reversePreserve", type: 'bool', title: inputTitle("Preserve previous state when reversing actions?"), defaultValue: false, submitOnChange: true, width: 6)
+                }
             }
             
-            section(title: (HE?'<b>':'') + "Smart Switches: Actions Schedule" + (HE?'</b>':'')) {
-        		input(name: "actionDays", type: "enum", title: "Select Days of the Week to run the above Actions", required: true, multiple: true, submitOnChange: true,
+            section(title: sectionTitle("Conditions")) {
+        		input(name: "actionDays", type: "enum", title: inputTitle("Select Days of the Week to run the above Actions"), required: true, multiple: true, submitOnChange: true, width: 4,
                 	options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday", "Saturday": "Saturday", "Sunday": "Sunday"])
-     		   	input(name: "fromTime", type: "time", title: "Disable Actions daily between From Time (optional)", required: false, submitOnChange: true)
-        		input(name: "toTime", type: "time", title: "...and To Time", required: (settings.fromTime != null), submitOnChange: true)
+				input(name: "fromTime", type: "time", title: inputTitle("Disable Actions daily between${HE?'<br>':''}From Time (optional)"), required: false, submitOnChange: true, width: 4)
+				input(name: "toTime", type: "time", title: inputTitle("${HE?'<br>':''}...and To Time"), required: (settings.fromTime != null), submitOnChange: true, width: 4)
                 def between = (((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false)         				
-                paragraph "Actions ${between?'would NOT':'would'} run right now (Hint: set From & To to the same time to block Actions at any time).${settings.reverseOnIdle?' Actions will be reversed on \'idle\' at ANY time.':''}"
+                if (maximize) paragraph "Actions ${between?'would NOT':'would'} run right now (Hint: set From & To to the same time to block Actions at any time).${settings.reverseOnIdle?' Actions will be reversed on \'idle\' at ANY time.':''}"
                 if (settings.fromTime) {
-                	input(name: 'reverseAtFromTime', type: 'bool', title: "${settings.reverseOnIdle?'Also r':'R'}everse above Actions at From time daily?", defaultValue: true, submitOnChange: true)
+                	input(name: 'reverseAtFromTime', type: 'bool', title: inputTitle("${settings.reverseOnIdle?'Also r':'R'}everse above Actions at From time daily?"), defaultValue: true, 
+                    	  submitOnChange: true, width: 4)
                     def theDays = (settings?.actionDays?.size() == 7) ? 'daily' : 'on ' + settings.actionDays.toString()[1..-2].replace('",',', ').replace('"','')
-                    if (settings.actionDays) paragraph "Actions ${settings.reverseAtFromTime?'will':'will NOT'} be reversed at ${getShortTime(settings?.fromTime)} ${theDays}"
+                    if (settings.actionDays && maximize) paragraph "Actions ${settings.reverseAtFromTime?'will':'will NOT'} be reversed at ${getShortTime(settings?.fromTime)} ${theDays}"
                 }
 			}
         }
-		
-		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
-        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                   
-        }
-		section(title: "") {
-			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
-		}        
-        section (getVersionLabel()) {}
+
+        section(title: sectionTitle("Operations")) {
+        	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+		}  
+		// Standard footer
+        if (ST) {
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+        } else {
+        	section() {
+        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+            }
+		}
     }
 }
 
@@ -173,6 +210,7 @@ def initialize() {
     }
     if (settings.debugOff) log.info "log.debug() logging disabled"
 	
+    //if (settings.preserve) atomicState.priorState = 
 	subscribe(settings.theThermostats, 'thermostatOperatingState', opStateHandler)
     if (settings.fromTime && settings.reverseAtFromTime) {
     	// schedule the daily reversal...
@@ -210,83 +248,249 @@ def opStateHandler(evt) {
     		LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
         	return
     	}
+        def priorState = atomicState.priorState
+        if (!priorState) priorState = [:]
+        
         if (settings.theOnSwitches) {
-        	LOG("Turning on ${settings.theOnSwitches*.displayName.toString()[1..-2]}",2,null,'info')
-    		settings.theOnSwitches*.on()
+			settings.theOnSwitches.each { theSwitch ->
+            	String cs = theSwitch.currentSwitch
+            	if (settings.reversePreserve) {    	
+            		String dni = theSwitch.device.deviceNetworkId as String
+                    if (!priorState?.dni) priorState.dni = []
+                    priorState[dni] << [action: 'on', type: 'switch', value: cs]
+                }
+                if (cs != 'on') { 
+                   	LOG("Turning on ${theSwitch.displayName}",2,null,'info')
+                   	theSwitch.on() 
+                } else {
+                  	LOG("${theSwitch.displayName} was already on",2,null,'info')
+                }
+            }
         }
-        if (settings.theOnDimmers) dimmersOn(settings.theOnDimmers)
+        
+        if (settings.theOnDimmers) {
+        	//LOG("Turning on ${settings.theOnDimmers*.displayName.toString()[1..-2]} to "${settings.onDimmerLevel?:99}%",2,null,'info')
+            settings.theOnDimmers.each { dimmer ->
+            	String dl = dimmer.currentLevel
+                String cs = dimmer.currentSwitch
+            	if (settings.reversePreserve) {
+                	String dni = dimmer.device.deviceNetworkId
+                    if (!priorState?.dni) priorState.dni = []
+                    priorState[dni] << [action: 'on', type: 'dimmer', value: dl]
+                    priorState[dni] << [action: 'on', type: 'switch', value: cs]
+                }
+                def tl = settings.onDimmerLevel?:99
+                if (dl != tl) {
+                	dimmer.setLevel(dl)
+                    LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
+                } else {
+                	LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
+                }
+                if (dimmer.currentSwitch != 'on') {
+                	LOG("Turning on ${dimmer.displayName}",2,null,'info')
+                	dimmer.on()
+                }
+            }
+        }
+        
         if (settings.theOffSwitches) {
-        	LOG("Turning off ${settings.theOffSwitches*.displayName.toString()[1..-2]}",2,null,'info')
-        	settings.theOffSwitches*.off()
+			settings.theOffSwitches.each { theSwitch ->
+            	String cs = theSwitch.currentSwitch
+            	if (settings.reversePreserve) {    	
+            		String dni = theSwitch.device.deviceNetworkId as String
+                    if (!priorState?.dni) priorState.dni = []
+                    priorState[dni] << [action: 'off', type: 'switch', value: cs]
+                }
+                if (cs != 'off') { 
+                   	LOG("Turning off ${theSwitch.displayName}",2,null,'info')
+                   	theSwitch.on() 
+                } else {
+                  	LOG("${theSwitch.displayName} was already off",2,null,'info')
+                }
+            }
         }
-        if (settings.theOffDimmers) dimmersOff(settings.theOffDimmers)
+
+        if (settings.theOffDimmers) {
+            settings.theOffDimmers.each { dimmer ->
+            	String dl = dimmer.currentLevel
+                String cs = dimmer.currentSwitch
+            	if (settings.reversePreserve) {
+                	String dni = dimmer.device.deviceNetworkId
+                    if (!priorState?.dni) priorState.dni = []
+                    priorState[dni] << [action: 'off', type: 'dimmer', value: dl]
+                    priorState[dni] << [action: 'off', type: 'switch', value: cs]
+                }
+                def tl = settings.offDimmerLevel?:0
+                if (tl != 0) {
+                	// we're just turning down the dimmer
+                	if (dl != tl) {
+                		dimmer.setLevel(dl)
+                    	LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
+                	} else {
+                		LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
+                	}
+                    if (dimmer.currentSwitch != 'on') {
+                		LOG("Turning on ${dimmer.displayName}",2,null,'info')
+                		dimmer.on()
+                	}
+                } else if (dl != 0) {
+                	if (dimmer.currentSwitch != 'off') {
+                		LOG("Turning off ${dimmer.displayName}",2,null,'info')
+                        dimmer.setLevel(0)
+                		dimmer.off()
+                    }
+                }
+            }
+        }
+        atomicState.priorState = priorState
     }
 }
 void reverseActionsScheduled() {
 	if (dayCheck) reverseActions()
 }
 void reverseActions() {
-    if (settings.theOnSwitches) {
-        LOG("Turning off ${settings.theOnSwitches*.displayName.toString()[1..-2]}",2,null,'info')
-        settings.theOnSwitches*.off()
-    }
-    if (settings.theOnDimmers) dimmersOff(settings.theOnDimmers)
-    if (settings.theOffSwitches) {
-        LOG("Turning on ${settings.theOffSwitches.displayName.toString()[1..-2]}",2,null,'info')
-        settings.theOffSwitches*.on()
-    }
-    if (settings.theOffDimmers) dimmersOn(settings.theOffDimmers)
-}
-
-void dimmersOff( theDimmers ) {
-	if (!theDimmers) return
+	def priorState = settings.reversePreserve ? atomicState.priorState : [:]
     
-	boolean changed = false
-	def dimLevel = settings.offDimmerLevel?:0
-    if (dimLevel == 0) {
-      	if (settings.theDimmers*.currentSwitch.contains('on')) {
-        	theDimmers*.off()
-            LOG("Turning off ${theDimmers*.displayName.toString()[1..-2]}",3,null,'info')
-        } else {
-        	LOG("${theDimmers*.displayName.toString()[1..-2]} ${theDimmers.size()>1?'are':'is'} already off",3,null,'info')
-        }
-        return
-    } else {
-    	theDimmers.each {
-        	if (it.currentSwitch == 'off') it.on()
-        	if (it.currentLevel.toInteger() != dimLevel) {
-        	   	changed = true
-            	it.setLevel(dimLevel)	// make sure none of the vents are less than the specified minimum
+    // Turn on the "off" dimmers
+	if (settings.theOffDimmers) {
+    	settings.theOffDimmers.each { dimmer ->
+        	String cs = dimmer.currentSwitch
+            def cl = dimmer.currentLevel
+        	if (settings.reversePreserve) {
+            	String dni = dimmer.device.deviceNetworkId
+                if (priorState && priorState[dni]) priorState[dni].each { ->
+                	if (it.action == 'off') {
+                    	String sw
+                        def lv
+                		if (it.type == 'switch') {
+                           	sw = it.value
+                        } else if (it.type == 'dimmer') {
+                           	lv = it.value
+                        }
+                    }
+                    if (lv && sw) { 					// dimmers will have both
+                        if ((lv != cl) || (cs != sw)) {
+                        	LOG("Returning ${dimmer.displayName} to prior state (${sw} @ ${lv}%)",2,null,'info')
+                        	dimmer.setLevel(lv)
+                        	dimmer."${sw}"()
+                        }
+                    }
+                }
+            } else {
+            	def tl = settings.onDimmerLevel?:99
+                if (dl != tl) {
+                	dimmer.setLevel(dl)
+                    LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
+                } else {
+                	LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
+                }
+                if (dimmer.currentSwitch != 'on') {
+                	LOG("Turning on ${dimmer.displayName}",2,null,'info')
+                	dimmer.on()
+                }
             }
-       	}
-   	}
-   
-   	if (changed) {
-       	LOG("Turning down ${theDimmers*.displayName.toString()[1..-2]} to ${dimLevel}%",3,null,'info')
-  	} else {
-       	LOG("${theDimmers*.displayName.toString()[1..-2]} ${theDimmers.size()>1?'are':'is'} already at ${dimLevel}%",3,null,'info')
-    }
-}
-
-void dimmersOn( theDimmers ) {
-	if (!theDimmers) return
-    
-    boolean changed = false
-    if (theDimmers*.currentSwitch.contains('off')) {
-    	theDimmers*.on()
-        changed = true
-    }
-    def dimLevel = settings.onDimmerLevel?:99
-    theDimmers.each {
-    	if (it.currentLevel.toInteger() != dimLevel) {
-    		it.setLevel(dimLevel)
-        	changed = true
         }
     }
-    if (changed) {
-    	LOG("Set ${theDimmers*.displayName.toString()[1..-2]} to ${dimLevel}%",3,null,'info')
-    } else {
-    	LOG("${theDimmers*.displayName.toString()[1..-2]} ${theDimmers.size()>1?'are':'is'} already at ${dimLevel}%",3,null,'info')
+    
+    // turn on the "off" switches
+    if (settings.theOffSwitches) {
+        settings.theOffSwitches.each { theSwitch ->
+            String cs = theSwitch.currentSwitch
+            if (settings.reversePreserve) {    	
+                String dni = theSwitch.device.deviceNetworkId as String
+                if (priorState && priorState[dni]) priorState[dni].each { ->
+            		if ((it.action == 'off') && (it.type == 'switch')) {
+                    	String sw = it.value
+                        if (cs != sw) {
+                        	theSwitch."${sw}()"
+                            LOG("Returning ${theSwitch.displayName} to prior state (${sw})",2,null,'info')
+                        } else {
+                        	LOG("${theSwitch.displayName} is already ${sw}",2,null,'info')
+                    	}
+                    }
+                }
+            } else {
+            	if (cs != 'off') { 
+                	LOG("Turning on ${theSwitch.displayName}",2,null,'info')
+                	theSwitch.on() 
+            	} else {
+                	LOG("${theSwitch.displayName} was already on",2,null,'info')
+                }
+            }
+        }
+    }
+    
+    //if (settings.theOnDimmers) dimmersOff(settings.theOnDimmers)
+    // turn off the "on" dimmers
+    if (settings.theOnDimmers) {
+    	settings.theOnDimmers.each { dimmer ->
+        	String cs = dimmer.currentSwitch
+            def cl = dimmer.currentLevel
+        	if (settings.reversePreserve) {
+            	String dni = dimmer.device.deviceNetworkId
+                if (priorState && priorState[dni]) priorState[dni].each { ->
+                	if (it.action == 'on') {
+                    	String sw
+                        def lv
+                		if (it.type == 'switch') {
+                           	sw = it.value
+                        } else if (it.type == 'dimmer') {
+                           	lv = it.value
+                        }
+                    }
+                    if (lv && sw) { 		// dimmers will have both
+                        if ((lv != cl) || (cs != sw)) {
+                        	LOG("Returning ${dimmer.displayName} to prior state (${sw} @ ${lv}%)",2,null,'info')
+                        	dimmer.setLevel(lv)
+                        	dimmer."${sw}"()
+                        }
+                    } else {
+                    	// Error: didn't get both values from priorState
+                    }
+                } else {
+                	// Error: didn't get ANY values from priorState
+                }
+            } else {
+            	def tl = settings.offDimmerLevel?:0
+                if (cl != tl) {
+                	dimmer.setLevel(tl)
+                    LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
+                } else {
+                	LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
+                }
+                if (dimmer.currentSwitch != 'off') {
+                	LOG("Turning off ${dimmer.displayName}",2,null,'info')
+                	dimmer.on()
+                }
+            }
+        }
+    }
+    // turn off the "on" switches
+    if (settings.theOnSwitches) {
+        settings.theOnSwitches.each { theSwitch ->
+            String cs = theSwitch.currentSwitch
+            if (settings.reversePreserve) {    	
+                String dni = theSwitch.device.deviceNetworkId as String
+                if (priorState && priorState[dni]) priorState[dni].each { ->
+                    if ((it.action == 'on') && (it.type == 'switch')) {
+                        String sw = it.value
+                        if (cs != sw) {
+                            theSwitch."${sw}()"
+                            LOG("Returning ${theSwitch.displayName} to prior state (${sw})",2,null,'info')
+                        } else {
+                            LOG("${theSwitch.displayName} is already ${sw}",2,null,'info')
+                        }
+                    }
+                }
+            } else {
+                if (cs != 'off') { 
+                    LOG("Turning off ${theSwitch.displayName}",2,null,'info')
+                    theSwitch.off() 
+                } else {
+                    LOG("${theSwitch.displayName} was already off",2,null,'info')
+                }
+            }
+        }
     }
 }
 
@@ -379,8 +583,30 @@ def pauseOff() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-	if ((logType != 'debug') || (!settings.debugOff)) log."${logType}" message
+    if (logType == 'debug') {
+    	if (!settings?.debugOff) log.debug message
+    } else if (logType == 'info') {
+    	if (!settings?.infoOff) log.info message
+    } else log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
+}
+
+String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
+String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
+String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
+String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return isHE ? "<div style='color:red'><b>WARNING: </b></div>"	: "WARNING: " }
+String getFormat(type, myText=""){
+	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
+	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
