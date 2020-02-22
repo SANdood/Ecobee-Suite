@@ -1,7 +1,7 @@
 /**
  *  ecobee Suite Smart Vents
  *
- *  Copyright 2017 Barry A. Burke
+ *  Copyright 2017-2020 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -41,24 +41,26 @@
  *	1.7.30 - Fixed undefined "excluded" mode/climate vent setting
  *	1.7.31 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum()		{ return "1.8.00e" }
+String getVersionNum()		{ return "1.8.01" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
 definition(
-	name: 			"ecobee Suite Smart Vents",
-	namespace: 		"sandood",
-	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description:	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled vents to meet a target temperature in a room.",
-	category: 		"Convenience",
-	parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
-	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
-    iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
-	singleInstance: false,
-    pausable: 		true
+	name: 				"ecobee Suite Smart Vents",
+	namespace: 			"sandood",
+	author: 			"Barry A. Burke (storageanarchy at gmail dot com)",
+	description:		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled vents to meet a target temperature in a room.",
+	category: 			"Convenience",
+	parent: 			"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#features-smart-vents-sa",
+	singleInstance: 	false,
+    pausable: 			true
 )
 
 preferences {
@@ -330,8 +332,8 @@ def mainPage() {
 			}
         }
         section( title: sectionTitle("Operations")) {
-			input(name: "minimize", type: "bool", title: inputTitle("Minimize the settings UI?"), defaultValue: false, submitOnChange: true, width: 3)
-            input(name: "tempDisable", title: inputTitle("Pause this Helper?"), type: "bool", description: "", defaultValue: false, submitOnChange: true, width: 3)
+			input(name: "minimize", type: "bool", title: inputTitle("Minimize settings text"), defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "tempDisable", title: inputTitle("Pause this Helper"), type: "bool", defaultValue: false, submitOnChange: true, width: 3)
             if (settings.tempDisable) {
                 if (settings.theEconetVents || settings.theHCEcoVents || settings.theKeenVents || settings.theHCKeenVents || settings.theGenericVents || settings.theGenericSwitches) {
                     input(name: 'disabledVents', type: 'enum', title: inputTitle('Paused vent state'), options:['open': 'open/on','closed': 'closed/off','percentage': 'percentage','unchanged': 'unchanged'], 
@@ -341,8 +343,8 @@ def mainPage() {
                     } else if (HE) paragraph("", width: 3)
                 }
             }
-			input(name: "debugOff", title: 	inputTitle("Disable debug logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-            input(name: "infoOff", title: 	inputTitle("Disable info logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+			input(name: "debugOff", title: 	inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", title: 	inputTitle("Disable info logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
         }         
 		// Standard footer
         if (ST) {
