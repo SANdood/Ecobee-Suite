@@ -2,7 +2,7 @@
  *  Ecobee Sensor
  *
  *  Copyright 2015 Juan Risso
- *	Copyright 2017-2018 Barry A. Burke
+ *	Copyright 2017-2020 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -30,8 +30,9 @@
  *	1.7.11 - New updateSensorPrograms - add/remove multiple programs atomically
  *	1.7.12 - Added (hidden) ***Updated timestamps (so Apps can detect changes)
  *	1.8.00 - Release number synchronization
+ *	1.8.01 - General Release
  */
-String getVersionNum() 		{ return "1.8.00a" }
+String getVersionNum() 		{ return "1.8.01" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 import groovy.json.*
