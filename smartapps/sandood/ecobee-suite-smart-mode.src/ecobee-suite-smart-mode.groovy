@@ -1,7 +1,7 @@
 /**
  *  Ecobee Suite Smart Mode
  *
- *  Copyright 2018 Justin Leonard, Barry A. Burke
+ *  Copyright 2018-2020 Justin Leonard, Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -31,8 +31,9 @@
  *	1.7.27 - Added reservation serializer for setpoint changes (program.climates)
  *	1.7.28 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum()		{ return "1.8.00a" }
+String getVersionNum()		{ return "1.8.01" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -47,6 +48,7 @@ definition(
 	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
     iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
     importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#smart-mode-sa",
 	singleInstance: false,
     pausable: 		true
 )
@@ -417,10 +419,10 @@ def mainPage() {
 			}
         }
         section(title: sectionTitle("Operations")) {
-        	input(name: "minimize", 	title: inputTitle("Minimize the settings UI?"), type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper?"), 		type: "bool", required: false, description: "", 	submitOnChange: true, width: 3)                
-			input(name: "debugOff",	 	title: inputTitle("Disable debug logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-            input(name: "infoOff", 		title: inputTitle("Disable info logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+        	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
         if (ST) {
