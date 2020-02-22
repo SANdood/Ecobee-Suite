@@ -1,7 +1,7 @@
 /**
  *  Ecobee Suite Thermal Comfort
  *
- *  Copyright 2018 Barry A. Burke
+ *  Copyright 2018-2020 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -24,24 +24,31 @@
  *	1.7.18 - Added notification customization and cleaned up notifier choices
  *	1.7.19 - Don't enforce heal/cooling setpoint rules if thermostat not configured for Auto Mode
  *	1.7.20 - Fixed helper labelling
+ *	1.7.21 - Fixed labels (again), added infoOff, cleaned up preferences setup
+ *	1.7.22 - Added reservation serializer for setpoint changes (program.climates)
+ *	1.7.23 - Added minimize UI
+ *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum() { return "1.7.20" }
-String getVersionLabel() { return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum()		{ return "1.8.01" }
+String getVersionLabel() 	{ return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 import groovy.json.*
 
 definition(
-	name: 			"ecobee Suite Thermal Comfort",
-	namespace: 		"sandood",
-	author: 		"Barry A. Burke and Richard Peng",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets Ecobee Temperature based on relative humidity using PMV.",
-	category: 		"Convenience",
-	parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
-	singleInstance:	false,
-    pausable: 		true
+	name: 				"ecobee Suite Thermal Comfort",
+	namespace: 			"sandood",
+	author: 			"Barry A. Burke and Richard Peng",
+	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSets Ecobee Temperature Setpoints based on relative humidity using PMV.",
+	category: 			"Convenience",
+	parent: 			"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#features-thermal-comfort",
+	singleInstance:		false,
+    pausable: 			true
 )
 
 preferences {
@@ -53,7 +60,8 @@ def mainPage() {
     def unit = getTemperatureScale()
 	boolean ST = isST
 	boolean HE = !ST
-	
+    boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
+    
     def coolPmvOptions = [
 			(-1.0): 'Very cool (-1.0)',
 			(-0.5): 'Cool (-0.5)',
@@ -96,23 +104,41 @@ def mainPage() {
             8.7: 'Winter weight duvet [7.7-8.7] (8.7)',
             'custom': 'Custom'
     ]
-	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
-    	section(title: "") {
-        	String defaultName = "Thermal Comfort"
-			String defaultLabel = atomicState?.appDisplayName ?: defaultName
-			String oldName = app.label
-			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
-			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
-				app.updateLabel(thisName)
-				atomicState.appDisplayName = thisName
-			} else if (!app.label) {
+    String defaultName = "Thermal Comfort"
+	
+	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV").capitalize()), uninstall: true, install: true) {
+    	if (maximize) {
+    		section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
+                if (ST) {
+                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
+                } else {
+                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
+                }
+                paragraph("This Helper dynamically adjusts the heating and/or cooling setpoints of Ecobee Suite Thermostats based on the concept of Thermal Comfort (see https://en.wikipedia.org/wiki/Thermal_comfort). "+
+                          "Using the Predicted Mean Vote (PMV) algorithm, Thermal Comfort setpoints will changed based entirely on the observed relative humidity and your selected activity and clothing levels. You may want to create different "+
+                          "instances for different seasons and/or activities.\n\n"+
+                          "The Helper's dynamic configuration calculator enables you to see the resultant setpoint based upon your PMV inputs in real time.")
+            }
+        }
+		section(title: sectionTitle("Naming${!settings.tempDisable?' & Thermostat Selection':''}")) {
+			String defaultLabel
+			if (!atomicState?.appDisplayName) {
+				defaultLabel = defaultName
+				app.updateLabel(defaultName)
+				atomicState?.appDisplayName = defaultName
+			} else {
+				defaultLabel = atomicState.appDisplayName
+			}
+			label(title: inputTitle("Name for this ${defaultName} Helper"), required: false, submitOnChange: true, defaultValue: defaultLabel, width: 6)
+            if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
-			}
-			updateMyLabel()
+			} else {
+            	atomicState.appDisplayName = app.label
+            }
 			if (HE) {
 				if (app.label.contains('<span ')) {
-					if (atomicState?.appDisplayName != null) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
 						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
@@ -124,7 +150,7 @@ def mainPage() {
                 }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	if (atomicState?.appDisplayName != null) {
+                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
                         String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
@@ -135,25 +161,24 @@ def mainPage() {
                 	atomicState.appDisplayName = app.label
                 }
             }
-            updateMyLabel()
-        	if (settings.tempDisable == true) {
-            	paragraph "WARNING: Temporarily Paused - re-enable below."
-            } else {
-        		input(name: 'theThermostat', type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Ecobee Thermostat", 
+        	if(settings.tempDisable) { 
+				paragraph warningText + "Temporarily Paused; Resume below" 
+			} else {
+        		input(name: 'theThermostat', type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select an Ecobee Suite Thermostat"), 
                 	  required: true, multiple: false, submitOnChange: true)
 			}
 			paragraph ''
         }
         if (!settings?.tempDisable && settings?.theThermostat) {
-            section(title: (HE?'<b>':'') + "Sensors" + (HE?'</b>':'')) {
+        	section(title: sectionTitle("Configuration") + (ST ? "\n" : '') + smallerTitle("Sensors")) {
 				if (settings?.humidistat) {
-                	input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensor?", 
-                	  	  required: true, multiple: false, submitOnChange: true)
+                	input(name: 'humidistat', type: 'capability.relativeHumidityMeasurement', title: "Select a Humidity Sensor", 
+                	  	  required: true, multiple: false, submitOnChange: true, width: 4)
                     atomicState.humidity = settings.humidistat.currentHumidity
 					paragraph "The current temperature at ${theThermostat.displayName} is ${theThermostat.currentTemperature}°${unit} and the relative humidity is ${atomicState.humidity}%"
 				} else {
-					input(name: 'humidistats', type: 'capability.relativeHumidityMeasurement', title: "Which Relative Humidity Sensors?", 
-                		  required: true, multiple: true, submitOnChange: true)
+					input(name: 'humidistats', type: 'capability.relativeHumidityMeasurement', title: "Select Humidity Sensors", 
+                		  required: true, multiple: true, submitOnChange: true, width: 4)
 					boolean multiHumid = false
 					if (settings.humidistats) {
 						if (settings.humidistats.size() == 1) {
@@ -161,149 +186,240 @@ def mainPage() {
 						} else {
 							multiHumid = true
 							input(name: 'multiHumidType', type: 'enum', options: ['average', 'highest', 'lowest'], title: 'Multiple Humidity Sensors, use:',
-								  required: true, multiple: false, defaultValue: 'average', submitOnChange: true)
+								  required: true, multiple: false, defaultValue: 'average', submitOnChange: true, width: 4)
 							atomicState.humidity = getMultiHumidistats()
 						}
 					}
 					if (atomicState.humidity != null) paragraph "The current temperature at ${theThermostat.displayName} is ${theThermostat.currentTemperature}°${unit} and the ${multiHumid?(settings.multiHumidType+' '):''}relative humidity reading is ${atomicState.humidity}%" 
 				}
-				paragraph ''
             }
 			
-			section(title: (HE?'<b>':'') + "Cool Comfort Settings" + (HE?'</b>':'')) {
-       			input(name: "coolPmv", title: "PMV in cool mode${((settings?.coolPmv!=null) && coolConfigured()) ? ' ('+calculateCoolSetpoint()+'°'+unit+')':' ()'}", 
-                	  type: 'enum', options: coolPmvOptions, required: !settings.heatPmv, submitOnChange: true)
-                if (settings.coolPmv=='custom') {
-                    input(name: "coolPmvCustom", title: "Custom cool mode PMV (decimal)", type: 'decimal', range: "-5..*", required: true, submitOnChange: true )
-                }
-                input(name: "coolMet", title: "Metabolic rate", type: 'enum', options: metOptions, required: (settings.coolPMV), submitOnChange: true, defaultValue: 1.1 )
-                if (settings.coolMet=='custom') {
-                    input(name: "coolMetCustom", title: "Custom cool mode Metabolic rate (decimal)", type: 'decimal', range: "0..*", required: true, submitOnChange: true )
-                }
-                input(name: "coolClo", title: "Clothing level", type: 'enum', options: cloOptions, required: (settings.coolPMV), submitOnChange: true, defaultValue: 0.6 )
-                if (settings.coolClo=='custom') {
-                    input(name: "coolCloCustom", title: "Custom cool mode Clothing level (decimal)", type: 'decimal', range: "0..*", required: true, submitOnChange: true )
-                }
-				paragraph ''
+			section(title: smallerTitle("Cool Comfort Settings")) {
+				if (HE) {
+					// First row
+					input(name: "coolPmv", title: inputTitle("PMV${((settings?.coolPmv!=null) && coolConfigured()) ? ' ('+calculateCoolSetpoint()+'°'+unit+')':' ()'}"), 
+						  type: 'enum', options: coolPmvOptions, required: !settings.heatPmv, submitOnChange: true, width: 4)
+					input(name: "coolMet", title: inputTitle("Metabolic Rate"), type: 'enum', options: metOptions, required: (settings.coolPMV), submitOnChange: true, defaultValue: 1.1, width: 4 )
+					input(name: "coolClo", title: inputTitle("Clothing Level"), type: 'enum', options: cloOptions, required: (settings.coolPMV), submitOnChange: true, defaultValue: 0.6, width: 4 )
+
+					// Second row
+					if (settings.coolPmv=='custom') {
+						input(name: "coolPmvCustom", title: inputTitle("Custom PMV")+"<br>(decimal between -5.0 and 5.0)", type: 'decimal', range: "-5..5", required: true, submitOnChange: true, width: 4 )
+					} else if ((settings?.coolMet == 'custom') || (settings?.coolClo == 'custom')) paragraph("",width:4)
+					if (settings.coolMet=='custom') {
+						input(name: "coolMetCustom", title: inputTitle("Custom Metabolic Rate")+"<br>(decimal 0-10.0)", type: 'decimal', range: "0..10", required: true, submitOnChange: true, width: 4 )
+					} else if ((settings?.coolPmv == 'custom') || (settings?.coolClo == 'custom')) paragraph("",width:4)
+					if (settings.coolClo=='custom') {
+						input(name: "coolCloCustom", title: inputTitle("Custom Clothing Level")+"<br>(decimal 0-10.0)", type: 'decimal', range: "0..10", required: true, submitOnChange: true, width: 4 )
+					} else if ((settings?.coolPmv == 'custom') || (settings?.coolMet == 'custom')) paragraph("",width:4)
+					
+					// Third row
+					if ((settings?.coolPmv == 'custom') && (settings?.coolPmvCustom != null) && ((settings.coolPmvCustom < -5.0) || ((settings.coolPmvCustom > 5.0)))){
+						paragraph("Value must be -5.0 to 5.0",width:4) 
+					} else if (HE) paragraph("",width:4)
+					if ((settings?.coolMet == 'custom') && (settings?.coolMetCustom != null) && ((settings.coolMetCustom < 0.0) || ((settings.coolMetCustom > 10.0)))){
+						paragraph("Value must be 0.0 to 10.0",width:4) 
+					} else if (HE) paragraph("",width:4)
+					if ((settings?.coolClo == 'custom') && (settings?.coolCloCustom != null) && ((settings.coolCloCustom < 0.0) || ((settings.coolCloCustom > 10.0)))){
+						paragraph("Value must be 0.0 to 10.0",width:4) 
+					} else if (HE) paragraph("",width:4)
+				} else {
+					input(name: "coolPmv", title: "Cooling PMV${((settings?.coolPmv!=null) && coolConfigured()) ? ' ('+calculateCoolSetpoint()+'°'+unit+')':' ()'}", 
+						  type: 'enum', options: coolPmvOptions, required: !settings.heatPmv, submitOnChange: true)
+					if (settings.coolPmv=='custom') {
+						input(name: "coolPmvCustom", title: inputTitle("Custom Cooling PMV (decimal -5.0 to +5.0)"), type: 'decimal', range: "-5..5", required: true, submitOnChange: true )
+					}
+					input(name: "coolMet", title: inputTitle("Cooling Metabolic Rate"), type: 'enum', options: metOptions, required: (settings.coolPMV), submitOnChange: true, defaultValue: 1.1 )
+					if (settings.coolMet=='custom') {
+						input(name: "coolMetCustom", title: inputTitle("Custom Cooling Metabolic Rate (decimal 0 to 10.0)"), type: 'decimal', range: "0..10", required: true, submitOnChange: true )
+					}
+					input(name: "coolClo", title: inputTitle("Cooling Clothing Level"), type: 'enum', options: cloOptions, required: (settings.coolPMV), submitOnChange: true, defaultValue: 0.6 )
+					if (settings.coolClo=='custom') {
+						input(name: "coolCloCustom", title: inputTitle("Custom Cooling Clothing Level (decimal 0 to 10.0)"), type: 'decimal', range: "0..10", required: true, submitOnChange: true )
+					}
+				}
 			}
 			
-            section(title: (HE?'<b>':'') + "Heat Comfort Settings" + (HE?'</b>':'')) {
-                input(name: "heatPmv", title: "PMV in heat mode${((settings.heatPmv!=null) && heatConfigured()) ? ' ('+calculateHeatSetpoint()+'°'+unit+')' : '()'}", 
-					  type: 'enum', options: heatPmvOptions, required: !settings.coolPmv, submitOnChange: true)
-                if (settings.heatPmv=='custom') {
-                    input(name: "heatPmvCustom", title: "Custom heat mode PMV (decimal)", type: 'decimal', range: "*..5", required: true, submitOnChange: true )
-                }
-                input(name: "heatMet", title: "Metabolic rate", type: 'enum', options: metOptions, required: (settings.heatPMV), submitOnChange: true, defaultValue: 1.1 )
-                if (settings.heatMet=='custom') {
-                    input(name: "heatMetCustom", title: "Custom heat mode Metabolic rate (decimal)", type: 'decimal', range: "0..*", required: true, submitOnChange: true )
-                }
-                input(name: "heatClo", title: "Clothing level", type: 'enum', options: cloOptions, required: (settings.heatPMV), submitOnChange: true, defaultValue: 1.0 )
-                if (settings.heatClo=='custom') {
-                    input(name: "heatCloCustom", title: "Custom heat mode Clothing level (decimal)", type: 'decimal', range: "0..*", required: true, submitOnChange: true )
-                }
-				paragraph ''
+            section(title: smallerTitle("Heat Comfort Settings")) {
+				if (HE) {
+					// First row
+					input(name: "heatPmv", title: inputTitle("PMV${((settings?.heatPmv!=null) && heatConfigured()) ? ' ('+calculateHeatSetpoint()+'°'+unit+')':' ()'}"), 
+						  type: 'enum', options: heatPmvOptions, required: !settings.coolPmv, submitOnChange: true, width: 4)
+					input(name: "heatMet", title: inputTitle("Metabolic Rate"), type: 'enum', options: metOptions, required: (settings.heatPMV), submitOnChange: true, defaultValue: 1.1, width: 4 )
+					input(name: "heatClo", title: inputTitle("Clothing Level"), type: 'enum', options: cloOptions, required: (settings.heatPMV), submitOnChange: true, defaultValue: 0.6, width: 4 )
+
+					// Second row
+					if (settings.heatPmv=='custom') {
+						input(name: "heatPmvCustom", title: inputTitle("Custom PMV")+"<br>(decimal between -5.0 and 5.0)", type: 'decimal', range: "-5..5", required: true, submitOnChange: true, width: 4 )
+					} else if ((settings?.heatMet == 'custom') || (settings?.heatClo == 'custom')) paragraph("",width:4)
+					if (settings.heatMet=='custom') {
+						input(name: "heatMetCustom", title: inputTitle("Custom Metabolic Rate")+"<br>(decimal 0-10.0)", type: 'decimal', range: "0..10", required: true, submitOnChange: true, width: 4 )
+					} else if ((settings?.heatPmv == 'custom') || (settings?.heatClo == 'custom')) paragraph("",width:4)
+					if (settings.heatClo=='custom') {
+						input(name: "heatCloCustom", title: inputTitle("Custom Clothing Level")+"<br>(decimal 0-10.0)", type: 'decimal', range: "0..10", required: true, submitOnChange: true, width: 4 )
+					} else if ((settings?.heatPmv == 'custom') || (settings?.heatMet == 'custom')) paragraph("",width:4)
+					
+					// Third row
+					if ((settings?.heatPmv == 'custom') && (settings?.heatPmvCustom != null) && ((settings.heatPmvCustom < -5.0) || ((settings.heatPmvCustom > 5.0)))){
+						paragraph("Value must be -5.0 to 5.0",width:4) 
+					} else if (HE) paragraph("",width:4)
+					if ((settings?.heatMet == 'custom') && (settings?.heatMetCustom != null) && ((settings.heatMetCustom < 0.0) || ((settings.heatMetCustom > 10.0)))){
+						paragraph("Value must be 0.0 to 10.0",width:4) 
+					} else if (HE) paragraph("",width:4)
+					if ((settings?.heatClo == 'custom') && (settings?.heatCloCustom != null) && ((settings.heatCloCustom < 0.0) || ((settings.heatCloCustom > 10.0)))){
+						paragraph("Value must be 0.0 to 10.0",width:4) 
+					} else if (HE) paragraph("",width:4)					
+				} else {
+					input(name: "heatPmv", title: inputTitle("Heating PMV${((settings.heatPmv!=null) && heatConfigured()) ? ' ('+calculateHeatSetpoint()+'°'+unit+')' : '()'}"), 
+						  type: 'enum', options: heatPmvOptions, required: !settings.coolPmv, submitOnChange: true)
+					if (settings.heatPmv=='custom') {
+						input(name: "heatPmvCustom", title: inputTitle("Custom Heating PMV (decimal -5.0 to +5.0)"), type: 'decimal', range: "-5..5", required: true, submitOnChange: true )
+					}
+					input(name: "heatMet", title: inputTitle("Metabolic Rate"), type: 'enum', options: metOptions, required: (settings.heatPMV), submitOnChange: true, defaultValue: 1.1 )
+					if (settings.heatMet=='custom') {
+						input(name: "heatMetCustom", title: inputTitle("Custom Heating Metabolic Rate (decimal 0 to 10.0)"), type: 'decimal', range: "0..10", required: true, submitOnChange: true )
+					}
+					input(name: "heatClo", title: inputTitle("Clothing level"), type: 'enum', options: cloOptions, required: (settings.heatPMV), submitOnChange: true, defaultValue: 1.0 )
+					if (settings.heatClo=='custom') {
+						input(name: "heatCloCustom", title: inputTitle("Custom Heating Clothing Level (decimal 0 to 10.0)"), type: 'decimal', range: "0..10", required: true, submitOnChange: true )
+					}
+				}
             }
 			
-			section(title: (HE?'<b>':'') + "Enable only for specific thermostat modes and/or programs? (optional)" + (HE?'</b>':'')) {
-        		// paragraph("Thermostat Modes will only be changed while ${location.name} is in these SmartThings Modes.")
-                input(name: "statModes", type: "enum", title: "When ${settings.theThermostat!=null?settings.theThermostat:'the thermostat'}'s Mode is", 
-                	  multiple: true, required: false, options: getThermostatModesList(), submitOnChange: true)
-                input(name: "thePrograms", type: "enum", title: "When ${settings.theThermostat!=null?settings.theThermostat:'the thermostat'}'s Program is", 
-                	  multiple: true, required: false, options: getProgramsList(), submitOnChange: true)
-                if (settings.statModes && settings.thePrograms) {
-                	input(name: "enable", type: "enum", title: "Require Both or Either condition?", options: ['and':'Both (AND)', 'or':'Either (OR)'], required: true, 
-                    	  defaultValue: 'or', multiple: false)
-                }
-				paragraph ''
-        	}
+			section(title: sectionTitle("Conditions")+"${ST?': ':''}"+smallerTitle("Modes & Programs")) {
+			//section(title: smallerTitle("Modes & Programs")) {
+				boolean multiple = false
+				if (maximize) paragraph "By default, Thermal Comfort adjusts the setpoint any time that the indoor temperature or humidity changes"
+				input(name: "theModes", type: "mode", title: inputTitle("Adjust when ${location.name}'s Location Mode is"), multiple: true, required: false, submitOnChange: true, width: 4)
+                input(name: "statModes", type: "enum", title: inputTitle("Adjust when the ${settings?.theThermostat?:'thermostat'}'s Operating Mode is"), 
+					  multiple: true, required: false, submitOnChange: true, options: getThermostatModes(), width: 4)
+				def programOptions = getThermostatPrograms() + ['Vacation']
+            	input(name: "thePrograms", type: "enum", title: inputTitle("Adjust when the ${settings.theThermostat?:'thermostat'}'s Program is"), 
+					  multiple: true, required: false, submitOnChange: true, options: programOptions, width: 4)
+				boolean any = (settings?.theModes || settings?.statModes || settings?.thePrograms)
+				if ((settings.theModes && settings.statModes) || (settings.statModes && settings.thePrograms) || (settings.thePrograms && settings.theModes)) {
+					multiple = true
+					input(name: 'needAll', type: 'bool', title: inputTitle('Require ALL conditions to be met?'), required: true, defaultValue: false, submitOnChange: true)
+				}
+				if (any) {
+					if (!multiple) {
+						if (maximize) paragraph("Thermal Comfort will only adjust the setpoint when the above condition is met")
+					} else {
+						if (maximize) paragraph("Thermal Comfort will ${settings.needAll?'only ':''}adjust the setpoint when ${settings.needAll?'ALL':'ANY'} of the above conditions are met")	 
+					}
+				} else {
+					if (maximize) paragraph "Thermal Comfort will adjust the setpoint whenever the indoor temperature or humidity changes"
+				}
+            }
 			
-            if (ST) {
-           		section (title: "Notifications" ) {
-					input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
-					paragraph "A notification is always sent to the Hello Home log whenever setpoints are adjusted\n"
+			if (ST) {
+				section("Notifications") {
+					input(name: "notify", type: "bool", title: inputTitle("Notify on setpoint adjustments?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
 					if (settings.notify) {
-                        input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, required: true, submitOnChange: true)
-                        input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, description: "Select notification devices", 
-                              required: (!settings.pushNotify && (settings.phone == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
-                              submitOnChange: true, hideWhenEmpty: true)
-                        input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
-                              required: (!settings.pushNotify && (settings.notifiers == null) && (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))),
-                              submitOnChange: true)
-                        input(name: "speak", type: "bool", title: "Spoken Notifications?", required: true, defaultValue: false, submitOnChange: true, hideWhenEmpty: (!"speechDevices" && !"musicDevices"))
-                        if (settings.speak) {
-                            input(name: "speechDevices", type: "capability.speechSynthesis", title: "Using these speech devices", multiple: true, 
-                                  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.musicDevices == null)), 
-                                  submitOnChange: true, hideWhenEmpty: true)
-                            input(name: "musicDevices", type: "capability.musicPlayer", title: "Using these music devices", multiple: true, 
-                                  required: (!settings.pushNotify && (settings.notifiers == null) && (settings.phone == null) && (settings.speechDevices == null)), 
-                                  submitOnChange: true, hideWhenEmpty: true)
-                            if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: false)
-                        }
-                        if (!settings.phone && !settings.pushNotify && !settings.speechDevices && !settings.musicDevices && !settings.notifiers) paragraph "WARNING: Notifications configured, but nowhere to send them!\n"
+						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, 
+							  required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
+						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
+							  required: ((settings.phone == null) && !settings.speak && !settings.pushNotify), multiple: true, submitOnChange: true)
+						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
+							  required: (!settings.pushNotify && !settings.notifiers && !settings.speak), submitOnChange: true)
+					}
+				}
+				if (settings.notify) {
+					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "") {
+						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", 
+								  multiple: true, hideWhenEmpty: true, submitOnChange: true)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", 
+								  multiple: true, hideWhenEmpty: true, submitOnChange: true)
+							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+						}
+					}
+				}
+                if (maximize) {
+					section() {
+						paragraph ( "A notification is always sent to the Hello Home log whenever an action is taken")
 					}
                 }
-            } else {		// HE
-                section (title: "<b>Notifications</b>") {
-					input(name: 'notify', type: 'bool', title: "Notify on Setpoint Adjustments?", required: false, defaultValue: false, submitOnChange: true)
-					paragraph "A 'Hello Home' notification is always sent to the Location Event log whenever setpoints are adjusted\n" 
+			} else {		// HE
+				section(sectionTitle("Notifications")) {
+					input(name: "notify", type: "bool", title: inputTitle("Notify on setpoint adjustments?"), required: true, defaultValue: false, submitOnChange: true, width: 8)
 					if (settings.notify) {
-						input(name: "notifiers", type: "capability.notification", title: "Send Notifications to these devices", multiple: true, submitOnChange: true,
-                              required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
-						paragraph ""
-						section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), "<b>Use Speech Device(s)</b>") {
-							input(name: "speak", type: "bool", title: "Speak messages?", required: !settings?.notifiers, defaultValue: false, submitOnChange: true)
-							if (settings.speak) {
-								input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "Using these speech devices", 
-                                	  multiple: true, submitOnChange: true)
-								input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "Using these music devices", 
-                                	  multiple: true, submitOnChange: true)
-								input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-							}
-						}
-                    }
+						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true,
+						  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+					}
 				}
+				if (settings.notify) {
+					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "") {
+						input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
+						if (settings.speak) {
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select speech devices"), 
+								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select music devices"), 
+								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+							input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
+						}
+					}
+				}
+                if (maximize) {
+					section("A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken"	){}
+                }
 			}
             if (settings?.notify && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
 				section() {
-					href name: "customNotifications", title: (HE?'<b>':'') + "Customize Notifications" + (HE?'</b>':''), page: "customNotifications", 
+					href name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
 						 description: "Customize notification messages", state: isCustomized()
 				}
             }
         }
-        section(title: (HE?'<b>':'') + "Temporarily Paused" + (HE?'</b>':'')) {
-        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)
+        section(title: sectionTitle("Operations")) {
+        	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+		}       
+		// Standard footer
+        if (ST) {
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+        } else {
+        	section() {
+        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+            }
 		}
-		section(title: "") {
-			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
-		}
-    	section (getVersionLabel()) {}
     }
 }
 def customNotifications(){
 	boolean ST = isST
 	boolean HE = !ST
-	dynamicPage(name: "customNotifications", uninstall: false, install: false) {
-		section((HE?'<b>':'') + "Custom Notifications" + (HE?'</b>':'')) {
-			input(name: "customPrefix", type: "enum", title: "Prefix text:", defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
-				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
+	pageLabel = pageLabel.take(pageLabel.indexOf(','))
+	dynamicPage(name: "customNotifications", title: pageTitle("${pageLabel}\nCustom Notifications"), uninstall: false, install: false) {
+		section(sectionTitle("Customizations")) {}
+        section(smallerTitle("Notification Prefix")) {
+			input(name: "customPrefix", type: "enum", title: inputTitle("Prefix text:"), defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
+				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false, width: 4)
 			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
 			if (settings.customPrefix == 'custom') {
-				input(name: "customPrefixText", type: "text", title: "Custom Prefix text", defaultValue: "", required: true, submitOnChange: true)
-			}      
-			input(name: "customTstat", type: "enum", title: "Refer to the HVAC system as", defaultValue: "(thermostat name)", options:
-				  ['the HVAC system', '(thermostat name)', 'custom'], submitOnChange: true, multiple: false)
+				input(name: "customPrefixText", type: "text", title: inputTitle("Custom Prefix text"), defaultValue: "", required: true, submitOnChange: true, width: 4)
+			}
+            if (HE) paragraph("", width:8)
+    	}
+        section(smallerTitle("Thermostat")) {
+			input(name: "customTstat", type: "enum", title: inputTitle("Refer to the HVAC system as"), defaultValue: "(thermostat name)", options:
+				  ['the HVAC system', '(thermostat name)', 'custom'], submitOnChange: true, multiple: false, width: 4)
 			if (settings?.customTstat == 'custom') {
-				input(name: "customTstatText", type: "text", title: "Custom HVAC system text", defaultValue: "", required: true, submitOnChange: true)
+				input(name: "customTstatText", type: "text", title: inputTitle("Custom HVAC system text"), defaultValue: "", required: true, submitOnChange: true, width: 4)
 			} 
 			if (settings?.customTstat == null) { app.updateSetting('customTstat', '(thermostat name)'); settings.customTstat = '(thermostat name)'; }
 			if (settings?.customTstat == '(thermostat name)') {
-				input(name: "tstatCleaners", type: 'enum', title: "Strip these words from the Thermostat's display name (${theThermostat.displayName})", multiple: true, required: false,
-					  submitOnChange: true, options: ['EcobeeTherm', 'EcoTherm', 'Thermostat', 'Ecobee'])
-				input(name: "tstatPrefix", type: 'enum', title: "Add this prefix to the Thermostat's display name", multiple: false, required: false,
-					  submitOnChange: true, options: ['the', 'Ecobee', 'Thermostat', 'Ecobee Thermostat', 'the Ecobee', 'the Ecobee Thermostat', 'the Thermostat']) 
+            	if (HE) paragraph("",width:8)
+				input(name: "tstatCleaners", type: 'enum', title: inputTitle("Strip these words from the Thermostat's display name (${theThermostat.displayName})"), multiple: true, required: false,
+					  submitOnChange: true, options: ['EcobeeTherm', 'EcoTherm', 'Thermostat', 'Ecobee'], width: 4)
+				input(name: "tstatPrefix", type: 'enum', title: inputTitle("Add this prefix to the Thermostat's display name"), multiple: false, required: false,
+					  submitOnChange: true, options: ['the', 'Ecobee', 'Thermostat', 'Ecobee Thermostat', 'the Ecobee', 'the Ecobee Thermostat', 'the Thermostat'], width: 4) 
 			}
-
-			paragraph "${HE?'<b><i>':''}Sample notification message:${HE?'</i></b>':''}"
+        }
+        section(title: sampleTitle("Sample Notification Message"), hideable: true, hidden: false) {
 			String thePrefix = getMsgPrefix()
 			String theTstat = getMsgTstat()
             String unit = getTemperatureScale()
@@ -334,19 +450,15 @@ void updated() {
     atomicState.because = " because ${app.label} was reinitialized"
     initialize()
 }
-def getProgramsList() {
-	def programs = ["Away","Home","Sleep"]
-	if (theThermostat) {
-    	def pl = theThermostat.currentValue('programsList')
-        if (pl) programs = new JsonSlurper().parseText(pl)
-    }
-    return programs.sort(false)
+def getThermostatPrograms() {
+    def cl = settings?.theThermostat?.currentValue('climatesList')
+    return (cl ? ((cl == '[]') ? ['Away', 'Home', 'Sleep'] : cl[1..-2].tokenize(', ').sort(false)) : ['Away', 'Home', 'Sleep'])
 }
-def getThermostatModesList() {
+def getThermostatModes() {
     def statModes = ["heat","cool","auto","auxHeatOnly"]
     if (settings.theThermostat) {
-        def tempModes = theThermostat.currentValue('supportedThermostatModes')
-        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
+        def tm = theThermostat.currentValue('supportedThermostatModes')
+        if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
     }
     return statModes.sort(false)
 }
@@ -453,7 +565,8 @@ void humidityUpdate( Integer humidity ) {
     	LOG("ignoring invalid humidity: ${humidity}%", 2, null, 'warn')
         return
     }
-	def ST = atomicState.isST
+	boolean ST = isST
+    
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
 	String statHold = ST ? settings.theThermostat.currentValue('thermostatHold') : settings.theThermostat.currentValue('thermostatHold', true)
@@ -522,7 +635,8 @@ void humidityUpdate( Integer humidity ) {
 
 void changeSetpoints( program, heatTemp, coolTemp ) {
 	def unit = getTemperatureScale()
-	boolean ST = atomicState.isST
+	boolean ST = isST
+    
 	String currentProgram 	= ST ? settings.theThermostat.currentValue('currentProgram') : settings.theThermostat.currentValue('currentProgram', true)
     if (program != currentProgram) {
     	LOG("Request to change program ${program}, bit that is not the current program (${currentProgram}) - ignoring request",2,null,'warn')
@@ -595,14 +709,26 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
     def currentCoolSetpoint = roundIt(((ST ? settings.theThermostat.currentValue('coolingSetpoint') : settings.theThermostat.currentValue('coolingSetpoint', true)) as BigDecimal), 2)
     
     if ((currentHeatSetpoint != heatTemp) || (currentCoolSetpoint != coolTemp)) {
-        	LOG("Changing setpoints for (${program}): ${heatTemp} / ${coolTemp} ${fixed?'('+fixed.toString()+'ingSetpoint was delta adjusted)':''}",2,null,debug)
-			theThermostat.setProgramSetpoints( program, heatTemp.toString(), coolTemp.toString())
-            
-        	atomicState.lastHeatSetpoint = heatTemp
-    		atomicState.lastCoolSetpoint = coolTemp
-    		atomicState.lastProgram = program
-    		atomicState.lastMode = currentMode
-    		atomicState.lastFixed = fixed
+        LOG("Changing setpoints for (${program}): ${heatTemp} / ${coolTemp} ${fixed?'('+fixed.toString()+'ingSetpoint was delta adjusted)':''}",2,null,debug)
+        //theThermostat.setProgramSetpoints( program, heatTemp.toString(), coolTemp.toString())
+    	String tid = theThermostat.currentValue("identifier").toString()
+        boolean anyReserved = anyReservations( tid, 'programChange' )		// need to make sure nobody changes the program Map out from beneath us
+        if (!anyReserved || haveReservation( tid, 'programChange' )) {
+        	// Nobody has a reservation, or the reservation is mine
+        	if (!anyReserved) makeReservation(tid, 'programChange')
+			makeSetpointChange(theThermostat, program, heatTemp, coolTemp)
+        } else {
+        	// somebody else has a reservation - we have to wait
+            atomicState.pendedUpdates = [program: program, heat: heatTemp, cool: coolTemp]
+            subscribe(stat, 'climatesUpdated', programWaitHandler)
+            //LOG("Delayed: Sensor ${sensor.displayName} will be added to ${settings.theClimates.toString()[1..-2]} and removed from ${notPrograms.toString()[1..-2]} when pending changes complete",2,null,'info')
+        }
+
+        atomicState.lastHeatSetpoint = heatTemp
+        atomicState.lastCoolSetpoint = coolTemp
+        atomicState.lastProgram = program
+        atomicState.lastMode = currentMode
+        atomicState.lastFixed = fixed
     } else {
        	LOG("The ${fixed?'delta adjusted':'requested'} Thermal Comfort setpoints are the same as the current setpoints, ignoring request...",2,null,'info')
         return
@@ -755,14 +881,14 @@ def calculateCoolSetpoint() {
 }
 
 def getHeatRange() {
-	boolean ST = atomicState.isST
+	boolean ST = isST
     def low  = ST ? settings.theThermostat.currentValue('heatRangeLow')  : settings.theThermostat.currentValue('heatRangeLow', true)
     def high = ST ? settings.theThermostat.currentValue('heatRangeHigh') : settings.theThermostat.currentValue('heatRangeHigh', true)
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
 def getCoolRange() {
-	boolean ST = atomicState.isST
+	boolean ST = isST
     def low  = ST ? settings.theThermostat.currentValue('coolRangeLow')  : settings.theThermostat.currentValue('coolRangeLow', true)
     def high = ST ? settings.theThermostat.currentValue('coolRangeHigh') : settings.theThermostat.currentValue('coolRangeHigh', true)
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
@@ -940,8 +1066,116 @@ void sendMessage(notificationMessage) {
 	}
 }
 
+def programUpdateHandler(evt) {
+	// Clear our reservation once we know that the Ecobee Cloud has updated our thermostat's setpoints (climates)
+    cancelReservation(evt.device.currentValue('identifier') as String, 'programChange')
+    unschedule(clearReservation)
+    unsubscribe(evt.device)
+    if (!settings?.tempDisable) {
+    	subscribe(evt.device, 'temperature', insideChangeHandler)
+        subscribe(evt.device, 'thermostatMode', thermostatModeHandler)
+    }
+	LOG("programUpdateHandler(): Setpoint change operation completed",4,null,'debug')
+}
+def programWaitHandler(evt) {
+	//LOG("climatesWaitHandler(): $evt.name = $evt.value",4,null,'debug')
+    unsubscribe(evt.device)
+    if (!settings?.tempDisable) {
+    	subscribe(evt.device, 'temperature', insideChangeHandler)
+        subscribe(evt.device, 'thermostatMode', thermostatModeHandler)
+    }
+    String tid = evt.device.currentValue('identifier') as String
+    def count = countReservations(tid, 'programChange')
+    if ((count > 0) && !haveReservation( tid, 'programChange' )) {
+    	atomicState.programWaitCounter = 0
+    	runIn(5, checkReservations, [overwrite: true, data: [tid:tid, type:'programChange']])
+        LOG("programWaitHandler(): There are still ${count} reservations for 'programChange', waiting...", 3, null, 'debug')
+    } else {
+    	makeReservation(tid, 'programChange')
+        LOG("programWaitHandler(): 'programChange' reservation secured, sending pended updates", 3, null, 'debug')
+    	doPendedUpdates(tid)
+    }
+}
+void checkReservations(data) {
+    def count = countReservations(data.tid, data.type)
+    def counter = atomicState.programWaitCounter
+	if ((count > 0) && !haveReservation(data.tid, data.type)  && (counter <= 60)) {	// Try for five minutes...
+    	// Need to wait longer
+        runIn(5, checkReservations, [overwrite: true, data: [tid: (data.tid), type: (data.type)]])
+        counter++
+        atomicState.programWaitCounter = counter
+        if ((counter % 12) == 0) runIn(2, doRefresh, [overwrite: true])	// force a refresh every minute if we don't get updated
+        LOG("checkReservations(): There are still ${count} reservations for 'programChange', waiting...", 3, null, 'debug')
+    } else {
+    	makeReservation(data.tid, data.type)
+    	atomicState.programWaitCounter = 0
+        LOG("checkReservation()(): 'programChange' reservation secured, sending pended updates", 3, null, 'debug')
+        doPendedUpdates()
+    }
+}
+void doRefresh() {
+	settings?.theThermostat?.doRefresh(true) // do a forced refresh
+}
+void clearReservation() {
+    String tid = settings?.theThermostat?.currentValue("identifier").toString()
+    cancelReservation(tid, 'programChange')
+}
+void doPendedUpdates(tid) {
+	LOG("doPendedUpdates() @ ${now()}: ${atomicState.pendedUpdates}",4,null,'debug')
+    def updates = atomicState.pendedUpdates
+    
+    if (needSetpointChange( stat, updates.program, updates.heat, updates.cool )) {
+		makeSetpointChange( stat, updates.program, updates.heat, updates.cool )
+    } else {
+        // Nothing to do - release the reservation now
+        cancelReservation(tid, 'programChange')
+    }
+    atomicState.pendedUpdates = [:] 	
+}
+def makeSetpointChange( stat, program, heat, cool ) {
+    subscribe( stat, 'climatesUpdated', programUpdateHandler )
+    stat.setProgramSetpoints( program, heat, cool )
+    runIn(150, clearReservation, [overwrite: true])
+    // programUpdateHandler will release the reservation for us
+}
+boolean needSetpointChange(stat, program, heat, cool) {             
+    // def tid = stat.currentValue('identifier') as String
+    // need to figure out how to tell if we actually need to make changes
+    def cProgram = isST ? stat.currentValue('currentProgram') : stat.currentProgram('currentProgram', true)
+    return (cProgram == program) // just make sure we are changing the current program
+}
+// Reservation Management Functions - Now implemented in Ecobee Suite Manager
+void makeReservation(String tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id as String, type )
+}
+// Cancel my reservation
+void cancelReservation(String tid, String type='modeOff') {
+	//log.debug "cancel ${tid}, ${type}"
+	parent.cancelReservation( tid, app.id as String, type )
+}
+// Do I have a reservation?
+boolean haveReservation(String tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id as String, type )
+}
+// Do any Apps have reservations?
+boolean anyReservations(String tid, String type='modeOff') {
+	return parent.anyReservations( tid, type )
+}
+// How many apps have reservations?
+Integer countReservations(String tid, String type='modeOff') {
+	return parent.countReservations( tid, type )
+}
+// Get the list of app IDs that have reservations
+List getReservations(String tid, String type='modeOff') {
+	return parent.getReservations( tid, type )
+}
+// Get the list of app Names that have reservations
+List getGuestList(String tid, String type='modeOff') {
+	return parent.getGuestList( tid, type )
+}
+
 void updateMyLabel() {
-	boolean ST = atomicState.isST
+	boolean ST = isST
     
 	String flag = ST ? ' (paused)' : '<span '
 	
@@ -993,9 +1227,32 @@ def pauseOff() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+    if (logType == 'debug') {
+    	if (!settings?.debugOff) log.debug message
+    } else if (logType == 'info') {
+    	if (!settings?.infoOff) log.info message
+    } else log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
+
+String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
+String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
+String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
+String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return isHE ? "<div style='color:red'><b>WARNING: </b></div>"	: "WARNING: " }
+String getFormat(type, myText=""){
+	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+	if(type == "header-nobee") 	return "<div style='width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
+	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+}
+
 // SmartThings/Hubitat Portability Library (SHPL)
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
