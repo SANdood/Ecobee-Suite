@@ -1,7 +1,7 @@
 /**
  *  ecobee Suite Smart Zones
  *
- *  Copyright 2017 Barry A. Burke
+ *  Copyright 2017-2020 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -20,22 +20,28 @@
  *	1.7.04 - Optimized isST/isHE, formatting, added Global Pause
  *	1.7.05 - Added option to disable local display of log.debug() logs
  *	1.7.06 - Fixed helper labelling
+ *	1.7.07 - Fixed labels (again), added infoOff, cleaned up preferences setup
+ *	1.7.08 - Added minimze UI
+ *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum() { return "1.7.06" }
+String getVersionNum()		{ return "1.8.01" }
 String getVersionLabel() { return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
-	name: 			"ecobee Suite Smart Zones",
-	namespace: 		"sandood",
-	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSynchronizes ecobee recirculation fan between two zones",
-	category: 		"Convenience",
-	parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
-	iconX2Url: 		"https://s3.amazonaws.com/smartapp-icons/Partner/ecobee@2x.png",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
-	singleInstance:	false,
-    pausable: 		true
+	name: 				"ecobee Suite Smart Zones",
+	namespace: 			"sandood",
+	author: 			"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSynchronizes ecobee recirculation fan between two zones",
+	category: 			"Convenience",
+	parent: 			"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#features-smart-zone-sa",
+	singleInstance:		false,
+    pausable: 			true
 )
 
 preferences {
@@ -46,24 +52,40 @@ preferences {
 def mainPage() {
 	boolean ST = isST
 	boolean HE = !ST
-	
-	dynamicPage(name: "mainPage", title: (HE?'<b>':'') + "${getVersionLabel()}" + (HE?'</b>':''), uninstall: true, install: true) {
-    	section(title: "") {
-        	String defaultName = "Smart Zones"
-			String defaultLabel = atomicState?.appDisplayName ?: defaultName
-			String oldName = app.label
-			input "thisName", "text", title: "Name for this ${defaultName} Helper", submitOnChange: true, defaultValue: defaultLabel
-			if ((!oldName && settings.thisName) || (oldName && settings.thisName && (settings.thisName != oldName))) {
-				app.updateLabel(thisName)
-				atomicState.appDisplayName = thisName
-			} else if (!app.label) {
+    boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
+	String defaultName = "Smart Zones"
+    
+	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
+    	if (maximize) {
+            section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
+                if (ST) {
+                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
+                } else {
+                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
+                }
+                paragraph("This Helper will synchronize Ecobee Suite thermostats' Operating State across a multi-zone HVAC system to run the fan simultaneously in all zones, minimizing the fan's total operating time.")
+            }
+        }
+        
+		section(title: sectionTitle("Naming${!settings.tempDisable?' & Thermostat Selection':''}")) {
+			String defaultLabel
+			if (!atomicState?.appDisplayName) {
+				defaultLabel = defaultName
+				app.updateLabel(defaultName)
+				atomicState?.appDisplayName = defaultName
+			} else {
+				defaultLabel = atomicState.appDisplayName
+			}
+			label(title: inputTitle("Name for this ${defaultName} Helper"), required: false, submitOnChange: true, defaultValue: defaultLabel, width: 6)
+            if (!app.label) {
 				app.updateLabel(defaultLabel)
 				atomicState.appDisplayName = defaultLabel
-			}
-			updateMyLabel()
+			} else {
+            	atomicState.appDisplayName = app.label
+            }
 			if (HE) {
 				if (app.label.contains('<span ')) {
-					if (atomicState?.appDisplayName != null) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
 						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
@@ -75,7 +97,7 @@ def mainPage() {
                 }
 			} else {
             	if (app.label.contains(' (paused)')) {
-                	if (atomicState?.appDisplayName != null) {
+                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
                         String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
@@ -86,39 +108,47 @@ def mainPage() {
                 	atomicState.appDisplayName = app.label
                 }
             }
-            updateMyLabel()
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused - re-enable below."
+				paragraph warningText + "Temporarily Paused; Resume below" 
 			} else {
-				input ("masterThermostat", "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)
+				input ("masterThermostat", "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select Master Ecobee Suite Thermostat", required: true, multiple: false, submitOnChange: true)
 			}            
 		}
         
         if (!settings?.tempDisable && settings?.masterThermostat) {
-			section(title: (HE?'<b>':'') + "Select Slave Thermostats" + (HE?'</b>':'')) {
+        	section(title: sectionTitle('Configuration')+(ST?"\n":'')+smallerTitle("Select Slave Thermostats")) {
 				// Settings option for using Mode or Routine
-				input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", required: true, multiple: true, submitOnChange: true)
+				input(name: "slaveThermostats", title: inputTitle("Select Slave Ecobee Suite Thermostat(s)"), type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", required: true, multiple: true, submitOnChange: true)
 			}
 			if (slaveThermostats) {
-				section(title: (HE?'<b>':'') + "Slave Thermostat Actions" + (HE?'</b>':'')) {
-					input(name: 'shareHeat', title: "Share ${masterThermostat.displayName} heating?", type: "bool", required: true, defaultValue: false, submitOnChange: true)
-					input(name: 'shareCool', title: "Share ${masterThermostat.displayName} cooling?", type: "bool", required: true, defaultValue: false, submitOnChange: true)
+				section(title: sectionTitle("Actions")) {
+					input(name: 'shareHeat', title: inputTitle("Share ${masterThermostat.displayName} heating?"), type: "bool", required: true, defaultValue: false, submitOnChange: true, width: 4)
+					input(name: 'shareCool', title: inputTitle("Share ${masterThermostat.displayName} cooling?"), type: "bool", required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (!settings.shareHeat && !settings.shareCool && !settings.shareFan) {
-						input(name: 'shareFan',  title: "Share ${masterThermostat.displayName} fan only?", type: "bool", required: true, defaultValue: true, submitOnChange: true)
+						input(name: 'shareFan',  title: inputTitle("Share ${masterThermostat.displayName} fan only?"), type: "bool", required: true, defaultValue: true, submitOnChange: true, width: 4)
+                        if (settings.shareFan == null) { app.updateSetting('shareFan', true); settings.shareFan = true; }
 					} else {
-						input(name: 'shareFan',  title: "Share ${masterThermostat.displayName} fan only?", type: "bool", required: true, /*defaultValue: true,*/ submitOnChange: true)
+						input(name: 'shareFan',  title: inputTitle("Share ${masterThermostat.displayName} fan only?"), type: "bool", required: true, /*defaultValue: true,*/ submitOnChange: true, width: 4)
 					}
 				}
 			}
 		}
         
-		section(title: (HE?'<b>':'') + "Temporarily Disable?" + (HE?'</b>':'')) {
-        	input(name: "tempDisable", title: "Pause this Helper?", type: "bool", required: false, description: "", submitOnChange: true)                
-        }
-		section(title: "") {
-			input(name: "debugOff", title: "Disable debug logging? ", type: "bool", required: false, defaultValue: false, submitOnChange: true)
-		}        
-        section (getVersionLabel()) {}
+        section(title: sectionTitle("Operations")) {
+        	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+		}       
+		// Standard footer
+        if (ST) {
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+        } else {
+        	section() {
+        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+            }
+		}
     }
 }
 
@@ -436,9 +466,32 @@ def pauseOff() {
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
-    log."${logType}" message
+    if (logType == 'debug') {
+    	if (!settings?.debugOff) log.debug message
+    } else if (logType == 'info') {
+    	if (!settings?.infoOff) log.info message
+    } else log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
+
+String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
+String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
+String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
+String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return isHE ? "<div style='color:red'><b>WARNING: </b></div>"	: "WARNING: " }
+String getFormat(type, myText=""){
+	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
+	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+}
+
 // SmartThings/Hubitat Portability Library (SHPL)
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
