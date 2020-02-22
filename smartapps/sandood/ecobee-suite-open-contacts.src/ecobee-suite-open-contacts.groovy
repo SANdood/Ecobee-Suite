@@ -125,7 +125,7 @@ def mainPage() {
                 }
             }
         	if (settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused; Resume below" 
+				paragraph warningText + "Temporarily Paused; Resume below" 
 			} else { 
 				if (settings.theThermostats || !settings.myThermostats) {
 					input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
@@ -156,6 +156,11 @@ def mainPage() {
                 }
         	}
 			section(title: sectionTitle("Actions")) {
+								
+                input(name: "whichAction", title: inputTitle("Select which Actions to run")+" (Default=Notify Only)", type: "enum", required: true, 
+                      options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
+                if (settings?.whichAction == null) { app.updateSetting('whichAction', 'Notify Only'); settings?.whichAction = 'Notify Only'; }
+				
 				if (!settings.hvacOff && !settings.adjustSetpoints) {
             		if (maximize) paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle Actions by turning on Quiet Time from this Helper instead of running HVAC Actions directly. '+
 							  'The Quiet Time Helper also offers additional control options (e.g.; fan/circulation off, dehumidifier off, etc.).')
@@ -171,9 +176,9 @@ def mainPage() {
 					}
                 } 
 				if (!settings.quietTime && !settings.adjustSetpoints) {
-                	input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: true, submitOnChange: true, width: 4)
+                	input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					//if (HE) paragraph("", width: 6)
-                	if ((settings.hvacOff == null) || settings.hvacOff) {
+                	if ((settings?.hvacOff != null) && settings.hvacOff) {
                     	if (maximize) paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. " +
 								  "Use the Quiet Time Helper for additional control options.\n\n"+
                                   'Note that no Actions will be run if the HVAC Mode was already Off when the first contact sensor or switch would have turned it ' +
@@ -194,10 +199,6 @@ def mainPage() {
 					input(name: "onDelay", title: inputTitle("Select the Delay Time before turning ${settings?.quietTime?'off Quiet Time':'the HVAC back on'} or Sending Notifications")+" (minutes)", type: "enum", required: true, 
                     	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0', width: 6)
 	        	}
-				
-                input(name: "whichAction", title: inputTitle("Select which Actions to run")+" (Default=Notify Only)", type: "enum", required: true, 
-                      options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true)
-                if (settings?.whichAction == null) { app.updateSetting('whichAction', 'Notify Only'); settings?.whichAction = 'Notify Only'; }
             }
             if (ST) {
                 section("Notifications") {
@@ -247,9 +248,7 @@ def mainPage() {
                     }
                 }
                 if (maximize)  {
-                	section(){
-                    	paragraph "A 'HelloHome' notification is always sent to the Location Event log whenever an action is triggered"		
-                	}
+                	section("A 'HelloHome' notification is always sent to the Location Event log whenever an action is triggered") {}
                 }
             }
             if (settings?.whichAction?.startsWith('Notify') && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
@@ -1426,6 +1425,7 @@ String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3>
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return isHE ? "<div style='color:red'><b>WARNING: </b></div>"	: "WARNING: " }
 String getFormat(type, myText=""){
 	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
 	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
