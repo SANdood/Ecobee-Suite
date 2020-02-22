@@ -180,6 +180,8 @@ The most significant changes in the latest release include:
   * **Disable debug logging** 	- stops all "debug" log output ("warn", "error" and "trace" cannot be disabled
   * **Disable info logging** - stops all "info" log output
 
+Also on Hubitat (only), each of the Applications now has a direct hot-link to the relevant section of this document, accessible via the Question Mark icon in the top-right corner of the application settings page (requires Hubitat version 2.1.9.* or later).
+
 - ***New inter-Helper coordination of Program (Schedule/Climate/Comfort Setting) Updates:*** Enables multiple Helper instances to safely update shared common data structures within Ecobee Suite Manager. Before this, if two different Helpers wanted to change the Setpoints of a Program (even different Programs) at the same time, the second one could overwrite changes made by the first one. This new coordination, which is based on the internal Reservations system, ensures that the second change is delayed until the first one has been fully received and effected by the Ecobee cloud *and* the Ecobee thermostat itself. 
 With this release, Smart Mode, Smart Room, Smart Vents and Thermal Comfort all utilize this mechanism; more will be added as required.
 
