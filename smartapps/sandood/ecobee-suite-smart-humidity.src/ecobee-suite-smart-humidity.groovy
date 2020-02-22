@@ -29,25 +29,27 @@
  *	1.7.06 - Added dewpoint-based adjustments for internal temp (default values are for 70.0°F)
  *	1.7.07 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
+ *	1.8.01 - General Release
  */
-String getVersionNum()		{ return "1.8.00a" }
+String getVersionNum()		{ return "1.8.01" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Humidity Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 //String getVersionLabel() 	{ return "Universal Ecobee Suite\nVersion ${getVersionNum()}" }
 import groovy.json.*
 
 definition(
-	name: 			"ecobee Suite Smart Humidity",
-	namespace: 		"sandood",
-	author: 		"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAdjusts the Humidity Setpoint based on outdoor forecasted low temperatures and thermal efficiency.",
-	category: 		"Convenience",
-	parent: 		"sandood:Ecobee Suite Manager",
-	iconUrl:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
-	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
-    iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
-    importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy",
-	singleInstance: false,
-    pausable: 		true
+	name: 				"ecobee Suite Smart Humidity",
+	namespace: 			"sandood",
+	author: 			"Barry A. Burke (storageanarchy at gmail dot com)",
+	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAdjusts the Humidity Setpoint based on outdoor forecasted low temperatures and thermal efficiency.",
+	category: 			"Convenience",
+	parent: 			"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+    iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+    importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy",
+    documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
+	singleInstance: 	false,
+    pausable: 			true
 )
 
 preferences {
@@ -310,10 +312,10 @@ def mainPage() {
             }
 		}  
         section(title: sectionTitle("Operations")) {
-        	input(name: "minimize", 	title: inputTitle("Minimize the settings UI?"), type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper?"), 		type: "bool", required: false, description: "", 	submitOnChange: true, width: 3)                
-			input(name: "debugOff",	 	title: inputTitle("Disable debug logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
-            input(name: "infoOff", 		title: inputTitle("Disable info logging?"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+        	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+           	input(name: "tempDisable", 	title: inputTitle("Pause this Helper"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)                
+			input(name: "debugOff",	 	title: inputTitle("Disable debug logging"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
+            input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
         if (ST) {
@@ -760,4 +762,4 @@ boolean getIsHEHub() { return atomicState.isHE as boolean}					// if (isHEHub) .
 
 def getParentSetting(String settingName) {
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
-}  
+}
