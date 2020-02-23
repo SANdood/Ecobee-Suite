@@ -1,7 +1,7 @@
 {
     "exported": 2,
     "author": "Barry A. Burke",
-    "name": “Ecobee Suite HubConnect Custom Drivers”,
+    "name": "Ecobee Suite HubConnect Custom Drivers",
     "drivers": {
         "ESSensor": {
             "driver": "HubConnect Ecobee Suite Sensor",
@@ -32,7 +32,7 @@
                 "curClimRefUpdated",
                 "climatesUpdated",
                 "scheduleUpdated",
-                “eventsUpdated",
+                "eventsUpdated"
             ]
         },
         "ESThermostat": {
