@@ -20,7 +20,7 @@ String getVersionNum() 		{ return "1.8.00b" }
 String getVersionLabel() 	{ return "HubConnect Ecobee Suite Thermostat, version ${getVersionNum()}" }
 metadata 
 {
-	definition(name: "HubConnect Ecobee Suite Thermostat", namespace: "shackrat", author: "Steve White", importUrl: "https://raw.githubusercontent.com/HubitatCommunity/HubConnect/master/UniversalDrivers/HubConnect-Thermostat.groovy")
+	definition(name: "HubConnect Ecobee Suite Thermostat", namespace: "shackrat", author: "Barry Burke", importUrl: "https://raw.githubusercontent.com/HubitatCommunity/HubConnect/master/UniversalDrivers/HubConnect-Thermostat.groovy")
 	{
 		capability "Sensor"
 		capability "Thermostat"
