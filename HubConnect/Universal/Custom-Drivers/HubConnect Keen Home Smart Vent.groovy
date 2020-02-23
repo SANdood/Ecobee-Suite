@@ -296,4 +296,4 @@ def getTemperatureColors() {
         [value: 37, color: "#bc2323"]
     ]) )
 }
-def getDriverVersion() {[platform: "Universal-BAB", major: 1, minor: 7, build: 03]}
+def getDriverVersion() {[platform: "Universal-BAB", major: 1, minor: 8, build: '01']}
