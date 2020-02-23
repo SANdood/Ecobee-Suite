@@ -185,4 +185,4 @@ def sync()
 	parent.syncDevice(device.deviceNetworkId, "ESSensor")
 	sendEvent([name: "version", value: "v${driverVersion.major}.${driverVersion.minor}.${driverVersion.build}"])
 }
-def getDriverVersion() {[platform: "Hubitat", major: 1, minor: 8, build: "01"]}
+def getDriverVersion() {[platform: "Hubitat", major: 1, minor: 8, build: "01"]} 
