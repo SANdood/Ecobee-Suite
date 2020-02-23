@@ -50,8 +50,9 @@
  *	1.7.52 - Added managementSet support for EMS thermostats
  *	1.8.00 - Version synchronization, new Smart Humidity Helper, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - Fixed smartAuto settings bug
  */
-String getVersionNum()		{ return "1.8.01" }
+String getVersionNum()		{ return "1.8.02" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -540,7 +541,7 @@ def preferencesPage() {
 		section(title: smallerTitle("Smart Auto")) {
         	paragraph("The 'Smart Auto Temperature Adjust' feature determines if you want to allow the thermostat setpoint to be changed using the arrow buttons in the Tile when the thermostat is in 'auto' mode.")
 			input(name: "smartAuto", title:inputTitle("Use Smart Auto Temperature Adjust?"), type: "bool", required:false, defaultValue: false, description: "", width: 4)
-            if (settings?.smartAuto == null) { app.smartAuto('showThermsAsSensor', false); settings?.smartAuto = false; }
+            if (settings?.smartAuto == null) { app.updateSetting('smartAuto', false); settings?.smartAuto = false; }
 		}	 
 		section(title: smallerTitle("Polling Interval")) {
         	paragraph("How frequently do you want to poll the Ecobee cloud for changes? For maximum responsiveness to commands, it is recommended to set this to 1 minute.")
