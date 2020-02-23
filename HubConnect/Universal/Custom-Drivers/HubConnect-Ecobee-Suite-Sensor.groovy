@@ -19,7 +19,8 @@ import groovy.json.*
 	
 metadata 
 {
-	definition(name: "HubConnect Ecobee Suite Sensor", namespace: "shackrat", author: "Steve White", importUrl: "https://raw.githubusercontent.com/HubitatCommunity/HubConnect/master/UniversalDrivers/HubConnect-Thermostat.groovy")
+	definition(name: "HubConnect Ecobee Suite Sensor", namespace: "shackrat", author: "Barry A. Burke", 
+			   importUrl: "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect-Ecobee-Suite-Sensor.groovy")
 	{
 		capability "Sensor"
 		capability "Temperature Measurement"
