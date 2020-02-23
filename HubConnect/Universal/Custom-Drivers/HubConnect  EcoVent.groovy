@@ -189,4 +189,4 @@ def sync()
 	parent.syncDevice(device.deviceNetworkId, "EcoVent")
 	sendEvent([name: "version", value: "v${driverVersion.major}.${driverVersion.minor}.${driverVersion.build}"])
 }
-def getDriverVersion() {[platform: "Universal-BAB", major: 1, minor: 7, build: 03]}
+def getDriverVersion() {[platform: "Universal-BAB", major: 1, minor: 8, build: "01"]}
