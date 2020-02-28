@@ -32,8 +32,9 @@
  *	1.7.17 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - Warning on Pause updated
  */
-String getVersionNum()	{ return "1.8.01" }
+String getVersionNum()	{ return "1.8.02" }
 String getVersionLabel() { return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -121,7 +122,7 @@ def mainPage() {
                 }
             }
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused; Resume below" 
+				paragraph getFormat("warning","This Helper is temporarily paused")
 			} else {
         		input (name: "myThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"),
                 	   required: true, multiple: true, submitOnChange: true)
@@ -902,11 +903,31 @@ String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3>
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
