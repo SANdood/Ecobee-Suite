@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.8.02",
+			"version": 	"1.8.03",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -51,7 +51,7 @@
 				"name": 	"ecobee Suite Routines",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.01",
+				"version": 	"1.8.02",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
 				"optional": 	false
@@ -66,7 +66,7 @@
 				"optional": 	false
 			},
 			{
-				"name": 	"ecobee Suite Smart Humidityt",
+				"name": 	"ecobee Suite Smart Humidity",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
 				"version": 	"1.8.01",
@@ -78,7 +78,7 @@
 				"name": 	"ecobee Suite Smart Mode",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.01",
+				"version": 	"1.8.02",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-mode.groovy",
 				"optional": 	false
@@ -105,7 +105,7 @@
 				"name": 	"ecobee Suite Smart Vents",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.01",
+				"version": 	"1.8.02",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 				"optional": 	false
@@ -132,7 +132,7 @@
 				"name": 	"ecobee Suite Working From Home",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.01",
+				"version": 	"1.8.02",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
 				"optional": 	false
