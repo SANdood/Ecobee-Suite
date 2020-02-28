@@ -32,8 +32,9 @@
  *	1.7.28 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - Fixed Mode selection error & updated WARNING formatting
  */
-String getVersionNum()		{ return "1.8.01" }
+String getVersionNum()		{ return "1.8.02" }
 String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
@@ -63,7 +64,7 @@ def mainPage() {
 	boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
 	String defaultName = "Smart Mode, Programs & Setpoints"
-    def thermostatModes = []
+    def statModes
     	
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
@@ -126,7 +127,7 @@ def mainPage() {
                 }
             }
             if (settings?.tempDisable) { 
-            	paragraph warningText + "Temporarily Paused; Resume below" 
+            	paragraph getFormat("warning","This Helper is temporarily paused...")
             } else {
 				input ("thermostats", "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), required: true, 
 					   multiple: true, submitOnChange: true)
@@ -134,7 +135,8 @@ def mainPage() {
 		}
         
         if (!settings?.tempDisable && (settings?.thermostats?.size()>0)) {
-        	thermostatModes = getThermostatModes()
+        	statModes = getThermostatModes()
+			log.debug "${statModes}"
 			section(title: sectionTitle("Configuration")+(ST?"\n":'')+smallerTitle("Outdoor Weather Source")) {
 				if (maximize) paragraph("Smart Mode requires access to external weather information (temperature and relative humidity). If you don't have a physical weather station of your own, "+
 						  "there are user-contributed weather drivers for many weather providers. If your provider isn't listed, choose '${ST?'SmartThings ':'Hubitat '} Sensors' and select your "+
@@ -230,7 +232,7 @@ def mainPage() {
                 		required: false, submitOnChange: true, width: 6)
 				if (settings.aboveTemp || settings.dewAboveTemp) {
 					input(name: 'aboveMode', title: inputTitle('Set thermostat Mode to'), type: 'enum', required: (!settings.aboveSetpoints && !settings.aboveSchedule), multiple: false, 
-						  options:thermostatModes, submitOnChange: true, width: 6)
+						  options:getThermostatModes(), submitOnChange: true, width: 6)
                     if (settings.aboveMode == 'off') {
                     	if (maximize) paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
                     }
@@ -256,7 +258,7 @@ def mainPage() {
 				if (HE) paragraph("", width: 6)
 				if (settings.belowTemp) {
 					input(name: 'belowMode', title: inputTitle('Set thermostat Mode to'), type: 'enum', required: (!settings.belowSetpoints && !settings.belowSchedule), multiple: false, 
-                    		options:thermostatModes, submitOnChange: true, width: 6)
+                    		options:statModes, submitOnChange: true, width: 6)
                     if (settings.belowMode == 'off') {
                     	if (maximize) paragraph "Note that Ecobee thermostats will still run fan circulation (if enabled) while the HVAC is in Off Mode"
                     }
@@ -287,7 +289,7 @@ def mainPage() {
 				//section(title: sectionTitle("Actions: Outdoor Temperature 'Between' Actions")) {}
 				section(title: smallerTitle("Outdoor Temperature 'Between'")) {
 					input(name: 'betweenMode', title: inputTitle("Set thermostat Mode to")+" (optional)", type: 'enum', 
-                    		required: false, multiple: false, options:thermostatModes, submitOnChange: true, width: 6)
+                    		required: false, multiple: false, options:statModes, submitOnChange: true, width: 6)
 					input(name: 'betweenSchedule', title: inputTitle('Set thermostat Program to')+' (optional)', type: 'enum', required: false, multiple: false, options:getThermostatPrograms(), width: 6)
             		input(name: 'betweenSetpoints', title: inputTitle('Change Program Setpoints'), type: 'bool', required: false, defaultValue: false, submitOnChange: true, width: 6) 
 					if (HE) paragraph("", width: 6)
@@ -318,7 +320,7 @@ def mainPage() {
 				}
 			}
             section(title:smallerTitle('Indoor Temperature')) {
-				if (thermostatModes.contains('cool')) { // && !settings.insideAuto) {
+				if (statModes.contains('cool')) { // && !settings.insideAuto) {
             		input(name: 'aboveCool', title: inputTitle('Set thermostat Mode to Cool if its Indoor Temperature is above its Cooling Setpoint')+' (optional)', type: 'bool', defaultValue: false, 
                           submitOnChange: true)
                     if (settings.aboveCool) {
@@ -326,7 +328,7 @@ def mainPage() {
                               " - This is just before the thermostat will demand Cool from the HVAC"
                     }
                 }
-				if (thermostatModes.contains('heat')) { // && !settings.insideAuto) {
+				if (statModes.contains('heat')) { // && !settings.insideAuto) {
                 	input(name: 'belowHeat', title: inputTitle('Set thermostat Mode to Heat if its Indoor Temperature is below its Heating Setpoint')+' (optional)', type: 'bool', defaultValue: false, 
                           submitOnChange: true)
                     if (settings.aboveCool) {
@@ -334,7 +336,7 @@ def mainPage() {
                               " - This is just before the thermostat will demand Heat from the HVAC"
                     }
                 }
-				if (thermostatModes.contains('auto')) { // && !(settings.aboveCool || settings.belowHeat)) {
+				if (statModes.contains('auto')) { // && !(settings.aboveCool || settings.belowHeat)) {
                 	input(name: 'insideAuto', title: inputTitle('Set thermostat Mode to Auto if its Indoor Temperature is between its Heating & Cooling Setpoints')+' (optional)', type: 'bool', defaultValue: false, 
                           submitOnChange: true)
                     if (settings.insideAuto) {
@@ -351,7 +353,7 @@ def mainPage() {
             	input(name: "theModes",type: "mode", title: inputTitle("Perform Actions only when the Location Mode is"), multiple: true, required: false, width: 6)
 				if (settings.theModes) {
 					input(name: 'doneMode', title: inputTitle("When the Location Mode is no longer valid, reset thermostat mode to")+" (optional)", type: 'enum', 
-                    		required: false, multiple: false, options:thermostatModes, submitOnChange: true)
+                    		required: false, multiple: false, options:statModes, submitOnChange: true)
 				}
 				//input(name: 'notify', type: 'bool', title: inputTitle("Notify on Activations?"), required: false, defaultValue: false, submitOnChange: true)
 				//paragraph HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
@@ -1914,12 +1916,31 @@ String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3>
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return isHE ? "<div style='color:red'><b>WARNING: </b></div>"	: "WARNING: " }
+String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
