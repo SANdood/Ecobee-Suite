@@ -51,8 +51,9 @@
  *	1.8.00 - Version synchronization, new Smart Humidity Helper, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - Fixed smartAuto settings bug
+ *	1.8.03 - Updated WARNING & NOTE: formatting
  */
-String getVersionNum()		{ return "1.8.02" }
+String getVersionNum()		{ return "1.8.03" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -178,7 +179,7 @@ def mainPage() {
 		
 		if(atomicState.initialized && !atomicState.authToken) {
 			section() {
-				paragraph "WARNING!\n\nYou are no longer connected to the ecobee API. Please re-Authorize below."				
+				paragraph(getFormat("warning", "You are no longer connected to the ecobee API. Please re-Authorize below."))
 			}
 		}		
 
@@ -278,7 +279,7 @@ def mainPage() {
 def removePage() {
 	dynamicPage(name: "removePage", title: pageTitle("Ecobee Suite Manager\nRemove Ecobee Suite Manager and its Children"), install: false, uninstall: true) {
 		section () {
-			paragraph("WARNING!\n\nRemoving Ecobee Suite Manager also removes all Helpers and Devices\n") 
+			paragraph(getFormat("warning", "Removing Ecobee Suite Manager also removes all Helpers and Devices!"))
 		}
 	}
 }
@@ -387,8 +388,8 @@ def thermsPage(params) {
             	  options: stats, submitOnChange: true, width: 6)		   
 		}
 		section(sectionTitle("Temperature Scale")) {
-        	paragraph("NOTE:\n\nThe temperature scale (Fahrenheit or Celsius) is determined by your ${getHubPlatform()} Location settings automatically. Please update your Hub settings " + 
-			"(under ${ST?'My Locations':'Settings/Location and Modes'}) to change the units used.\n\nThe current scale is °${temperatureScale}.")
+        	paragraph(getFormat("note","The temperature scale (Fahrenheit or Celsius) is determined by your ${getHubPlatform()} Location settings automatically. Please update your Hub settings " + 
+			"(under ${ST?'My Locations':'Settings/Location and Modes'}) to change the units used.\n\nThe current scale is °${temperatureScale}."))
 		}
 	}	   
 }
@@ -418,7 +419,7 @@ def sensorsPage() {
 					  options: options, width: 6, height: 2)
 			}
 			if (showThermsAsSensor) { 
-				section("NOTE: Thermostats are included as an available sensor to allow for actual temperature values to be used.") { }
+				paragraph(getFormat("note", "Thermostats are included as an available sensor to allow for actual temperature values to be used."))
 			}
 		} else {
 			 // No sensors associated with this set of Thermostats was found
@@ -683,7 +684,7 @@ def helperSmartAppsPage() {
 					atomicState.appsArePaused = false
 				}
 			}
-			if (HE)	 paragraph "NOTE: the '(paused)' status for the installed Helpers displayed below may not change until you refresh this page."
+			if (HE)	 paragraph(getFormat("note", "The '(paused)' status for the installed Helpers displayed below may not change until you refresh this page."))
 		}
 		// if (ST) section("Installed Helper SmartApps") {}
 		section(sectionTitle("Avalable Helper ${ST?'SmartApps':'Applications'}")) {
@@ -1205,8 +1206,6 @@ void updated() {
 	initialize()
 }
 
-
-
 def rebooted(evt) {
 	LOG("Hub rebooted, re-initializing", 1, null, 'debug')
 	initialize()
@@ -1635,33 +1634,6 @@ def sunsetEvent(evt) {
 	scheduleWatchdog(evt, true)
 }
 
-// Event on a monitored device (DEPRECATED)
-/*
-def userDefinedEvent(evt) {
-	if ( ((now() - atomicState.lastUserDefinedEvent) / 60000.0) < 0.5 ) { 
-		if (debugLevel(4)) LOG("userDefinedEvent() - time since last event is less than 30 seconds, ignoring.", 1, null, 'trace')
-		return 
-	}
-	
-	if (debugLevel(4)) LOG("userDefinedEvent() - with evt (Device:${evt?.displayName} ${evt?.name}:${evt?.value})", 1, null, "info")
-	
-	poll()
-	atomicState.lastUserDefinedEvent = now()
-	atomicState.lastUserDefinedEventDate = getTimestamp()
-	atomicState.lastUserDefinedEventInfo = "Event Info: (Device:${evt?.displayName} ${evt?.name}:${evt?.value})"
-	
-	def lastUserWatchdog = atomicState.lastUserWatchdogEvent
-	if (lastUserWatchdog) {
-		if ( ((now() - lastUserWatchdog) / 60000) < 3 ) {
-			// Don't bother running the watchdog on EVERY userDefinedEvent - that's really overkill.
-			if (debugLevel(4)) LOG('userDefinedEvent() - polled, but time since last watchdog is less than 3 minutes, exiting without performing additional actions', 4)
-			return
-		}
-	}
-	atomicState.lastUserWatchdogEvent = now()
-	scheduleWatchdog(evt, true)
-}
-*/
 boolean scheduleWatchdog(evt=null, local=false) {
 	boolean results = true	
 	if (debugLevel(4)) {
@@ -2072,27 +2044,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 							ttu = true
 						}
 						//log.debug "${tstat}: thermostat: ${ttu}, runtime: ${tru}, alerts: ${tau}"
-/*
-						// Check if the equipmentStatus changed but runtimeUpdated didn't
-						if (!tru) {
-							def equipStatus = (resp.data?.containsKey('statusList')) ? resp.data.statusList : null
-							if (equipStatus != null) {
-								def lastEquipStatus = atomicState.equipmentStatus
-								LOG("equipStatus: ${equipStatus}, lastEquipStatus: ${lastEquipStatus}, tid: ${tstat}", 2, null, 'trace')
-								equipStatus.each { status ->
-									if (!tru) {
-										def tList = status.split(':') as List
-										if (tList[0] == tstat) {
-											if (tList[1] == null) tList[1] = ''
-											LOG("${tstat}: New: '${tList[1]}', Old: '${lastEquipStatus[tstat]}'", 2, null, 'trace')
-											if (tList[1] != lastEquipStatus[tstat]) tru = true
-										}
-									}
-								}
-							}
-							if (tru) LOG("Equipment Status changed, runtime did not (${equipStatus})", 2, null, 'info')
-						}
-*/
+                        
 						// update global flags (we update the superset of changes for all requested tstats)
 						if (tru || tau || ttu) {
 							runtimeUpdated = (runtimeUpdated || tru)		// || atomicState.runtimeUpdated)
@@ -2247,7 +2199,7 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	// the rest of the time)
 	
 	// get equipmentStatus every time
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + checkTherms + '","includeEquipmentStatus":"true"'
+	String jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + checkTherms + '","includeEquipmentStatus":"true"'
 	String gw = '( equipmentStatus'
 	if (thermostatUpdated || forcePoll) {
 		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true","includeAudio":"true"'
@@ -6699,11 +6651,31 @@ String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3>
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
