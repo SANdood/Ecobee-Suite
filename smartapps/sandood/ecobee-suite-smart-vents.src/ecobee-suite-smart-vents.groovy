@@ -42,8 +42,9 @@
  *	1.7.31 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - Option to close vents when contact open and fan only; fixed too many ES sensors error when 0 ES sensors, fix Pause warning
  */
-String getVersionNum()		{ return "1.8.01" }
+String getVersionNum()		{ return "1.8.02" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -137,7 +138,7 @@ def mainPage() {
                 }
             }
             if (settings?.tempDisable) { 
-            	paragraph "WARNING: Temporarily Paused; Resume below" 
+            	paragraph getFormat("warning","This Helper is temporarily paused")
             } else {
             	if (maximize) paragraph("Select 1 or more temperature sensors, ideally at least 1 of which is an Ecobee Suite Sensor")
         		input(name: "theSensors", type:"capability.temperatureMeasurement", title: inputTitle("Select Temperature Sensor(s)"), required: true, multiple: true, submitOnChange: true)
@@ -182,6 +183,7 @@ def mainPage() {
             section(title: smallerTitle("Windows & Doors")) {
         		if (maximize) paragraph("Open Windows and Doors will temporarily deactivate (close) the vent${vc>1?'s':''}, except during 'Fan Only'")
             	input(name: "theWindows", type: "capability.contactSensor", title: inputTitle("Monitor these Window/Door contact sensor(s)?")+'(optional)', required: false, multiple: true)
+                input(name: "closeFanOnly", type: "bool", title: "Also close during Fan Only?", required: false, defaultValue: false, submitOnChange: true)
 			}
             section(title: smallerTitle("Thermostat")) {
 				if (maximize) paragraph("Specify which Ecobee Suite Thermostat to monitor for operating state, mode and setpoint change events")
@@ -220,12 +222,12 @@ def mainPage() {
 
 					if (settings.theSensors) {
 						def ecobeeSensors = []
-						settings.theSensors.each { 
+						settings?.theSensors.each { 
 							if (it.hasCommand('updateSensorPrograms')) {
 								ecobeeSensors << it
 							}
 						}
-						if (ecobeeSensors.size() == 1) {
+						if (ecobeeSensors?.size() == 1) {
 							if (settings.theClimates) input(name: "enrollClimates", type: 'bool', title: inputTitle("Automatically include sensor ${ecobeeSensors[0].displayName} in the above Programs?"),
 															defaulValue: true, submitOnChange: true, width: 12)     
 							if (settings.enrollClimates && settings.theClimates) {
@@ -238,7 +240,7 @@ def mainPage() {
 																"It will also be removed from ALL Programs when this Helper is Paused."
 							}
 						} else {
-							paragraph("You have selected more than 1 Ecobee Suite Sensor. At this time, this Helper only supports automatically enrolling a single sensor into Ecobee Programs.")
+							if (ecobeeSensors == []) paragraph("You have selected more than 1 Ecobee Suite Sensor. At this time, this Helper only supports automatically enrolling a single sensor into Ecobee Programs.")
 							app.updateSetting('enrollClimates', false)
 							settings.enrollClimates = false
 						}
@@ -690,13 +692,11 @@ boolean needClimateChange(sensor, List adds, List removes) {
     }
 	return updatesToDo
 }
-
 void changeHandler(evt) {
 	//log.debug "changeHandler(): ${evt.displayName} ${evt.name} ${evt.value}"
 	updateTheVents()
 	runIn( 2, checkAndSet, [overwrite: true])		// collapse multiple inter-related events into a single thread
 }
-
 void checkAndSet() {
 	if (!atomicState.version || (atomicState.version != getVersionLabel())) {
     	LOG('Helper version changed, re-initializing...',1,null,'info')
@@ -704,7 +704,6 @@ void checkAndSet() {
     }
 	setTheVents(checkTemperature())
 }
-
 String checkTemperature() {
 	boolean ST = isST
     
@@ -838,7 +837,7 @@ String checkTemperature() {
                 LOG("${theThermostat.displayName} is running 'Fan Only', room temperature is ${cTemp}°, vents-->${vents}${settings?.fanOnlyState == 'percentage'?'%':''}",3,null,'info')
             }
 		}    
-		if ((vents == 'open') && (settings.adjustAlways || (cOpState != 'fan only'))) { // let 'Fan Only' run even if windows are open || (vents.isNumber())) {
+		if ((vents == 'open') && (settings.adjustAlways || ((cOpState != 'fan only') || settings.closeFanOnly))) { // let 'Fan Only' run even if windows are open, unless overriden in settings (1.8.02)
         	if (settings.theWindows) {
             	boolean openWindows = ST ? settings.theWindows*.currentValue('contact').contains('open') : settings.theWindows*.currentValue('contact', true).contains('open')
                 if (openWindows) {
@@ -1302,11 +1301,31 @@ String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3>
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
