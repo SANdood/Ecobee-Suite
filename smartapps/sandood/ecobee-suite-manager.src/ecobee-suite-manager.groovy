@@ -52,8 +52,9 @@
  *	1.8.01 - General Release
  *	1.8.02 - Fixed smartAuto settings bug
  *	1.8.03 - Updated WARNING & NOTE: formatting
+ *	1.8.04 - Fix holdEndDate during transitions; supportedThermostatModes initialization loophole
  */
-String getVersionNum()		{ return "1.8.03" }
+String getVersionNum()		{ return "1.8.04" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -4119,6 +4120,7 @@ void updateThermostatData() {
                 // statusMsg = ((holdEndsAt == '') || (holdEndsAt == 'null')) ? 'null' : ((thermostatHold=='hold') ? 'Hold' : ((thermostatHold=='vacation') ? 'Vacation' : (thermostatHold=='demandResponse'?'Event')+" ends ${holdEndsAt}"
                 if ((holdEndsAt == '') || (holdEndsAt == 'null')) {
                     statusMsg = 'null'
+                    holdEndDate = 'null'
                 } else {
                     def statusStart
                     switch (thermostatHold) {
@@ -4341,25 +4343,25 @@ void updateThermostatData() {
                     def statHoldAction = statSettings?.holdAction			// thermsotat's preference setting for holdAction:
                                                                             // useEndTime4hour, useEndTime2hour, nextPeriod, indefinite, askMe
                     // if (changeNever[tid][0] != statMode)			{ data << [thermostatMode: statMode];			changeNever[tid][0] = statMode; nvrChanged = true; }
-                    if (changeNever[tid][1] != autoMode)		{ data << [autoMode: autoMode];					changeNever[tid][1] = autoMode; 				nvrChanged = true; }
-                    if (changeNever[tid][2] != statHoldAction)	{ data << [statHoldAction: statHoldAction];		changeNever[tid][2] = statHoldAction; 			nvrChanged = true; }
-                    if (changeNever[tid][3] != coolStages)		{ data << [coolStages: coolStages, 
-                                                                            coolMode: (coolStages > 0)];		changeNever[tid][3] = coolStages; 				nvrChanged = true; }
-                    if (changeNever[tid][4] != heatStages)		{ data << [heatStages: heatStages,
-                                                                            heatMode: (heatStages > 0)];		changeNever[tid][4] = heatStages; 				nvrChanged = true; }
-                    if (changeNever[tid][5] != heatRange)		{ data << [heatRange: heatRange,
-                                                                            heatRangeHigh: heatHigh,
-                                                                            heatRangeLow: heatLow];				changeNever[tid][5] = heatRange; 				nvrChanged = true; }
-                    if (changeNever[tid][6] != coolRange)		{ data << [coolRange: coolRange,
-                                                                            coolRangeHigh: coolHigh,
-                                                                            coolRangeLow: coolLow];				changeNever[tid][6] = coolRange; 				nvrChanged = true; }
-                    if (changeNever[tid][11] != tempHeatDiff)	{ data << [heatDifferential: tempHeatDiff];		changeNever[tid][11] = tempHeatDiff; 			nvrChanged = true; }
-                    if (changeNever[tid][12] != tempCoolDiff)	{ data << [coolDifferential: tempCoolDiff];		changeNever[tid][12] = tempCoolDiff;			nvrChanged = true; }
-                    if (changeNever[tid][13] != tempHeatCoolMinDelta){ data << [heatCoolMinDelta: tempHeatCoolMinDelta];
-                    																							changeNever[tid][13] = tempHeatCoolMinDelta; 	nvrChanged = true; }
-                    if (changeNever[tid][8] != auxHeatMode)		{ data << [auxHeatMode: auxHeatMode];			changeNever[tid][8] = auxHeatMode; 				nvrChanged = true; }
-                    if (changeNever[tid][9] != hasHumidifier)	{ data << [hasHumidifier: hasHumidifier];		changeNever[tid][9] = hasHumidifier; 			nvrChanged = true; }
-                    if (changeNever[tid][10] != hasDehumidifier){ data << [hasDehumidifier: hasDehumidifier];	changeNever[tid][10] = hasDehumidifier; 		nvrChanged = true;}
+                    if (forcePoll || (changeNever[tid][1] != autoMode))		{ data << [autoMode: autoMode];					changeNever[tid][1] = autoMode; 				nvrChanged = true; }
+                    if (changeNever[tid][2] != statHoldAction)				{ data << [statHoldAction: statHoldAction];		changeNever[tid][2] = statHoldAction; 			nvrChanged = true; }
+                    if (forcePoll || (changeNever[tid][3] != coolStages))	{ data << [coolStages: coolStages, 
+                                                                            		   coolMode: (coolStages > 0)];			changeNever[tid][3] = coolStages; 				nvrChanged = true; }
+                    if (forcePoll || (changeNever[tid][4] != heatStages))	{ data << [heatStages: heatStages,
+                                                                            		   heatMode: (heatStages > 0)];			changeNever[tid][4] = heatStages; 				nvrChanged = true; }
+                    if (changeNever[tid][5] != heatRange)					{ data << [heatRange: heatRange,
+                                                                            		   heatRangeHigh: heatHigh,
+                                                                            		   heatRangeLow: heatLow];				changeNever[tid][5] = heatRange; 				nvrChanged = true; }
+                    if (changeNever[tid][6] != coolRange)					{ data << [coolRange: coolRange,
+                                                                            		   coolRangeHigh: coolHigh,
+                                                                            		   coolRangeLow: coolLow];				changeNever[tid][6] = coolRange; 				nvrChanged = true; }
+                    if (changeNever[tid][11] != tempHeatDiff)				{ data << [heatDifferential: tempHeatDiff];		changeNever[tid][11] = tempHeatDiff; 			nvrChanged = true; }
+                    if (changeNever[tid][12] != tempCoolDiff)				{ data << [coolDifferential: tempCoolDiff];		changeNever[tid][12] = tempCoolDiff;			nvrChanged = true; }
+                    if (changeNever[tid][13] != tempHeatCoolMinDelta)		{ data << [heatCoolMinDelta: tempHeatCoolMinDelta];
+                    																										changeNever[tid][13] = tempHeatCoolMinDelta; 	nvrChanged = true; }
+                    if (forcePoll || (changeNever[tid][8] != auxHeatMode))	{ data << [auxHeatMode: auxHeatMode];			changeNever[tid][8] = auxHeatMode; 				nvrChanged = true; }
+                    if (changeNever[tid][9] != hasHumidifier)				{ data << [hasHumidifier: hasHumidifier];		changeNever[tid][9] = hasHumidifier; 			nvrChanged = true; }
+                    if (changeNever[tid][10] != hasDehumidifier)			{ data << [hasDehumidifier: hasDehumidifier];	changeNever[tid][10] = hasDehumidifier; 		nvrChanged = true;}
                 }
                 if (forcePoll || climatesUpdated) {
                     // REMINDER: updateSensorData is using atomicState.changeNever[tid][7] to send the programsList to the Sensor devices
