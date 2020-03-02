@@ -52,8 +52,9 @@
  *	1.7.39 - Added holdEndDate, schedule now uses this ('Hold: Home until 2020-02-14 18:30:00')
  *	1.8.00 - Release number sync-up
  *	1.8.01 - General Release
+ *	1.8.02 - Fix holdEndDate & schedule during transitions; supportedThermostatModes initialization loophole
  */
-String getVersionNum() 		{ return "1.8.01" }
+String getVersionNum() 		{ return "1.8.02" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -957,7 +958,7 @@ def generateEvent(Map results) {
 	if (precision == null) precision = isMetric ? 1 : 0
 	Integer objectsUpdated = 0
 	def supportedThermostatModes = []
-	if (state.supportedThermostatModes == null) {
+	if (state.supportedThermostatModes == null) {				// attribute updates will continuously update this if config changes
 		// Initialize for those that are updating the DTH with this version
 		supportedThermostatModes = ['off']
 		if (ST) {
@@ -1435,6 +1436,7 @@ def generateEvent(Map results) {
                             }
                         	sendEvent(name: 'holdEndsAt', value: '', displayed: false)	// belt and suspenders
                             sendEvent(name: 'holdStatus', value: '', displayed: false)
+							sendEvent(name: 'holdEndDate', value: '', displayed: false)
                             descText = 'Hold finished'
                         } else if (sendValue == 'hold') {
                         	String ncCp = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
@@ -1774,14 +1776,14 @@ def generateEvent(Map results) {
                     sendEvent(name: 'schedText', value: schedText, displayed: false)
                     if (schedText) schedText = ' ' + schedText
                     if (currentProgramName  && ((currentProgramName != '') && (currentProgramName != 'null'))) {
-                        sendEvent(name: 'schedule', value: currentProgramName + (schedText?:''), descriptionText: "Schedule is ${currentProgramName}${schedText?:''}", displayed: true)
+                        sendEvent(name: 'schedule', value: "${currentProgramName}${schedText}", descriptionText: "Schedule is ${currentProgramName}${schedText}", displayed: true)
                     }
                 	break;
 
 				case 'holdEndsAt':                    
                     if (isChange || forceChange) {
                     	String sendText = sendValue != 'null' ? sendValue : ''
-                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, displayed: false, isStateChange: true]
+                        if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: "", displayed: false, isStateChange: true]
                     }
 					break;
 
@@ -1871,16 +1873,17 @@ def generateEvent(Map results) {
 				case 'heatMode':
 				case 'coolMode':
 				case 'auxHeatMode':
-                	if (isChange) {
-                        def modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
+                	//if (isChange) {
+                        String modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
+                        boolean chg = false
                         if (sendValue == 'true') {
-                            if (!supportedThermostatModes.contains(modeValue)) supportedThermostatModes += modeValue
+                            if (!supportedThermostatModes.contains(modeValue)) { supportedThermostatModes += modeValue; chg = true; }
                         } else {
-                            if (supportedThermostatModes.contains(modeValue)) supportedThermostatModes -= modeValue
+                            if (supportedThermostatModes.contains(modeValue))  { supportedThermostatModes -= modeValue; chg = false; }
                         }
-                    	state.supportedThermostatModes = supportedThermostatModes.sort(false)
+                    	if (chg) state.supportedThermostatModes = supportedThermostatModes.sort(false)
                     	updateModeButtons()	//	This will actually disable any that were turned off (e.g., 'auto' / 'autoHeatCoolFeatureEnabled'
-                    }
+                   //}
                     
 				// Removed all the miscellaneous settings - they will thus appear in the device event list via 'default:' (May 10, 2019 - BAB)
 				// This *should* improve the efficiency of the 'switch', at least a little
@@ -2628,7 +2631,7 @@ void auto() {
 // Thermostat Program (aka Climates) Commands
 // Program/Climates CANNOT be changed while in Vacation mode
 // ***************************************************************************
-void setThermostatProgram(String program, String holdType=null, Integer holdHours=2) {
+void setThermostatProgram(String program, String holdType="", Integer holdHours=2) {
 	// N.B. if holdType is provided, it must be one of the valid parameters for the Ecobee setHold call (indefinite, nextTransition, holdHours). dateTime not currently supported
 	refresh()
 	boolean ST = state.isST
@@ -2662,13 +2665,14 @@ void setThermostatProgram(String program, String holdType=null, Integer holdHour
 		return
 	}
 
-	def sendHoldType = null
+	String sendHoldType = ""
 	def sendHoldHours = null
 	if (holdType && (holdType != "")) {
 		sendHoldType = holdType
 		if (holdType == 'holdHours') sendHoldHours = holdHours
 	} else {
 		sendHoldType =	whatHoldType()
+		//log.debug "sendHoldType: ${sendHoldType}"
 		if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
 			sendHoldHours = sendHoldType
 			sendHoldType = 'holdHours'
@@ -2732,7 +2736,6 @@ void setThermostatProgram(String program, String holdType=null, Integer holdHour
 		resumeProgramInternal(true)							// resumeAll before we change the program
 		needRefresh = false
 	}
-
 	if ( parent.setProgram(this, program, deviceId, sendHoldType, sendHoldHours) ) {
 		if (needRefresh) runIn(5, refresh, [overwrite: true])
 
@@ -2877,7 +2880,7 @@ def resumeProgramInternal(resumeAll=true) {
 	def deviceId = getDeviceId()
 	sendEvent(name: 'thermostatStatus', value: 'Resuming Scheduled Program', displayed: false, isStateChange: true)
 	if (parent.resumeProgram(this, deviceId, resumeAll)) {
-		def updates = [ holdStatus: 'null', thermostatHold: 'null', holdEndsAt: 'null' ]
+		def updates = [ holdStatus: 'null', thermostatHold: 'null', holdEndsAt: 'null', holdEndDate: 'null' ]
 		generateEvent(updates)
 		if (ST) sendEvent(name: "resumeProgram", value: "resume dis", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
 		sendEvent(name: 'thermostatStatus', value: 'Resume Program succeeded', displayed: false, isStateChange: true)
@@ -2902,7 +2905,7 @@ void generateProgramEvent(String program, String failedProgram='') {
 	// We have to wait for wait until Ecobee sends us the correct currentProgramId
 	def updates = [currentProgramName: progHold, currentProgram: prog]
     if (failedProgram == '') {
-    	updates += [thermostatHold: 'null', holdEndsAt: 'null', holdStatus: 'null']
+    	updates += [thermostatHold: 'null', holdEndsAt: 'null', holdStatus: 'null', holdEndDate: 'null']
     } else {
     	updates += [thermostatHold:'hold']
     }
@@ -3484,10 +3487,10 @@ boolean usingSmartAuto() {
 // returns the holdType keyword, OR the number of hours to hold
 // precedence: 1. device preferences, 2. parent settings.holdType, 3. indefinite (must specify to use the thermostat setting)
 def whatHoldType() {
-	def theHoldType = settings.myHoldType
-	def sendHoldType = null
-	def parentHoldType
-	switch (myHoldType) {
+	String theHoldType = settings.myHoldType
+	def sendHoldType
+	String parentHoldType
+	switch (settings.myHoldType) {
 		case 'Temporary':
 			sendHoldType = 'nextTransition'
 			break;
@@ -3508,6 +3511,7 @@ def whatHoldType() {
 				sendHoldType = 2
 			}
 			break;
+		case "":
 		case null :		// null means use parent value
 			theHoldType = 'Parent'
 		case 'Parent':
@@ -3530,6 +3534,7 @@ def whatHoldType() {
 					case 'indefinite':
 					case 'askMe':
 					case null :
+					case "":
 					default :
 						sendHoldType = 'indefinite'
 						break;
@@ -3552,6 +3557,7 @@ def whatHoldType() {
 						sendHoldType = getParentSetting('holdHours')?: 2
 						break;
 					case null :		// if not set in Parent, should probably use Thermostat setting, but precendence was set that null = indefinite
+					case "":
 					default :
 						sendHoldType = 'indefinite'
 						break;
