@@ -38,7 +38,7 @@
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  */
-String getVersionNum()		{ return "1.8.01" }
+String getVersionNum()		{ return "1.8.01a" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -439,7 +439,7 @@ void updated() {
 def initialize() {
 	LOG("${getVersionLabel()} - Initializing...", 2, "", 'info')
 	updateMyLabel()
-    boolean ST = isST
+    boolean ST = isSTHub
     boolean HE = !ST
     log.trace "Initializing with settings: ${settings}"
 	
@@ -646,7 +646,7 @@ void sensorOpened(evt=null) {
     def HVACModeState = atomicState.HVACModeState
     if (HVACModeState == 'off_pending') return		// already in process of turning off
 
-	boolean ST = isST
+	boolean ST = isSTHub
 	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
 	
 	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
@@ -709,7 +709,7 @@ void sensorClosed(evt=null) {
 	// Turn HVAC Off action has occured
     LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null,'info')
 	def HVACModeState = atomicState.HVACModeState
-    boolean ST = isST
+    boolean ST = isSTHub
     
     if (allClosed() == true) {
     	if (HVACModeState == 'on_pending') return
@@ -775,7 +775,7 @@ void sensorClosed(evt=null) {
 void turnOffHVAC(quietly = false) {
 	// Save current states
     LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'info')
-	boolean ST = isST
+	boolean ST = isSTHub
 	
     if (allClosed() && (atomicState.HVACModeState == 'off_pending')) {
     	// Nothing is open, maybe got closed while we were waiting, abort the "off"
@@ -950,7 +950,7 @@ void turnOffHVAC(quietly = false) {
 void turnOnHVAC(quietly = false) {
 	// Restore previous state
     LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'debug')
-	boolean ST = isST
+	boolean ST = isSTHub
     
 	if (!allClosed() && (atomicState.HVACModeState == 'on_pending')) {
     	LOG("turnOnHVAC() called, but somethings is still open/on, ignoring request & leaving HVAC off",3,null,'info')
@@ -1084,7 +1084,7 @@ void turnOnHVAC(quietly = false) {
 }
 
 boolean allClosed() {
-	boolean ST = isST
+	boolean ST = isSTHub
 	// Check if all Sensors are in "HVAC ON" state   
     def response = true
     String txt = ''
@@ -1118,7 +1118,7 @@ boolean allClosed() {
 }
 
 def numOpen() {
-	boolean ST = isST
+	boolean ST = isSTHub
 	def response = 0
 	if (settings.contactSensors) {
 		if (settings.contactOpen) {
@@ -1272,7 +1272,7 @@ void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 3, null, "info")
     String msg = getMsgPrefix() + notificationMessage
 	
-	if (isST) {
+	if (isSTHub) {
 		if (settings.notifiers != null) {
 			settings.notifiers.each {									// Use notification devices (if any)
 				it.deviceNotification(msg)
@@ -1436,15 +1436,15 @@ String getFormat(type, myText=""){
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+boolean getIsST()     { return (atomicState.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
+boolean getIsHE()     { return (atomicState.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 
 String getHubPlatform() {
 	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
+    atomicState.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
+    atomicState.isST = pf.startsWith('S')	// if (atomicState.isST) ...
+    atomicState.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
 boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
