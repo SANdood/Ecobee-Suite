@@ -31,27 +31,31 @@
  *	1.7.12 - Added (hidden) ***Updated timestamps (so Apps can detect changes)
  *	1.8.00 - Release number synchronization
  *	1.8.01 - General Release
+ *	1.8.02 - Better Health Check integration (ST)
  */
-String getVersionNum() 		{ return "1.8.01" }
+String getVersionNum() 		{ return "1.8.02" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 import groovy.json.*
 
 metadata {
 	definition (
-        name:         "Ecobee Suite Sensor", 
-        namespace:    "sandood", 
-        author:       "Barry A. Burke (storageanarchy@gmail.com)",
-        mnmn:         "SmartThings",          // for the new Samsung (Connect) app
-        vid:          "generic-motion",        // for the new Samsung (Connect) app
-        importUrl:    "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy"
+        name:         	"Ecobee Suite Sensor", 
+        namespace:    	"sandood", 
+        author:       	"Barry A. Burke (storageanarchy@gmail.com)",
+        mnmn:         	"SmartThings",          // for the new Samsung (Connect) app
+        vid:          	"generic-motion-6",        // for the new Samsung (Connect) app
+        ocfDeviceType:	"x.com.st.d.sensor.multifunction", //["oic.r.humidity", "x.com.st.d.sensor.moisture", "x.com.st.d.sensor.temperature", "x.com.st.d.sensor.motion"],
+        importUrl:    	"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy"
     ) 
-    {		
+    {	
+    	//capability "Health Check"
 		capability "Temperature Measurement"
+        capability "Relative Humidity Measurement"		// Thermostat-as-Sensor only (otherwise we never actually sendEvent 'humidity')
 		capability "Motion Sensor"
 		capability "Sensor"
 		capability "Refresh"
-        capability "Health Check"
+        
 		
 		attribute "Awake", 'STRING'
 		attribute "Away", 'STRING'
@@ -67,7 +71,7 @@ metadata {
 		attribute "currentProgramName", 'STRING'
 		attribute "decimalPrecision", 'NUMBER'
 		attribute "doors", 'STRING'
-		attribute "humidity", 'STRING'
+		attribute "humidity", 'NUMBER'
         attribute "programsList", 'STRING'
 		attribute "temperatureDisplay", 'STRING'
 		attribute "thermostatId", 'STRING'
@@ -267,6 +271,8 @@ void poll() {
 void ping() {
 	def tstatId = device.currentValue('thermostatId')
 	LOG( "Pinged - executing parent.pollChildren(${tstatId})", 2, null, 'info')
+    sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
+	sendEvent(name: "healthStatus", value: "online")
 	parent.pollChildren(tstatId,true)		// we have to poll our Thermostat to get updated
 }
 
@@ -285,13 +291,17 @@ void updated() {
 	getHubPlatform()
 	LOG("${getVersionLabel()} updated",1,null,'info')
 	state.version = getVersionLabel()
+    updateDataValue("myVersion", getVersionLabel())
 	
 	if (!device.displayName.contains('TestingForInstall')) {
 		// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
-		sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
+		sendEvent(name: 'checkInterval', value: 3900, displayed: false) //, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
 		if (state.isST) {
-			sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
+			//sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
 			updateDataValue("EnrolledUTDH", "true")
+            sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
+			sendEvent(name: "healthStatus", value: "online")
+			sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"cloud\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${location.hubs[0].id}\"}", displayed: false)
 		}
 	}
 }
@@ -300,7 +310,9 @@ void noOp() {}
 
 def generateEvent(Map results) {
 	LOG("generateEvent(): parsing data ${results}",3,null,'trace')
-	if (!state.version || (state.version != getVersionLabel())) updated()
+    String myVersion = getDataValue("myVersion")
+    //if (!state.version || (state.version != getVersionLabel())) updated()
+	if (!myVersion || (myVersion != getVersionLabel())) updated()
 	
 	def startMS = now()
 	
