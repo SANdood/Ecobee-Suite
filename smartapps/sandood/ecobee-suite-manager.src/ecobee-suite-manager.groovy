@@ -53,8 +53,10 @@
  *	1.8.02 - Fixed smartAuto settings bug
  *	1.8.03 - Updated WARNING & NOTE: formatting
  *	1.8.04 - Fix holdEndDate during transitions; supportedThermostatModes initialization loophole
+ *	1.8.05 - Fix attribute initialization logic
+ *	1.8.06 - Fix thermostatAsSensor selection page
  */
-String getVersionNum()		{ return "1.8.04" }
+String getVersionNum()		{ return "1.8.06" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -417,15 +419,19 @@ def sensorsPage() {
 					LOG("atomicState.settingsCurrentSensors != ecobeesensors determined!!!", 4, null, "trace")					
 				} else { LOG("atomicState.settingsCurrentSensors == ecobeesensors: No changes detected!", 4, null, "trace") }
 				input(name: "ecobeesensors", title:inputTitle("Select Ecobee Sensors (${numFound} found)"), type: "enum", required:false, description: "Tap to choose", multiple:true, 
-					  options: options, width: 6, height: 2)
+					  options: options, width: 8, height: 1)
 			}
-			if (showThermsAsSensor) { 
-				paragraph(getFormat("note", "Thermostats are included as an available sensor to allow for actual temperature values to be used."))
+			if (settings?.showThermsAsSensor) { 
+				section() {
+					paragraph(getFormat("note", "Thermostats are included as an available sensor to allow for actual temperature values to be used."))
+				}
 			}
 		} else {
-			 // No sensors associated with this set of Thermostats was found
-		   LOG("sensorsPage(): No sensors found.", 4)
-		   section("No associated sensors were found. Click Done above ${settings.thermostats?'.':' and select one or more Thermostats.'}") { }
+			// No sensors associated with this set of Thermostats was found
+		    LOG("sensorsPage(): No sensors found.", 4)
+			section() { 
+				paragraph("No associated sensors were found. ${HE?'Click':'Tap'} Done ${settings.thermostats?'.':' and select one or more Thermostats.'}")
+			}
 		}		 
 	}
 }
@@ -503,9 +509,9 @@ def preferencesPage() {
 				paragraph ( "A notification is always sent to the Hello Home log")
 			}
 		} else {		// isHE
-			section(title: sectionTitle('Configuration')+smallerTitle("Notifications")) {
-				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour."
-				input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true,
+			section(title: smallerTitle("Notifications")) {
+				paragraph("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour.", width: 8)
+				input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true, width: 6,
 					  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
 			}
             section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "") {
@@ -541,38 +547,44 @@ def preferencesPage() {
 			}
 		}	
 		section(title: smallerTitle("Smart Auto")) {
-        	paragraph("The 'Smart Auto Temperature Adjust' feature determines if you want to allow the thermostat setpoint to be changed using the arrow buttons in the Tile when the thermostat is in 'auto' mode.")
+        	paragraph("The 'Smart Auto Temperature Adjust' feature determines if you want to allow the thermostat setpoint to be changed using the arrow buttons in the Tile when the thermostat is in 'auto' mode.", width: 8)
+			if (HE) paragraph("", width: 4)
 			input(name: "smartAuto", title:inputTitle("Use Smart Auto Temperature Adjust?"), type: "bool", required:false, defaultValue: false, description: "", width: 4)
             if (settings?.smartAuto == null) { app.updateSetting('smartAuto', false); settings?.smartAuto = false; }
 		}	 
 		section(title: smallerTitle("Polling Interval")) {
-        	paragraph("How frequently do you want to poll the Ecobee cloud for changes? For maximum responsiveness to commands, it is recommended to set this to 1 minute.")
+        	paragraph("How frequently do you want to poll the Ecobee cloud for changes? For maximum responsiveness to commands, it is recommended to set this to 1 minute.", width: 8)
+			if (HE) paragraph("", width: 4)
 			input(name: "pollingInterval", title:inputTitle("Select Polling Interval")+" (minutes)", type: "enum", required:false, multiple:false, defaultValue:3, description: "3", width: 4,
             	  options:["1", "2", "3", "5", "10", "15", "30"])
             if (settings?.pollingInterval == null) { app.updateSetting('pollingInterval', "3"); settings?.pollingInterval = "3"; }
 		}
 		section(title: smallerTitle("Thermostat as Sensor")) {
         	paragraph("Showing Thermostats as separate Sensors is useful if you need to access the actual temperature in the room where the Thermostat is located and not just the (average) "+
-            		  "temperature displayed on the Thermostat.")
-			input(name: "showThermsAsSensor", title:inputTitle("Include Thermostats as a separate Ecobee Sensor?"), type: "bool", required:false, defaultValue: false, description: "", width: 4)
+            		  "temperature displayed on the Thermostat.", width: 8)
+			if (HE) paragraph("", width: 4)
+			input(name: "showThermsAsSensor", title:inputTitle("Include Thermostats as a separate Ecobee Sensor?"), type: "bool", required:false, defaultValue: false, description: "", width: 6)
             if (settings?.showThermsAsSensor == null) { app.updateSetting('showThermsAsSensor', false); settings?.showThermsAsSensor = false; }
 		}
 		section(title: smallerTitle("Button Delay")) {
         	paragraph("Set the pause between pressing the setpoint arrows and initiating the API calls. The pause needs to be long enough to allow you to click the arrow again for changing by "+
-            		  "more than one degree.")
+            		  "more than one degree.", width: 8)
+			if (HE) paragraph("", width: 4)
 			input(name: "arrowPause", title:inputTitle("Select Button Delay")+" (seconds)", type: "enum", required:false, multiple:false, description: "4", defaultValue:4, 
 				  options:["1", "2", "3", "4", "5"], width: 4)
             if (settings?.arrowPause == null) { app.updateSetting('arrowPause', 4); settings?.arrowPause = 4; }
 		}
 		section(title: smallerTitle("Decimal Precision")) {
-        	paragraph("Select the desired number of decimal places to display for all temperatures (default 1 for C, 0 for F).")
+        	paragraph("Select the desired number of decimal places to display for all temperatures (default 1 for C, 0 for F).", width: 8)
+			if (HE) paragraph("", width: 4)
 			String digits = wantMetric() ? "1" : "0"
 			input(name: "tempDecimals", title:inputTitle("Select Decimal display precision"), type: "enum", required:false, multiple:false, defaultValue:digits, description: digits, 
 				  options:["0", "1", "2"], submitOnChange: true, width: 4)
             if (settings?.tempDecimals == null) { app.updateSetting('tempDecimals', digits); settings?.tempDecimals = digits; }
 		}
 		section(title: smallerTitle("Debug Log Level")) {
-        	paragraph("Select the debug logging level. Higher levels send more information to IDE Live Logging. A setting of 2 is recommended for normal operations.")
+        	paragraph("Select the debug logging level. Higher levels send more information to IDE Live Logging. A setting of 2 is recommended for normal operations.", width: 8)
+			if (HE) paragraph("", width: 4)
 			input(name: "debugLevel", title:inputTitle("Select Debug Log Level"), type: "enum", required:false, multiple:false, defaultValue:2, description: "2", 
 				  options:["5", "4", "3", "2", "1", "0"], width: 4)
             if (settings?.debugLevel == null) { app.updateSetting('debugLevel', 2); settings?.debugLevel = 2; }
@@ -3339,7 +3351,7 @@ void updateSensorData() {
                     def lastList = atomicState."${sensorDNI}" as List
                     def listSize = 6
                     if ( !lastList || (lastList.size() < listSize)) {
-                        lastList = [999,'x',-1,'default','default','null']	// initilize the list 
+                        lastList = [999,'x',-1,'default','default','x']	// initilize the list 
                         sensorData = [ thermostatId: tid ]		// this will never change, but we need to send it at least once
                     }
                     def sensorList = []
@@ -4161,7 +4173,7 @@ void updateThermostatData() {
                 // 0: equipStatus, 1:thermOpState, 2:equipOpState, 3: , 4: nextHeatSP, 5: nextCoolSP, 6: nextProgName
                 atomicState.wasConnected = isConnected
                 boolean eqpChanged = false
-                if (!changeEquip || !changeEquip.containsKey(tid) || !changeEquip[tid]) changeEquip[tid] = ['null','null','null','null','','','']
+                if (!changeEquip || !changeEquip.containsKey(tid) || !changeEquip[tid]) changeEquip[tid] = ['x','x','x','x','x','x','x']
                 if (changeEquip[tid][4] != nextHeatingSetpoint)			 { data << [nextHeatingSetpoint: nextHeatingSetpoint];	changeEquip[tid][4] = nextHeatingSetpoint;	eqpChanged = true; }
                 if (changeEquip[tid][5] != nextCoolingSetpoint)			 { data << [nextCoolingSetpoint: nextCoolingSetpoint];	changeEquip[tid][5] = nextCoolingSetpoint;	eqpChanged = true; }
                 if (changeEquip[tid][6] != nextProgramName)				 { data << [nextProgramName: nextProgramName];			changeEquip[tid][6] = nextProgramName;		eqpChanged = true; }
@@ -4186,7 +4198,7 @@ void updateThermostatData() {
                 }
             }
             def changeCloud =  (atomicState.changeCloud	? atomicState.changeCloud  : [:])
-            if (!changeCloud || !changeCloud.containsKey(tid) || !changeCloud[tid]) changeCloud[tid] = ['null','null','null','null']
+            if (!changeCloud || !changeCloud.containsKey(tid) || !changeCloud[tid]) changeCloud[tid] = ['x','x','x','x']
             if (changeCloud[tid][0] != lastPoll)		{ data << [lastPoll: lastPoll];				changeCloud[tid][0] = lastPoll; 		cldChanged = true; }
             if (changeCloud[tid][1] != apiConnection)	{ data << [apiConnected: apiConnection];	changeCloud[tid][1] = apiConnection; 	cldChanged = true; }
             if (changeCloud[tid][2] != isConnected)		{ data << [ecobeeConnected: isConnected];	changeCloud[tid][2] = isConnected; 		cldChanged = true; }
@@ -4320,7 +4332,7 @@ void updateThermostatData() {
             String timeOfDay = atomicState.timeZone ? getTimeOfDay() : getTimeOfDay(tid)
             boolean userPChanged = false
             def changeConfig = atomicState.changeConfig ?: [:]
-            if (!changeConfig || !changeConfig.containsKey(tid) || !changeConfig[tid]) changeConfig[tid] = ['null','null','null','null','null']
+            if (!changeConfig || !changeConfig.containsKey(tid) || !changeConfig[tid]) changeConfig[tid] = ['x','x','x','x','x']
 
             if (changeConfig[tid][0] != timeOfDay)		{ data << [timeOfDay: timeOfDay];				changeConfig[tid][0] = timeOfDay; 			cfgsChanged = true; }
             if (changeConfig[tid][1] != userPrecision)	{ data << [decimalPrecision: userPrecision];	changeConfig[tid][1] = userPrecision; 		cfgsChanged = true; userPChanged = true; }
@@ -4337,17 +4349,17 @@ void updateThermostatData() {
             // Thermostat configuration stuff that almost never changes - if any one changes, send them all
             def changeNever =  (atomicState.changeNever ?: [:]) as HashMap
             if (settingsUpdated || programUpdated || forcePoll || !changeNever || !changeNever.containsKey(tid)) {														 // || (changeNever[tid] != neverList)) {
-                if (!changeNever[tid]) changeNever[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+                if (!changeNever[tid]) changeNever[tid] = ['x','x','x','x','x','x','x','x','x','x','x','x','x','x','x']
                 if (settingsUpdated || forcePoll) {
                     def autoMode = statSettings?.autoHeatCoolFeatureEnabled
                     def statHoldAction = statSettings?.holdAction			// thermsotat's preference setting for holdAction:
                                                                             // useEndTime4hour, useEndTime2hour, nextPeriod, indefinite, askMe
                     // if (changeNever[tid][0] != statMode)			{ data << [thermostatMode: statMode];			changeNever[tid][0] = statMode; nvrChanged = true; }
-                    if (forcePoll || (changeNever[tid][1] != autoMode))		{ data << [autoMode: autoMode];					changeNever[tid][1] = autoMode; 				nvrChanged = true; }
+                    if (/*forcePoll || */ (changeNever[tid][1] != autoMode))		{ data << [autoMode: autoMode];					changeNever[tid][1] = autoMode; 				nvrChanged = true; }
                     if (changeNever[tid][2] != statHoldAction)				{ data << [statHoldAction: statHoldAction];		changeNever[tid][2] = statHoldAction; 			nvrChanged = true; }
-                    if (forcePoll || (changeNever[tid][3] != coolStages))	{ data << [coolStages: coolStages, 
+                    if (/*forcePoll || */ (changeNever[tid][3] != coolStages))	{ data << [coolStages: coolStages, 
                                                                             		   coolMode: (coolStages > 0)];			changeNever[tid][3] = coolStages; 				nvrChanged = true; }
-                    if (forcePoll || (changeNever[tid][4] != heatStages))	{ data << [heatStages: heatStages,
+                    if (/*forcePoll || */ (changeNever[tid][4] != heatStages))	{ data << [heatStages: heatStages,
                                                                             		   heatMode: (heatStages > 0)];			changeNever[tid][4] = heatStages; 				nvrChanged = true; }
                     if (changeNever[tid][5] != heatRange)					{ data << [heatRange: heatRange,
                                                                             		   heatRangeHigh: heatHigh,
@@ -4359,7 +4371,7 @@ void updateThermostatData() {
                     if (changeNever[tid][12] != tempCoolDiff)				{ data << [coolDifferential: tempCoolDiff];		changeNever[tid][12] = tempCoolDiff;			nvrChanged = true; }
                     if (changeNever[tid][13] != tempHeatCoolMinDelta)		{ data << [heatCoolMinDelta: tempHeatCoolMinDelta];
                     																										changeNever[tid][13] = tempHeatCoolMinDelta; 	nvrChanged = true; }
-                    if (forcePoll || (changeNever[tid][8] != auxHeatMode))	{ data << [auxHeatMode: auxHeatMode];			changeNever[tid][8] = auxHeatMode; 				nvrChanged = true; }
+                    if (/*forcePoll || */ (changeNever[tid][8] != auxHeatMode))	{ data << [auxHeatMode: auxHeatMode];			changeNever[tid][8] = auxHeatMode; 				nvrChanged = true; }
                     if (changeNever[tid][9] != hasHumidifier)				{ data << [hasHumidifier: hasHumidifier];		changeNever[tid][9] = hasHumidifier; 			nvrChanged = true; }
                     if (changeNever[tid][10] != hasDehumidifier)			{ data << [hasDehumidifier: hasDehumidifier];	changeNever[tid][10] = hasDehumidifier; 		nvrChanged = true;}
                 }
@@ -4394,7 +4406,7 @@ void updateThermostatData() {
             def changeRarely = (atomicState.changeRarely ?: [:]) as HashMap
             //if (thermostatUpdated || runtimeUpdated ||	equipUpdated || forcePoll || /*settingsUpdated || eventsUpdated || programUpdated || runtimeUpdated || extendRTUpdated ||*/ (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {	
             if (programUpdated || runtimeUpdated || eventsUpdated || equipUpdated || settingsUpdated || forcePoll || !changeRarely || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {	
-                if (!changeRarely[tid]) changeRarely[tid] = ['null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null','null']
+                if (!changeRarely[tid]) changeRarely[tid] = ['x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x']
                 
                 //log.debug "changeRarely[${tid}] before: ${changeRarely[tid]}"
                 // The order of these is IMPORTANT - Do setpoints and all equipment changes before notifying of the hold and program change...
@@ -4468,7 +4480,7 @@ void updateThermostatData() {
             lastOList = changeOften[tid]
             // 69.0,   inactive,               44, null,          day,              6,       null,        null,           null,           null,                   44,                  60,                       44,    1,    null
             // 0:temp, 1:motion, 2:actualHumidity, 3: , 4: weatherToD, 5: weatherIcon, 6: outTemp, 7: putHumid, 8: outDewpoint, 9: outPressure, 10: humiditySetpoint, 11: dehumidSetpoint, 12: humidSetpointDisplay, 13: , 14: outLowFc
-            if ( !lastOList || (lastOList.size() < 14)) lastOList = [999,'null',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1,-1,-1,'null']
+            if ( !lastOList || (lastOList.size() < 14)) lastOList = [999,'x',-1,-1,-1,-999,-999,-1,-1,-1,-1,-1,-1,-1,'x']
             if (sensorsUpdated && (lastOList[1] != occupancy)) data << [motion: occupancy]
             if (runtimeUpdated || forcePoll || weatherUpdated || extendRTUpdated) { 
                 String wSymbol = atomicState.weather[tid]?.weatherSymbol?.toString()
