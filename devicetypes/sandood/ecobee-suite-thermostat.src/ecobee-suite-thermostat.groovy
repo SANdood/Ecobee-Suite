@@ -53,113 +53,45 @@
  *	1.8.00 - Release number sync-up
  *	1.8.01 - General Release
  *	1.8.02 - Fix holdEndDate & schedule during transitions; supportedThermostatModes initialization loophole
+ *	1.8.03 - Cleaned up supportedThermostatModes fix
+ *	1.8.04 - Better Health Check integration (ST)
  */
-String getVersionNum() 		{ return "1.8.02" }
+String getVersionNum() 		{ return "1.8.04" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
 
 metadata {
 	definition (
-        name:        "Ecobee Suite Thermostat", 
-        namespace:   "sandood", 
-        author:      "Barry A. Burke (storageanarchy@gmail.com)",		
-        mnmn:        "SmartThings", 
-        vid:         "SmartThings-smartthings-Z-Wave_Thermostat",
-		importUrl:   "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
+        name:        	"Ecobee Suite Thermostat", 
+        ocfDeviceType: 	["oic.d.thermostat", "oic.r.humidity", "oic.r.temperature", "oic.r.motion", "oic.d.humidifier", "oic.d.dehumidifier"],
+        //vid: 			"generic-thermostat-5",
+        //vid:			"SmartThings-smartthings-Ecobee_Thermostat",
+        namespace:   	"sandood", 
+        author:      	"Barry A. Burke (storageanarchy@gmail.com)",		
+        mnmn:        	"SmartThings", 
+        vid:         	"SmartThings-smartthings-Z-Wave_Thermostat",
+		importUrl:   	"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy"
 	)
     {		
 		capability "Thermostat"
 		capability "Actuator"
+        capability "Sensor"
+		capability "Refresh"
+        capability "Thermostat Operating State"
+		capability "Thermostat Setpoint"
 		capability "Relative Humidity Measurement"
 		capability "Temperature Measurement"
 		capability "Motion Sensor"
-		capability "Sensor"
-		capability "Refresh"
 
-		// Extended Set of Thermostat Capabilities
-		// capability "Thermostat Cooling Setpoint"
-		// capability "Thermostat Fan Mode"
-		// capability "Thermostat Heating Setpoint"
-		// capability "Thermostat Mode"
-		capability "Thermostat Operating State"
-		capability "Thermostat Setpoint"
-		capability "Health Check"
-
-		command "asleep", 					[]						// We cannot overload the internal Java/Groovy definition of 'sleep()'
-		// command "auto", 					[]
-		command "auxHeatOnly", 				[]
-		command "awake", 					[]
-		command "away", 					[]
-        command "cancelDemandResponse",		[]
-		command "cancelReservation", 		[]
-		command "cancelVacation", 			[]
-		// command "cool", 					[]
-		command "deleteVacation", 			[]
-		command "doRefresh", 				[]						// internal use by the refresh button
-		command "emergency", 				[]	
-		// command "emergencyHeat", 		[]
-		// command "fanAuto", 				[]
-		// command "fanCirculate", 			[]
-		command "fanOff", 					[]						// Missing from the Thermostat standard capability set
-		// command "fanOn", 				[]
-		command "forceRefresh", 			[]	
-		command "generateEvent"
-		// command "heat", 					[]
-		command "home", 					[]	
-		command "lowerSetpoint", 			[]	
-		command "makeReservation", 			[]	
-        command	"microphoneOff",			[]
-        command "microphoneOn",				[]
-		command "night", 					[]						// this is probably the appropriate SmartThings device command to call, matches ST mode
-		command "noOp", 					[]						// Workaround for formatting issues
-		// command "off", 					[]						// redundant - should be predefined by the Thermostat capability
-		command "present", 					[]	
-		command "raiseSetpoint", 			[]	
-		command "resumeProgram", 			['STRING']
-		command "setCoolingSetpointDelay",	[]
-        if (isST) {
-			command "setDehumidifierMode", 	['STRING']
-        	command "setDehumiditySetpoint",['NUMBER']
-        	command "setEcobeeSetting", 	['STRING', 'STRING']	// Allows changes to (most) Ecobee Settings
-        	command "setFanMinOnTime",		['NUMBER']
-        } else {
-        	command "setDehumidifierMode", 	[[name:'Dehumidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
-											  constraints: ['auto','off','on']]]
-        	command "setDehumiditySetpoint",[[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
-        	command "setEcobeeSetting", 	[[name:'Ecobee Setting Name*', type:'STRING', description:'Name of setting to change'],
-											 [name:'Ecobee Setting Value*', type:'STRING', description:'New value for this setting']]
-			command "setFanMinOnTime", 		[[name:'Fan Min On Time*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
-        }
-		command "setFanMinOnTimeDelay", 	[]
-		command "setHeatingSetpointDelay",	[]
 		if (isST) {
-        	command	"setHumidifierMode", 	['STRING']
-			command "setHumiditySetpoint",	['NUMBER']
-            command "setProgramSetpoints", 	['STRING', 'NUMBER', 'NUMBER']
-		} else {
-        	command	"setHumidifierMode", 	[[name:'Humidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
-											  constraints: ['auto','off','on']]]
-			command "setHumiditySetpoint", 	[[name:'Humidity Setpoint*', type:'NUMBER', description:'Humidifier RH% setpoint (0-100)']]
-			command "setProgramSetpoints", 	[[name:'Program Name*', type:'STRING', description:'Program to change'],
-											 [name:'Heating Setpoint*', type:'NUMBER', description:'Heating setpoint temperature'],
-											 [name:'Cooling Setpoint*', type:'NUMBER', description:'Cooling setpoint temperature']]
-		}
-		
-		// command "setSchedule"			['JSON_OBJECT']
-		// command "setThermostatFanMode"	['STRING']
-		// command "setThermostatMode"		['STRING']
-        if (isST) {
-			command "setThermostatProgram", 	['STRING', 'STRING', 'NUMBER']
-			command "setVacationFanMinOnTime",	['NUMBER']
-        } else {
-			command "setThermostatProgram", [[name:'Program Name*', type:'STRING', description:'Desired Program'],
-											 [name:'Hold Type*', type:'ENUM', description:'Delect and option',
-											  constraints: ['indefinite', 'nextTransition', 'holdHours']],
-											 [name:'Hold Hours', type:'NUMBER', description:'Hours to Hold (if Hold Type == Hold Hours]']]
-            command "setVacationFanMinOnTime",[[name:'Fan Min On Time for Vacation Hold*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
+			// Extended Set of Thermostat Capabilities
+			capability "Thermostat Cooling Setpoint"
+			capability "Thermostat Fan Mode"
+			capability "Thermostat Heating Setpoint"
+			capability "Thermostat Mode"
+		//	capability "Health Check"
         }
-		command "wakeup", 					[]
 
 		attribute 'apiConnected',							'STRING'
 		attribute 'autoAway', 								'STRING'
@@ -270,6 +202,7 @@ metadata {
 		attribute 'hotTempAlert', 'NUMBER'
 		attribute 'hotTempAlertEnabled', 'STRING'
 		attribute 'humidifierMode', 'STRING'
+        attribute 'humidity', 'NUMBER'
 		attribute 'humidityAlertNotify', 'STRING'
 		attribute 'humidityAlertNotifyTechnician', 'STRING'
 		attribute 'humidityHighAlert', 'NUMBER'			// %
@@ -379,6 +312,83 @@ metadata {
         attribute "settingsUpdated", 'NUMBER'
         attribute "weatherUpdated", 'NUMBER'
         
+
+		command "asleep", 					[]						// We cannot overload the internal Java/Groovy definition of 'sleep()'
+		// command "auto", 					[]
+		command "auxHeatOnly", 				[]
+		command "awake", 					[]
+		command "away", 					[]
+        command "cancelDemandResponse",		[]
+		command "cancelReservation", 		[]
+		command "cancelVacation", 			[]
+		// command "cool", 					[]
+		command "deleteVacation", 			[]
+		command "doRefresh", 				[]						// internal use by the refresh button
+		command "emergency", 				[]	
+		// command "emergencyHeat", 		[]
+		// command "fanAuto", 				[]
+		// command "fanCirculate", 			[]
+		command "fanOff", 					[]						// Missing from the Thermostat standard capability set
+		// command "fanOn", 				[]
+		command "forceRefresh", 			[]	
+		command "generateEvent"
+		// command "heat", 					[]
+		command "home", 					[]	
+		command "lowerSetpoint", 			[]	
+		command "makeReservation", 			[]	
+        command	"microphoneOff",			[]
+        command "microphoneOn",				[]
+		command "night", 					[]						// this is probably the appropriate SmartThings device command to call, matches ST mode
+		command "noOp", 					[]						// Workaround for formatting issues
+		// command "off", 					[]						// redundant - should be predefined by the Thermostat capability
+		command "present", 					[]	
+		command "raiseSetpoint", 			[]	
+		command "resumeProgram", 			['STRING']
+		command "setCoolingSetpointDelay",	[]
+        if (isST) {
+			command "setDehumidifierMode", 	['STRING']
+        	command "setDehumiditySetpoint",['NUMBER']
+        	command "setEcobeeSetting", 	['STRING', 'STRING']	// Allows changes to (most) Ecobee Settings
+        	command "setFanMinOnTime",		['NUMBER']
+        } else {
+        	command "setDehumidifierMode", 	[[name:'Dehumidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
+											  constraints: ['auto','off','on']]]
+        	command "setDehumiditySetpoint",[[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
+        	command "setEcobeeSetting", 	[[name:'Ecobee Setting Name*', type:'STRING', description:'Name of setting to change'],
+											 [name:'Ecobee Setting Value*', type:'STRING', description:'New value for this setting']]
+			command "setFanMinOnTime", 		[[name:'Fan Min On Time*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
+        }
+		command "setFanMinOnTimeDelay", 	[]
+		command "setHeatingSetpointDelay",	[]
+		if (isST) {
+        	command	"setHumidifierMode", 	['STRING']
+			command "setHumiditySetpoint",	['NUMBER']
+            command "setProgramSetpoints", 	['STRING', 'NUMBER', 'NUMBER']
+		} else {
+        	command	"setHumidifierMode", 	[[name:'Humidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
+											  constraints: ['auto','off','on']]]
+			command "setHumiditySetpoint", 	[[name:'Humidity Setpoint*', type:'NUMBER', description:'Humidifier RH% setpoint (0-100)']]
+			command "setProgramSetpoints", 	[[name:'Program Name*', type:'STRING', description:'Program to change'],
+											 [name:'Heating Setpoint*', type:'NUMBER', description:'Heating setpoint temperature'],
+											 [name:'Cooling Setpoint*', type:'NUMBER', description:'Cooling setpoint temperature']]
+		}
+		
+		// command "setSchedule"			['JSON_OBJECT']
+		// command "setThermostatFanMode"	['STRING']
+		// command "setThermostatMode"		['STRING']
+        if (isST) {
+			command "setThermostatProgram", 	['STRING', 'STRING', 'NUMBER']
+			command "setVacationFanMinOnTime",	['NUMBER']
+        } else {
+			command "setThermostatProgram", [[name:'Program Name*', type:'STRING', description:'Desired Program'],
+											 [name:'Hold Type*', type:'ENUM', description:'Delect and option',
+											  constraints: ['indefinite', 'nextTransition', 'holdHours']],
+											 [name:'Hold Hours', type:'NUMBER', description:'Hours to Hold (if Hold Type == Hold Hours]']]
+            command "setVacationFanMinOnTime",[[name:'Fan Min On Time for Vacation Hold*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
+        }
+		command "wakeup", 					[]
+
+
         
 	}
 
@@ -406,7 +416,7 @@ metadata {
 				attributeState("VALUE_DOWN", action: "lowerSetpoint")
 			}
 			tileAttribute("device.humidity", key: "SECONDARY_CONTROL") {
-				attributeState("default", label:'${currentValue}%', unit:"Humidity", defaultState: true)
+				attributeState("default", label:'${currentValue}%', unit:"%", defaultState: true)
 			}
 			tileAttribute('device.thermostatOperatingStateDisplay', key: "OPERATING_STATE") {
 				attributeState('idle',						backgroundColor:"#d28de0")		// ecobee purple/magenta
@@ -906,8 +916,12 @@ def updated() {
 	// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
 		sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
 		if (state.isST) {
-			sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
+			// sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
 			updateDataValue("EnrolledUTDH", "true")
+            sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
+			sendEvent(name: "healthStatus", value: "online")
+			//sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"cloud\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
+            sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"cloud\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${location.hubs[0].id}\"}", displayed: false)
 		}
 	} else {
 		return
@@ -916,6 +930,7 @@ def updated() {
 	resetUISetpoints()
 	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
 	state.version = getVersionLabel()
+    updateDataValue("myVersion", getVersionLabel())
 	runIn(2, 'forceRefresh', [overwrite: true])
 }
 
@@ -927,6 +942,8 @@ def poll() {
 // Health Check will ping us based on the frequency we configure in Ecobee (Connect) (derived from poll & watchdog frequency)
 def ping() {
 	if (state.isST ) {
+    	sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
+		sendEvent(name: "healthStatus", value: "online")
 		LOG("Health Check ping - apiConnected: ${device.currentValue('apiConnected')}, ecobeeConnected: ${device.currentValue('ecobeeConnected')}, checkInterval: ${device.currentValue('checkInterval')} seconds",1,null,'warn')
 	} else {
 		LOG("Health Check ping - apiConnected: ${device.currentValue('apiConnected', true)}, ecobeeConnected: ${device.currentValue('ecobeeConnected', true)}, checkInterval: ${device.currentValue('checkInterval', true)} seconds",1,null,'warn')
@@ -935,7 +952,9 @@ def ping() {
 }
 
 def generateEvent(Map results) {
-	if (!state.version || (state.version != getVersionLabel())) updated()
+	//if (!state.version || (state.version != getVersionLabel())) updated()
+    String myVersion = getDataValue("myVersion")
+    if (!myVersion || (myVersion != getVersionLabel())) updated()
 	def startMS = now()
 	boolean debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("generateEvent(): parsing data ${results}", 1)
@@ -1873,18 +1892,18 @@ def generateEvent(Map results) {
 				case 'heatMode':
 				case 'coolMode':
 				case 'auxHeatMode':
-                	//if (isChange) {
-                        String modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
-                        boolean chg = false
-                        if (sendValue == 'true') {
-                            if (!supportedThermostatModes.contains(modeValue)) { supportedThermostatModes += modeValue; chg = true; }
-                        } else {
-                            if (supportedThermostatModes.contains(modeValue))  { supportedThermostatModes -= modeValue; chg = false; }
-                        }
-                    	if (chg) state.supportedThermostatModes = supportedThermostatModes.sort(false)
-                    	updateModeButtons()	//	This will actually disable any that were turned off (e.g., 'auto' / 'autoHeatCoolFeatureEnabled'
-                   //}
-                    
+                    String modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
+                    if (sendValue == 'true') {
+                        if (!supportedThermostatModes.contains(modeValue)) supportedThermostatModes += modeValue
+                    } else {
+                        if (supportedThermostatModes.contains(modeValue))  supportedThermostatModes -= modeValue
+                    }
+                    if (state.supportedThermostatModes != supportedThermostatModes) {
+                    	state.supportedThermostatModes = supportedThermostatModes.sort(false)
+                        sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
+                        sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
+                        updateModeButtons()
+                    }
 				// Removed all the miscellaneous settings - they will thus appear in the device event list via 'default:' (May 10, 2019 - BAB)
 				// This *should* improve the efficiency of the 'switch', at least a little
 				case 'debugLevel':
@@ -1907,13 +1926,9 @@ def generateEvent(Map results) {
                 case 'nextProgramName':
                 case 'nextHeatingSetpoint':
                 case 'nextCoolingSetpoint':
-				//if (name == 'currentProgramId') log.debug "${name}: ${sendValue}, ${sendValue == 'null'}"
-					//if (isChange) {
-                    	def sendText = (sendValue != 'null') ? sendValue : ''
-                        def descText = (sendText != '') ? "${name} is ${sendText}" : ''
-                        /* if (isStateChange(device, name, sendText)) */ event = eventFront + [value: sendText, descriptionText: descText, /* isStateChange: true, */ displayed: false]
-                        //if (name == 'nextHeatingSetpoint') log.debug event
-                    //}
+                    String sendText = (sendValue != 'null') ? sendValue : ''
+                    String descText = (sendText != '') ? "${name} is ${sendText}" : ''
+                    event = eventFront + [value: sendText, descriptionText: descText, /* isStateChange: true, */ displayed: false]
 					break;
 
 				// everything else gets displayed once with generic text
@@ -1927,10 +1942,8 @@ def generateEvent(Map results) {
                     }
 					break;
 			}
-            //log.debug "Before event check: ${event}"
 			if (event != [:]) {
 				if (debugLevelFour) LOG("generateEvent() - Out of switch{}, calling sendevent(${event})", 1)
-                //if (event.name == 'temperature') log.debug "temperature sent"
 				sendEvent(event)
 			}
 			if (tempDisplay != "") {
@@ -1939,12 +1952,7 @@ def generateEvent(Map results) {
 				objectsUpdated++
 			}
 		}
-		if (state.supportedThermostatModes != supportedThermostatModes) {
-			state.supportedThermostatModes = supportedThermostatModes.sort(false)
-			sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
-			sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
-            updateModeButtons()
-		}
+
 		//generateSetpointEvent()
 		//generateStatusEvent()
 	}
