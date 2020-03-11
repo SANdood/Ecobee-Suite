@@ -55,8 +55,9 @@
  *	1.8.02 - Fix holdEndDate & schedule during transitions; supportedThermostatModes initialization loophole
  *	1.8.03 - Cleaned up supportedThermostatModes fix
  *	1.8.04 - Better Health Check integration (ST)
+ *	1.8.05 - Fixed thermostatMode changes heat-->auto and cool-->auto
  */
-String getVersionNum() 		{ return "1.8.04" }
+String getVersionNum() 		{ return "1.8.05" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -1541,15 +1542,15 @@ def generateEvent(Map results) {
 							def newSetpoint
                             lRunMode =  getDataValue("lastRunningMode") // ST ? device.currentValue('lastRunningMode') : device.currentValue('lastRunningMode', true)  // update this, just in case it changed
 							if (lRunMode == 'heat') {
-                            	newSetPoint = (ST ? device.currentValue('heatingSetpoint') : device.currentValue('heatingSetpoint', true))?.toString()
+                            	newSetpoint = (ST ? device.currentValue('heatingSetpoint') : device.currentValue('heatingSetpoint', true))?.toString()
 							} else if (lRunMode == 'cool') {
-                            	newSetPoint = (ST ? device.currentValue('coolingSetpoint') : device.currentValue('coolingSetpoint', true))?.toString()
+                            	newSetpoint = (ST ? device.currentValue('coolingSetpoint') : device.currentValue('coolingSetpoint', true))?.toString()
 							} else if (ST) {
                             	newSetpoint = roundIt(((device.currentValue('heatingSetpoint')?.toBigDecimal() + device.currentValue('coolingSetpoint')?.toBigDecimal()) / 2.0), precision.toInteger()).toString()
                             } else {
                             	newSetpoint = roundIt(((device.currentValue('heatingSetpoint', true)?.toBigDecimal() + device.currentValue('coolingSetpoint', true)?.toBigDecimal()) / 2.0), precision.toInteger()).toString()
                             }
-							sendEvent(name: 'thermostatSetpoint', value: newSetPoint.toString(), unit: tu, descriptionText: "Thermostat setpoint is ${newSetpoint}°${tu}", displayed: true)
+							sendEvent(name: 'thermostatSetpoint', value: newSetpoint.toString(), unit: tu, descriptionText: "Thermostat setpoint is ${newSetpoint}°${tu}", displayed: true)
 							disableModeAutoButton()
 							disableFanOffButton()
 							objectsUpdated++
