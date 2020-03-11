@@ -37,8 +37,11 @@
  *	1.7.46 - Layout tweaks for Hubitat
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - Miscellaneous optimizations
+ *	1.8.03 - Updated Paused warning
+ *	1.8.04 - Fixed some logging messages
  */
-String getVersionNum()		{ return "1.8.01a" }
+String getVersionNum()		{ return "1.8.04" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -125,7 +128,7 @@ def mainPage() {
                 }
             }
         	if (settings.tempDisable) { 
-				paragraph warningText + "Temporarily Paused; Resume below" 
+				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
 				if (settings.theThermostats || !settings.myThermostats) {
 					input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
@@ -710,14 +713,13 @@ void sensorClosed(evt=null) {
     LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null,'info')
 	def HVACModeState = atomicState.HVACModeState
     boolean ST = isSTHub
-    
+    def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats    
     if (allClosed() == true) {
     	if (HVACModeState == 'on_pending') return
         
 		if (atomicState.wasAlreadyOff == true) {
 			def tmpThermSavedState = atomicState.thermSavedState ?: [:]
 			int i = 0, j = 0
-			def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 			theStats.each { therm ->
 				j++
 				def tid = getDeviceId(therm.deviceNetworkId)
