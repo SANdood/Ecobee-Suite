@@ -144,7 +144,7 @@
 			"name": 	"Ecobee Suite Thermostat",
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published":	true,
-			"version": 	"1.8.04",
+			"version": 	"1.8.05",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
 			"optional": 	false
 		},
