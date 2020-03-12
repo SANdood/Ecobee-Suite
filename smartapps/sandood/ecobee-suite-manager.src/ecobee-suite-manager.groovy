@@ -57,7 +57,7 @@
  *	1.8.06 - Fix thermostatAsSensor selection page
  *	1.8.07 - Improve http error handling
  */
-String getVersionNum()		{ return "1.8.07" }
+String getVersionNum()		{ return "1.8.07a" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -1863,8 +1863,15 @@ void forceNextPoll() {
 
 void pollChildren(deviceId=null,force=false) {
 	if (atomicState.inPollChildren) {
-		LOG("Already polling, skipping this request",2,null,'warn')
-		return
+		def skipTime = atomicState.skipTime ?: now()
+		// Give the already running poll a full minute to complete
+		if ((now() - skipTime) < 59000) {
+			LOG("Already polling, skipping this request",2,null,'warn')
+			if (atomicState.skipTime != skipTime) atomicState.skipTime = skipTime
+			return
+		} else {
+			atomicState.skipTime = null
+		}
 	} else {
 		atomicState.inPollChildren = true
 	}
@@ -2109,13 +2116,13 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 				// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
 				LOG('Checking: Auth_token refreshed', 2, null, 'info')
 			} else {
-				LOG('Checking: Auth_token refresh failed', 1, null, 'error')
-			} 
+				LOG('Checking: Auth_token refresh failed', 1, null, 'warn')
+			}
 		} else if (((iStatus == null) && (e?.message?.contains('timed out') || e?.message?.contains('timeout'))) || 
 				   (iStatus && (((iStatus > 400) && (iStatus < 405)) || (iStatus == 408) || (iStatus > 500)))) { //((iStatus > 500) && (iStatus < 505))) {
 			// Retry on transient, recoverable error codes (timeouts, server temporarily unavailable, etc.) see https://en.wikipedia.org/wiki/List_of_HTTP_status_codes 
-			LOG("checkThermostatSummary() - httpGet error: ${iStatus}, ${e?.message}, ${e.response?.data} - Will Retry", 1, null, 'warn')	// Just log it, and hope for better next time...
-			log.debug "checkThermostatSummary() - <b>ERROR</b> e: ${e}, \nmessage: ${e.message}, \nstatusCode: ${e.statusCode}, \nresponse.data: ${e.response?.data}"
+			LOG("checkThermostatSummary() - httpGet error: ${iStatus}, ${e?.message}, ${e.response?.data} - will retry", 1, null, 'warn')	// Just log it, and hope for better next time...
+			//log.debug "checkThermostatSummary() - <b>ERROR</b> e: ${e}, \nmessage: ${e.message}, \nstatusCode: ${e.statusCode}, \nresponse.data: ${e.response?.data}"
 			if (apiConnected() != 'warn') {
 				atomicState.connected = 'warn'
 				updateMyLabel()
@@ -2129,12 +2136,12 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 			atomicState.inTimeoutRetry = inTimeoutRetry + 1
 			//return result
 		} else /* can we handle any other errors??? */ {
-			log.debug "checkThermostatSummary() - <b>ERROR</b> e: ${e}, \nmessage: ${e.message}, \nstatusCode: ${e.statusCode}, \nresponse.data: ${e.response?.data}"
-			LOG("checkThermostatSummary() - httpGet error: ${iStatus}, ${e?.message}", 1, null, "error")
+			//log.debug "checkThermostatSummary() - ERROR e: ${e}, \nmessage: ${e.message}, \nstatusCode: ${e.statusCode}, \nresponse.data: ${e.response?.data}"
+			LOG("checkThermostatSummary() - httpGet error: ${iStatus}, ${e?.message}, ${e.response?.data} - won't retry", 1, null, "error")
 		}
         if (resp) resp = null
 	} catch (java.util.concurrent.TimeoutException e) {
-		LOG("checkThermostatSummary() - Concurrent Execution Timeout: ${e}.", 1, null, "warn")
+		LOG("checkThermostatSummary() - Concurrent Execution Timeout: ${e} - will retry", 1, null, "warn")
 		// Do not add an else statement to run immediately as this could cause an long looping cycle
 		runIn(atomicState.reAttemptInterval, pollChildren, [overwrite: true])
         if (resp) resp = null
@@ -2143,7 +2150,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 	} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | 
 			javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | 
 			java.net.SocketTimeoutException | java.net.NoRouteToHostException | java.net.UnknownHostException |
-			java.net.UnknownHostException e) {
+			groovyx.net.http.ResponseParseException | java.lang.reflect.UndeclaredThrowableException e) {
 		LOG("checkThermostatSummary() - ${e} - will retry",1,null,'warn')  // Just log it, and hope for better next time...
 		if (apiConnected() != 'warn') {
 			atomicState.connected = 'warn'
@@ -2160,7 +2167,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 		result = false
 		// throw e
 	} catch (Exception e) {
-		LOG("checkThermostatSummary() - General Exception: ${e}, data: ${resp?.data}", 1, null, "error")
+		LOG("checkThermostatSummary() - General Exception: ${e}, data: ${resp?.data} - won't retry", 1, null, "error")
 		result = false
         if (resp) resp = null
 		//throw e
@@ -2293,14 +2300,21 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	if (debugLevelFour) pollState += [thermostatIdsString:thermostatIdsString]
 	
 	//if (TIMERS) { def tNow = now(); log.debug "TIMER: asyncPollPrep done (${tNow - atomicState.pollEcobeeAPIStart}ms)"; atomicState.asyncPollStart = tNow; }
-	if (ST) {
-		include 'asynchttp_v1'
-		asynchttp_v1.get( pollEcobeeAPICallback, pollParams, pollState )
-	} else {
-		asynchttpGet( pollEcobeeAPICallback, pollParams, pollState )
+	boolean result = true
+	try {
+		if (ST) {
+			include 'asynchttp_v1'
+			asynchttp_v1.get( pollEcobeeAPICallback, pollParams, pollState )
+		} else {
+			asynchttpGet( pollEcobeeAPICallback, pollParams, pollState )
+		}
+		atomicState.waitingForCallback = true
+		// return true
+	} catch (Exception e) {
+		LOG("pollEcobeeAPI() - General Exception: ${e}", 1, null, "error")
+		result = false
 	}
-	atomicState.waitingForCallback = true
-	return true
+	return result
 }
 
 boolean pollEcobeeAPICallback( resp, pollState ) {
@@ -2955,13 +2969,13 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 			}
 			if (statusCode?.toInteger() == 14) {
 				// Auth_token expired
-				if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "warn")
+				if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "trace")
 				atomicState.action = "pollChildren"
 				if ( refreshAuthToken() ) { 
 					// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
 					LOG( 'Polling: Auth_token refreshed', 2, null, 'info')
 				} else {
-					LOG( 'Polling: Auth_token refresh failed', 1, null, 'error')
+					LOG( 'Polling: Auth_token refresh failed', 1, null, 'warn')
 				}
 				atomicState.inTimeoutRetry = 0
 				//return result
@@ -2972,9 +2986,9 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				//return result
 			}
 		} else if (((iStatus == null) && (resp.errorMessage?.contains('connection timed out') || resp.errorMessage?.contains('Read timeout'))) || 
-				   (iStatus && (((iStatus > 400) && (iStatus < 405)) || (iStatus == 408) || (iStatus > 500)))) { //((iStatus > 500) && (iStatus < 505))) {
-			// Retry on transient, recoverable error codes (timeouts, server temporarily unavailable, etc.) see https://en.wikipedia.org/wiki/List_of_HTTP_status_codes 
-			LOG("pollEcobeeAPICallback() - Polling error: ${iStatus}, ${resp.errorMessage} - Will Retry", 1, null, 'warn')	// Just log it, and hope for better next time...
+				   (iStatus && ((iStatus == 200) || ((iStatus > 400) && (iStatus < 405)) || (iStatus == 408) || (iStatus > 500)))) { //((iStatus > 500) && (iStatus < 505))) {
+			// Retry on transient, recoverable error codes (timeouts, server temporarily unavailable, parsing errors, etc.) see https://en.wikipedia.org/wiki/List_of_HTTP_status_codes 
+			LOG("pollEcobeeAPICallback() - Poll error: ${iStatus}, ${resp.errorMessage}, ${resp?.errorData?.status?.message}, - will retry", 1, null, 'warn')	// Just log it, and hope for better next time...
 			if (apiConnected() != 'warn') {
 				atomicState.connected = 'warn'
 				updateMyLabel()
@@ -2988,7 +3002,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 			atomicState.inTimeoutRetry = inTimeoutRetry + 1
 			//return result
 		} else /* can we handle any other errors??? */ {
-			LOG("pollEcobeeAPICallback() - Polling error: ${iStatus}, ${resp.errorMessage}, ${resp.errorJson?.status?.message}, ${resp.errorJson?.status?.code}", 1, null, "error")
+			LOG("pollEcobeeAPICallback() - Poll error: ${iStatus}, ${resp.errorMessage}, ${resp.errorJson?.status?.message}, ${resp.errorJson?.status?.code} - won't retry", 1, null, "error")
 		}
 		// For now, the code here just logs the error and assumes that checkThermostatSummary() will recover from the unhandled errors on the next call.
 		//return result
@@ -4715,9 +4729,12 @@ boolean refreshAuthToken(child=null) {
 			if ( atomicState.isHE || canSchedule() ) { runIn(atomicState.reAttemptInterval, refreshAuthToken, [overwrite: true]) } else { refreshAuthToken(child) }		
             if (resp) resp = [:]
 			return false
-		} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException |
-				 javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException | java.net.UnknownHostException | java.net.UnknownHostException e) {
-			LOG("refreshAuthToken() - ${e}.",1,child,'warn')  // Just log it, and hope for better next time...
+		} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | 
+				 javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | 
+				 java.net.SocketTimeoutException | java.net.NoRouteToHostException | java.net.UnknownHostException |
+				 groovyx.net.http.ResponseParseException | java.lang.reflect.UndeclaredThrowableException e) {
+			
+			LOG("refreshAuthToken() - ${e} - will retry",1,child,'warn')  // Just log it, and hope for better next time...
 			if (apiConnected() != 'warn') {
 				atomicState.connected = 'warn'
 				updateMyLabel()
@@ -5905,7 +5922,7 @@ boolean sendJson(child=null, String jsonBody) {
         def iStatus = e?.statusCode ? e.statusCode.toInteger() : null
 		if (debugLevelFour) LOG("sendJson() ${iStatus} ${e.response?.data?.status?.code}",1,null,"trace")
 		if (iStatus && (iStatus == 500) && (e.response?.data?.status?.code == 14)) {
-			LOG("sendJson() - HttpResponseException occurred: Auth_token has expired", 3, null, "info")
+			LOG("sendJson() - HttpResponseException occurred: Auth_token has expired", 3, null, "trace")
 			// atomicState.savedActionJsonBody = jsonBody
 			// atomicState.savedActionChild = child.deviceNetworkId
 			// atomicState.action = "sendJsonRetry"
@@ -5921,13 +5938,13 @@ boolean sendJson(child=null, String jsonBody) {
 					atomicState.sendJsonRetry = false
 				}
 			} else {
-				LOG( "Sending: Auth_token refresh failed", 1, null, 'error') 
+				LOG( "Sending: Auth_token refresh failed", 1, null, 'warn') 
 			}
         } else if (((iStatus == null) && (e?.message?.contains('timed out') || e?.message?.contains('timeout'))) || 
 				   (iStatus && (((iStatus > 400) && (iStatus < 405)) || (iStatus == 408) || (iStatus > 500)))) { //((iStatus > 500) && (iStatus < 505))) {
 			// Retry on transient, recoverable error codes (timeouts, server temporarily unavailable, etc.) see https://en.wikipedia.org/wiki/List_of_HTTP_status_codes 
-			LOG("sendJson() - httpPost error: ${iStatus}, ${e?.message}, ${e.response?.data} - Will Retry", 1, null, 'warn')	// Just log it, and hope for better next time...
-			//log.debug "checkThermostatSummary() - <b>ERROR</b> e: ${e}, \nmessage: ${e.message}, \nstatusCode: ${e.statusCode}, \nresponse.data: ${e.response?.data}"
+			LOG("sendJson() - httpPost error: ${iStatus}, ${e?.message}, ${e.response?.data} - will retry", 1, null, 'warn')	// Just log it, and hope for better next time...
+			//log.debug "sendJson() - <b>ERROR</b> e: ${e}, \nmessage: ${e.message}, \nstatusCode: ${e.statusCode}, \nresponse.data: ${e.response?.data}"
 			if (apiConnected() != 'warn') {
 				atomicState.connected = 'warn'
 				updateMyLabel()
@@ -5946,14 +5963,16 @@ boolean sendJson(child=null, String jsonBody) {
                 }
             }
 		} else /* can we handle any other errors??? */ {
-			log.debug "checkThermostatSummary() - <b>ERROR</b> e: ${e}, \nmessage: ${e.message}, \nstatusCode: ${e.statusCode}, \nresponse.data: ${e.response?.data}"
-			LOG("sendJson() - httpPost error: ${iStatus}, ${e?.message}, ${e?.response?.data}", 1, null, "error")
+			// log.debug "sendJson() - <b>ERROR</b> e: ${e}, \nmessage: ${e.message}, \nstatusCode: ${e.statusCode}, \nresponse.data: ${e.response?.data}"
+			LOG("sendJson() - httpPost error: ${iStatus}, ${e?.message}, ${e?.response?.data} - won't retry", 1, null, "error")
 		}
         if (resp) resp = [:]
 	// These appear to be transient errors, treat them all as if a Timeout...
-	} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | javax.net.ssl.SSLPeerUnverifiedException | 
-			 javax.net.ssl.SSLHandshakeException | java.net.SocketTimeoutException | java.net.UnknownHostException | java.net.UnknownHostException e) {
-		LOG("sendJson() - ${e}.",1,null,'warn')	 // Just log it, and hope for better next time...
+	} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException |
+			 javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | 
+			 java.net.SocketTimeoutException | java.net.NoRouteToHostException | java.net.UnknownHostException |
+			 groovyx.net.http.ResponseParseException | java.lang.reflect.UndeclaredThrowableException e) {
+		LOG("sendJson() - ${e} - will retry",1,null,'warn')	 // Just log it, and hope for better next time...
 		if (apiConnected() != 'warn') {
 			atomicState.connected = 'warn'
 			updateMyLabel()
@@ -5973,7 +5992,7 @@ boolean sendJson(child=null, String jsonBody) {
         if (resp) resp = [:]
 	} catch(Exception e) {
 		// Might need to further break down 
-		LOG("sendJson() - Exception: ${e}", 1, child, "error")
+		LOG("sendJson() - Exception: ${e} - won't retry", 1, child, "error")
 		result = false
         if (resp) resp = [:]
 		//throw e
