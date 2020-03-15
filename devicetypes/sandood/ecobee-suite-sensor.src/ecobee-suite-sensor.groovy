@@ -32,8 +32,9 @@
  *	1.8.00 - Release number synchronization
  *	1.8.01 - General Release
  *	1.8.02 - Better Health Check integration (ST)
+ *	1.8.03 - Added debugLevel attribute
  */
-String getVersionNum() 		{ return "1.8.02" }
+String getVersionNum() 		{ return "1.8.03" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 import groovy.json.*
@@ -70,6 +71,7 @@ metadata {
         attribute "currentProgram", "STRING"
 		attribute "currentProgramName", 'STRING'
 		attribute "decimalPrecision", 'NUMBER'
+        attribute "debugLevel", "NUMBER"
 		attribute "doors", 'STRING'
 		attribute "humidity", 'NUMBER'
         attribute "programsList", 'STRING'
@@ -394,6 +396,10 @@ def generateEvent(Map results) {
             	event = [name: name, value: sendValue, descriptionText: "DEBUG: "+sendValue, isStateChange: true, displayed: false]
                 updateDataValue( name, sendValue )
                 break;
+            case 'debugLevel':
+                updateDataValue('debugLevel', sendValue)
+				event = [name: name, value: sendValue, descriptionText: "debugLevel is ${sendValue}", displayed: false]
+                break;
 			case 'Home':
 			case 'Away':
 			case 'Sleep':
@@ -421,10 +427,10 @@ def generateEvent(Map results) {
                     	// Save non-standard Programs in a state variable and a dataValue
 						state."${name}" = sendValue
                         updateDataValue( name, sendValue )
-                    } else {
-                    	if (getDataValue(name) != "") updateDataValue(name, "")
-                        if (getDataValue('thermostatUpdated') != "") updateDataValue('thermostatUpdated', "")
-                    }
+                    } // else {
+                    	//if (getDataValue(name) != null) updateDataValue(name, "")
+                        //if (getDataValue('thermostatUpdated') != "") updateDataValue('thermostatUpdated', "")
+                    //}
                     objectsUpdated++
 				}
 				break;
@@ -498,10 +504,11 @@ def roundIt( value, decimals=0 ) {
 def roundIt( BigDecimal value, decimals=0 ) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
-
-def debugLevel(level=3) {
-	Integer debugLvlNum = (getParentSetting('debugLevel') ?: level) as Integer
-    return ( debugLvlNum >= (level as Integer))
+int getDebugLevel() {
+	 return (getDataValue('debugLevel') ?: (device.currentValue('debugLevel') ?: (getParentSetting('debugLevel') ?: 3))) as int
+}
+boolean debugLevel(level=3) {
+	return ( getDebugLevel() >= (level as int) )
 }
 
 void LOG(message, Integer level=3, child=null, logType="debug", event=false, displayEvent=false) {
