@@ -33,9 +33,10 @@
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - Fixed Mode selection error & updated WARNING formatting
+ *	1.8.03 - More busy bees
  */
-String getVersionNum()		{ return "1.8.02" }
-String getVersionLabel() { return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum()		{ return "1.8.03" }
+String getVersionLabel() 	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
 
 definition(
@@ -136,7 +137,7 @@ def mainPage() {
         
         if (!settings?.tempDisable && (settings?.thermostats?.size()>0)) {
         	statModes = getThermostatModes()
-			log.debug "${statModes}"
+			//log.debug "${statModes}"
 			section(title: sectionTitle("Configuration")+(ST?"\n":'')+smallerTitle("Outdoor Weather Source")) {
 				if (maximize) paragraph("Smart Mode requires access to external weather information (temperature and relative humidity). If you don't have a physical weather station of your own, "+
 						  "there are user-contributed weather drivers for many weather providers. If your provider isn't listed, choose '${ST?'SmartThings ':'Hubitat '} Sensors' and select your "+
@@ -1908,11 +1909,12 @@ def pauseOff() {
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
 String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
 String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
