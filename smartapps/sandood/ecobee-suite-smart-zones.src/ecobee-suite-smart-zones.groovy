@@ -24,9 +24,12 @@
  *	1.7.08 - Added minimze UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - Merged in the 'One at a Time' logic to make this a multi-modal Smart Zones Helper
+ *	1.8.03 - More busy bees
  */
-String getVersionNum()		{ return "1.8.01" }
-String getVersionLabel() { return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum()		{ return "1.8.03" }
+String getVersionLabel() 	{ return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+import groovy.json.*
 
 definition(
 	name: 				"ecobee Suite Smart Zones",
@@ -63,7 +66,8 @@ def mainPage() {
                 } else {
                     paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
                 }
-                paragraph("This Helper will synchronize Ecobee Suite thermostats' Operating State across a multi-zone HVAC system to run the fan simultaneously in all zones, minimizing the fan's total operating time.")
+                paragraph("This multi-modal Helper will either synchronize Ecobee Suite thermostats' Operating State across a multi-zone HVAC system (in Cooperative Mode), or it will turn off all " +
+                		  "idle thermostats whenever one starts heat/cooling/fan only (Isolated Mode)")
             }
         }
         
@@ -109,19 +113,35 @@ def mainPage() {
                 }
             }
         	if(settings.tempDisable) { 
-				paragraph warningText + "Temporarily Paused; Resume below" 
+				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else {
-				input ("masterThermostat", "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: "Select Master Ecobee Suite Thermostat", required: true, multiple: false, submitOnChange: true)
+            	paragraph("In the (traditional) Cooperative operating mode, this helper share the master thermostat's cool/heat/fan operating state across all the slave thermostats. " +
+                		  "In the (new) 'Isolated' operating mode, this helper will turn off all of the other thermostats when any one begins heating/cooling/fan only.")
+            	if (settings?.helperMode == null) { app.updateSetting('helperMode', 'cooperate'); settings?.helperMode = 'cooperate'; }
+				
+            	String defaultMode = (settings?.masterThermostat || (settings?.helperMode && (settings.helperMode == 'cooperate'))) ? "cooperate" : ""
+            	input(name: "helperMode", type: "enum", title: inputTitle("Select desired operating mode for this Helper"), required: true, multiple: false, submitOnChange: true, defaultValue: defaultMode, 
+                	  options: ["cooperate": "Cooperative", "isolate": "Isolated"])
+                
+            	if ((settings?.masterThermostat && !settings?.helperMode) || (settings?.helperMode && (settings.helperMode == 'cooperate'))) {
+					input(name: "masterThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Master Ecobee Suite Thermostat"), required: true, multiple: false, submitOnChange: true)
+                } else {
+                	input(name: "theThermostats", type:"${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select two or more Ecobee Suite Thermostats"), 
+					  	  required: true, multiple: true, submitOnChange: true)
+					if (settings?.theThermostats) {
+						if (settings.theThermostats.size() == 1) paragraph getFormat("warning", "You must select at least 2 Ecobee Suite Thermostsats...")
+					}
+                }
 			}            
 		}
-        
-        if (!settings?.tempDisable && settings?.masterThermostat) {
-        	section(title: sectionTitle('Configuration')+(ST?"\n":'')+smallerTitle("Select Slave Thermostats")) {
+        // COOPERATIVE MODE SETTINGS
+        if (!settings?.tempDisable && (settings?.helperMode == 'cooperate') && settings?.masterThermostat) {
+        	section(title: sectionTitle('Cooperative Mode: Slaves')) {
 				// Settings option for using Mode or Routine
 				input(name: "slaveThermostats", title: inputTitle("Select Slave Ecobee Suite Thermostat(s)"), type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", required: true, multiple: true, submitOnChange: true)
 			}
 			if (slaveThermostats) {
-				section(title: sectionTitle("Actions")) {
+				section(title: sectionTitle("Cooperative Mode: Actions")) {
 					input(name: 'shareHeat', title: inputTitle("Share ${masterThermostat.displayName} heating?"), type: "bool", required: true, defaultValue: false, submitOnChange: true, width: 4)
 					input(name: 'shareCool', title: inputTitle("Share ${masterThermostat.displayName} cooling?"), type: "bool", required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (!settings.shareHeat && !settings.shareCool && !settings.shareFan) {
@@ -132,7 +152,40 @@ def mainPage() {
 					}
 				}
 			}
-		}
+		} else if (!settings.tempDisable && (settings.helperMode == 'isolate') && settings?.theThermostats && (settings.theThermostats.size() > 1)) {
+        // ISOLATED MODE SETTINGS
+			section(title: sectionTitle("Isolated Mode: Actions")) {
+				input(name: "busyStates", type: "enum", title: inputTitle("When any Thermostat's Operating State becomes one of these..."), submitOnChange: true, required: true, width: 6, multiple: true,
+                	  options: ["cooling": "Cooling", "heating": "Heating", "fan only": "Fan Only"], defaultValue: "cooling")
+				if (HE) paragraph("", width: 6)
+            	input(name: "hvacOff", type: "bool", title: inputTitle("Turn off the idle Thermostat${(settings?.theThermostats?.size() > 2)?'s':''}?"), defaultValue: false, submitOnChange: true, width: 4)
+                if (settings?.hvacOff) {
+                	input(name: "fanOff", type: "bool", title: inputTitle("Turn off the Fan on the idle systems?"), defaultValue: false, submitOnChange: true, width: 6)
+                	if (HE) paragraph("", width: 2)
+                }
+                def statModes = getThermostatModes()
+                if (settings?.hvacOff) input(name: "hvacOn", type: "enum", title: inputTitle("Return HVAC to"), defaultValue: "Prior State", options: statModes, width: 4)
+                if (settings?.fanOff) {
+                	if (HE && !settings?.hvacOff) paragraph("", width: 4)
+                    def fanModes = getThermostatFanModes()
+                    input(name: "fanOn", type: "enum", title: inputTitle("Return Fan to"), defaultValue: "Prior State", options: fanModes, width: 4)
+                    if (settings?.fanOn == 'Circulate') input(name: "fanOnTime", type: "number", title: inputTitle("Fan Circulation Time (minutes)"), range: 1..55, defaultValue: 20, submitOnChange: true, width: 4)
+                }
+            }
+            section (title: sectionTitle("Isolated Mode: Conditions")) {
+            	paragraph "Choose one or more conditions; thermostat modes will be changed only when ALL of these are true"
+            	if (!settings?.busyStates) { app.updateSetting("busyStates", "cool"); settings.busyStates = "cool"; }
+                input(name: "actionDays", type: "enum", title: smallerTitle("Only on these days of the week"), multiple: true, required: false, submitOnChange: true,
+                      options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], width: 5)
+            	paragraph(smallerTitle("Only during this time period:"), width: 3)
+				
+                input(name: "fromTime", type: "time", title: inputTitle("From:"), required: false, submitOnChange: true, width: 2)
+                //if (HE) paragraph("", width: 8)
+        		input(name: "toTime", type: "time", title: inputTitle("To:"), required: (settings?.fromTime != null), submitOnChange: true, width: 2)
+				//def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(fromTime), timeToday(toTime), new Date(), location.timeZone) : true
+				paragraph(getFormat("note","All thermostats will be returned to the 'on' Mode outside of the above conditions"))
+            }
+        }
         
         section(title: sectionTitle("Operations")) {
         	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
@@ -155,31 +208,39 @@ def mainPage() {
 // Main functions
 void installed() {
 	LOG("Installed with settings ${settings}", 4, null, 'trace')
+    atomicState.HVACModeState = 'unknown'
+	atomicState.runningThermostat = ''
 	initialize()  
 }
 void updated() {
 	LOG("Updated with settings ${settings}", 4, null, 'trace')
 	unsubscribe()
+    unschedule()
     initialize()
 }
 def initialize() {
-	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+	LOG("${getVersionLabel()} Initializing (${settings?.helperMode})...", 2, "", 'info')
+    atomicState.versionLabel = getVersionLabel()
 	updateMyLabel()
 	boolean ST = atomicState.isST
-	
-	// Get slaves into a known state
-	slaveThermostats.each { stat ->
-		String ncTh= ST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true) 
-    	if (ncTh == 'hold') {
-        	if (state."${stat.displayName}-currProg" == null) {
-				state."${stat.displayName}-currProg" = ST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+	boolean isolate = (settings?.helperMode == 'isolate')
+    boolean cooperate = (settings?.helperMode == 'isolate')
+    
+    if (cooperate) {
+        // Get slaves into a known state
+        slaveThermostats.each { stat ->
+            String ncTh= ST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true) 
+            if (ncTh == 'hold') {
+                if (state."${stat.displayName}-currProg" == null) {
+                    state."${stat.displayName}-currProg" = ST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+                }
+                if (state."${stat.displayName}-holdType" == null) {
+                    state."${stat.displayName}-holdType" = ST ? stat.currentValue('lastHoldType') : stat.currentValue('lastHoldType', true)
+                }
+            } else {
+                state."${stat.displayName}-currProg" = null
+                state."${stat.displayName}-holdType" = null
             }
-            if (state."${stat.displayName}-holdType" == null) {
-        		state."${stat.displayName}-holdType" = ST ? stat.currentValue('lastHoldType') : stat.currentValue('lastHoldType', true)
-            }
-        } else {
-      		state."${stat.displayName}-currProg" = null
-        	state."${stat.displayName}-holdType" = null
         }
 	}
 	
@@ -190,21 +251,27 @@ def initialize() {
     }
     if (settings.debugOff) log.info "log.debug() logging disabled"
 	
-	// check the master, but give it a few seconds first
-	runIn (5, "theAdjuster", [overwrite: true])
-	
-	// and finally, subscribe to thermostatOperatingState changes
-	subscribe( masterThermostat, 'thermostatOperatingState', masterFanStateHandler )
-    subscribe( slaveThermostats, 'thermostatOperatingState', changeHandler )
-    subscribe( slaveThermostats, 'temperature', changeHandler )
-    subscribe( slaveThermostats, 'heatingSetpoint', changeHandler )
-    subscribe( slaveThermostats, 'coolingSetpoint', changeHandler )
-    subscribe( slaveThermostats, 'temperature', changeHandler )
-    // subscribe( slaveThermostats, 'currentProgram', changeHandler )
-    
+    if (cooperate) {
+        // check the master, but give it a few seconds first
+        runIn (5, "theAdjuster", [overwrite: true])
+
+        // and finally, subscribe to thermostatOperatingState changes
+        subscribe( masterThermostat, 'thermostatOperatingState', masterFanStateHandler )
+        subscribe( slaveThermostats, 'thermostatOperatingState', changeHandler )
+        subscribe( slaveThermostats, 'temperature', changeHandler )
+        subscribe( slaveThermostats, 'heatingSetpoint', changeHandler )
+        subscribe( slaveThermostats, 'coolingSetpoint', changeHandler )
+        subscribe( slaveThermostats, 'temperature', changeHandler )
+        // subscribe( slaveThermostats, 'currentProgram', changeHandler )
+    } else if (isolate) {
+    	subscribe(theThermostats, 'thermostatOperatingState', thermostatHandler)
+		updateMyLabel()
+    }
+
     LOG("initialize() complete", 3, null, 'trace')
 }
 
+// COOPERATIVE MODE METHODS
 def changeHandler(evt) {
 	LOG("${evt.displayName} ${evt.name} ${evt.value}",4,null,'trace')
 	runIn(2, 'theAdjuster', [overwrite: true])		// collapse multiple simultaneous events
@@ -411,7 +478,259 @@ void setFanOn(stat) {
     }
 }
 
+// ISOLATED MODE METHODS
+def thermostatHandler(evt) {
+	String dni = evt.device.deviceNetworkId as String
+    String tid = getDeviceId(dni)
+    
+	// First make sure we are supposed to be making changes now...
+    boolean notNow = false
+    if (!dayCheck()) {
+        if (atomicState.HVACModeState != 'idle') LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
+        notNow = true
+    }
+    def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : true
+    if (!notNow && !between) {
+        if (atomicState.HVACModeState != 'idle') LOG('Not configured to run Actions at this time, ignoring', 2, null, 'info')
+        notNow = true
+    }
+    
+    if (notNow) {
+    	// Make sure that we leave all the systems turned on once we are outside the configured days & time window
+        if (atomicState.HVACModeState == 'off') {
+        	theThermostats.each { stat ->
+            	turnOnHVAC(stat)
+            }
+            atomicState.HVACModeState == 'idle'	// we'll only do this once...
+        }
+    } else if (evt.value.startsWith('idle') && (tid == atomicState.runningThermostat)) {
+    	// turn them all back on again
+        atomicState.HVACModeState = 'on'
+        atomicState.runningThermostat = ''
+        theThermostats.each { stat ->
+        	if (stat.deviceNetworkId != dni) {
+            	turnOnHVAC(stat)
+            }
+        }
+    } else if (settings?.busyStates?.contains(evt.value)) {
+    	// turn off all the other thermostats
+        atomicState.runningThermostat = tid
+        atomicState.HVACModeState = 'off'
+        theThermostats.each { stat ->
+        	if (stat.deviceNetworkId != dni) {
+            	turnOffHVAC(stat)
+            }
+        }
+    }  else {
+    	LOG("thermostatHandler(): ${evt.name} = ${evt.value} for ${evt.device.displayName} - nothing to do...", 3, null, 'info')
+    }
+}
+
+void turnOffHVAC(therm) {
+	LOG("turnOffHVAC(${therm.displayName}}) entered...", 4,null,'info')
+	boolean ST = isST
+    
+    if (settings.hvacOff) {
+    	String tid = getDeviceId(therm.deviceNetworkId)
+    	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
+    	if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+        // turn off the HVAC & save the state
+		makeReservation(tid, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
+		String thermostatMode = 	ST ? therm.currentValue('thermostatMode') 		: therm.currentValue('thermostatMode', true)
+        String thermostatFanMode = 	ST ? therm.currentValue('thermostatFanMode') 	: therm.currentValue('thermostatFanMode', true)
+        def fanMinOnTime = 			(ST ? therm.currentValue('fanMinOnTime') 		: therm.currentValue('fanMinOnTime', true)) ?: 0
+    	if (thermostatMode != 'off') {
+        	fanToo = false
+            tmpThermSavedState[tid].mode = thermostatMode
+            tmpThermSavedState[tid].fanMode = thermostatFanMode
+            tmpThermSavedState[tid].fanTime = fanMinOnTime
+            tmpThermSavedState[tid].HVACModeState = 'off'
+			tmpThermSavedState[tid].wasAlreadyOff = false
+            //therm.setThermostatMode('off')
+			log.debug "therm.setThermostatMode( 'off' )"
+            if (settings.fanOff) {
+            	makeReservation(tid, 'fanOff')
+            	//therm.setThermostatFanMode('off')		// "Off" will also clear fanMinOnTime
+				log.debug "therm.setThermostatFanMode( 'off' )"
+                fanToo = true
+            }
+			LOG("${therm.displayName} Mode ${fanToo?'and Fan ':''}turned off (was ${thermostatMode}/${thermostatFanMode}-${fanMinOnTime})",3,null,'info')    
+        } else {
+        	tmpThermSavedState[tid].wasAlreadyOff = true
+            tmpThermSavedState[tid].HVACModeState = 'off'
+        }
+    	atomicState.thermSavedState = tmpThermSavedState
+		LOG("turnOffHVAC(${therm.displayName}) - thermSavedState: ${atomicState.thermSavedState}", 4, null, 'debug')
+    }
+}
+
+void turnOnHVAC(therm) {
+ 	LOG("turnOnHVAC(${therm.displayName}) entered...", 4,null,'info')
+	boolean ST = isST
+
+	if (settings.hvacOff) {
+    	// turn on the HVAC
+    	String tid = getDeviceId(therm.deviceNetworkId)
+    	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
+        if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
+        String currentMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true) 		// Better be "off"
+     
+        String thermostatMode
+        String thermostatFanMode
+        def fanMinOnTime = 0
+
+        if (settings.hvacOn == "Prior State") {
+            thermostatMode = tmpThermSavedState[tid].mode
+            if (settings.fanOff) {
+                if (settings.fanOn) {
+                    if (settings.fanOn == "Prior State") {
+                        thermostatFanMode = tmpThermSavedState[tid].fanMode
+                        fanMinOnTime = tmpThermSavedState[tid].fanTime
+                    }else {
+                        thermostatFanMode = settings.fanOn
+                        if (settings.fanOn == "Circulate") {
+                            fanMinOnTime = settings.fanOnTime ?: 20
+                        }
+                    }
+                }
+            }
+        } else {
+            thermostatMode = settings.hvacOn
+            if (settings.fanOff) {
+                if (settings.fanOn) {
+                    if (settings.fanOn == "Prior State") {
+                        thermostatFanMode = tmpThermSavedState[tid].fanMode
+                        fanMinOnTime = tmpThermSavedState[tid].fanTime
+                    } else {
+                        thermostatFanMode = settings.fanOn
+                        if (settings.fanOn == "Circulate") {
+                            fanMinOnTime = settings.fanOnTime ?: 20
+                        }
+                    }
+                }
+            }
+        }
+            
+        if (currentMode == 'off') {
+           	int i = countReservations( tid, 'modeOff' ) - (haveReservation(tid, 'modeOff') ? 1 : 0)
+            if (i > 0) {
+                // Currently off, and somebody besides me has a reservation - just release my reservation
+                cancelReservation(tid, 'modeOff')
+                notReserved = false							
+                LOG("Cannot change ${therm.displayName} to ${thermostatMode.capitalize()} - ${getGuestList(tid, 'modeOff').toString()[1..-2]} hold 'modeOff' reservations",1,null,'warn')
+            } else {
+              	// Nobody else but me has a reservation
+                cancelReservation(tid, 'modeOff')
+				if (tmpThermSavedState[tid].containsKey('wasAlreadyOff') && (tmpThermSavedState[tid].wasAlreadyOff == false)) {
+					tmpThermSavedState[tid].HVACModeState = 'on'
+					tmpThermSavedState[tid].mode = thermostatMode
+                	//therm.setThermostatMode( thermostatMode )
+					log.debug "therm.setThermostatMode( ${thermostatMode} )"
+                    boolean andFan = false
+                    if (settings.fanOff) {
+						i = countReservations( tid, 'fanOff' ) - (haveReservation(tid, 'fanOff') ? 1 : 0)
+						if (i > 0) {
+                			// Currently off, and somebody besides me has a reservation - just release my reservation
+                			cancelReservation(tid, 'fanOff')	
+                			LOG("Cannot change ${therm.displayName} to ${thermostatFanMode.capitalize()} - ${getGuestList(tid, 'fanOff').toString()[1..-2]} hold 'fanOff' reservations",1,null,'warn')
+            			} else {
+              				// Nobody else but me has a reservation
+                			cancelReservation(tid, 'fanOff')
+							currentFanTime = ST ? therm.currentValue('fanMinOnTime') 		: therm.currentValue('fanMinOnTime', true)
+							if (fanMinOnTime != currentFanTime) {
+								andFan = true
+								therm.setFanMinOnTime = fanMinOnTime
+								log.debug "therm.setFanMinOnTime( ${fanMinOnTime} )"
+							}
+							currentFanMode = ST ? therm.currentValue('thermostatFanMode') 	: therm.currentValue('thermostatFanMode', true)
+							if (thermostatFanMode != currentFanMode) {
+								andFan = true
+								therm.setFanMode(thermostatFanMode)
+								log.debug "therm.setThermostatFanMode( ${thermostatFanMode} )"
+							}
+						}
+					}
+					LOG("${therm.displayName} ${thermostatMode.capitalize()} Mode ${andFan?'and Fan':''} restored (was ${currentMode.capitalize()})",3,null,'info')
+				} else {
+					LOG("${therm.displayName} was already off, not turning back on",3,null,'info')
+				}
+            } 
+        } else if (currentMode == thermostatMode) {
+            LOG("${therm.displayName} is already in ${thermostatMode.capitalize()}",3,null,'info')
+            tmpThermSavedState[tid].HVACModeState = 'on'
+        }
+        atomicState.thermSavedState = tmpThermSavedState
+    }
+}
+
 // Helper Functions
+// SmartThings internal function format (Strings instead of Dates)
+private myTimeOfDayIsBetween(String fromTime, String toTime, Date checkDate, String timeZone) {
+log.debug "fromTime: ${fromTime}"
+	return myTimeOfDayIsBetween(timeToday(fromTime), timeToday(toTime), checkDate, timeZone)
+}
+
+private myTimeOfDayIsBetween(Date fromDate, Date toDate, Date checkDate, timeZone)     {
+	if (toDate == fromDate) {
+		return false	// blocks the whole day
+	} else if (toDate < fromDate) {
+		if (checkDate.before(fromDate)) {
+			fromDate = fromDate - 1
+		} else {
+			toDate = toDate + 1
+		}
+	}
+    return (!checkDate.before(fromDate) && !checkDate.after(toDate))
+}
+private toDateTime( str ) {
+	return timeToday( str )
+}
+def getShortTime( date ) {
+	Date dt = timeToday( date )
+	def df = new java.text.SimpleDateFormat("h:mm a")
+    df.setTimeZone(location.timeZone)
+    return df.format( dt )
+}
+private boolean dayCheck() {
+	if (!settings.actionDays) return true
+    
+    def df = new java.text.SimpleDateFormat("EEEE")
+    // Ensure the new date object is set to local time zone
+    df.setTimeZone(location.timeZone)
+    def day = df.format(new Date())
+    //Does the preference input Days, i.e., days-of-week, contain today?
+    return (actionDays.contains(day))
+}
+
+// Reservation Management Functions - Now implemented in Ecobee Suite Manager
+void makeReservation(String tid, String type='modeOff' ) {
+	parent.makeReservation( tid, app.id as String, type )
+}
+// Cancel my reservation
+void cancelReservation(String tid, String type='modeOff') {
+	//log.debug "cancel ${tid}, ${type}"
+	parent.cancelReservation( tid, app.id as String, type )
+}
+// Do I have a reservation?
+Boolean haveReservation(String tid, String type='modeOff') {
+	return parent.haveReservation( tid, app.id as String, type )
+}
+// Do any Apps have reservations?
+Boolean anyReservations(String tid, String type='modeOff') {
+	return parent.anyReservations( tid, type )
+}
+// How many apps have reservations?
+Integer countReservations(String tid, String type='modeOff') {
+	return parent.countReservations( tid, type )
+}
+// Get the list of app IDs that have reservations
+List getReservations(String tid, String type='modeOff') {
+	return parent.getReservations( tid, type )
+}
+// Get the list of app Names that have reservations
+List getGuestList(String tid, String type='modeOff') {
+	return parent.getGuestList( tid, type )
+}
 
 void updateMyLabel() {
 	boolean ST = atomicState.isST
@@ -463,6 +782,42 @@ def pauseOff() {
 	}
 	atomicState.globalPause = false
 }
+// Thermostat Programs & Modes
+def getProgramsList() {
+	def programs = ["Away","Home","Sleep"]
+	if (theThermostat) {
+    	def pl = theThermostat.currentValue('programsList')
+        if (pl) programs = new JsonSlurper().parseText(pl)
+    }
+    return programs.sort(false)
+}
+def getThermostatModes() {
+	def statModes = []
+    if (settings?.theThermostats) {
+    	settings.theThermostats.each { stat ->
+    		def tempModes = stat.currentValue('supportedThermostatModes')
+        	def modeTemp = (tempModes) ? tempModes[1..-2].tokenize(", ") : []
+            if (modeTemp != []) statModes = (statModes == []) ? modeTemp : statModes.intersect(modeTemp)
+        }
+    }
+    if (statModes == []) statModes = ["off","heat","cool","auto","auxHeatOnly"]
+    return ["Prior State"] + statModes*.capitalize().sort(false)
+}
+List getThermostatFanModes() {
+	def fanModes = []
+    if (settings?.theThermostats) {
+    	settings.theThermostats.each { stat ->
+        	def tempModes = stat.currentValue('supportedThermostatFanModes')
+        	def fanTemp = tempModes ? tempModes[1..-2].tokenize(", ") : []
+            if (fanTemp != []) fanModes = (fanModes == []) ? fanTemp : fanModes.intersect(fanTemp)
+        }
+    }
+    if (fanModes == []) fanModes = ["off", "auto", "circulate", "on"]
+    return ["Prior State"] + fanModes*.capitalize().sort(false)
+}
+String getDeviceId(networkId) {
+    return networkId.split(/\./).last()
+}
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	String msg = "${atomicState.appDisplayName} ${message}"
     if (logType == null) logType = 'debug'
@@ -473,30 +828,52 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
     } else log."${logType}" message
 	parent.LOG(msg, level, null, logType, event, displayEvent)
 }
-
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
 String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
 String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return isHE ? "<div style='color:red'><b>WARNING: </b></div>"	: "WARNING: " }
+String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
+// The following 3 calls are available EVERYWHERE, but they incure a high overhead, so best used only in the Metadata definitions
 String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }
+boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }
+// The following 3 calls are ONLY for use within the Application runtime  - they will throw an error at compile time if used within metadata
 String getHubPlatform() {
+	// This MUST be called at least once in the application runtime space
 	def pf = getPlatform()
     atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
 											// or if (state.hubPlatform == 'SmartThings')...
@@ -504,8 +881,9 @@ String getHubPlatform() {
     atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
     return pf
 }
-boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+// THese work, but using the atomicState.is** directly is more efficient
+boolean getIsSTHub() { return atomicState.isST as boolean}					// if (isSTHub) ...
+boolean getIsHEHub() { return atomicState.isHE as boolean}					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
 	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
