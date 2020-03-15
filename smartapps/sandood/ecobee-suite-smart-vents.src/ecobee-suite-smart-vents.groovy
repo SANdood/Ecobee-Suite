@@ -43,8 +43,9 @@
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - Option to close vents when contact open and fan only; fixed too many ES sensors error when 0 ES sensors, fix Pause warning
+ *	1.8.03 - More busy bees
  */
-String getVersionNum()		{ return "1.8.02" }
+String getVersionNum()		{ return "1.8.03" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.JsonSlurper
 
@@ -138,7 +139,7 @@ def mainPage() {
                 }
             }
             if (settings?.tempDisable) { 
-            	paragraph getFormat("warning","This Helper is temporarily paused")
+            	paragraph getFormat("warning","This Helper is temporarily paused...")
             } else {
             	if (maximize) paragraph("Select 1 or more temperature sensors, ideally at least 1 of which is an Ecobee Suite Sensor")
         		input(name: "theSensors", type:"capability.temperatureMeasurement", title: inputTitle("Select Temperature Sensor(s)"), required: true, multiple: true, submitOnChange: true)
@@ -1293,11 +1294,12 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
 String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
 String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
