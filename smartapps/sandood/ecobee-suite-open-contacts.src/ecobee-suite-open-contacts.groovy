@@ -38,8 +38,12 @@
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - Miscellaneous optimizations
+ *	1.8.03 - Updated Paused warning
+ *	1.8.04 - Fixed some logging messages, cleaned up thermostatMode changes
+ *	1.8.05 - More busy bees...
+ *	1.8.06 - Ignore multiple "open" events if no intermediate "close" events
  */
-String getVersionNum()		{ return "1.8.02" }
+String getVersionNum()		{ return "1.8.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -126,7 +130,7 @@ def mainPage() {
                 }
             }
         	if (settings.tempDisable) { 
-				paragraph warningText + "Temporarily Paused; Resume below" 
+				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
 				if (settings.theThermostats || !settings.myThermostats) {
 					input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
@@ -579,8 +583,8 @@ def statModeChange(evt) {
         tmpThermSavedState[tid].HVACModeState = 'off'
 		tmpThermSavedState[tid].wasAlreadyOff = false
     } else {
-    	// somebody has overridden us..
-        cancelReservation( tid, 'modeOff' )		// might as well give up our reservation
+    	// somebody has overridden us...or they just changed the stat mode between heat/cool/auto
+        if (haveReservation( tid, 'modeOff')) cancelReservation( tid, 'modeOff' )		// might as well give up our reservation
     	if (atomicState.HVACModeState != 'on') atomicState.HVACModeState = 'on'
         tmpThermSavedState[tid].HVACModeState = 'on'
 		tmpThermSavedState[tid].wasAlreadyOff = false
@@ -644,18 +648,32 @@ def coolSPHandler( evt ) {
 // "sensorOpened" called when state change should turn HVAC off - routine name preserved for backwards compatibility with prior implementations
 void sensorOpened(evt=null) {
 	LOG("sensorOpened() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null, 'info')
+    def openCount = numOpen()
+    def aSOC = atomicState.openCount
+    if (aSOC && (aSOC == openCount)) {
+    	// Weird - something just opened, but the count of open things is the same as before...
+        // We must have missed something getting closed somehow. Let's just ignore this for now
+        LOG("sensorOpened() - unexpected duplicate open event, or we missed a close event...ignoring", 3, null, 'warn')
+        return
+    }
+    atomicState.openCount = openCount
+    
     def HVACModeState = atomicState.HVACModeState
-    if (HVACModeState == 'off_pending') return		// already in process of turning off
+    if (HVACModeState == 'off_pending') {
+    	LOG("sensorOpened() - HVAC off is already pending - ignoring", 3, null, 'info')
+    	return		// already in process of turning off
+    }
 
 	boolean ST = isSTHub
 	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
 	
-	def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
+	def theStats = settings.theThermostats ?: settings.myThermostats
     if (HVACModeState == 'off') { // || (HVACModeState == 'off_pending')) {
     	// HVAC is already off
 		def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue('thermostatMode', true)
 		if (tstatModes.contains('off')) { // at least 1 thermostat is actually off	
-			if (numOpen() == 1) {
+			if (atomicState.openCount == 1) {
+            	// Save the current HVAC state on the FIRST contact to open ONLY
 				atomicState.wasAlreadyOff = true
 				theStats.each { therm ->
 					def tid = getDeviceId(therm.deviceNetworkId)
@@ -707,18 +725,19 @@ void sensorOpened(evt=null) {
 
 // "sensorClosed" called when state change should turn HVAC On (routine name preserved for backwards compatibility with prior implementations)
 void sensorClosed(evt=null) {
-	// Turn HVAC Off action has occured
+	// Turn HVAC Off action has occurred
     LOG("sensorClosed() - ${evt?.device} ${evt?.name} ${evt?.value}", 4, null,'info')
+    atomicState.openCount = numOpen()
+    
 	def HVACModeState = atomicState.HVACModeState
     boolean ST = isSTHub
-    
+    def theStats = settings.theThermostats ?: settings.myThermostats    
     if (allClosed() == true) {
     	if (HVACModeState == 'on_pending') return
         
 		if (atomicState.wasAlreadyOff == true) {
 			def tmpThermSavedState = atomicState.thermSavedState ?: [:]
 			int i = 0, j = 0
-			def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 			theStats.each { therm ->
 				j++
 				def tid = getDeviceId(therm.deviceNetworkId)
@@ -1418,20 +1437,40 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
 String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
 String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
+String sectionTitle	(String txt) 	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
 String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
 String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return isHE ? "<div style='color:red'><b>WARNING: </b></div>"	: "WARNING: " }
+String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
