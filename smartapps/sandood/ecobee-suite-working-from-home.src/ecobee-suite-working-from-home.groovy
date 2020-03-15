@@ -16,7 +16,7 @@
  *	1.7.01 - nonCached currentValue() for HE
  *	1.7.02 - Optionally identify who is still home in logs and notifications
  *	1.7.03 - Miscellaneous optimizations
- *	1.7.04 - Fixed myThermostats subscription (thx @astephon88) & missing sendMessages
+ *	1.7.04 - Fixed myThermostats subscription (thx @astephon88) & missing sendMessages 
  *	1.7.05 - Fixed SMS text entry
  *	1.7.06 - Fixing private method issue caused by grails
  *	1.7.07 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
