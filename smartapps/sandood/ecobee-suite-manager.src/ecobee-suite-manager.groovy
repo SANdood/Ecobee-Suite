@@ -60,7 +60,7 @@
  *	1.8.09 - Reworked stat.generateEvent()
  *	1.8.10 - Optimized & hardened initialize()
  */
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.10a" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 import groovy.json.*
@@ -1914,7 +1914,7 @@ void pollChildren(deviceId=null,force=false) {
 		}
 	} else {
 		atomicState.inPollChildren = true
-        atomicState.skipTime = null
+        if (atomicState.skipTime) atomicState.skipTime = null
 	}
 	
 	// Just in case we need to re-initialize anything
@@ -1923,7 +1923,7 @@ void pollChildren(deviceId=null,force=false) {
 		LOG("Code updated: ${version} - re-initializing",1,null,'warn')
 		atomicState.versionLabel = version
 		atomicState.inPollChildren = false
-        atomicState.skipTime = null
+        if (atomicState.skipTime) atomicState.skipTime = null
         // runIn(2, updated, [overwrite: true])
         updated()
 		return
@@ -1952,6 +1952,7 @@ void pollChildren(deviceId=null,force=false) {
 		} else {		
 			LOG("pollChildren() - Unable to schedule handlers do to loss of API Connection. Please ensure you are authorized.", 1, null, "error")
 			atomicState.inPollChildren = false
+            if (atomicState.skipTime) atomicState.skipTime = null
 			return
 		}
 	}
@@ -1962,6 +1963,7 @@ void pollChildren(deviceId=null,force=false) {
 	if (settings.thermostats?.size() < 1) {
 		LOG("pollChildren() - Nothing to poll as there are no thermostats currently selected", 1, null, "warn")
 		atomicState.inPollChildren = false
+        if (atomicState.skipTime) atomicState.skipTime = null
 		return
 	}	 
 	
@@ -1982,8 +1984,9 @@ void pollChildren(deviceId=null,force=false) {
 		pollEcobeeAPI(thermostatsToPoll)		// This will queue the async request, and values will be generated and sent from pollEcobeeAPICallback
 	} else {	 
 		LOG(preText+'No updates...', 2, null, 'trace')
+        atomicState.inPollChildren = false
+        if (atomicState.skipTime) atomicState.skipTime = null
 	}
-	//atomicState.inPollChildren = false
 }
 
 void generateAlertsAndEvents() {
@@ -2274,6 +2277,8 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	// This probably can't happen anymore...shouldn't even be here if nothing has changed and not a forced poll...
 	if (!somethingChanged && !forcePoll) {	
 		if (debugLevelFour) LOG("<===== Leaving pollEcobeeAPI() - nothing changed, skipping heavy poll...", 4 )
+        atomicState.inPollChildren = false
+        if (atomicState.skipTime) atomicState.skipTime = null
 		return true		// act like we completed the heavy poll without error
 	} else {
 		// if getting the weather, get for all thermostats at the same time. Else, just get the thermostats that changed
@@ -2359,6 +2364,8 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 		// return true
 	} catch (Exception e) {
 		LOG("pollEcobeeAPI() - General Exception: ${e}", 1, null, "error")
+        atomicState.inPollChildren = false
+        if (atomicState.skipTime) atomicState.skipTime = null
 		result = false
 	}
 	return result
@@ -3086,6 +3093,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	//}
 	if (debugLevelFour) LOG("<===== Leaving pollEcobeeAPICallback() results: ${result}", 1, null, 'trace')
     atomicState.inPollChildren = false
+    if (atomicState.skipTime) atomicState.skipTime = null
 	return result
 }
 
