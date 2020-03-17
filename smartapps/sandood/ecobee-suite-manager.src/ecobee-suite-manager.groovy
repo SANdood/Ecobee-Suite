@@ -1928,7 +1928,7 @@ void pollChildren(deviceId=null,force=false) {
         updated()
 		return
 	}
-	
+	LOG("Checking for updates...",1,null,'info')
 	boolean debugLevelFour = debugLevel(4)
 	//debugLevelFour = true
 	if (debugLevelFour) LOG("pollChildren() - deviceId ${deviceId}", 1, null, 'trace')
@@ -2043,9 +2043,9 @@ void generateEventLocalParams() {
 // NOTE: Despite the documentation, Runtime Revision CAN change more frequently than every 3 minutes - equipmentStatus is 
 //		 apparently updated in real time (or at least very close to real time)
 boolean checkThermostatSummary(String thermostatIdsString) {
-	def startMS 
+	//def startMS 
 	//if (TIMERS) startMS = now()
-
+    
 	def updatesLog = atomicState.updatesLog
 	boolean thermostatUpdated = updatesLog.thermostatUpdated	// false
 	boolean alertsUpdated = updatesLog.alertsUpdated			// false
@@ -2056,7 +2056,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 	boolean debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("checkThermostatSummary() - ${thermostatIdsString}",1,null,'trace')
 	if (thermostatIdsString == '') thermostatIdsString = getChildThermostatDeviceIdsString()
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeEquipmentStatus":"true"}}'
+	String jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeEquipmentStatus":"true"}}'
 	def pollParams = [
 			uri: apiEndpoint,
 			path: "/1/thermostatSummary",
@@ -2066,7 +2066,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 	]
 	
 	boolean result = false
-	def statusCode=999
+	def statusCode = 999
 	String tstatsStr = ''	 
 	if (debugLevelFour) LOG("checkThermostatSummary() - pollParams: ${pollParams}",1,null,'trace')
 	try {
@@ -2078,7 +2078,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 					&& (resp.data.status instanceof Map) && resp.data.status.containsKey('code') && (resp.data.status.code != null)) {
 					statusCode = resp.data.status.code
 				} else {
-					LOG("checkThermostatSummary() - malformed resp.data", 2, null, 'warn')
+					LOG("checkThermostatSummary() - malformed response - skipping...", 2, null, 'warn')
 				}
 				if (statusCode == 0) { 
 					def revisions = resp.data?.revisionList
@@ -2138,17 +2138,21 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 					}
 				} else if ( [14, 1, 2, 3].contains(statusCode)) {
 					LOG("checkThermostatSummary() - status code: ${statusCode}, message: ${resp.data.status.message}", 2, null, 'warn')
+					atomicState.inPollChildren = false
+					if (atomicState.skipTime) atomicState.skipTime = null
 					runIn(2, refreshAuthToken, [overwrite: true])
 				} else {
 					// if we get here, we had http status== 200, but API status != 0
-					if (statusCode != 999) LOG("checkThermostatSummary() - Ecobee API status ${statusCode}, message: ${resp.data.status.message}", 1, null, 'warn')
+					atomicState.inPollChildren = false
+					if (atomicState.skipTime) atomicState.skipTime = null
+					if (statusCode != 999) LOG("checkThermostatSummary() - status code ${statusCode}, message: ${resp.data.status.message}", 1, null, 'warn')
 					runIn(2, refreshAuthToken, [overwrite: true])
 				}
 			} else {
 				LOG("checkThermostatSummary() - ThermostatSummary poll got http status ${resp.status}", 1, null, "error")
 			}
 		}
-        if (resp) resp = [:]
+        if (resp) resp = null
 		atomicState.inTimeoutRetry = 0
 	} catch (groovyx.net.http.HttpResponseException e) {   
 		result = false // this thread failed to get the summary
@@ -2158,6 +2162,8 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 			atomicState.action = "pollChildren"
 			if (debugLevelFour) LOG( "Refreshing your auth_token!", 1, null, 'trace')
 			atomicState.inTimeoutRetry = 0
+			atomicState.inPollChildren = false
+			if (atomicState.skipTime) atomicState.skipTime = null
 			if ( refreshAuthToken() ) {
 				// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
 				LOG('Checking: Auth_token refreshed', 2, null, 'info')
@@ -2182,6 +2188,8 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 			}
 			def inTimeoutRetry = atomicState.inTimeoutRetry
 			if (inTimeoutRetry == null) inTimeoutRetry = 0
+			atomicState.inPollChildren = false
+			if (atomicState.skipTime) atomicState.skipTime = null
 			if (inTimeoutRetry < 3) runIn(atomicState.reAttemptInterval, pollChildren, [overwrite: true])
 			atomicState.inTimeoutRetry = inTimeoutRetry + 1
 			//return result
@@ -2211,6 +2219,8 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 		}
 		def inTimeoutRetry = atomicState.inTimeoutRetry
 		if (inTimeoutRetry == null) inTimeoutRetry = 0
+		atomicState.inPollChildren = false
+		if (atomicState.skipTime) atomicState.skipTime = null
 		if (inTimeoutRetry < 3) runIn(atomicState.reAttemptInterval, pollChildren, [overwrite: true])
 		atomicState.inTimeoutRetry = inTimeoutRetry + 1
         if (resp) resp = null
@@ -2232,8 +2242,8 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 
 boolean pollEcobeeAPI(thermostatIdsString = '') {
 	// boolean timers = atomicState.timers
-	def pollEcobeeAPIStart = now()
-	atomicState.pollEcobeeAPIStart = pollEcobeeAPIStart
+	//def pollEcobeeAPIStart = now()
+	atomicState.pollEcobeeAPIStart = now() //pollEcobeeAPIStart
 	
 	boolean debugLevelFour = debugLevel(4)
 	boolean debugLevelThree = debugLevel(3)
@@ -2249,7 +2259,7 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	//String preText = debugLevel(2) ? '' : 'pollEcobeeAPI() - '
 	boolean somethingChanged = (thermostatIdsString != '')
 	String allMyChildren = getChildThermostatDeviceIdsString()
-	String checkTherms = thermostatIdsString?:allMyChildren
+	String checkTherms = thermostatIdsString ?: allMyChildren
 
 	// forcePoll = true
 	if (thermostatIdsString == '') {
@@ -2346,10 +2356,10 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
         timeout: 30
 	]
 	def pollState = [
-			thermostatIdsString:thermostatIdsString,
-			checkTherms:		checkTherms,
+		thermostatIdsString: thermostatIdsString,
+		checkTherms:		 checkTherms,
 	]
-	if (debugLevelFour) pollState += [thermostatIdsString:thermostatIdsString]
+	if (debugLevelFour) pollState += [thermostatIdsString: thermostatIdsString]
 	
 	//if (TIMERS) { def tNow = now(); log.debug "TIMER: asyncPollPrep done (${tNow - atomicState.pollEcobeeAPIStart}ms)"; atomicState.asyncPollStart = tNow; }
 	boolean result = true
@@ -2375,7 +2385,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	def startMS = now()
 	atomicState.waitingForCallback = false
 	//boolean timers = atomicState.timers
-	def pollEcobeeAPIStart
+	//def pollEcobeeAPIStart
 	//if (TIMERS) { pollEcobeeAPIStart = atomicState.pollEcobeeAPIStart; log.debug "TIMER: asyncPoll took ${startMS - atomicState.asyncPollStart}ms"; log.debug "TIMER: Poll callback total time ${startMS - pollEcobeeAPIStart}ms"; }
 	boolean debugLevelFour = debugLevel(4)
 	boolean debugLevelThree = debugLevel(3)
@@ -2474,16 +2484,16 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				if (debugLevelThree) LOG("pollEcobeeAPICallback() - Parsing data for thermostat ${tstatName} (${tid})", 3, null, 'info')
 				//if (TIMERS) log.debug "TIMER: Parsing data for ${tstatName} @ (${now() - pollEcobeeAPIStart}ms)"
 				
-				tempEquipStat[tid] = stat.equipmentStatus			// always store ("" is a valid return value)
-				tempStatTime[tid] = stat.thermostatTime
+				tempEquipStat[tid] = 	stat.equipmentStatus			// always store ("" is a valid return value)
+				tempStatTime[tid] = 	stat.thermostatTime
 						
 				if (thermostatUpdated || forcePoll ) {
 					if (stat.settings)	tempSettings[tid]	= stat.settings as HashMap
                     if (stat.program) {
                     // Break program down into smaller chunks, since most of it never changes
-                    	tempClimates[tid] 				 	=stat.program.climates // as HashMap
-                        tempSchedule[tid]					=stat.program.schedule
-                        tempCurrentClimateRef[tid]			=stat.program.currentClimateRef
+                    	tempClimates[tid] 				 	= stat.program.climates // as HashMap
+                        tempSchedule[tid]					= stat.program.schedule
+                        tempCurrentClimateRef[tid]			= stat.program.currentClimateRef
                    	}
                     //log.debug "stat.events: ${stat.events}
                     
@@ -2519,7 +2529,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 						tempExtendedRuntime[tid] = [desiredHumidity:	stat.extendedRuntime.desiredHumidity[2], 
 													desiredDehumidity:	stat.extendedRuntime.desiredDehumidity[2]]
 					}
-					if (stat.remoteSensors)		tempSensors[tid] =			stat.remoteSensors
+					if (stat.remoteSensors)		tempSensors[tid] =		stat.remoteSensors
 					//if (stat.energy) log.debug "stat[${tid}].energy: ${stat.energy}"
 				}
 				atomicState.latestRevisions = latestRevisions
@@ -2553,7 +2563,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				}
 			}
 		} else {
-			LOG("pollEcobeeAPICallback() - poll: ${jsonRequestBody}; no thermostatList: ${resp.json}", 1, null, 'error')
+			LOG("pollEcobeeAPICallback() - poll: no thermostatList: ${resp.json}", 1, null, 'error')
 			result = false
 		}
 		
@@ -2659,9 +2669,9 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
                     }
                     atomicState.climates = tempClimates
                 }
-            } else {
+            } //else {
             	// if (atomicState.programUpdatedByAPI) {}
-            }
+            //}
             // Now we build the (more efficient) timeSchedule map
             if (scheduleUpdated || !atomicState.timeSchedule) {
             	tempAtomic = atomicState.timeSchedule 
@@ -2677,7 +2687,6 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
                 tempAtomic = null	// And NOW we can release the memory
                 tempSchedule = null
                 tempClimates = null
-               
 			}
             programUpdated = (curClimRefUpdated || climatesUpdated || scheduleUpdated)		// just in case
             
@@ -2996,25 +3005,22 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				generateEventLocalParams() // Update the connection status
 			}
 			
-            
 			String names = resp.json.thermostatList?.name.toString()[1..-2]			// .replaceAll("\\[","").replaceAll("\\]","")
 			String tids = ""
-			def numStats = 0
+			int numStats = 0
 			tidList.each { numStats++; tids = (tids=="") ? it : tids+","+it }
-			//if (preText == '') {	// avoid calling debugLevel() again) {
-				LOG("Polling thermostat${(numStats>1)?'s':''} ${names} (${tids}) completed", 2, null, 'info')
-			//} else {
-				if (debugLevelFour) LOG("pollEcobeeAPICallback() - Updated thermostat${(numStats>1)?'s':''} ${names} (${tidList}) ${atomicState.thermostats}", 1, null, 'info')
-			//}
+            
+			LOG("Polling thermostat${(numStats>1)?'s':''} ${names} (${tids}) completed", 2, null, 'info')
+            if (debugLevelFour) LOG("pollEcobeeAPICallback() - Updated thermostat${(numStats>1)?'s':''} ${names} (${tidList}) ${atomicState.thermostats}", 1, null, 'info')
 		}
 		atomicState.inTimeoutRetry = 0	// Not in Timeout Recovery any longer
 	} else if (resp && resp.hasError()) {
 		result = false
-		if (debugLevelFour) LOG("pollEcobeeAPICallback() - Poll returned http status ${resp.status}, ${resp.errorMessage}", 1, null, "error")
+		if (debugLevelFour) LOG("pollEcobeeAPICallback() - Poll http status ${resp.status}, ${resp.errorMessage}", 1, null, "error")
 		def iStatus = resp.status ? resp.status?.toInteger() : null
 		// Handle recoverable / retryable errors
 		if (iStatus && (iStatus == 500)) {
-			if (debugLevelFour) LOG("pollEcobeeAPICallback() - Poll error: 500, ${resp.errorMessage}, ${resp.errorData}", 2, null, "warn")
+			if (debugLevelFour) LOG("pollEcobeeAPICallback() - Poll exception: 500, ${resp.errorMessage}, ${resp.errorData}", 2, null, "warn")
 			// Ecobee server error
 			def statusCode
 			if (resp.errorData) {
@@ -3025,6 +3031,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				// Auth_token expired
 				if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "trace")
 				atomicState.action = "pollChildren"
+				atomicState.inPollChildren = false
+				if (atomicState.skipTime) atomicState.skipTime = null
 				if ( refreshAuthToken() ) { 
 					// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
 					LOG( 'Polling: Auth_token refreshed', 2, null, 'info')
@@ -3035,7 +3043,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				//return result
 			} else { 
 				// All other Ecobee Server (500) errors here
-				LOG("pollEcobeeAPICallback() - Poll error: 500, statusCode: ${statusCode} (${resp.errorMessage}: ${resp.errorData}) - won't retry", 1, null, 'error')
+				LOG("pollEcobeeAPICallback() - Poll exception: 500, statusCode: ${statusCode} (${resp.errorMessage}: ${resp.errorData}) - won't retry", 1, null, 'error')
 				// Don't retry for now...may change in the future
 				//return result
 			}
@@ -3043,7 +3051,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				   (iStatus && ((iStatus == 200) || ((iStatus > 400) && (iStatus < 405)) || (iStatus == 408) || (iStatus > 500)))) { //((iStatus > 500) && (iStatus < 505))) {
 			// Retry on transient, recoverable error codes (timeouts, server temporarily unavailable, parsing errors, etc.) see https://en.wikipedia.org/wiki/List_of_HTTP_status_codes 
 			if (iStatus && (iStatus != 525)) {
-            	LOG("pollEcobeeAPICallback() - Poll error: ${iStatus}, ${resp.errorMessage}, ${resp.errorData}, - will retry", 1, null, 'warn')	// Just log it, and hope for better next time...
+            	LOG("pollEcobeeAPICallback() - Poll exception: ${iStatus}, ${resp.errorMessage}, ${resp.errorData}, - will retry", 1, null, 'warn')	// Just log it, and hope for better next time...
             } else {
             	LOG("pollEcobeeAPICallback() - Poll timeout - will retry", 1, null, 'warn')
             }
@@ -3060,7 +3068,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 			atomicState.inTimeoutRetry = inTimeoutRetry + 1
 			//return result
 		} else /* can we handle any other errors??? */ {
-			LOG("pollEcobeeAPICallback() - Poll error: ${iStatus}, ${resp.errorMessage}, ${resp.errorJson?.status?.message}, ${resp.errorJson?.status?.code} - won't retry", 1, null, "error")
+			LOG("pollEcobeeAPICallback() - Poll exception: ${iStatus}, ${resp.errorMessage}, ${resp.errorJson?.status?.message}, ${resp.errorJson?.status?.code} - won't retry", 1, null, "error")
 		}
 		// For now, the code here just logs the error and assumes that checkThermostatSummary() will recover from the unhandled errors on the next call.
 		//return result
@@ -3071,7 +3079,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		} else if (resp.status?.toInteger() != 200) {
 			LOG("pollEcobeeAPICallback() - unexpected response status: ${resp.status}",1,null,'error')
 		} else {
-			LOG("pollEcobeeAPICallback() - UNKNOWN ERROR CONDITION!!!, ${resp}",1,null,'error')	// Can't get here!!!
+			LOG("pollEcobeeAPICallback() - UNKNOWN EXCEPTION!!!, ${resp}",1,null,'error')	// Can't get here!!!
 		}
 	}
 	
@@ -3437,7 +3445,7 @@ void updateSensorData() {
                 if ((sensorDNI != '') && settings.ecobeesensors?.contains(sensorDNI)) {		// only process the selected/configured sensors
                     def sensorData = [:] // as HashMap
                     def lastList = atomicState."${sensorDNI}" as List
-                    def listSize = 7
+                    int listSize = 7
                     if ( !lastList || (lastList.size() < listSize)) {
                         lastList = [999,'x',-1,'default','default','x',-1]	// initilize the list 
                         sensorData = [ thermostatId: tid ]		// this will never change, but we need to send it at least once
@@ -3589,10 +3597,10 @@ void updateSensorData() {
                     if (eventsUpdated) 		sensorData << [eventsUpdated: 		timeNow]
 
                     if (sensorData) {
-                        def sls = sensorData.size()
-                        totalUpdates = totalUpdates + sls
+                        //int sls = sensorData.size()
+                        totalUpdates = totalUpdates + sensorData.size() // sls
                         //log.debug "${it.name}: ${sensorData}"
-                        sensorCollector[sensorDNI] = [name:it.name,data:sensorData]
+                        sensorCollector[sensorDNI] = [name: it.name, data: sensorData]
                         atomicState."${sensorDNI}" = sensorList
                         if (debugLevelFour) LOG("updateSensorData() - sensorCollector being updated with sensorData: ${sensorData}", 1, null, 'trace')
                         sNames += it.name
@@ -3604,7 +3612,7 @@ void updateSensorData() {
 	
 	atomicState.remoteSensorsData = sensorCollector
 	if (preText=='') {
-		def sz = sNames.size()
+		int sz = sNames.size()
 		if (sz > 1) sNames.sort()
 		if (debugLevelFour) LOG("Sensor data: ${sensorCollector}", 1, null, trace)
 		LOG("${totalUpdates} update${totalUpdates!=1?'s':''} for ${sz} sensor${sz!=1?'s':''}${sNames?' ('+sNames.toString()[1..-2]+')':''}",2, null, 'info')
@@ -3615,7 +3623,7 @@ void updateSensorData() {
 }
 
 void updateThermostatData() {
-	def pollEcobeeAPIStart
+	//def pollEcobeeAPIStart
 	//if (TIMERS) { pollEcobeeAPIStart = atomicState.pollEcobeeAPIStart; log.debug "TIMER: Entered updateThermostatData() @ ${now() - pollEcobeeAPIStart}ms"; }
 	boolean debugLevelFour = debugLevel(4)
 	boolean debugLevelThree = debugLevel(3)
@@ -4752,6 +4760,8 @@ boolean refreshAuthToken(child=null) {
                             "${action}"()
 						} else {
 							// Assume we had to re-authorize during a pollEcobeeAPI session
+							atomicState.inPollChildren = false
+							atomicState.skipTime = null
 							runIn( 2, pollChildren, [overwrite: true])
 						}
 					} else {
