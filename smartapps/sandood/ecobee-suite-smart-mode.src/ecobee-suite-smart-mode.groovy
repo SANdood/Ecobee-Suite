@@ -1607,7 +1607,7 @@ void doPendedUpdates(tid) {
 			if (statTid == tid) {
 				if (needSetpointChange( stat, updates[tid].program, updates[tid].heat, updates[tid].cool )) {
 					makeSetpointChange( stat, updates[tid].program, updates[tid].heat, updates[tid].cool )
-					updates = atomicState.pendedUpdates	// in case we have multiple in parallell
+					updates = atomicState.pendedUpdates // in case we have multiple in parallell
 				} else {
 					// Nothing to do - release the reservation now
 					cancelReservation(tid, 'programChange')
@@ -1744,8 +1744,8 @@ String getMsgTstat(statList = []) {
 			String statStr = textListToString(nameList)
 			if (tstatCleaners != []) {
 				tstatCleaners.each{
-					if ((!settings?.tstatSuffix || (settings.tstatSuffix != it)) && (!settings?.tstatPrefix || (settings.tstatPrefix != it))) {	// Don't strip the prefix/suffix we added above
-						statStr = statStr.replace(it, '').replace(it.toLowerCase(), '')	// Strip out any unnecessary words
+					if ((!settings?.tstatSuffix || (settings.tstatSuffix != it)) && (!settings?.tstatPrefix || (settings.tstatPrefix != it))) { // Don't strip the prefix/suffix we added above
+						statStr = statStr.replace(it, '').replace(it.toLowerCase(), '') // Strip out any unnecessary words
 					}
 				}
 			}
@@ -1919,9 +1919,9 @@ String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
 String pageTitle	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>')	: txt }
-String sectionTitle	(String txt)	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt)	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>'				: txt) : '' }
+String pageTitleOld (String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>')	: txt }
+String sectionTitle (String txt)	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle (String txt)	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>'				: txt) : '' }
 String sampleTitle	(String txt)	{ return isHE ? '<b><i>'+txt+'<i></b>'							: txt }
 String inputTitle	(String txt)	{ return isHE ? '<b>'+txt+'</b>'								: txt }
 String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
@@ -1953,7 +1953,7 @@ String getFormat(type, myText=""){
 
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-String	getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+String	getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') } // if (platform == 'SmartThings') ...
 boolean getIsST()	  { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
 boolean getIsHE()	  { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 
@@ -1969,5 +1969,5 @@ boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
 boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}" 
 }
