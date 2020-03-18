@@ -41,19 +41,19 @@ String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints
 import groovy.json.*
 
 definition(
-	name:			"ecobee Suite Smart Mode",
-	namespace:		"sandood",
-	author:			"Justin J. Leonard & Barry A. Burke",
-	description:	"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSet Ecobee Mode, Program and/or Program Setpoints based on temperature & dewpoint",
-	category:		"Convenience",
-	parent:			"sandood:Ecobee Suite Manager",
-	iconUrl:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
-	iconX2Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
-	iconX3Url:		"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
-	importUrl:		"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
+	name:				"ecobee Suite Smart Mode",
+	namespace:			"sandood",
+	author:				"Justin J. Leonard & Barry A. Burke",
+	description:		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nSet Ecobee Mode, Program and/or Program Setpoints based on temperature & dewpoint",
+	category:			"Convenience",
+	parent:				"sandood:Ecobee Suite Manager",
+	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
+	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
+	iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
+	importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
 	documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md#smart-mode-sa",
-	singleInstance: false,
-	pausable:		true
+	singleInstance:		false,
+	pausable:			true
 )
 
 preferences {
