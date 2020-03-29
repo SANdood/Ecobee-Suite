@@ -31,11 +31,14 @@
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - More busy bees
+ *	1.8.03 - No longer LOGs to parent (too much overhead for too little value)
+ *	1.8.04 - New SHPL, using Global Fields instead of atomicState
  */
-String getVersionNum()		{ return "1.8.02" }
-String getVersionLabel() 	{ return "Ecobee Suite Smart Humidity Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
-//String getVersionLabel() 	{ return "Universal Ecobee Suite\nVersion ${getVersionNum()}" }
 import groovy.json.*
+import groovy.transform.Field
+
+String getVersionNum()		{ return "1.8.04" }
+String getVersionLabel() 	{ return "Ecobee Suite Smart Humidity Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 				"ecobee Suite Smart Humidity",
@@ -59,8 +62,8 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	boolean ST = isST
-	boolean HE = !ST
+	//boolean ST = isST
+	//boolean HE = !ST
 	boolean humidifierEnabled = false
 	def hasHumidifier
     def cTemp		// current indoor temperature
@@ -156,7 +159,7 @@ def mainPage() {
 						app.updateSetting('theThermostat', null)
 						settings.theThermostat = null
 					} else {
-						String humidifierMode = isST ? settings.theThermostat.currentValue('humidifierMode') : settings.theThermostat.currentValue('humidifierMode', true)
+						String humidifierMode = ST ? settings.theThermostat.currentValue('humidifierMode') : settings.theThermostat.currentValue('humidifierMode', true)
 						if (humidifierMode == 'auto') {
 							paraString += ", but the humidifier is in Frost Control mode with a humidity setpoint of ${theThermostat.currentValue('humiditySetpoint')}%.\n\n" +
 											"Smart Humidity cannot adjust the humidity setpoint while the humidifier is in Frost Control mode."
@@ -334,7 +337,7 @@ def getHumidityTemp() {
 	return getHumidityTempArray(settings.smartStrategy)[0]
 }
 def getHumidityTempArray(strategy){
-	boolean ST = isST
+	//boolean ST = isST
 
 	def values = []
 	if (strategy) {
@@ -421,7 +424,7 @@ def calcHumSetpoint( temp ) {
     // Second, calculate the effective dewpoint at 70°F
     def dp = calculateDewpoint( 70.0, setpoint, 'F') // dewpoint is returned in temperatureScale units
     // Third, adjust setpoint for the current temperature. Cooler air with same water content (dewpoint) will have a higher RH%.
-    def cTemp = isST ? theThermostat.currentValue('temperature') : theThermostat.currentValue('temperature', true)
+    def cTemp = ST ? theThermostat.currentValue('temperature') : theThermostat.currentValue('temperature', true)
     if (temperatureScale == 'C') {
         setpoint = calculateRelHumidity( cTemp, dp, 'C')
     } else {
@@ -447,7 +450,7 @@ def initialize() {
 	String version = getVersionLabel()
 	LOG("${version} Initializing...", 2, null, 'info')
     atomicState.versionLabel = getVersionLabel()
-	boolean ST = isST
+	//boolean ST = isST
 	
 	updateMyLabel()
 
@@ -484,7 +487,7 @@ def initialize() {
 }
 
 boolean isOkNow() {
-	boolean ST = isST
+	//boolean ST = isST
 	boolean isOK = true
 	if (settings?.theModes || settings?.thePrograms  || settings?.statModes) {
 		String currentProgram = settings?.thePrograms ? (ST ? settings?.theThermostat.latestValue('currentProgram') : settings?.theThermostat.latestValue('currentProgram', true)) : ""
@@ -504,7 +507,7 @@ boolean isOkNow() {
 }
 
 def setSmartSetpoint( setpoint ) {
-	boolean ST = isST
+	//boolean ST = isST
 	boolean humidifierEnabled = true
 	
 	String humidifierMode = settings.theThermostat.currentValue('humidifierMode')
@@ -540,7 +543,7 @@ def forecastChangeHandler(evt=null) {
         runIn(2, updated, [overwrite: true])
         return
     }
-    if ((evt.name == 'humidity') && !infoOff) {
+    if (evt && (evt.name == 'humidity') && !infoOff) {
     	LOG("Humidity changed to ${evt.value}%",3,null,'info')
         return		// No need to recalculate, as current humidity isn't part of the algorithm, but it is useful to see in the logs
     }
@@ -578,7 +581,7 @@ def delayedUpdate() {
 // HELPER FUNCTIONS
 // Temporary/Global Pause functions
 void updateMyLabel() {
-	boolean ST = isST
+	//boolean ST = isST
     
 	String flag
 	if (ST) {
@@ -715,14 +718,24 @@ def fToC(temp) {
 	return (temp != null) ? ((temp - 32) / 1.8) : null
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-	if (logType == 'debug') {
-    	if (!settings?.debugOff) log.debug message
-    } else if (logType == 'info') {
-    	if (!settings?.infoOff) log.info message
-    } else log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+    switch (logType) {
+    	case 'error':
+        	log.error message
+            break;
+        case 'warn':
+        	log.warn message
+            break;
+        case 'trace':
+        	log.trace message
+            break;
+        case 'info':
+        	if (!settings?.infoOff) log.info message
+            break;
+        case 'debug':
+        default:
+        	if (!settings?.debugOff) log.debug message
+        	break;
+    }
 }
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
@@ -730,13 +743,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
-String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -746,42 +759,51 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
 			break;
 		case "note":
-			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
 			break;
 		default:
 			return myText
 			break;
 	}
 }
-
 // SmartThings/Hubitat Portability Library (SHPL)
-// The following 3 calls are available EVERYWHERE, but they incure a high overhead, so best used only in the Metadata definitions
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }
-// The following 3 calls are ONLY for use within the Application runtime  - they will throw an error at compile time if used within metadata
-String getHubPlatform() {
-	// This MUST be called at least once in the application runtime space
-	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
-											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
-    return pf
+// Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
 }
-// THese work, but using the atomicState.is** directly is more efficient
-boolean getIsSTHub() { return atomicState.isST as boolean}					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE as boolean}					// if (isHEHub) ...
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
+}
+
+String getHubPlatform() {
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
+}
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
