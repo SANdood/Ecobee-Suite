@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.8.11",
+			"version": 	"1.8.16",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -33,7 +33,7 @@
 				"name": 	"ecobee Suite Open Contacts",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.06",
+				"version": 	"1.8.10",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
 				"optional": 	false
@@ -42,7 +42,7 @@
 				"name": 	"ecobee Suite Quiet Time",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.02",
+				"version": 	"1.8.04",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
 				"optional": 	false
@@ -51,7 +51,7 @@
 				"name": 	"ecobee Suite Routines",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.03",
+				"version": 	"1.8.06",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
 				"optional": 	false
@@ -60,7 +60,7 @@
 				"name": 	"ecobee Suite Smart Circulation",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.02",
+				"version": 	"1.8.04",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
 				"optional": 	false
@@ -69,7 +69,7 @@
 				"name": 	"ecobee Suite Smart Humidity",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.02",
+				"version": 	"1.8.04",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-humidity.groovy",
 				"optional": 	false
@@ -78,7 +78,7 @@
 				"name": 	"ecobee Suite Smart Mode",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.04",
+				"version": 	"1.8.07",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-mode.groovy",
 				"optional": 	false
@@ -87,7 +87,7 @@
 				"name": 	"ecobee Suite Smart Room",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.02",
+				"version": 	"1.8.05",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy",
 				"optional": 	false
@@ -96,7 +96,7 @@
 				"name": 	"ecobee Suite Smart Switches",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.02",
+				"version": 	"1.8.04",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
 				"optional": 	false
@@ -105,7 +105,7 @@
 				"name": 	"ecobee Suite Smart Vents",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.03",
+				"version": 	"1.8.05",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
 				"optional": 	false
@@ -114,7 +114,7 @@
 				"name": 	"ecobee Suite Smart Zones",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.03",
+				"version": 	"1.8.05",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
 				"optional": 	false
@@ -123,7 +123,7 @@
 				"name": 	"ecobee Suite Thermal Comfort",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.02",
+				"version": 	"1.8.05",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
 				"optional": 	false
@@ -132,7 +132,7 @@
 				"name": 	"ecobee Suite Working From Home",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.03",
+				"version": 	"1.8.06",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
 				"optional": 	false
@@ -144,7 +144,7 @@
 			"name": 	"Ecobee Suite Thermostat",
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published":	true,
-			"version": 	"1.8.07",
+			"version": 	"1.8.08",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
 			"optional": 	false
 		},
@@ -152,7 +152,7 @@
 			"name": 	"Ecobee Suite Sensor",
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published": 	true,
-			"version": 	"1.8.03",
+			"version": 	"1.8.04",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
 			"optional": 	false
 		}
