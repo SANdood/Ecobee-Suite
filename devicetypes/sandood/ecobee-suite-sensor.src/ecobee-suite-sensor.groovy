@@ -33,11 +33,15 @@
  *	1.8.01 - General Release
  *	1.8.02 - Better Health Check integration (ST)
  *	1.8.03 - Added debugLevel attribute
+ *	1.8.04 - New SHPL, using Global Fields instead of State
  */
-String getVersionNum() 		{ return "1.8.03" }
+import groovy.json.*
+import groovy.transform.Field
+
+String getVersionNum() 		{ return "1.8.04" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
-import groovy.json.*
+
 
 metadata {
 	definition (
@@ -298,7 +302,7 @@ void updated() {
 	if (!device.displayName.contains('TestingForInstall')) {
 		// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
 		sendEvent(name: 'checkInterval', value: 3900, displayed: false) //, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
-		if (state.isST) {
+		if (ST) {
 			//sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
 			updateDataValue("EnrolledUTDH", "true")
             sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
@@ -311,7 +315,7 @@ void updated() {
 void noOp() {}
 
 def generateEvent(Map results) {
-	LOG("generateEvent(): parsing data ${results}",3,null,'trace')
+	if (debugLevel(3)) LOG("generateEvent(): parsing data ${results}",1,null,'trace')
     String myVersion = getDataValue("myVersion")
     //if (!state.version || (state.version != getVersionLabel())) updated()
 	if (!myVersion || (myVersion != getVersionLabel())) updated()
@@ -322,7 +326,7 @@ def generateEvent(Map results) {
 	String tempScale = getTemperatureScale()
     def precision = device.currentValue('decimalPrecision')
     if (!precision) precision = (tempScale == 'C') ? 1 : 0
-    String currentProgramName = state.isST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
+    String currentProgramName = ST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
     def isConnected = (currentProgramName != 'Offline')
 
 	if(results) {
@@ -360,8 +364,8 @@ def generateEvent(Map results) {
 							} else {
 								tempDisplay = String.format( "%.${precision.toInteger()}f", roundIt(dValue, precision.toInteger())) + '°'
 							}
-							sendEvent(name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', 
-									  descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
+							//sendEvent(name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', 
+							//		  descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 							event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, 
 									 value: sendValue, isStateChange: true, displayed: true]
 							objectsUpdated += 2
@@ -390,16 +394,17 @@ def generateEvent(Map results) {
 					}
 					break;
             case 'checkInterval':
-            	event = [name: name, value: sendValue, /*isStateChange: true,*/ displayed: false]
-				break;
+                    event = [name: name, value: sendValue, /*isStateChange: true,*/ displayed: false]
+                    break;
             case 'debugEventFromParent':
-            	event = [name: name, value: sendValue, descriptionText: "DEBUG: "+sendValue, isStateChange: true, displayed: false]
-                updateDataValue( name, sendValue )
-                break;
+                    event = [name: name, value: sendValue, descriptionText: "DEBUG: "+sendValue, isStateChange: true, displayed: false]
+                    updateDataValue( name, sendValue )
+                    break;
             case 'debugLevel':
-                updateDataValue('debugLevel', sendValue)
-				event = [name: name, value: sendValue, descriptionText: "debugLevel is ${sendValue}", displayed: false]
-                break;
+                    String sendText = (sendValue != 'null') ? sendValue : ''
+                    updateDataValue('debugLevel', sendText)
+                    event = [name: name, value: sendText, descriptionText: "debugLevel is ${sendValue}", displayed: false]
+                    break;
 			case 'Home':
 			case 'Away':
 			case 'Sleep':
@@ -412,34 +417,34 @@ def generateEvent(Map results) {
             case 'climatesList':
 			case 'thermostatId':
             case 'activeClimates':
-				isChange = isStateChange(device, name, sendValue)
-				if (isChange) {
-					event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: false]
-					objectsUpdated++
-				}
-				break;
+                   // isChange = isStateChange(device, name, sendValue)
+                   // if (isChange) {
+                        event = [name: name, linkText: linkText, handlerName: name, value: sendValue, /* isStateChange: true, */ displayed: false]
+                        objectsUpdated++
+                   // }
+                    break;
 			default:
-				// Must be a non-standard program name, or one of the XXXupdated timestamps
-				isChange = isStateChange(device, name, sendValue)
-				if (isChange) {
-					event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: false]
-					if (!name.endsWith("Updated")) {
-                    	// Save non-standard Programs in a state variable and a dataValue
-						state."${name}" = sendValue
-                        updateDataValue( name, sendValue )
-                    } // else {
-                    	//if (getDataValue(name) != null) updateDataValue(name, "")
-                        //if (getDataValue('thermostatUpdated') != "") updateDataValue('thermostatUpdated', "")
-                    //}
-                    objectsUpdated++
-				}
-				break;
+                    // Must be a non-standard program name, or one of the XXXupdated timestamps
+                   // isChange = isStateChange(device, name, sendValue)
+                   // if (isChange) {
+                        event = [name: name, linkText: linkText, handlerName: name, value: sendValue, /*isStateChange: true,*/ displayed: false]
+                        if (!name.endsWith("Updated")) {
+                            // Save non-standard Programs in a state variable and a dataValue
+                            state."${name}" = sendValue
+                            updateDataValue( name, sendValue )
+                        } // else {
+                            //if (getDataValue(name) != null) updateDataValue(name, "")
+                            //if (getDataValue('thermostatUpdated') != "") updateDataValue('thermostatUpdated', "")
+                        //}
+                        objectsUpdated++
+                   // }
+                    break;
             }			
 			if (event != [:]) sendEvent(event)
 		}
-		//if (tempDisplay) {
-		//	sendEvent( name: "temperatureDisplay", linkText: linkText, value: "${tempDisplay}", handlerName: "temperatureDisplay", descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
-		//}
+		if (tempDisplay) {
+			sendEvent( name: "temperatureDisplay", linkText: linkText, value: "${tempDisplay}", handlerName: "temperatureDisplay", descriptionText: "Display temperature is ${tempDisplay}",/* isStateChange: true,*/ displayed: false)
+		}
 	}
 	def elapsed = now() - startMS
     LOG("Updated ${objectsUpdated} object${objectsUpdated!=1?'s':''} (${elapsed}ms)",2,this,'info')
@@ -471,7 +476,7 @@ void updateSensorPrograms(List activeList, List inactiveList) {
 	// Let our parent do all the work...
 	def result = parent.updateSensorPrograms(this, device.currentValue('thermostatId').toString(), getSensorId(), activeList, inactiveList)
     if (result) {
-    	def programsList = state.isST ? device.currentValue('programsList') : device.currentValue('programsList', true)
+    	def programsList = ST ? device.currentValue('programsList') : device.currentValue('programsList', true)
         activeList.each { program ->
         	sendEvent(name: "${program}", value: 'on', descriptionText: "Sensor added to the ${program.capitalize()} program", isStateChange: true, displayed: true)
     		if (!programIdList().contains(program.toLowerCase())) state?."$program" = 'on'
@@ -511,11 +516,11 @@ boolean debugLevel(level=3) {
 	return ( getDebugLevel() >= (level as int) )
 }
 
-void LOG(message, Integer level=3, child=null, logType="debug", event=false, displayEvent=false) {
+void LOG(message, int level=3, child=null, logType="debug", event=false, displayEvent=false) {
 	def prefix = ""
 	Integer dbgLvl = (getParentSetting('debugLevel') ?: level) as Integer
 	if ( dbgLvl == 5 ) { prefix = "LOG: " }
-	if ( dbgLvl >= (level as Integer) ) { 
+	if ( dbgLvl >= level ) { 
     	log."${logType}" "${prefix}${message}"
         if (event) { debugEvent(message, displayEvent) }        
 	}    
@@ -592,26 +597,35 @@ def getStockTempColors() {
         [value: 98, color: "#bc2323"]
     ]       
 }
-
-// **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
+}
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
+}
 
 String getHubPlatform() {
-	def pf = getPlatform()
-	state?.hubPlatform = pf			// if (state.hubPlatform == 'Hubitat') ...
-											// or if (state.hubPlatform == 'SmartThings')...
-	state?.isST = pf.startsWith('S')	// if (state.isST) ...
-	state?.isHE = pf.startsWith('H')	// if (state.isHE) ...
-	return pf
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
 }
-boolean getIsSTHub() { return state.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return state.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	// def ST = (state?.isST != null) ? state?.isST : isST
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
