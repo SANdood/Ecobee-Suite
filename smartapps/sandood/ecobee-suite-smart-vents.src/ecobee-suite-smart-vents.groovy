@@ -13,21 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.05 - More code optimizations
- *	1.7.06 - Added generic switch control (e.g., to control a fan)
- *	1.7.07 - Update vent status (refresh) before & after taking actions, display vent status in appLabel
- *	1.7.08 - Optimized checks when nothing changes; added vent open/close option for 'fan only'
- *	1.7.09 - Removed redundant log.debug text, fixed new fan only vent option
- *	1.7.10 - Added option to disable local display of log.debug() logs, tweaked myLabel handling
- *	1.7.11 - Check both hasCapability('switchLevel') & hasCommand('setLevel')
- *	1.7.12 - Fix typo in ventsOn(); set 100 instead of 99
- *	1.7.13 - Optimized checkTemperature() to avoid timeout errors on ST
- *	1.7.14 - Added maximumVentLevel and fanOnlyState; more optimizations
- *	1.7.15 - More bugs squashed, settings page cleaned up
- *	1.7.16 - Fixed vents not changing 
- *	1.7.17 - Fixed vents not changing when both minLevel & maxLevel are set
- *	1.7.18 - Added conditional support for "contact sensor" capability, so vents show logical state in HomeKit (as blinds)
- *	1.7.19 - Fixed helper labelling
  *	1.7.20 - Added support for HubConnected EcoVents and Keen Vents; optimized Keen Vent handling; new Fan Only percentage setting
  *	1.7.21 - Fix HubConnect EcoVent selector
  *	1.7.22 - Added optional Ecobee Programs exception & auto Sensor enrollments; show open percentage in label
@@ -44,10 +29,15 @@
  *	1.8.01 - General Release
  *	1.8.02 - Option to close vents when contact open and fan only; fixed too many ES sensors error when 0 ES sensors, fix Pause warning
  *	1.8.03 - More busy bees
+ *	1.8.04 - No longer LOGs to parent (too much overhead for too little value)
+ *	1.8.05 - New SHPL, using Global Fields instead of atomicState
  */
-String getVersionNum()		{ return "1.8.03" }
+import groovy.json.*
+import groovy.transform.Field
+
+String getVersionNum()		{ return "1.8.05" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
-import groovy.json.JsonSlurper
+
 
 definition(
 	name: 				"ecobee Suite Smart Vents",
@@ -71,8 +61,8 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	boolean ST = isST
-	boolean HE = !ST
+	//boolean ST = isST
+	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     def vc = 0			// vent counter
     def unit = temperatureScale
@@ -387,8 +377,8 @@ void uninstalled() {
 }
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
-    boolean ST = isST
-    boolean HE = !ST
+    //boolean ST = isST
+    //boolean HE = !ST
 
     // Housekeeping
     if (settings.closedFanOnly != null) {
@@ -441,25 +431,25 @@ def initialize() {
                      (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
 
 	
-    subscribe(settings.theSensors, 			'temperature', 				changeHandler)	
-	subscribe(settings.theThermostat, 		'thermostatOperatingState', changeHandler)
+    subscribe(settings.theSensors, 			'temperature', 				changeHandler, [filterEvents: true])	
+	subscribe(settings.theThermostat, 		'thermostatOperatingState', changeHandler, [filterEvents: true])
     //subscribe(theThermostat, 				'temperature', 				changeHandler)
-	subscribe(settings.theThermostat,		'thermostatMode', 			changeHandler)
+	subscribe(settings.theThermostat,		'thermostatMode', 			changeHandler, [filterEvents: true])
     //subscribe(theThermostat,				'currentProgram',			changeHandler)
-    subscribe(settings.theVents, 			'level', 					changeHandler)	// In case someone changes them on us
-    subscribe(settings.theVents, 			'switch', 					changeHandler)
+    subscribe(settings.theVents, 			'level', 					changeHandler, [filterEvents: true])	// In case someone changes them on us
+    subscribe(settings.theVents, 			'switch', 					changeHandler, [filterEvents: true])
 	if (settings.theWindows) {
-    	subscribe(settings.theWindows, 		'contact',					changeHandler)
+    	subscribe(settings.theWindows, 		'contact',					changeHandler, [filterEvents: true])
     }
     if (settings.useThermostat) {
-    	subscribe(settings.theThermostat,	'heatingSetpoint', 			changeHandler)
-        subscribe(settings.theThermostat,	'coolingSetpoint', 			changeHandler)
+    	subscribe(settings.theThermostat,	'heatingSetpoint', 			changeHandler, [filterEvents: true])
+        subscribe(settings.theThermostat,	'coolingSetpoint', 			changeHandler, [filterEvents: true])
     //  subscribe(theThermostat, 			'thermostatSetpoint', 		changeHandler)
     } else if (settings.useVirtualStat) {
-    	subscribe(settings.theVirtualStat,	'thermostatOperatingState', changeHandler)
-		subscribe(settings.theVirtualStat,	'thermostatMode', 			changeHandler)
-    	subscribe(settings.theVirtualStat,	'heatingSetpoint', 			changeHandler)
-        subscribe(settings.theVirtualStat,	'coolingSetpoint', 			changeHandler)
+    	subscribe(settings.theVirtualStat,	'thermostatOperatingState', changeHandler, [filterEvents: true])
+		subscribe(settings.theVirtualStat,	'thermostatMode', 			changeHandler, [filterEvents: true])
+    	subscribe(settings.theVirtualStat,	'heatingSetpoint', 			changeHandler, [filterEvents: true])
+        subscribe(settings.theVirtualStat,	'coolingSetpoint', 			changeHandler, [filterEvents: true])
     }
     
     // These don't change much, and we need them frequently, so stash them away and track their changes
@@ -577,7 +567,7 @@ def programUpdateHandler(evt) {
     cancelReservation(evt.device.currentValue('thermostatId') as String, 'programChange')
     unschedule(clearReservation)
     unsubscribe(evt.device)
-    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler)
+    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler, [filterEvents: true])
     def pendingRequest = atomicState.updateSensorRequest
     if (pendingRequest != null) {
     	atomicState.updateSensorRequest = null
@@ -586,7 +576,7 @@ def programUpdateHandler(evt) {
 }
 def programWaitHandler(evt) {
     unsubscribe(evt.device)
-    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler)
+    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler, [filterEvents: true])
     String tid = evt.device.currentValue('thermostatId') as String
     def count = countReservations(tid, 'programChange')
     if ((count > 0) && !haveReservation( tid, 'programChange' )) {
@@ -663,7 +653,7 @@ def makeClimateChange( sensor, adds, removes ) {
 }
 boolean needClimateChange(sensor, List adds, List removes) {
 	if (!adds && !removes) return false
-    String ac = isST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
+    String ac = ST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
     def activeClimates = ac ? ((ac == '[]') ? [] : ac[1..-2].tokenize(', ').sort(false)) : []
     log.debug "activeClimates: ${activeClimates}"
     boolean updatesToDo = false
@@ -693,20 +683,34 @@ boolean needClimateChange(sensor, List adds, List removes) {
     }
 	return updatesToDo
 }
+//@Field Random rand = new Random()
+//@Field String lastEvent = "foo"
 void changeHandler(evt) {
-	//log.debug "changeHandler(): ${evt.displayName} ${evt.name} ${evt.value}"
-	updateTheVents()
-	runIn( 2, checkAndSet, [overwrite: true])		// collapse multiple inter-related events into a single thread
+	//String thisEvent = evt.id
+	LOG("changeHandler(): ${evt.displayName} ${evt.name} ${evt.value}, ${evt.id}", 4, null, 'debug')
+    //def lastEvent = atomicState.lastEvent
+//    if (evt.id != lastEvent) {
+//    	lastEvent = evt.id
+//    	int randomSeconds = rand.nextInt(40)
+    	//log.debug "randomSeconds: ${randomSeconds}"
+//        log.debug "new"
+		updateTheVents()
+		runIn( 2, checkAndSet, [overwrite: true])		// collapse multiple inter-related events into a single thread
+    	//atomicState.lastEvent = thisEvent
+//    } else {
+//    	log.debug "dup"
+//    }
 }
 void checkAndSet() {
 	if (!atomicState.version || (atomicState.version != getVersionLabel())) {
     	LOG('Helper version changed, re-initializing...',1,null,'info')
     	updated()
     }
+//    log.debug "c&s"
 	setTheVents(checkTemperature())
 }
 String checkTemperature() {
-	boolean ST = isST
+	//boolean ST = isST
     
     // Check if we're supposed to do anything during the currently active Ecobee Program (or the upcoming Program if in Smart Recovery)
     if (settings?.theClimates) {
@@ -854,7 +858,7 @@ String checkTemperature() {
 }
 
 def getAverageTemperature() {
-	boolean ST = isST
+	//boolean ST = isST
     
 	def tTemp = 0.0G
     Integer i = 0
@@ -887,7 +891,7 @@ void setTheVents(ventState) {
     	allVentsLevel(ventState as Integer)
         newVentState = (ventState.toInteger() <= settings.minimumVentLevel.toInteger()) ? 'closed' : 'open'
     } else if (ventState == 'unchanged') {
-    	boolean ST = isST	
+    	//boolean ST = isST	
     	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
     					(settings.theKeenVents ?: []) + (settings.theHCKeenVents ?: []) + 
                     	 (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
@@ -988,7 +992,7 @@ void allVentsLevel(level) {
 }
 
 void ventOff( theVent ) {
-	boolean ST = isST	
+	//boolean ST = isST	
     
 	def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
     def minVentLevel = (settings.minimumVentLevel ?: 1) as Integer
@@ -1039,8 +1043,9 @@ void ventOff( theVent ) {
 }
 
 void ventOn( theVent ) {
-	boolean ST = isST
+	//boolean ST = isST
     boolean changed = false
+    
     def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
     def maxVentLevel = (settings.maximumVentLevel ?: 98) as Integer
     def minVentLevel = (settings.minimumVentLevel ?: 1) as Integer
@@ -1092,7 +1097,7 @@ void ventOn( theVent ) {
 }
 
 void ventLevel( theVent, level=50 ) {
-	boolean ST = isST
+	//boolean ST = isST
     if (level == 0) {
     	ventOff(theVent)
         return
@@ -1186,7 +1191,7 @@ List getGuestList(String tid, String type='modeOff') {
 }
 
 void updateMyLabel() {
-	boolean ST = isST
+	//boolean ST = isST
 	
 	String flag
 	if (ST) {
@@ -1282,14 +1287,24 @@ def roundIt( BigDecimal value, decimals=0 ) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-    if (logType == 'debug') {
-    	if (!settings?.debugOff) log.debug message
-    } else if (logType == 'info') {
-    	if (!settings?.infoOff) log.info message
-    } else log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+    switch (logType) {
+    	case 'error':
+        	log.error message
+            break;
+        case 'warn':
+        	log.warn message
+            break;
+        case 'trace':
+        	log.trace message
+            break;
+        case 'info':
+        	if (!settings?.infoOff) log.info message
+            break;
+        case 'debug':
+        default:
+        	if (!settings?.debugOff) log.debug message
+        	break;
+    }
 }
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
@@ -1297,13 +1312,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
-String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -1313,38 +1328,51 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
 			break;
 		case "note":
-			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
 			break;
 		default:
 			return myText
 			break;
 	}
 }
-
 // SmartThings/Hubitat Portability Library (SHPL)
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-String getHubPlatform() {
-	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
-											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
-    return pf
+// Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
 }
-boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
+}
+
+String getHubPlatform() {
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
+}
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
