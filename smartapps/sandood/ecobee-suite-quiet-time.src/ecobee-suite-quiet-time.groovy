@@ -28,8 +28,12 @@
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - More busy bees
+ *	1.8.03 - No longer LOGs to parent (too much overhead for too little value)
+ *	1.8.04 - New SHPL, using Global Fields instead of atomicState
  */
-String getVersionNum()		{ return "1.8.02" }
+import groovy.transform.Field
+
+String getVersionNum()		{ return "1.8.04" }
 String getVersionLabel() 	{ return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -54,8 +58,8 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	boolean ST = isST
-	boolean HE = !ST
+	//boolean ST = isST
+	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     String defaultName = "Quiet Time"
 	
@@ -307,7 +311,7 @@ def initialize() {
     def statState = [:]
     settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
-		if (isST) {
+		if (ST) {
 			statState[tid] = [
 								thermostatMode: 	stat.currentValue('thermostatMode'),
 								thermostatFanMode: 	stat.currentValue('thermostatFanMode'),
@@ -456,7 +460,7 @@ def quietOnHandler(evt=null) {
 void turnOnQuietTime() {
 	LOG("Turning On Quiet Time",2,null,'info')
 	def statState = atomicState.statState
-	boolean ST = isST
+	//boolean ST = isST
 	
     clearReservations()			// clean slate
 	settings.theThermostats.each() { stat ->
@@ -555,7 +559,7 @@ def quietOffHandler(evt=null) {
         return
     }
 	LOG("Quiet Time Off requested",2,null,'info')
-	boolean ST = isST
+	//boolean ST = isST
     
     if ((settings.qtAutoOff != null) && (settings.qtAutoOff != '(Disabled)')) { unschedule(turnQuietOff) }
    	atomicState.isQuietTime = false
@@ -843,7 +847,7 @@ def pauseOff() {
 	atomicState.globalPause = false
 }
 void updateMyLabel() {
-	boolean ST = isST
+	//boolean ST = isST
     
 	String flag = ST ? ' (paused)' : '<span '
 	
@@ -865,14 +869,24 @@ void updateMyLabel() {
 }
 
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-	if (logType == 'debug') {
-    	if (!settings?.debugOff) log.debug message
-    } else if (logType == 'info') {
-    	if (!settings?.infoOff) log.info message
-    } else log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+    switch (logType) {
+    	case 'error':
+        	log.error message
+            break;
+        case 'warn':
+        	log.warn message
+            break;
+        case 'trace':
+        	log.trace message
+            break;
+        case 'info':
+        	if (!settings?.infoOff) log.info message
+            break;
+        case 'debug':
+        default:
+        	if (!settings?.debugOff) log.debug message
+        	break;
+    }
 }
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
@@ -880,13 +894,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
-String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return isHE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -896,16 +910,16 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return isHE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return isHE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
 			break;
 		case "note":
-			return isHE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
 			break;
 		default:
 			return myText
@@ -914,20 +928,34 @@ String getFormat(type, myText=""){
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-String getHubPlatform() {
-	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
-											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
-    return pf
+// Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
 }
-boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
+}
+
+String getHubPlatform() {
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
+}
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
