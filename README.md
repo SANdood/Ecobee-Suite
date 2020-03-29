@@ -1,5 +1,9 @@
 ![Universal Ecobee Suite, Version 1.8.00](https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Ecobee-1-8-00-header.png) 
 ======================================================
+### NOTICE: Latest updates posted 29 March 2020 at 7:00pm
+- [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/46)
+- [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/77?u=storageanarchy)
+
 <a name="overview"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Overview-1-8-00-section.png" width="50%" alt="Overview" /></a>
 
 Ecobee Suite is a collection of applications and device drivers that serve to integrate Ecobee Thermostats with the SmartThings and Hubitat Elevation home automation platforms.
