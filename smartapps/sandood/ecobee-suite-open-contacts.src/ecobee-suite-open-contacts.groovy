@@ -47,10 +47,11 @@
  *	1.8.08 - New SHPL, using Global Fields instead of atomicState
  *	1.8.09 - No longer LOGs to parent (too much overhead for too little value)
  *	1.8.10 - Send simultaneous notification Announcements to multiple Echo Speaks devices
+ *	1.8.11 - Fixed appDisplayName in sendMessage
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1365,9 +1366,9 @@ void sendMessage(notificationMessage) {
                         if((echo.size() > 1) && echoDeviceObjs && echoDeviceObjs?.size()) {
                             //NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
-                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:(app.displayName?:(app.label?:app.name))), echoDeviceObjs)	// , changeVol, restoreVol) }
+                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:(app.displayName?:(app.label?:app.name))))
+                            echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         } else {
                         	notEcho*.deviceNotification(msg)
                         }
@@ -1427,9 +1428,9 @@ void sendMessage(notificationMessage) {
                         if((echo.size() > 1) && echoDeviceObjs && echoDeviceObjs?.size()) {
                             //NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
-                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:(app.displayName?:(app.label?:app.name))), echoDeviceObjs)	// , changeVol, restoreVol) }
+                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:(app.displayName?:(app.label?:app.name))))
+                            echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         } else {
                         	notEcho*.deviceNotification(msg)
                         }
