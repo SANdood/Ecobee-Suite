@@ -38,11 +38,12 @@
  *	1.8.05 - Send simultaneous notification Announcements to multiple Echo Speaks devices
  *	1.8.06 - No longer LOGs to parent (too much overhead for too little value)
  *	1.8.07 - New SHPL, using Global Fields instead of atomicState
+ *	1.8.08 - Fixed pageLabel issue of CustomNotifications page
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.07" }
+String getVersionNum()		{ return "1.8.08" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -461,8 +462,7 @@ def mainPage() {
 
 
 def customNotifications(){
-	//boolean ST = isST
-	//boolean HE = !ST
+	String pageLabel = getVersionLabel()
 	pageLabel = pageLabel.take(pageLabel.indexOf(','))
 	dynamicPage(name: "customNotifications", title: pageTitle("${pageLabel}\nCustom Notifications"), uninstall: false, install: false) {
 		section(sectionTitle("Customizations")) {}
