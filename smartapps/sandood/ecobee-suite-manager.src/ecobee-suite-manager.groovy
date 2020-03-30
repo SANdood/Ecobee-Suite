@@ -128,7 +128,7 @@ definition(
     iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
     importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
     documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
-	singleInstance: 	false,
+	singleInstance: 	true,
 	oauth:				true,
 	pausable:			false
 ) {
