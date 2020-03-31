@@ -44,7 +44,7 @@
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.09a" }
+String getVersionNum()		{ return "1.8.09b" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -504,9 +504,9 @@ def customNotifications(){
 			
 			if (settings?.aboveCool || settings?.belowHeat) {
 				String tt = theTstat.endsWith('s') ? theTstat + "'" : theTstat + "'s"
-				samples = getMsgPrefix() + "${tt} inside temperature is ${theLowTemp}°, so I changed it to 'Heat' mode\n"
+				samples = (getMsgPrefix() + "${tt} inside temperature is ${theLowTemp}°, so I changed it to 'Heat' mode").replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
 			}
-			samples = samples + "The outside temperature is ${theHighTemp}°${unit}, so I changed ${getMsgTstat()} to 'Cool' mode\n"
+			samples = samples + "\n" + ("The outside temperature is ${theHighTemp}°${unit}, so I changed ${getMsgTstat()} to 'Cool' mode").replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
 						
 	  /*	  
 			if (ST && settings.wfhPhrase) {
@@ -1044,7 +1044,7 @@ def temperatureUpdate( BigDecimal temp ) {
 		}
 		return
 	}
-	
+	log.trace "start\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged = false}"
 	def desiredMode = null
 	def desiredProgram = null
 	if ((settings.aboveTemp && (temp >= settings.aboveTemp)) || (settings.dewAboveTemp && (atomicState.dewpoint >= settings.dewAboveTemp))) {
@@ -1058,6 +1058,7 @@ def temperatureUpdate( BigDecimal temp ) {
 			atomicState.betweenChanged = false
 			atomicState.belowChanged = false
 		}
+        log.trace "above\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 	} else if (settings.belowTemp && (temp <= settings.belowTemp)) {
 		if (!atomicState.belowChanged) {
 			// We haven't already changed to belowMode/belowSchedule
@@ -1094,6 +1095,7 @@ def temperatureUpdate( BigDecimal temp ) {
 			atomicState.aboveChanged = false
 			atomicState.betweenChanged = false
 			atomicState.belowChanged = true
+            log.trace "below1\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 		} else {
 			// We have prior changed to the belowMode/belowSchedule - now we have to check if dewpoint is still below the limit
 			if ((settings.belowMode == 'off') && settings.dewBelowOverride && (settings.dewBelowTemp <= atomicState.dewpoint)) {
@@ -1119,6 +1121,7 @@ def temperatureUpdate( BigDecimal temp ) {
 					atomicState.betweeChanged = false
 					atomicState.belowChanged = true		// so we don't change it again...
 				}
+                log.trace "below2\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 			} else if (!settings.belowMode || (!settings.dewBelowTemp || (settings.dewBelowTemp > atomicState.dewpoint))) {
 				// No belowMode, or not doing dewpointOverride - return to belowMode settings
 				desiredMode = settings.belowMode
@@ -1130,6 +1133,7 @@ def temperatureUpdate( BigDecimal temp ) {
 				atomicState.betweenChanged = false
 				atomicState.belowChanged = true
 			}
+            log.trace "below\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 		}
 	} else if ((settings.aboveTemp || (settings.dewAboveTemp && (atomicState.dewpoint < settings.dewAboveTemp))) && settings.belowTemp && settings.betweenMode) {
 		if (!atomicState.betweenChanged) {
@@ -1142,8 +1146,9 @@ def temperatureUpdate( BigDecimal temp ) {
 			atomicState.betweenChanged = true
 			atomicState.belowChanged = false
 		}
+        log.trace "between\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 	}
-	
+	log.debug "desiredMode: ${desiredMode}, desiredProgram: ${desiredProgram}"
 	if ((desiredMode != null) || (desiredProgram != null)) {
 		String changeNames = ""
 		def changeNamesList = []
@@ -1172,7 +1177,7 @@ def temperatureUpdate( BigDecimal temp ) {
 										sendHoldHours = sendHoldType
 										sendHoldType = 'holdHours'
 									}
-									LOG("sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
+									LOG("desiredProgram: ${desiredProgram}, sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
 									it.setThermostatProgram(desiredProgram, sendHoldType, sendHoldHours)
 								}
 								changeNames += changeNames ? ", ${it.displayName}" : it.displayName
@@ -1800,7 +1805,7 @@ void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "info")
     if (settings.notify) {
     	String msgPrefix = getMsgPrefix()
-        String msg = msgPrefix + notificationMessage
+        String msg = (msgPrefix + notificationMessage.replaceAll(':','')).replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
         boolean addFrom = (msgPrefix && !msgPrefix.startsWith("From "))
         //String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (ST) {
