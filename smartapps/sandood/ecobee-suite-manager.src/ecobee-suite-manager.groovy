@@ -65,12 +65,12 @@
  *	1.8.14 - Notification devices are no longer required (but still highly recommended)
  *	1.8.15 - New SHPL, using Global Fields instead of atomicState
  *	1.8.16 - Tightened up httpGet/httpPost response handling
- *	1.8.17 - Fixed latent installation error
+ *	1.8.17a - Fixed latent installation error (a=again)
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.17" }
+String getVersionNum()		{ return "1.8.17a" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -4724,7 +4724,7 @@ void updateThermostatData() {
 
                 if (programUpdated || eventsUpdated || forcePoll || needAll) {
                     // Save the Program when it changes so that we can get to it easily for the child sensors
-                    Map tempProgramName = atomicState.currentProgramName
+                  /*  Map tempProgramName = atomicState.currentProgramName
                     //if (!tempProgramName) tempProgramName = [:]
                     tempProgramName[tid] = currentClimateName
                     atomicState.currentProgramName = tempProgramName
@@ -4732,7 +4732,8 @@ void updateThermostatData() {
                     //if (!tempProgram) tempProgram = [:]
                     tempProgram[tid] = currentClimate
                     atomicState.currentProgram = tempProgram
-                    /*
+                    */
+                    
                     def tempProgram = [:]
                     tempProgram[tid] = currentClimateName
                     if (atomicState.currentProgramName) tempProgram = atomicState.currentProgramName + tempProgram
@@ -4741,7 +4742,6 @@ void updateThermostatData() {
                     tempProgram[tid] = currentClimate
                     if (atomicState.currentProgram) tempProgram = atomicState.currentProgram + tempProgram
                     atomicState.currentProgram = tempProgram
-                    */
                 }
                 //if (TIMERS) log.debug "TIMER: Finished queueing changeRarely for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
             }	  
