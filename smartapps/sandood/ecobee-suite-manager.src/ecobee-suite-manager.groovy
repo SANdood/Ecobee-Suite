@@ -40,11 +40,12 @@
  *	1.8.16 - Tightened up httpGet/httpPost response handling
  *	1.8.17 - Fixed latent installation error (a=again)
  *	1.8.18 - Fixed mixed Notification devices in sendMessage
+ *	1.8.19 - Turn off extraneous debug logging
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.18" }
+String getVersionNum()		{ return "1.8.19" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1070,13 +1071,7 @@ def getEcobeeThermostats() {
         def stats = [:]
         def statLocation = [:]
         try {
-            httpGet(deviceListParams) { resp ->
-            	resp.headers.each {
-        			log.debug "${it.name} : ${it.value}"
-    			}
-    			log.debug "response contentType: ${resp.contentType}"
-    			log.debug "response data: ${resp.data}"
-                
+            httpGet(deviceListParams) { resp ->                
             	LOG("getEcobeeThermostats() - httpGet() response: ${resp.data}", 4, null, 'trace')
             	//	the Thermostat Data. Will reuse for the Sensor List intialization
             	atomicState.thermostatData = resp.data			
