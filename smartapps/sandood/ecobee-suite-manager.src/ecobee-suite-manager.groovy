@@ -66,7 +66,7 @@
  *	1.8.15 - New SHPL, using Global Fields instead of atomicState
  *	1.8.16 - Tightened up httpGet/httpPost response handling
  *	1.8.17a - Fixed latent installation error (a=again)
- */
+ */ 
 import groovy.json.*
 import groovy.transform.Field
 
