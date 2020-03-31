@@ -15,24 +15,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.04 - noncached currentValue() on HE
- *	1.7.05 - Belt & suspenders for thermostatHold compares
- *	1.7.06 - Cosmetic Cleanups
- *	1.7.07 - Fixed variable definition (ncCp)
- *	1.7.08 - Cleaned up messages (a little - more still to do)
- *	1.7.09 - Fixed SMS text entry
- *	1.7.10 - Fixing private method issue caused by grails, "Vacation" from currentProgramName
- *	1.7.11 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.12 - Optimized isST/isHE, formatting, Global Pause
- *	1.7.13 - Fixed holdType == ES Manager setting, & getEcobeePrograms()
- *	1.7.14 - Clean up appLabel in sendMessage(), eliminate duplicate currentProgram/currentProgramName subscriptions
- *	1.7.15 - Remove fanMode setting, fix fanMinOnTime to not break the hold
- *	1.7.16 - Added option to disable local display of log.debug() logs, support Notification devices on ST
- *	1.7.17 - Option to skip notification if Thermostat Mode is 'Off'
- *	1.7.18 - Fixed helper labelling
- *	1.7.19 - Fixed labels (again), added infoOff, cleaned up preferences setup
- *	1.7.20 - Added minimize UI
- *	1.7.21 - Layout tweaks for Hubitat
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - Updated WARNING formatting
@@ -41,11 +23,12 @@
  *	1.8.05 - No longer LOGs to parent (too much overhead for too little value)
  *	1.8.06 - New SHPL, using Global Fields instead of atomicState
  *	1.8.07 - Fixed appDisplayName in sendMessage
+ *	1.8.08 - Fixed mixed Notification devices in sendMessage
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.07" }
+String getVersionNum()		{ return "1.8.08" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -905,7 +888,7 @@ void sendMessage(notificationMessage) {
                 // If we have multiple Echo Speak device targets, get them all to speak at once
                 List echoDeviceObjs = []
                 if (echo) {
-                    if(echo?.size() > 1) {
+                    if (echo?.size() > 1) {
                         echo?.each { 
                             String deviceType = it.currentValue('deviceType') as String
                             String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -918,16 +901,16 @@ void sendMessage(notificationMessage) {
                         def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
                         echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                     } else if (echo.size() == 1) {
-                        echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                    } else {
-                        notEcho*.deviceNotification(msg)
+                        echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                     }
+                    // The rest get a standard deviceNotification
+                    if (notEcho) notEcho*.deviceNotification(msg)
                 } else {
                     settings.notifiers*.deviceNotification(msg)
                 }
             } else {
                 settings.notifiers*.deviceNotification(msg)
-            }
+            }                
         }
         if (settings.phone) { // check that the user did select a phone number
             if ( settings.phone.indexOf(";") > 0){
@@ -967,7 +950,7 @@ void sendMessage(notificationMessage) {
                 // If we have multiple Echo Speak device targets, get them all to speak at once
                 List echoDeviceObjs = []
                 if (echo) {
-                    if(echo?.size() > 1) {
+                    if (echo?.size() > 1) {
                         echo?.each { 
                             String deviceType = it.currentValue('deviceType') as String
                             String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -980,10 +963,10 @@ void sendMessage(notificationMessage) {
                         def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
                         echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                     } else if (echo.size() == 1) {
-                        echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                    } else {
-                        notEcho*.deviceNotification(msg)
+                        echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                     }
+                    // The rest get a standard deviceNotification
+                    if (notEcho) notEcho*.deviceNotification(msg)
                 } else {
                     settings.notifiers*.deviceNotification(msg)
                 }
