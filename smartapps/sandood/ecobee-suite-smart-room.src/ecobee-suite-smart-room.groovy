@@ -13,19 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - Fix sort issue & noCache currentValue() for HE
- *	1.7.02 - Fixed SMS text entry
- *	1.7.03 - Fixing private method issue caused by grails
- *	1.7.04 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.05 - Optimized isST/isHE, added Global Pause
- *	1.7.06 - Added option to disable local display of log.debug() logs, support Notification devices on ST
- *	1.7.07 - Fixed Helper labelling
- *	1.7.08 - Fixed labels (again), added infoOff, cleaned up preferences setup
- *	1.7.09 - Integrated with Smart Vents Helper
- *	1.7.10 - Uses new updateSensorPrograms() (if not using Smart Vents Helper).
- *	1.7.11 - Added reservation serializer for climate/sensor changes (program.climates)
- *	1.7.12 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - More busy bees
@@ -33,11 +20,13 @@
  *	1.8.04 - No longer LOGs to parent (too much overhead for too little value)
  *	1.8.05 - New SHPL, using Global Fields instead of atomicState
  *	1.8.06 - Fixed appDisplayName in sendMessage
+ *	1.8.07 - Fixed mixed Notification devices in sendMessage
+ *	1.8.08 - Added customized Notifications
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.06" }
+String getVersionNum()		{ return "1.8.08" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -58,6 +47,7 @@ definition(
 
 preferences {
 	page(name: "mainPage")
+    page(name: "customNotifications")
 }
 
 // Preferences Pages
@@ -281,6 +271,12 @@ def mainPage() {
 					}
                 }
 			}
+            if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
+                section() {
+                    href name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
+                         description: "Customize notification messages", state: isCustomized()
+                }
+			}	
         }
         section(title: sectionTitle("Operations")) {
         	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
@@ -298,6 +294,47 @@ def mainPage() {
             }
 		}
     }
+}
+def customNotifications(){
+	String pageLabel = getVersionLabel()
+	pageLabel = pageLabel.take(pageLabel.indexOf(','))
+	dynamicPage(name: "customNotifications", title: pageTitle("${pageLabel}\nCustom Notifications"), uninstall: false, install: false) {
+		section(sectionTitle("Customizations")) {}
+		section(smallerTitle("Notification Prefix")) {
+			input(name: "customPrefix", type: "enum", title: inputTitle("Notification Prefix text:"), defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
+				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
+			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+			if (settings.customPrefix == 'custom') {
+				input(name: "customPrefixText", type: "text", title: inputTitle("Custom Prefix text"), defaultValue: "", required: true, submitOnChange: true)
+			}
+		}
+		section(smallerTitle("Room Name")) {
+			input(name: "customRoomName", type: "enum", title: inputTitle("Refer to the Room as"), defaultValue: "(helper name)", options:
+				  (['(helper name)', 'the room', 'custom'] + (settings.theSensorDevices.size() == 1?['(sensor name)']:[])).sort(false), submitOnChange: true, multiple: false)
+			if (settings?.customRoomName == 'custom') {
+				input(name: "customRoomText", type: "text", title: inputTitle("Custom Room Name"), defaultValue: "", required: true, submitOnChange: true)
+			} 
+			if (settings?.customRoomName == null) { app.updateSetting('customRoomName', '(helper name)'); settings.customTstat = '(helper name)'; }
+			if (['(helper name)', '(sensor name)'].contains(settings?.customRoomName)) {
+				input(name: "roomCleaners", type: 'enum', title: inputTitle("Strip these words from the Room Name"), multiple: true, required: false,
+					  submitOnChange: true, options: ['EcobeeSensor', 'EcoSensor', 'Smart', 'Room', 'Bedroom', 'Sensor', 'Contact'].sort(false))
+				input(name: "roomPrefix", type: 'enum', title: inputTitle("Add this prefix to the Room Name"), multiple: false, required: false,
+					  submitOnChange: true, options: ['the', 'Smart', 'Room', 'Smart Room'].sort(false)) 
+				input(name: "roomSuffix", type: 'enum', title: inputTitle("Add this suffix to the Room Name"), multiple: false, required: false,
+					  submitOnChange: true, options: ['room', 'bedroom', 'Smart Room'].sort(false))
+            	if (settings.roomSuffix == null) {app.updateSetting('roomSuffix', ""); settings.roomSuffix = "";}
+			}
+		}
+		section(title: sampleTitle("Sample Notification Messages"), hideable: true, hidden: false) {
+			String thePrefix = getMsgPrefix()
+			String theRoom = getMsgRoomName()
+            samples = (thePrefix + "I just activated" + theRoom + "\n" + thePrefix + "I just deactivated" + theRoom).replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim()
+			paragraph samples
+		}
+	}
+}
+def isCustomized() {
+	return (customPrefix || customTstat || (useSensorNames != null)) ? "complete" : null
 }
 
 // Main functions
@@ -645,7 +682,7 @@ void activateRoom() {
         if (anyInactive) { sensorData << [SmartRoom:'active']; atomicState.SmartRoom = 'active'; }
         generateSensorsEvents( sensorData )
     }
-    if (anyInactive) sendMessage("I just activated ${app.label}")
+    if (anyInactive) sendMessage("I just activated")
     
     LOG("Activated",3,null,'info')
 }
@@ -712,7 +749,7 @@ void deactivateRoom() {
     }
     generateSensorsEvents(sensorData)
     atomicState.isRoomOccupied = false	// this gets turned on the first time motion is detected after the doors are closed
-    if (anyActive) sendMessage("I just deactivated ${app.label} (Smart Room)")
+    if (anyActive) sendMessage("I just deactivated")
     LOG("Deactivated",3,null,'info',false,false)
 }
 def programUpdateHandler(evt) {
@@ -895,11 +932,62 @@ void generateSensorsEvents( Map dataMap ) {
     }
 }
 
+String getMsgPrefix() {
+	String thePrefix = ""
+	if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+	switch (settings?.customPrefix) {
+		case '(helper):':
+			thePrefix = atomicState.appDisplayName + ': '
+			break
+		case '(helper) at (location):':
+			thePrefix = atomicState.appDisplayName + " at ${location.name}: "
+			break
+		case '(location):':
+			thePrefix = location.name + ': '
+			break
+		case 'custom':
+			thePrefix = settings?.customPrefixText?.trim() + ' '
+			break
+		case 'none':
+			break
+	}
+	return thePrefix
+}
+String getMsgRoomName() {
+	String theRoomName = ""
+	switch (settings?.customRoomName) {
+    	case '(helper name)':
+        	theRoomName = atomicState.appDisplayName.replaceAll(':','')
+            break
+        case '(sensor name)':
+        	theRoomName = settings.theSensorDevices[0].displayName
+            break
+        case 'the room':
+        	theRoomName = 'the room'
+            break
+        case 'custom':
+        	theRoomName = settings?.customRoomText
+            break
+    }
+    theRoomName = ' ' + theRoomName + ' '
+    if (settings?.roomCleaners) {
+    	settings.roomCleaners.each { 
+        	theRoomName = theRoomName.replaceAll(it, '')
+        }
+    }
+	String prefix = settings.roomPrefix ?: ' '
+    String suffix = settings.roomSuffix ?: ' '
+    theRoomName = (' ' + prefix + ' ' + theRoomName + ' ' + suffix).replaceAll(':','').replaceAll('  ',' ')
+    return theRoomName
+}
+
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
    // boolean ST = isST
     if (settings.notify) {
-        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    	String msgPrefix = getMsgPrefix()
+        String msg = msgPrefix + (notificationMessage.trim() + getMsgRoomName()).replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim()
+        log.debug msg
 		if (ST) {
 			if (settings.notifiers) {
             	if (settings.echoAnnouncements) {
@@ -922,10 +1010,10 @@ void sendMessage(notificationMessage) {
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
                             echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        } else {
-                        	notEcho*.deviceNotification(msg)
+                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         }
+						// The rest get a standard deviceNotification
+                        if (notEcho) notEcho*.deviceNotification(msg)
                     } else {
                         settings.notifiers*.deviceNotification(msg)
                     }
@@ -971,7 +1059,7 @@ void sendMessage(notificationMessage) {
                     // If we have multiple Echo Speak device targets, get them all to speak at once
                     List echoDeviceObjs = []
                     if (echo) {
-                        if(echo?.size() > 1) {
+                        if (echo?.size() > 1) {
                             echo?.each { 
                                 String deviceType = it.currentValue('deviceType') as String
                                 String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -984,10 +1072,10 @@ void sendMessage(notificationMessage) {
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
                             echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        } else {
-                        	notEcho*.deviceNotification(msg)
+                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         }
+						// The rest get a standard deviceNotification
+                        if (notEcho) notEcho*.deviceNotification(msg)
                     } else {
                         settings.notifiers*.deviceNotification(msg)
                     }
