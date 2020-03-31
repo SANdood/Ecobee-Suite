@@ -26,30 +26,6 @@
  *	See Github Changelog for complete change history
  *
  * <snip>
- *	1.7.16 - Fixed nagging command error & preferences{}
- *	1.7.17 - Optimized isST/isHE calls, fixed set*fanMinOnTime()
- *	1.7.18 - Fixed sendHoldType conversion error
- *	1.7.19 - Fixed incorrect importUrl
- *	1.7.20 - Added economizer, ventilator, compHotWater, & auxHotWater for equipmentOperatingState/thermostatOperatingStateDisplay
- *	1.7.21 - Fixed set*fanMinOnTime() again
- *	1.7.22 - Enabled "Demand Response" program
- *	1.7.23 - Fixed typo in setDehumiditySetpoint()
- *	1.7.24 - Fixed type conversion error in setFanMinOnTime
- *	1.7.25 - Added arg typing for Hubitat, some more fanMinOnTime cleanup
- *	1.7.26 - Fixed thermostatHold in updateThermostatSetpoints()
- *	1.7.27 - Added support for display/update of Ecobee 4+ Audio settings, microphoneOn/Off, update attrs upon successful setEcobeeSettings()
- *	1.7.28 - Fixed typo in setProgramSetpoints(); 
- *	1.7.29 - if Auto mode is disabled for this thermostat, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint
- *	1.7.30 - Fixes for timeout errors in setProgramSetpoint()
- *	1.7.31 - Additional Hubitat optimizations
- *	1.7.32 - Added next*Setpoints, setFanMode keeps current fanMinOnTime for ON & CIRCULATE; resets to 0 for OFF & AUTO
- *	1.7.33 - Added weatherTempLowForecast array (string) for new Smart Humidity Helper
- *	1.7.34 - Fixed Fan Holds, added nextProgramName for Smart Vents
- *	1.7.35 - Misc Optimizations
- *	1.7.36 - Added lastRunningMode attribute for Google Home
- *	1.7.37 - Added *Updated attributes
- *	1.7.38 - debugEventFromParent messages are now in-line
- *	1.7.39 - Added holdEndDate, schedule now uses this ('Hold: Home until 2020-02-14 18:30:00')
  *	1.8.00 - Release number sync-up
  *	1.8.01 - General Release
  *	1.8.02 - Fix holdEndDate & schedule during transitions; supportedThermostatModes initialization loophole
@@ -58,9 +34,10 @@
  *	1.8.05 - Fixed thermostatMode changes heat-->auto and cool-->auto
  *	1.8.06 - Reworked generateEvent()
  *	1.8.07 - Added debugLevel as dataValue
-*	1.8.08 - New SHPL, using Global Fields instead of State
+ *	1.8.08 - New SHPL, using Global Fields instead of State
+ *	1.8.09 - Fixed thermostatSetpoint initialization error in auto mode
  */
-String getVersionNum() 		{ return "1.8.08" }
+String getVersionNum() 		{ return "1.8.09" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -1551,10 +1528,10 @@ def generateEvent(List updates) {
 									newSetpoint = (ST ? device.currentValue('heatingSetpoint') : device.currentValue('heatingSetpoint', true))?.toString()
 								} else if (lRunMode == 'cool') {
 									newSetpoint = (ST ? device.currentValue('coolingSetpoint') : device.currentValue('coolingSetpoint', true))?.toString()
-								} else if (ST) {
-									newSetpoint = roundIt(((device.currentValue('heatingSetpoint')?.toBigDecimal() + device.currentValue('coolingSetpoint')?.toBigDecimal()) / 2.0), precision.toInteger()).toString()
 								} else {
-									newSetpoint = roundIt(((device.currentValue('heatingSetpoint', true)?.toBigDecimal() + device.currentValue('coolingSetpoint', true)?.toBigDecimal()) / 2.0), precision.toInteger()).toString()
+                                	def hsp = ST ? device.currentValue('heatingSetpoint') : device.currentValue('heatingSetpoint', true)
+                                    def csp = ST ? device.currentValue('coolingSetpoint') : device.currentValue('coolingSetpoint', true)
+									newSetpoint = ((hsp != null) && (csp != null)) ? (roundIt(((hsp + csp) / 2.0), precision.toInteger())) : null
 								}
 								sendEvent(name: 'thermostatSetpoint', value: newSetpoint.toString(), unit: tu, descriptionText: "Thermostat setpoint is ${newSetpoint}°${tu}", displayed: true)
 								disableModeAutoButton()
