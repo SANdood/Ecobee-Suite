@@ -13,20 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.10 - Fixed isST/isHE Optimization bugs
- *	1.7.11 - Added multi-humidistat support
- *	1.7.12 - Fixed multi-humidistat initialization error
- *	1.7.13 - Clean up app label in sendMessage()
- *	1.7.14 - Fixed Notifications setup
- *	1.7.15 - Added option to disable local display of log.debug() logs, support Notification devices on ST
- *	1.7.16 - Fixed ST Notifications section, removed HE SMS option, fixed event handlers typo, fixed humidity initialization
- *	1.7.17 - Double-verify program before changing; don't send repetitive (fixed) setpoint changes
- *	1.7.18 - Added notification customization and cleaned up notifier choices
- *	1.7.19 - Don't enforce heal/cooling setpoint rules if thermostat not configured for Auto Mode
- *	1.7.20 - Fixed helper labelling
- *	1.7.21 - Fixed labels (again), added infoOff, cleaned up preferences setup
- *	1.7.22 - Added reservation serializer for setpoint changes (program.climates)
- *	1.7.23 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - More busy bees
@@ -34,11 +20,12 @@
  *	1.8.04 - No longer LOGs to parent (too much overhead for too little value)
  *	1.8.05 - New SHPL, using Global Fields instead of atomicState
  *	1.8.06 - Fixed appDisplayName in sendMessage
+ *	1.8.07 - Fixed mixed Notification devices in sendMessage
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.06" }
+String getVersionNum()		{ return "1.8.07" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1031,7 +1018,7 @@ void sendMessage(notificationMessage) {
                     // If we have multiple Echo Speak device targets, get them all to speak at once
                     List echoDeviceObjs = []
                     if (echo) {
-                        if(echo?.size() > 1) {
+                        if (echo?.size() > 1) {
                             echo?.each { 
                                 String deviceType = it.currentValue('deviceType') as String
                                 String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -1044,10 +1031,10 @@ void sendMessage(notificationMessage) {
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
                             echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        } else {
-                        	notEcho*.deviceNotification(msg)
+                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         }
+						// The rest get a standard deviceNotification
+                        if (notEcho) notEcho*.deviceNotification(msg)
                     } else {
                         settings.notifiers*.deviceNotification(msg)
                     }
@@ -1093,7 +1080,7 @@ void sendMessage(notificationMessage) {
                     // If we have multiple Echo Speak device targets, get them all to speak at once
                     List echoDeviceObjs = []
                     if (echo) {
-                        if(echo?.size() > 1) {
+                        if (echo?.size() > 1) {
                             echo?.each { 
                                 String deviceType = it.currentValue('deviceType') as String
                                 String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -1106,10 +1093,10 @@ void sendMessage(notificationMessage) {
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
                             echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        } else {
-                        	notEcho*.deviceNotification(msg)
+                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         }
+						// The rest get a standard deviceNotification
+                        if (notEcho) notEcho*.deviceNotification(msg)
                     } else {
                         settings.notifiers*.deviceNotification(msg)
                     }
