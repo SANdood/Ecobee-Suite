@@ -14,28 +14,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.25 - Don't notify if contacts are closed while "off_pending" delay
- *	1.7.26 - Fixed 'off_pending' (again)
- *	1.7.27 - Changed minimum LOG level to 3
- *	1.7.28 - Fixed unintended overwrite of thermostat's mode in statModeChange()
- *	1.7.29 - Clean up appLabel in sendMessage()
- *	1.7.30 - Corrected (user reported) tmpThermSaveState typo
- *	1.7.31 - Added noDebug option
- *	1.7.32 - Tweaked noDebug, add Notifications device support for ST
- *	1.7.33 - Cleaned up Notification messages for single/multi thermostats
- *	1.7.34 - Fixed Notifications section for ST, removed SMS for HE
- *	1.7.35 - Fixed initialization error when HVAC should be off
- *	1.7.36 - Added options to customize the Notifications
- *	1.7.37 - Bypass HE cache for currentContact/currentSwitch
- *	1.7.38 - Tweaks to notification customization
- *	1.7.39 - Fixed typo that prevented announcements being sent or spoken in some cases
- *	1.7.40 - Fixed another issue preventing announcements
- *	1.7.41 - Fixed Helper labelling
- *	1.7.42 - Fixed labels (again), added debugOff/infoOff, cleaned up preferences setup, added Intro ***
- *	1.7.43 - Fixed numOpen() fatal error
- *	1.7.44 - Added minimize UI
- *	1.7.45 - Made logging less chatty with debugOff && infoOff
- *	1.7.46 - Layout tweaks for Hubitat
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - Miscellaneous optimizations
@@ -48,10 +26,11 @@
  *	1.8.09 - No longer LOGs to parent (too much overhead for too little value)
  *	1.8.10 - Send simultaneous notification Announcements to multiple Echo Speaks devices
  *	1.8.11 - Fixed appDisplayName in sendMessage
+ *	1.8.12 - Fixed mixed Notification devices in sendMessage
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.11" }
+String getVersionNum()		{ return "1.8.12" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1355,7 +1334,7 @@ void sendMessage(notificationMessage) {
                     // If we have multiple Echo Speak device targets, get them all to speak at once
                     List echoDeviceObjs = []
                     if (echo) {
-                        if(echo?.size() > 1) {
+                        if (echo?.size() > 1) {
                             echo?.each { 
                                 String deviceType = it.currentValue('deviceType') as String
                                 String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -1368,16 +1347,16 @@ void sendMessage(notificationMessage) {
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
                             echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        } else {
-                        	notEcho*.deviceNotification(msg)
+                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         }
+						// The rest get a standard deviceNotification
+                        if (notEcho) notEcho*.deviceNotification(msg)
                     } else {
                         settings.notifiers*.deviceNotification(msg)
                     }
                 } else {
                 	settings.notifiers*.deviceNotification(msg)
-                }
+                }                
             }
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
@@ -1417,7 +1396,7 @@ void sendMessage(notificationMessage) {
                     // If we have multiple Echo Speak device targets, get them all to speak at once
                     List echoDeviceObjs = []
                     if (echo) {
-                        if(echo?.size() > 1) {
+                        if (echo?.size() > 1) {
                             echo?.each { 
                                 String deviceType = it.currentValue('deviceType') as String
                                 String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -1430,10 +1409,10 @@ void sendMessage(notificationMessage) {
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
                             echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        } else {
-                        	notEcho*.deviceNotification(msg)
+                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         }
+						// The rest get a standard deviceNotification
+                        if (notEcho) notEcho*.deviceNotification(msg)
                     } else {
                         settings.notifiers*.deviceNotification(msg)
                     }
