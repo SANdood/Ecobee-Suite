@@ -21,33 +21,6 @@
  *
  *	See Github Changelog for complete change history
  *	<snip>
- *	1.7.26 - Fixed pauseSwitch initialization error
- *	1.7.27 - Enabled "Demand Response" program
- *	1.7.28 - Fixed weatherIcon change at sunrise/sunset & demandResponse currentProgramName/Id
- *	1.7.29 - Fixed null owner & type references for Auto Home/Away programs
- *	1.7.30 - Fixed null values during Hub reboot recovery
- *	1.7.31 - Optimized LOG() handling, fanMode/fanMinOnTime tweaks
- *	1.7.32 - Send programsList to sensors, to support add/deleteSensorFromProgram
- *	1.7.33 - Added notification device support on SmartThings
- *	1.7.34 - Added Audio object settings (for Ecobee 4)
- *	1.7.35 - Cleaned up initialize redundancy
- *	1.7.36 - Fixed child.label/child.name
- *	1.7.37 - If Auto mode is disabled, don't enforce heatCoolMinDelta or heatingSetpoint can't be higher than coolingSetpoint in setPrgramSetpoints()
- *	1.7.38 - Added queued requests to climateChange actions (setProgramSetpoints, addSensorToProgram, deleteSensorFromProgram)
- *	1.7.39 - Fixed type conversion error in setProgramSetpoints with null setpoint
- *	1.7.40 - Miscellaneous Map/HashMap optimizations
- *	1.7.41 - Revamped Smart Recovery, so that the Smart Vents Helper knows what the Recovery target is
- *	1.7.42 - Added weatherTempLowForecast, for the new Smart Humidity Helper
- *	1.7.43 - Added nextProgramName (for Smart Vents), fixed Fan Holds
- *	1.7.44 - Optimized myConvertTemperatureIfNeeded()
- *	1.7.45 - Fixed labels (again), cleaned up settings pages, cleaned up child logging
- *	1.7.46 - Release memory when finished, extended http request timeouts to 30 seconds
- *	1.7.47 - Added infrastructure for one child app to pause/unpause another
- *	1.7.48 - Broke program Map into currentClimateRef, climates and schedule Maps
- *	1.7.49 - Fixed runCallQueue ('setProgramSetpoint-s-' typo)
- *	1.7.50 - Added schedule conversions to/from new timeSchedule Map
- *	1.7.51 - Added ***Updated timestamps; track updates by Tid; 
- *	1.7.52 - Added managementSet support for EMS thermostats
  *	1.8.00 - Version synchronization, new Smart Humidity Helper, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - Fixed smartAuto settings bug
@@ -65,12 +38,13 @@
  *	1.8.14 - Notification devices are no longer required (but still highly recommended)
  *	1.8.15 - New SHPL, using Global Fields instead of atomicState
  *	1.8.16 - Tightened up httpGet/httpPost response handling
- *	1.8.17a - Fixed latent installation error (a=again)
- */ 
+ *	1.8.17 - Fixed latent installation error (a=again)
+ *	1.8.18 - Fixed mixed Notification devices in sendMessage
+ */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.17a" }
+String getVersionNum()		{ return "1.8.18" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -129,7 +103,7 @@ definition(
     iconX3Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-3x.jpg",
     importUrl:			"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
     documentationLink:	"https://github.com/SANdood/Ecobee-Suite/blob/master/README.md",
-	singleInstance: 	false,
+	singleInstance: 	true,
 	oauth:				true,
 	pausable:			false
 ) {
@@ -202,7 +176,7 @@ def mainPage() {
 
 		if(atomicState.authToken != null && atomicState.initialized != true) {
 			section() {
-				paragraph "Please ${HE?'click':'tap'} 'Done' to save your credentials. Then re-open the Ecobee Suite Manager to continue the setup."
+				paragraph "Please ${HE?'click \'Done\'':'tap \'Save\''} to save your credentials. Then re-open the Ecobee Suite Manager to continue the setup."
 			}
 		}
 
@@ -926,22 +900,29 @@ def oauthInitUrl() {
 	}
 }
 void parseAuthResponse(resp) {
+
+	log.debug "response isSuccess: ${resp.isSuccess()}"
 	log.debug "response data: ${resp.data}"
-	log.debug "response.headers: "
-	resp.headers.each { log.debug "${it.name} : ${it.value}"}
-	log.debug "response contentType: ${resp.contentType}"
+    String str = ""
+	resp.headers.each {
+        str += "\n${it.name}: ${it.value}, "
+    }
+    log.debug "response headers: ${str}"
 	log.debug("response status: "+resp.status)
-	log.debug "response params: "
-	resp.params.each {log.debug "${it.names}"}
+    // Trying to parse the params throws an error on ST
+    //str = ""
+    //log.debug "resp param ${resp.params}"
+	//resp.params.each { str += "${it.name}: ${it.value}"}
+    //log.debug "response params: ${str}"
 }
 // OAuth Callback URL and helpers
 def callback() {
-	LOG("callback()>> params: $params, params.code ${params.code}, params.state ${params.state}, atomicState.oauthInitState ${atomicState.oauthInitState}", 2, null, 'debug')
+	LOG("callback()>> params: ${params}" /* params.code ${params.code}, params.state ${params.state}, atomicState.oauthInitState ${atomicState.oauthInitState}"*/, 1, null, 'debug')
 	def code = params.code
 	def oauthState = params.state
 
 	//verify oauthState == atomicState.oauthInitState, so the callback corresponds to the authentication request
-	if (oauthState == atomicState.oauthInitState){
+	if (oauthState == atomicState.oauthInitState) {
 		LOG("callback() --> States matched!", 1)
 		def tokenParams = [
 			"grant_type": "authorization_code",
@@ -949,20 +930,28 @@ def callback() {
 			client_id : ecobeeApiKey,
 			state	  : oauthState,
 			redirect_uri: callbackUrl,
-            timeout: 30
+            timeout: (ST?20:30)
 		]
 
 		def tokenUrl = "${apiEndpoint}/token?${toQueryString(tokenParams)}"
-		LOG("callback()-->tokenURL: ${tokenUrl}", 2)
-		httpPost(uri: tokenUrl) { resp ->
-			atomicState.refreshToken = resp.data.refresh_token
-			atomicState.authToken = resp.data.access_token
+		//LOG("callback()-->tokenURL: ${tokenUrl}", 2)
+        try { 
+            httpPost(uri: tokenUrl) { resp ->
+     			//if (resp) parseAuthResponse(resp)
+    			if (resp && resp.data && resp.isSuccess()) {
+                	//parseAuthResponse(resp)
+                    atomicState.refreshToken = resp.data.refresh_token
+                    atomicState.authToken = resp.data.access_token
 
-			LOG("Expires in ${resp?.data?.expires_in} seconds")
-			atomicState.authTokenExpires = now() + (resp.data.expires_in * 1000)
-			LOG("swapped token: $resp.data; atomicState.refreshToken: ${atomicState.refreshToken}; atomicState.authToken: ${atomicState.authToken}", 2)
-		}
-
+                    LOG("Expires in ${resp.data.expires_in} seconds")
+                    atomicState.authTokenExpires = now() + (resp.data.expires_in * 1000)
+                    LOG("swapped token: $resp.data; atomicState.refreshToken: ${atomicState.refreshToken}; atomicState.authToken: ${atomicState.authToken}", 2)
+                }
+            }
+		} catch(Exception e) {
+            LOG("auth callback() Exception: ${e}", 1, null, "error")
+			if (resp) parseAuthResponse(resp)
+        }
 		if (atomicState.authToken) { success() } else { fail() }
 
 	} else {
@@ -1082,6 +1071,12 @@ def getEcobeeThermostats() {
         def statLocation = [:]
         try {
             httpGet(deviceListParams) { resp ->
+            	resp.headers.each {
+        			log.debug "${it.name} : ${it.value}"
+    			}
+    			log.debug "response contentType: ${resp.contentType}"
+    			log.debug "response data: ${resp.data}"
+                
             	LOG("getEcobeeThermostats() - httpGet() response: ${resp.data}", 4, null, 'trace')
             	//	the Thermostat Data. Will reuse for the Sensor List intialization
             	atomicState.thermostatData = resp.data			
@@ -2576,7 +2571,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
                 statUpdates[tid] = [] //.add('foo') // as List	// initialize the list of things that changed...
                 
 				//String tstatName = getThermostatName(tid)
-				if (debugLevelThree) LOG("pollEcobeeAPICallback() - Parsing data for thermostat ${getThermostatName(tid)} (${tid})", 3, null, 'info')
+				if (debugLevelThree) LOG("pollEcobeeAPICallback() - Parsing data for thermostat (${tid})", 3, null, 'info')
 				//if (TIMERS) log.debug "TIMER: Parsing data for ${tstatName} @ (${now() - pollEcobeeAPIStart}ms)"
 				
 				tempEquipStat[tid] = 	stat.equipmentStatus			// always store ("" is a valid return value)
@@ -6387,7 +6382,7 @@ void debugEventFromParent(child, message) {
 
 // TODO: Create a more generic push capability to send notifications
 // send both push notification and mobile activity feeds
-void sendPushAndFeeds(notificationMessage) {
+void sendMessage(notificationMessage) {
 	LOG("Notification Message: ${notificationMessage}", 2, null, "trace")
 	LOG("Notification Time: ${atomicState.timeSendPush}", 2, null, "info")
 	
@@ -6404,7 +6399,7 @@ void sendPushAndFeeds(notificationMessage) {
                     // If we have multiple Echo Speak device targets, get them all to speak at once
                     List echoDeviceObjs = []
                     if (echo) {
-                        if(echo?.size() > 1) {
+                        if (echo?.size() > 1) {
                             echo?.each { 
                                 String deviceType = it.currentValue('deviceType') as String
                                 String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -6415,18 +6410,18 @@ void sendPushAndFeeds(notificationMessage) {
                         if((echo.size() > 1) && echoDeviceObjs && echoDeviceObjs?.size()) {
                             //NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
-                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:(app.displayName?:(app.label?:app.name))), echoDeviceObjs)	// , changeVol, restoreVol) }
+                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:(app.displayName?:(app.label?:app.name))))
-                        } else {
-                        	notEcho*.deviceNotification(msg)
+                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         }
+						// The rest get a standard deviceNotification
+                        if (notEcho) notEcho*.deviceNotification(msg)
                     } else {
                         settings.notifiers*.deviceNotification(msg)
                     }
                 } else {
                 	settings.notifiers*.deviceNotification(msg)
-                }
+                }                
             }
 			if (phone) { // check that the user did select a phone number
 				if ( phone.indexOf(";") > 0){
@@ -6467,7 +6462,7 @@ void sendPushAndFeeds(notificationMessage) {
                     // If we have multiple Echo Speak device targets, get them all to speak at once
                     List echoDeviceObjs = []
                     if (echo) {
-                        if(echo?.size() > 1) {
+                        if (echo?.size() > 1) {
                             echo?.each { 
                                 String deviceType = it.currentValue('deviceType') as String
                                 String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
@@ -6478,12 +6473,12 @@ void sendPushAndFeeds(notificationMessage) {
                         if((echo.size() > 1) && echoDeviceObjs && echoDeviceObjs?.size()) {
                             //NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
                             def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
-                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:(app.displayName?:(app.label?:app.name))), echoDeviceObjs)	// , changeVol, restoreVol) }
+                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
                         } else if (echo.size() == 1) {
-                            echo.playAnnouncement(msg, (msgPrefix?:(app.displayName?:(app.label?:app.name))))
-                        } else {
-                        	notEcho*.deviceNotification(msg)
+                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
                         }
+						// The rest get a standard deviceNotification
+                        if (notEcho) notEcho*.deviceNotification(msg)
                     } else {
                         settings.notifiers*.deviceNotification(msg)
                     }
@@ -6735,7 +6730,7 @@ void apiLost(where = "[where not specified]") {
 	updateMyLabel()
 	atomicState.authToken = null
 	
-	sendPushAndFeeds(notificationMessage)
+	sendMessage(notificationMessage)
 	generateEventLocalParams()
 
 	LOG("Unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running the Ecobee Suite Manager ${ST?'Smart':''}App and logging in again", 0, null, "error")
@@ -6758,7 +6753,7 @@ void notifyApiLost() {
 	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
 	if ( atomicState.connected == "lost" ) {
 		generateEventLocalParams()
-		sendPushAndFeeds(notificationMessage)
+		sendMessage(notificationMessage)
 		LOG("notifyApiLost() - API Connection Previously Lost. User MUST reintialize the connection with Ecobee by running the Ecobee Suite Manager ${ST?'Smart':''}App and logging in again", 0, null, "error")
 	} else {
 		// Must have restored connection
