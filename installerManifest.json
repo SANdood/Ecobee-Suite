@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.8.19",
+			"version": 	"1.8.20",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -78,7 +78,7 @@
 				"name": 	"ecobee Suite Smart Mode",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.09",
+				"version": 	"1.8.12",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-mode.groovy",
 				"optional": 	false
