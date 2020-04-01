@@ -42,11 +42,12 @@
  *	1.8.18 - Fixed mixed Notification devices in sendMessage
  *	1.8.19 - Turn off extraneous debug logging
  *	1.8.20 - Misc optimizations and tweaks
+ *	1.8.21 - Hotfix to fix skipTime during initialization
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.20" }
+String getVersionNum()		{ return "1.8.21" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1272,12 +1273,14 @@ def initialize() {
     if (atomicState.inPollChildren && atomicState.initialized) {
     	// let the current poll cycle complete first, so we don't yank the rug out from under its feet
         def seconds = ST ? 21 : 26
-        if (atomicState.skipTime) {
-        	seconds = seconds - (((now() - atomicState.skipTime)/1000).toInteger())	// mow much longer do we need to wait
+        def skipTime = atomicState.skipTime?:now()
+        if (skipTime) {
+        	seconds = seconds - (((now() - skipTime)/1000).toInteger())	// mow much longer do we need to wait
         }
     	if (seconds > 1) {
         	LOG("intialize() - Waiting ${seconds} seconds for current poll cycle to complete...",1,null,'warn')
         	runIn(seconds, initialize, [overwrite: true])
+            atomicState.skipTime = skipTime
         	return false
         }
 	} else {
