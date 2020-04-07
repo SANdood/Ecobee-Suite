@@ -38,7 +38,7 @@
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum() 		{ return "1.8.04" }
+String getVersionNum() 		{ return "1.8.04b" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 
@@ -50,7 +50,7 @@ metadata {
         author:       	"Barry A. Burke (storageanarchy@gmail.com)",
         mnmn:         	"SmartThings",          // for the new Samsung (Connect) app
         vid:          	"generic-motion-6",        // for the new Samsung (Connect) app
-        ocfDeviceType:	"x.com.st.d.sensor.multifunction", //["oic.r.humidity", "x.com.st.d.sensor.moisture", "x.com.st.d.sensor.temperature", "x.com.st.d.sensor.motion"],
+        ocfDeviceType:	"x.com.st.d.sensor.motion", //["oic.r.humidity", "x.com.st.d.sensor.moisture", "x.com.st.d.sensor.temperature", "x.com.st.d.sensor.motion"],
         importUrl:    	"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy"
     ) 
     {	
