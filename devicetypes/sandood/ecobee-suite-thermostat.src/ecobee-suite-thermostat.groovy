@@ -38,7 +38,7 @@
  *	1.8.09 - Fixed thermostatSetpoint initialization error in auto mode
  *	1.8.10 - Optimizations for HE (no need to update *Display attributes)
  */
-String getVersionNum() 		{ return "1.8.10" }
+String getVersionNum() 		{ return "1.8.10b" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -46,7 +46,7 @@ import groovy.transform.Field
 metadata {
 	definition (
         name:        	"Ecobee Suite Thermostat", 
-        ocfDeviceType: 	["oic.d.thermostat", "oic.r.humidity", "oic.r.temperature", "oic.r.motion", "oic.d.humidifier", "oic.d.dehumidifier"],
+        ocfDeviceType: 	"oic.d.thermostat", // "oic.r.humidity", "oic.r.temperature", "oic.r.motion", "oic.d.humidifier", "oic.d.dehumidifier"],
         //vid: 			"generic-thermostat-5",
         //vid:			"SmartThings-smartthings-Ecobee_Thermostat",
         namespace:   	"sandood", 
