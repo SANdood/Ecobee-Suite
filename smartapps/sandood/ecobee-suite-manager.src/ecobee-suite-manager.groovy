@@ -43,12 +43,12 @@
  *	1.8.19 - Turn off extraneous debug logging
  *	1.8.20 - Misc optimizations and tweaks
  *	1.8.21 - Hotfix to fix skipTime during initialization
- *	1.8.21*- Hotfix for Eco+ screwing with dehumidifyWithAC
+ *	1.8.21b- Hotfix for dehumidifyOvercoolOffset
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.21" }
+String getVersionNum()		{ return "1.8.21b" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -3869,10 +3869,7 @@ void updateThermostatData() {
             	fanMinOnTime				= statSettings[tid].fanMinOnTime
                 humidifierMode				= statSettings[tid].humidifierMode
             	dehumidifierMode			= statSettings[tid].dehumidifierMode
-//            	dehumidifyOvercoolOffset	= statSettings[tid].dehumidifyOvercoolOffset
-				String dOO					= statSettings[tid].dehumidifyOvercoolOffset?.toString()
-                log.debug "dehumidifyOvercoolOffset(String): ${dOO}"
-            	dehumidifyOvercoolOffset	= dOO?.isInteger() ? dOO.toInteger() : 0 as Integer // (statSettings[tid].dehumidifyOvercoolOffset?.toString().isInteger() ? statSettings[tid].dehumidifyOvercoolOffset : 0) as Integer	// eco+ screwed this up!!!
+            	dehumidifyOvercoolOffset	= statSettings[tid].dehumidifyOvercoolOffset
 
             	hasHumidifier				= statSettings[tid].hasHumidifier
             	hasDehumidifier				= statSettings[tid].hasDehumidifier || (statSettings[tid].dehumidifyWithAC && (dehumidifyOvercoolOffset != 0)) // fortunately, we can hide the details from the device handler
@@ -4507,7 +4504,7 @@ void updateThermostatData() {
                 def tempValues = []
                 tempSettingsList.eachWithIndex { temp, i ->
                     def theTemp = statSettings[tid]."${temp}"
-                    def tempVal = theTemp ? myConvertTemperatureIfNeeded(theTemp.toInteger() / 10.0, 'F', apiPrecision) : 'null'
+                    def tempVal = (theTemp != null) ? myConvertTemperatureIfNeeded(theTemp.toInteger() / 10.0, 'F', apiPrecision) : 'null'
                     tempValues[i] = tempVal 
                     if (changeTemps[tid]?.getAt(i) != tempVal) {
                         data << [ "${temp}": tempVal ]
