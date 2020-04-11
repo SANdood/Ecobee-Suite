@@ -13,29 +13,20 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.20 - Added support for HubConnected EcoVents and Keen Vents; optimized Keen Vent handling; new Fan Only percentage setting
- *	1.7.21 - Fix HubConnect EcoVent selector
- *	1.7.22 - Added optional Ecobee Programs exception & auto Sensor enrollments; show open percentage in label
- *	1.7.23 - Enable Smart Recovery handling when *nextClimate* is enabled (but currently running Program is not), default min/maxVentLevel to 1/98 for silent operation
- *	1.7.24 - Remove extraneous log.debug, fix app.label handling of levels, added 'percentage' as option for Paused
- *	1.7.25 - Fixed labels (again), fixed open contacts, and updated configuration layout, added intro ***
- *	1.7.26 - Integrated with Smart Room and ES Sensors
- *	1.7.27 - Added atomic updateSensorPrograms - add/remove in 1 call
- *	1.7.28 - Added reservation serializer for climate/sensor changes (program.climates)
- *	1.7.29 - Added Mode restriction
- *	1.7.30 - Fixed undefined "excluded" mode/climate vent setting
- *	1.7.31 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - Option to close vents when contact open and fan only; fixed too many ES sensors error when 0 ES sensors, fix Pause warning
  *	1.8.03 - More busy bees
  *	1.8.04 - No longer LOGs to parent (too much overhead for too little value)
  *	1.8.05 - New SHPL, using Global Fields instead of atomicState
+ *	1.8.06 - Allow individual un-pause from peers, even if was already paused
+ *	1.8.07 - Fix to workaround improper dehumidifyOvercoolOffset setting from thermostat (null when should be 0)
+ *	1.8.08 - Enhanced currentProgram() check
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.05" }
+String getVersionNum()		{ return "1.8.08" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 
@@ -308,12 +299,14 @@ def mainPage() {
 						if (heatAt && coolAt && maximize) paragraph "In the '${cProgram}' program, the vent${vc>1?'s':''} will open when the observed ambient temperature at the selected " +
 													"sensor${settings.theSensors?.size()>1?'s':''} is less than ${heatAt}°${unit} or more than ${coolAt}°${unit}"
 						def overCool
-						def overCoolOffset
+						String overCoolOffset
 						if (settings?.theThermostat) {
 							overCool = theThermostat.currentValue('dehumidifyWithAC')
-							overCoolOffset = theThermostat.currentValue('dehumidifyOvercoolOffset')
 							overCool = ((overCool != null) && ((overCool == true) || (overCool == 'true'))) ? true : false
-							if (overCool && !overCoolOffset) overCool = false 	// if no offset, or offset is 0.0, then we're not overcooling
+                            if (overCool) {
+                            	overCoolOffset = theThermostat.currentValue('dehumidifyOvercoolOffset').toString()
+                                if ((overCoolOffset == '0') || (overCoolOffset == 'null')) overCool = false		// if no offset, or offset is 0.0, then we're not overcooling
+                            }
 							if (overCool) {
 								if (maximize) paragraph "${theThermostat.displayName} is configured to dehumidify using the HVAC to over-cool as much as ${overCoolOffset}°${temperatureScale} lower than the cooling setpoint"
 								input(name: "overCoolToo", type: "bool", title: "Would you like to overcool this room also?", required: true, defaultValue: false, submitOnChange: true, width: 6)
@@ -377,9 +370,8 @@ void uninstalled() {
 }
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
-    //boolean ST = isST
-    //boolean HE = !ST
-
+	atomicState.version = getVersionLabel()
+    
     // Housekeeping
     if (settings.closedFanOnly != null) {
     	if (settings.fanOnlyState == null) {
@@ -390,8 +382,7 @@ def initialize() {
         settings.closedFanOnly = null
         if (HE) app.removeSetting('closedFanOnly')
     }
-    atomicState.version = getVersionLabel()
-    atomicState.scheduled = false
+
     // Now, just exit if we are disabled...
 	if (settings.tempDisable) {
         if (settings.disabledVents && (settings.disabledVents != 'unchanged')) {
@@ -411,10 +402,14 @@ def initialize() {
         	log.trace "initialize(): Calling unenrollSensors()"
         	unenrollSensors()
         }
+        atomicState.wasAlreadyPaused = true
         return true
     }
 	if (settings.debugOff) log.info "log.debug() logging disabled"
 	
+    // Not paused anymore
+    atomicState.wasAlreadyPaused = false
+    
     // Ecobee sensors are special: we update the vent status there if SmartRoom is enabled on them
     if (settings.theSensors) {
         def ecobeeSensors = []
@@ -455,20 +450,25 @@ def initialize() {
     // These don't change much, and we need them frequently, so stash them away and track their changes
     atomicState.heatDifferential = 0.0	// NO LONGER USED theThermostat.currentValue('heatDifferential')
     atomicState.coolDifferential = 0.0	// theThermostat.currentValue('coolDifferential') 
-    def dehumidifyWithAC = theThermostat.currentValue('dehumidifyWithAC')
-    def overcoolOffset = theThermostat.currentValue('dehumidifyOvercoolOffset') ?: 0.0
-    if ((overcoolOffset && (overcoolOffset != 0.0)) && dehumidifyWithAC && ((dehumidifyWithAC == true) || (dehumidifyWithAC == 'true'))) {
+    def dehumidifyWithAC = settings.overCoolToo ? theThermostat.currentValue('dehumidifyWithAC') : false
+    def overcoolOffset =  (settings.overCoolToo && dehumidifyWithAC) ? theThermostat.currentValue('dehumidifyOvercoolOffset') : 0
+    if (((overcoolOffset != null) && (overcoolOffset != 0)) && (dehumidifyWithAC != null) && ((dehumidifyWithAC == true) || (dehumidifyWithAC == 'true'))) {
     	atomicState.dehumidifyWithAC = true
         atomicState.dehumidifyOvercoolOffset = overcoolOffset
     } else {
+    	dehumidifyWithAC = false
+        settings.overCoolToo = false
+        app.updateSetting('overCoolToo', false)
     	atomicState.dehumidifyWithAC = false
         atomicState.dehumidifyOvercoolOffset = 0.0
     }
         
     //subscribe(theThermostat, 'heatDifferential', atomicHandler)
     //subscribe(theThermostat, 'coolDifferential', atomicHandler)
-    subscribe(theThermostat, 				'dehumidifyOvercoolOffset', atomicHandler)
-    subscribe(theThermostat, 				'dehumidifyWithAC', atomicHandler)
+    if (dehumidifyWithAC) {
+        subscribe(theThermostat, 				'dehumidifyOvercoolOffset', atomicHandler)
+        subscribe(theThermostat, 				'dehumidifyWithAC', atomicHandler)
+    }
     
 	atomicState.currentStatus = [:]
 	atomicState.heatOrCool = null
@@ -715,6 +715,7 @@ String checkTemperature() {
     // Check if we're supposed to do anything during the currently active Ecobee Program (or the upcoming Program if in Smart Recovery)
     if (settings?.theClimates) {
     	def currentProgram = ST ? theThermostat.currentValue('currentProgram') 		: theThermostat.currentValue('currentProgram', true)
+        if (!currentProgram) currentProgram = 'null'
         if (!settings.theClimates.contains(currentProgram)) {
             // If we are in (Smart Recovery), check to see if we're supposed to be adjusting during the upcoming program
             def nextProgram = ST ? theThermostat.currentValue('nextProgramName') 	: theThermostat.currentValue('nextProgramName', true)
@@ -1243,42 +1244,39 @@ void generateSensorsEvents( Map dataMap ) {
         parent.getChildDevice(DNI)?.generateEvent(dataMap)
     }
 }
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-    log.debug "pauseOn()"
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
         settings.tempDisable = true
-		atomicState.globalPause = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
-        updateMyLabel()
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
-    log.debug "pauseOff()"
-    log.debug "paused? ${settings.tempDisable}"
 	if (settings.tempDisable) {
-    log.debug "already? ${atomicState.wasAlreadyPaused}"
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
             settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
-            updateMyLabel()
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
@@ -1376,3 +1374,8 @@ def getParentSetting(String settingName) {
 @Field String  hubPlatform 	= getHubPlatform()
 @Field boolean ST 			= getIsST()
 @Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
