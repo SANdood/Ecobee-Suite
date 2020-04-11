@@ -34,11 +34,13 @@
  *	1.8.02 - Better Health Check integration (ST)
  *	1.8.03 - Added debugLevel attribute
  *	1.8.04 - New SHPL, using Global Fields instead of State
+ *	1.8.05 - Fixed icon for Samsung Smart Things mobile app (the new one)
+ *	1.8.06 - Clean up null vs. 'null' attributes - HE doesn't overwrite existing attrs with null
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum() 		{ return "1.8.04b" }
+String getVersionNum() 		{ return "1.8.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 
@@ -49,12 +51,12 @@ metadata {
         namespace:    	"sandood", 
         author:       	"Barry A. Burke (storageanarchy@gmail.com)",
         mnmn:         	"SmartThings",          // for the new Samsung (Connect) app
-        vid:          	"generic-motion-6",        // for the new Samsung (Connect) app
-        ocfDeviceType:	"x.com.st.d.sensor.motion", //["oic.r.humidity", "x.com.st.d.sensor.moisture", "x.com.st.d.sensor.temperature", "x.com.st.d.sensor.motion"],
+        vid:          	"generic-motion",        // for the new Samsung (Connect) app
+        ocfDeviceType:	"x.com.st.d.sensor.motion",  // "x.com.st.d.sensor.multifunction", //["oic.r.humidity", "x.com.st.d.sensor.moisture", "x.com.st.d.sensor.temperature", "x.com.st.d.sensor.motion"],
         importUrl:    	"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy"
     ) 
     {	
-    	//capability "Health Check"
+    	capability "Health Check"
 		capability "Temperature Measurement"
         capability "Relative Humidity Measurement"		// Thermostat-as-Sensor only (otherwise we never actually sendEvent 'humidity')
 		capability "Motion Sensor"
@@ -401,9 +403,9 @@ def generateEvent(Map results) {
                     updateDataValue( name, sendValue )
                     break;
             case 'debugLevel':
-                    String sendText = (sendValue != 'null') ? sendValue : ''
-                    updateDataValue('debugLevel', sendText)
-                    event = [name: name, value: sendText, descriptionText: "debugLevel is ${sendValue}", displayed: false]
+                    //String sendText = (sendValue != 'null') ? sendValue : ''
+                    updateDataValue('debugLevel', sendValue)
+                    event = [name: name, value: sendValue, descriptionText: "debugLevel is ${sendValue}", displayed: false]
                     break;
 			case 'Home':
 			case 'Away':
@@ -629,3 +631,8 @@ def getParentSetting(String settingName) {
 @Field String  hubPlatform 	= getHubPlatform()
 @Field boolean ST 			= getIsST()
 @Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
