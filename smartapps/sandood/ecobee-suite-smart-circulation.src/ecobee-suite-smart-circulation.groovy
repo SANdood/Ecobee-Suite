@@ -13,34 +13,18 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - nonCached currentValue() for HE
- *	1.7.02 - more nonCached cases for HE
- *	1.7.03 - Fixing private method issue caused by grails
- *	1.7.04 - Fix error message when temps don't converge
- *	1.7.05 - Fix adjustments down (was getting stuck unless delta < 1.0), fix broken mode handler, reservations work, fix 'Vacation'
- *	1.7.06 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.07 - Added option to require ALL or ANY of the Modes/Programs restrictions
- *	1.7.08 - Fixed typos and formatting
- *	1.7.09 - Optimized isST/isHE, added Global Pause, misc optimizations
- *	1.7.10 - More optimizations, auto-update new versions, fixed another typo
- *	1.7.11 - LOG when calcTemps() is Done!
- *	1.7.12 - Added option to disable local display of log.debug() logs
- *	1.7.13 - Fixed Helper labelling
- *	1.7.14 - Fixed labels (again), added infoOff, cleaned up preferences setup ***
- *	1.7.15 - Display current fanMinOnTime in label, more feedback during configuration
- *	1.7.16 - Added some more LOGs, cleaned up 
- *	1.7.17 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - More busy bees
  *	1.8.03 - No longer LOGs to parent (too much overhead for too little value)
  *	1.8.04 - New SHPL, using Global Fields instead of atomicState
+ *	1.8.05 - Allow individual un-pause from peers, even if was already paused
+ *	1.8.06 - Enhanced isOkNow() check
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.04" }
+String getVersionNum()		{ return "1.8.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -357,6 +341,7 @@ def initialize() {
     boolean isOK = true
     if (theModes || thePrograms  || statModes) {
 		String currentProgram = ST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
+        if (!currentProgram) currentProgram = 'null'
 		String thermostatMode = ST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
 		if (settings.needAll) {
 			isOK = 				settings.theModes ?		settings.theModes.contains(location.mode) 		: true
@@ -866,34 +851,39 @@ void updateMyLabel() {
 	}
     //log.debug "newLabel: " + newLabel + ", myLabel: " + myLabel + ", app.label: " + app.label
 }
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
-		atomicState.globalPause = true
+        settings.tempDisable = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
 	if (settings.tempDisable) {
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
+            settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 // Thermostat Programs & Modes
 def getThermostatPrograms() {
@@ -1051,3 +1041,8 @@ def getParentSetting(String settingName) {
 @Field String  hubPlatform 	= getHubPlatform()
 @Field boolean ST 			= getIsST()
 @Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
