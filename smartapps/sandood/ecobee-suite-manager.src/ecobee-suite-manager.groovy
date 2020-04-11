@@ -49,12 +49,13 @@
  *	1.8.25 - Fixed weather not updating
  *	1.8.26 - Added global vs. helper pause (helpers can override global wasAlreadyPaused)
  *	1.8.27 - Refactored update collection and queueing, schedule/schedText now sent independently from ESM, clear callQueue when ESM is re-initialized
+ *	1.8.28 - HOTFIX: fix to show thermostat names in live logging
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.27" }
+String getVersionNum()		{ return "1.8.28" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -147,8 +148,6 @@ def mainPage() {
 	atomicState.inSetup = true
 	def deviceHandlersInstalled 
 	def readyToInstall
-	//boolean ST = isST	// these are now "global" variables
-	//boolean HE = !ST
 	atomicState.appsArePaused = settings.pauseHelpers?:false
 	
 	// Request the Ask Alexa Message Queue list as early as possible (isn't a problem if Ask Alexa isn't installed)
@@ -288,8 +287,6 @@ def removePage() {
 // Setup OAuth between SmartThings and Ecobee clouds
 def authPage() {
 	LOG("authPage() --> Begin", 3, null, 'trace')
-	//boolean ST = isST
-	//boolean HE = !ST
 
 	// atomicState.accessToken = createAccessToken()
 	log.debug "accessToken: ${atomicState.accessToken}, ${state.accessToken}"
@@ -362,8 +359,6 @@ def authPage() {
 def thermsPage(params) {
 	LOG("=====> thermsPage() entered", 5)		 
 	def stats = getEcobeeThermostats()
-	//boolean ST = isST
-	//boolean HE = !isST
 	
 	LOG("thermsPage() -> thermostat list: ${stats}")
 	LOG("thermsPage() starting settings: ${settings}")
@@ -402,8 +397,6 @@ def sensorsPage() {
 	// Refactor to show the sensors under their corresponding Thermostats. Use Thermostat name as section header?
 	LOG("=====> sensorsPage() entered. settings: ${settings}", 5)
 	atomicState.sensorsPageVisited = true
-	//boolean ST = isST
-	//boolean HE = !ST
 
 	def options = getEcobeeSensors() ?: []
 	def numFound = options.size() ?: 0
@@ -439,7 +432,6 @@ def sensorsPage() {
 }
 
 def askAlexaPage() {
-	//boolean HE = isHE
 	
 	dynamicPage(name: "askAlexaPage", title: pageTitle("Ecobee Suite Manager\nAsk Alexa Integration"), nextPage: "") {
 	
@@ -483,8 +475,6 @@ def askAlexaPage() {
 
 def preferencesPage() {
 	LOG("=====> preferencesPage() entered. settings: ${settings}", 5)
-	//boolean ST = isST
-	//boolean HE = !ST
 	
 	dynamicPage(name: "preferencesPage", title: pageTitle("Ecobee Suite Manager\nPreferences"), nextPage: "") {
 		if (ST) {
@@ -610,7 +600,6 @@ def preferencesPage() {
 
 def debugDashboardPage() {
 	LOG("=====> debugDashboardPage() entered.", 5)	  
-	//boolean HE = isHE
 	
 	dynamicPage(name: "debugDashboardPage", title: "") {
 		section(getVersionLabel())
@@ -689,10 +678,7 @@ def refreshAuthTokenPage() {
 }
 
 def helperSmartAppsPage() {
-	LOG("helperSmartAppsPage() entered", 5)
-	//boolean ST = isST
-	//boolean HE = !ST
-
+	//LOG("helperSmartAppsPage() entered", 5)
 	LOG("The available Helper ${ST?'Smart':''}Apps are ${getHelperSmartApps()}", 5, null, "info")
 	
 	dynamicPage(name: "helperSmartAppsPage", title: pageTitle("Ecobee Suite Manager\nHelper ${ST?'SmartApps':'Applications'}"), nextPage: "", install: false, uninstall: false, submitOnChange: true) { 
@@ -2449,8 +2435,6 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
     //LOG("Requesting ${gw} for thermostats ${checkTherms}",2,null,'info')
 	jsonRequestBody += '}}'	  
 	if (debugLevelFour) LOG("pollEcobeeAPI() - jsonRequestBody is: ${jsonRequestBody}", 1, null, 'trace')
- 
-	//boolean ST = atomicState.isST
 	
 	def pollParams = [
 		uri: apiEndpoint,
@@ -2492,7 +2476,6 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	//if (TIMERS) { pollEcobeeAPIStart = atomicState.pollEcobeeAPIStart; log.debug "TIMER: asyncPoll took ${startMS - atomicState.asyncPollStart}ms"; log.debug "TIMER: Poll callback total time ${startMS - pollEcobeeAPIStart}ms"; }
 	boolean debugLevelFour = debugLevel(4)
 	boolean debugLevelThree = debugLevelFour ?: debugLevel(3)
-	//boolean ST = atomicState.isST
     
 	Map updatesLog 				= atomicState.updatesLog
 	boolean forcePoll 			= updatesLog.forcePoll
@@ -5388,7 +5371,6 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 		queueFailedCall('setHold', child.device.deviceNetworkId, 5, heating, cooling, deviceId, sendHoldType, sendHoldHours)
 		return false
 	}
-	//boolean ST = atomicState.isST
 	
 	def currentThermostatHold = ST ? child.device.currentValue('thermostatHold') : child.device.currentValue('thermostatHold', true)
 	if (currentThermostatHold == 'vacation') {
@@ -5468,7 +5450,6 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
 
 	if (debugLevelFour) LOG("setFanMode(${fanMode}) for ${child.device.displayName} (${deviceId})", 4, null, 'trace') 
 	boolean isMetric = (temperatureScale == "C")
-	//boolean ST = atomicState.isST
 	
 	def currentThermostatHold = ST ? child.device.currentValue('thermostatHold') : child.device.currentValue('thermostatHold', true)
 	if (currentThermostatHold == 'vacation') {
@@ -6168,7 +6149,7 @@ String getEcobeeApiKey() {
 
 String getThermostatName(String tid) {
 	// Get the name for this thermostat
-	String DNI = (atomicState.isHE?'ecobee_suite-thermostat-':'') + ([ app.id, tid ].join('.'))
+	String DNI = (HE?'ecobee_suite-thermostat-':'') + ([ app.id, tid ].join('.'))
 	def thermostatsWithNames = atomicState.thermostatsWithNames
 	String tstatName = (thermostatsWithNames?.containsKey(DNI)) ? thermostatsWithNames[DNI] : ''
 	if (tstatName == '') {
@@ -6529,7 +6510,6 @@ def getDebugDump() {
 }
 
 void apiLost(where = "[where not specified]") {
-	//boolean ST = atomicState.isST
 	
 	LOG("apiLost() - ${where}: Lost connection with APIs. unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running Ecobee Suite Manager ${ST?'Smart':''}App and logging in again", 1, null, "error")
 	atomicState.apiLostDump = getDebugDump()
@@ -6562,8 +6542,7 @@ void apiLost(where = "[where not specified]") {
 }
 
 void notifyApiLost() {
-	//boolean ST = atomicState.isST
-	
+
 	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
 	if ( atomicState.connected == "lost" ) {
 		generateEventLocalParams()
