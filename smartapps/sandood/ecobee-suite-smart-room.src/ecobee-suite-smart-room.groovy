@@ -22,11 +22,13 @@
  *	1.8.06 - Fixed appDisplayName in sendMessage
  *	1.8.07 - Fixed mixed Notification devices in sendMessage
  *	1.8.08 - Added customized Notifications
+ *	1.8.09 - Refactored sendMessage / sendNotifications
+ *	1.8.10 - Allow individual un-pause from peers, even if was already paused
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.08" }
+String getVersionNum()		{ return "1.8.10" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -160,17 +162,6 @@ def mainPage() {
                 	input(name: "manageSmartVents", type: "bool", title: inputTitle("Manage Smart Vents Helper(s) for this Smart Room?"), defaultValue: false, submitOnChange: true, width: 6)
                 	if (settings?.manageSmartVents) {
                     	input(name: "theVentApps", type: "enum", title: inputTitle("Select Smart Vents Helper(s) to manage"), required: true, multiple: true, submitOnChange: true, options: allVentApps, width: 6)
-                    /*  def appNames = []
-                        if (settings?.theVentApps) {
-                        	settings.theVentApps.each { appId ->
-                        		allVentApps.each{ key, value ->
-                                	String selection = (key == appId) ? value : ''
-                        			if (selection != '') {
-                                		appNames = appNames + [selection]
-                                    }
-                                }
-                            }
-                        } */
 					}
                 }
 				if (!allVentApps || !settings?.manageSmartVents) {
@@ -417,7 +408,7 @@ def initialize() {
 	log.debug "isSRActive: ${atomicState.isSmartRoomActive}"
     if (settings?.manageSmartVents && settings?.theVentApps) {
     	settings.theVentApps.each { appId ->
-        log.debug "calling parent.pauseChildApp(${appId}, ${(atomicState.isSmartRoomActive != true)})"
+        	LOG("calling parent.pauseChildApp(${appId}, ${(atomicState.isSmartRoomActive != true)})",1,null,'info')
         	parent.pauseChildApp( appId, (atomicState.isSmartRoomActive != true))	// unpause if active, pause if not
         }
     } else {
@@ -986,40 +977,11 @@ void sendMessage(notificationMessage) {
    // boolean ST = isST
     if (settings.notify) {
     	String msgPrefix = getMsgPrefix()
-        String msg = msgPrefix + (notificationMessage.trim() + getMsgRoomName()).replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim()
-        log.debug msg
+        String msg = msgPrefix + (notificationMessage.trim() + getMsgRoomName()).replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
+        boolean addFrom = (msgPrefix && !msgPrefix.startsWith("From "))
 		if (ST) {
 			if (settings.notifiers) {
-            	if (settings.echoAnnouncements) {
-                    List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                    List notEcho = echo ? settings.notifiers - echo : settings.notifiers
-
-                    // If we have multiple Echo Speak device targets, get them all to speak at once
-                    List echoDeviceObjs = []
-                    if (echo) {
-                        if (echo?.size() > 1) {
-                            echo?.each { 
-                                String deviceType = it.currentValue('deviceType') as String
-                                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                                echoDeviceObjs?.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
-                            }
-                        }
-                        //Announcement Command Logic
-                        if((echo.size() > 1) && echoDeviceObjs && echoDeviceObjs?.size()) {
-                            //NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
-                            def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
-                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
-                        } else if (echo.size() == 1) {
-                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        }
-						// The rest get a standard deviceNotification
-                        if (notEcho) notEcho*.deviceNotification(msg)
-                    } else {
-                        settings.notifiers*.deviceNotification(msg)
-                    }
-                } else {
-                	settings.notifiers*.deviceNotification(msg)
-                }                
+				sendNotifications(msgPrefix, msg)               
             }
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
@@ -1030,82 +992,86 @@ void sendMessage(notificationMessage) {
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)				// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)										// Push to everyone
+				sendPushMessage(msg)								// Push to everyone
 			}
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
 					settings.speechDevices.each {
-						it.speak( "From " + msg )
+						it.speak( (addFrom?"From ":"") + msg )
 					}
 				}
 				if (settings.musicDevices != null) {
 					settings.musicDevices.each {
 						it.setLevel( settings.volume )
-						it.playText( "From " + msg )
+						it.playText( (addFrom?"From ":"") + msg )
 					}
 				}
 			}
 		} else {		// HE
 			if (settings.notifiers) {
-            	if (settings.echoAnnouncements) {
-                    List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                    List notEcho = echo ? settings.notifiers - echo : settings.notifiers
-
-                    // If we have multiple Echo Speak device targets, get them all to speak at once
-                    List echoDeviceObjs = []
-                    if (echo) {
-                        if (echo?.size() > 1) {
-                            echo?.each { 
-                                String deviceType = it.currentValue('deviceType') as String
-                                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                                echoDeviceObjs?.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
-                            }
-                        }
-                        //Announcement Command Logic
-                        if((echo.size() > 1) && echoDeviceObjs && echoDeviceObjs?.size()) {
-                            //NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
-                            def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
-                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
-                        } else if (echo.size() == 1) {
-                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        }
-						// The rest get a standard deviceNotification
-                        if (notEcho) notEcho*.deviceNotification(msg)
-                    } else {
-                        settings.notifiers*.deviceNotification(msg)
-                    }
-                } else {
-                	settings.notifiers*.deviceNotification(msg)
-                }                
+                sendNotifications(msgPrefix, msg)               
             }
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
 					settings.speechDevices.each {
-						it.speak( "From " + msg )
+						it.speak((addFrom?"From ":"") + msg )
 					}
 				}
 				if (settings.musicDevices != null) {
 					settings.musicDevices.each {
 						it.setLevel( settings.volume )
-						it.playText( "From " + msg )
+						it.playText((addFrom?"From ":"") + msg )
 					}
 				}
 			}
 		}
     }
-	// Always send to Hello Home / Location Event log
+    // Always send to Hello Home / Location Event log
 	if (ST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
-		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
 }
-
+// Handles sending to Notification devices, with special handling for Echo Speaks devices (if settings.echoAnnouncements is true)
+boolean sendNotifications( String msgPrefix, String msg ) {
+	if (!settings.notifiers) {
+		LOG("sendNotifications(): no notifiers!",2,null,'warn')
+		return false
+	}
+    if (settings.echoAnnouncements) {
+        List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+        List notEcho = echo ? settings.notifiers - echo : settings.notifiers        
+        List echoDeviceObjs = []
+        if (echo?.size()) {
+			// Get all the Echo Speaks devices to speak at once
+			echo.each { 
+				String deviceType = it.currentValue('deviceType') as String
+				String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
+				echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+			}
+			if (echoDeviceObjs?.size()) {
+				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
+				def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
+				echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
+			}
+			// The rest get a standard deviceNotification
+			if (notEcho) notEcho*.deviceNotification(msg)
+		} else {
+			// No Echo Speaks devices
+			settings.notifiers*.deviceNotification(msg)
+		}
+	} else {
+		// Echo Announcements not enabled
+		settings.notifiers*.deviceNotification(msg)
+	}
+	return true
+}
 def getSensorPrograms(sensor) {
     def cl = sensor.currentValue('climatesList')
     return (cl ? ((cl == '[]') ? ['Away', 'Home', 'Sleep'] : cl[1..-2].tokenize(', ').sort(false)) : ['Away', 'Home', 'Sleep'])
@@ -1185,7 +1151,10 @@ void updateMyLabel() {
     	smartRoom = ' (paused)'
 		newLabel = myLabel + ( ST ? smartRoom : '<span style="color:red">' + smartRoom + '</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
-	} else if (SmartRoom != 'default') {
+    } else if (smartRoom == 'inactive') {
+		newLabel = myLabel + ( ST ? ' ('+smartRoom+')' : '<span style="color:orange"> (' + smartRoom + ')</span>' )
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else if (smartRoom != 'default') {
 		newLabel = myLabel + ( ST ? ' ('+smartRoom+')' : '<span style="color:green"> (' + smartRoom + ')</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
@@ -1193,34 +1162,39 @@ void updateMyLabel() {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
-		atomicState.globalPause = true
+        settings.tempDisable = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
 	if (settings.tempDisable) {
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
+            settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
     switch (logType) {
@@ -1312,3 +1286,8 @@ def getParentSetting(String settingName) {
 @Field String  hubPlatform 	= getHubPlatform()
 @Field boolean ST 			= getIsST()
 @Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
