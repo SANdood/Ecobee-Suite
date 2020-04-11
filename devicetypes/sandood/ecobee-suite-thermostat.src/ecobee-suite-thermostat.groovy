@@ -37,8 +37,9 @@
  *	1.8.08 - New SHPL, using Global Fields instead of State
  *	1.8.09 - Fixed thermostatSetpoint initialization error in auto mode
  *	1.8.10 - Optimizations for HE (no need to update *Display attributes)
+ *	1.8.11 - schedule/schedText now sent independently from ESM
  */
-String getVersionNum() 		{ return "1.8.10b" }
+String getVersionNum() 		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -46,9 +47,7 @@ import groovy.transform.Field
 metadata {
 	definition (
         name:        	"Ecobee Suite Thermostat", 
-        ocfDeviceType: 	"oic.d.thermostat", // "oic.r.humidity", "oic.r.temperature", "oic.r.motion", "oic.d.humidifier", "oic.d.dehumidifier"],
-        //vid: 			"generic-thermostat-5",
-        //vid:			"SmartThings-smartthings-Ecobee_Thermostat",
+        ocfDeviceType: 	"oic.d.thermostat", //"oic.r.humidity", "oic.r.temperature", "oic.r.motion", "oic.d.humidifier", "oic.d.dehumidifier"],
         namespace:   	"sandood", 
         author:      	"Barry A. Burke (storageanarchy@gmail.com)",		
         mnmn:        	"SmartThings", 
@@ -97,33 +96,33 @@ metadata {
 		attribute 'coldTempAlertEnabled', 					'STRING'		// or boolean?
 		attribute 'compressorProtectionMinTemp', 			'NUMBER'
 		attribute 'compressorProtectionMinTime', 			'NUMBER'
-		attribute 'condensationAvoid', 						'STRING'			// boolean
+		attribute 'condensationAvoid', 						'STRING'		// boolean
 		attribute 'coolAtSetpoint', 						'NUMBER'
 		attribute 'coolDifferential', 						'NUMBER'
-		attribute 'coolMaxTemp', 							'NUMBER'				// Read Only
-		attribute 'coolMinTemp', 							'NUMBER'				// Read Only
+		attribute 'coolMaxTemp', 							'NUMBER'		// Read Only
+		attribute 'coolMinTemp', 							'NUMBER'		// Read Only
 		attribute 'coolMode', 								'STRING'
 		attribute 'coolRange', 								'STRING'
 		attribute 'coolRangeHigh', 							'NUMBER'
 		attribute 'coolRangeLow', 							'NUMBER'
-		attribute 'coolStages', 							'NUMBER'				// Read Only
+		attribute 'coolStages', 							'NUMBER'		// Read Only
 		attribute 'coolingLockout', 						'STRING'
-		if (ST) attribute 'coolingSetpointDisplay', 				'NUMBER'	// Now the same as coolingSetpoint
+		if (ST) attribute 'coolingSetpointDisplay', 		'NUMBER'		// Now the same as coolingSetpoint
 		attribute 'coolingSetpointMax', 					'NUMBER'
 		attribute 'coolingSetpointMin', 					'NUMBER'
 		attribute 'coolingSetpointRange', 					'vector3'
-		if (ST) attribute 'coolingSetpointTile', 					'NUMBER'		// Used to show coolAt/coolTo for MultiTile
+		if (ST) attribute 'coolingSetpointTile', 			'NUMBER'		// Used to show coolAt/coolTo for MultiTile
 		attribute 'coldTempAlert', 							'NUMBER'
 		attribute 'coldTempAlertEnabled', 					'STRING'
-		attribute 'currentProgram',							'STRING'				// Read only
-		attribute 'currentProgramId',						'STRING'			// Read only
+		attribute 'currentProgram',							'STRING'		// Read only
+		attribute 'currentProgramId',						'STRING'		// Read only
 		attribute 'currentProgramName', 					'STRING'		// Read only
         attribute 'currentProgramOwner', 					'STRING'		// Read only
         attribute 'currentProgramType', 					'STRING'		// Read only
 		attribute 'debugEventFromParent',					'STRING'		// Read only
-		attribute 'debugLevel', 							'NUMBER'				// Read only - changed in preferences
-		attribute 'decimalPrecision', 						'NUMBER'			// Read only - changed in preferences
-		attribute 'dehumidifierLevel', 						'NUMBER'			// should be same as dehumiditySetpoint
+		attribute 'debugLevel', 							'NUMBER'		// Read only - changed in preferences
+		attribute 'decimalPrecision', 						'NUMBER'		// Read only - changed in preferences
+		attribute 'dehumidifierLevel', 						'NUMBER'		// should be same as dehumiditySetpoint
 		attribute 'dehumidifierMode', 						'STRING'
 		attribute 'dehumidifyOvercoolOffset', 				'NUMBER'
 		attribute 'dehumidifyWhenHeating', 					'STRING'
@@ -135,6 +134,7 @@ metadata {
 		attribute 'disablePreCooling', 						'STRING'
 		attribute 'disablePreHeating', 						'STRING'
 		attribute 'drAccept', 								'STRING'
+        attribute 'ecoPlus',								'STRING'
 		attribute 'ecobeeConnected', 						'STRING'
 		attribute 'eiLocation', 							'STRING'
 		attribute 'electricityBillCycleMonths', 			'STRING'
@@ -145,154 +145,157 @@ metadata {
 		attribute 'equipmentOperatingState', 				'STRING'
 		attribute 'equipmentStatus', 						'STRING'
 		attribute 'fanControlRequired', 					'STRING'
-		attribute 'fanMinOnTime', 'NUMBER'
-		attribute 'features','STRING'
-		attribute 'followMeComfort', 'STRING'
-		attribute 'groupName', 'STRING'
-		attribute 'groupRef', 'STRING'
-		attribute 'groupSetting', 'STRING'
-		attribute 'hasBoiler', 'STRING'					// Read Only
-		attribute 'hasDehumidifier', 'STRING'			// Read Only
-		attribute 'hasElectric', 'STRING'				// Read Only
-		attribute 'hasErv', 'STRING'					// Read Only
-		attribute 'hasForcedAir', 'STRING'				// Read Only
-		attribute 'hasHeatPump', 'STRING'				// Read Only
-		attribute 'hasHrv', 'STRING'					// Read Only
-		attribute 'hasHumidifier', 'STRING'				// Read Only
-		attribute 'hasUVFilter', 'STRING'				// Read Only
-		attribute 'heatAtSetpoint', 'NUMBER'
-		attribute 'heatCoolMinDelta', 'NUMBER'
-		attribute 'heatDifferential', 'NUMBER'
-		attribute 'heatMaxTemp', 'NUMBER'				// Read Only
-		attribute 'heatMinTemp', 'NUMBER'				// Read Only
-		attribute 'heatMode', 'STRING'
-		attribute 'heatPumpGroundWater', 'STRING'		// Read Only
-		attribute 'heatPumpReversalOnCool', 'STRING'
-		attribute 'heatRange', 'STRING'
-		attribute 'heatRangeHigh', 'NUMBER'
-		attribute 'heatRangeLow', 'NUMBER'
-		attribute 'heatStages', 'NUMBER'				// Read Only
-		if (ST) attribute 'heatingSetpointDisplay', 'NUMBER'	// now the same as heatingSetpoint
-		attribute 'heatingSetpointMax', 'NUMBER'
-		attribute 'heatingSetpointMin', 'NUMBER'
-		attribute 'heatingSetpointRange', 'vector3'
-		if (ST) attribute 'heatingSetpointTile', 'NUMBER'		// Used to show heatAt/heatTo for MultiTile
-		attribute 'holdAction', 'STRING'
-		attribute 'holdEndsAt', 'STRING'
-        attribute 'holdEndDate', 'STRING'
-		attribute 'holdStatus', 'STRING'
-		attribute 'hotTempAlert', 'NUMBER'
-		attribute 'hotTempAlertEnabled', 'STRING'
-		attribute 'humidifierMode', 'STRING'
-        attribute 'humidity', 'NUMBER'
-		attribute 'humidityAlertNotify', 'STRING'
-		attribute 'humidityAlertNotifyTechnician', 'STRING'
-		attribute 'humidityHighAlert', 'NUMBER'			// %
-		attribute 'humidityLowAlert', 'NUMBER'
-		attribute 'humiditySetpoint', 'NUMBER'
-		if (ST) attribute 'humiditySetpointDisplay', 'STRING'
-		attribute 'identifier', 'STRING'
-		attribute 'installerCodeRequired', 'STRING'
-		attribute 'isRegistered', 'STRING' 
-		attribute 'isRentalProperty', 'STRING'
-		attribute 'isVentilatorTimerOn', 'STRING'
-		attribute 'lastHoldType', 'STRING'
-		attribute 'lastModified', 'STRING' 
-		attribute 'lastOpState', 'STRING'				// keeps track if we were most recently heating or cooling
-		attribute 'lastPoll', 'STRING'
-        attribute 'lastRunningMode', 'STRING'			// for Google Home
-		attribute 'lastServiceDate', 'STRING'
-		attribute 'locale', 'STRING'
-		attribute 'logo', 'STRING'
-		attribute 'maxSetBack', 'NUMBER'
-		attribute 'maxSetForward', 'NUMBER'
-        attribute 'microphoneEnabled', 'STRING'			// From Audio object (boolean)
-		attribute 'mobile', 'STRING'
-		attribute 'modelNumber', 'STRING' 
-		attribute 'monthlyElectricityBillLimit', 'STRING'
-		attribute 'monthsBetweenService', 'STRING'
-		attribute 'motion', 'STRING'
-		attribute 'name', 'STRING'
-        attribute "nextCoolingSetpoint", 'NUMBER'		// Next 3 are for Smart Vents handling of (Smart Recovery)
-        attribute "nextHeatingSetpoint", 'NUMBER'		// "
-        attribute 'nextProgramName', 'STRING'			// ""
-        attribute 'playbackVolume', 'NUMBER'			// From Audio object
-		attribute 'programsList', 'STRING'				// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
-		attribute 'quickSaveSetBack', 'NUMBER'
-		attribute 'quickSaveSetForward', 'NUMBER'
-		attribute 'randomStartDelayCool', 'STRING'
-		attribute 'randomStartDelayHeat', 'STRING'
-		attribute 'remindMeDate', 'STRING'
-		attribute 'schedText', 'STRING'
-		//attribute 'schedule', 'STRING'					// same as 'currentProgram'
-		attribute 'scheduledProgram','STRING'
-		attribute 'scheduledProgramId','STRING'
-		attribute 'scheduledProgramName', 'STRING'
-        attribute 'scheduledProgramOwner', 'STRING'
-        attribute 'scheduledProgramType', 'STRING'
-		attribute 'serviceRemindMe', 'STRING'
-		attribute 'serviceRemindTechnician', 'STRING'
-		if (ST) attribute 'setpointDisplay', 'STRING'
-		attribute 'smartCirculation', 'STRING'			// not implemented by E3, but by this code it is
-		attribute 'soundAlertVolume', 'NUMBER'			// From Audio object
-		attribute 'soundTickVolume', 'NUMBER'			// From Audio object
-		attribute 'stage1CoolingDifferentialTemp', 'NUMBER'
-		attribute 'stage1CoolingDissipationTime', 'NUMBER'
-		attribute 'stage1HeatingDifferentialTemp', 'NUMBER'
-		attribute 'stage1HeatingDissipationTime', 'NUMBER'
-		attribute 'statHoldAction', 'STRING'
-		attribute 'supportedThermostatFanModes', 'JSON_OBJECT' // USAGE: List theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(', ')
-		attribute 'supportedThermostatModes', 'JSON_OBJECT' // USAGE: List theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(', ')
-		attribute 'supportedVentModes', 'JSON_OBJECT' // USAGE: List theModes = stat.currentValue('supportedVentModes')[1..-2].tokenize(', ')
-		attribute 'tempAlertNotify', 'STRING'
-		attribute 'tempAlertNotifyTechnician', 'STRING'
-		attribute 'tempCorrection', 'NUMBER'
-		if (ST) attribute 'temperatureDisplay', 'STRING'
-		attribute 'temperatureScale', 'STRING'
-		if (ST) attribute 'thermostatFanModeDisplay', 'STRING'
-		attribute 'thermostatHold', 'STRING'
-		attribute 'thermostatOperatingStateDisplay', 'STRING'
-		attribute 'thermostatSetpoint','NUMBER'
-		attribute 'thermostatSetpointMax', 'NUMBER'
-		attribute 'thermostatSetpointMin', 'NUMBER'
-		attribute 'thermostatSetpointRange', 'vector3'
-		attribute 'thermostatStatus','STRING'
-		attribute 'thermostatTime', 'STRING'
-		attribute 'timeOfDay', 'enum', ['day', 'night']
-		attribute 'userAccessCode', 'STRING'			// Read Only
-		attribute 'userAccessSetting', 'STRING'			// Read Only
-		attribute 'vent', 'STRING'						// same as 'ventMode'
-		attribute 'ventMode', 'STRING'					// Ecobee actually calls it only 'vent'
-		attribute 'ventilatorDehumidify', 'STRING'
-		attribute 'ventilatorFreeCooling', 'STRING'
-		attribute 'ventilatorMinOnTime', 'NUMBER'
-		attribute 'ventilatorMinOnTimeAway', 'NUMBER'
-		attribute 'ventilatorMinOnTimeHome', 'NUMBER'
-		attribute 'ventilatorOffDateTime', 'STRING'		// Read Only
-		attribute 'ventilatorType', 'STRING'			// Read Only ('none', 'ventilator', 'hrv', 'erv')
-        attribute 'voiceEngines', 'JSON_OBJECT'			// From Audio object
-		attribute 'weatherDewpoint', 'NUMBER'
-		attribute 'weatherHumidity', 'NUMBER'
-		attribute 'weatherPressure', 'NUMBER'
-		attribute 'weatherSymbol', 'STRING'
-		attribute 'weatherTemperature', 'NUMBER'
-        attribute 'weatherTempLowForecast', 'STRING'	// "lowToday,low1Day,low2Day,low3Day,low4Day" in F (for Smart Humidity Helper)
-		attribute 'wifiOfflineAlert', 'STRING'
+		attribute 'fanMinOnTime', 							'NUMBER'
+		attribute 'features',								'STRING'
+		attribute 'followMeComfort', 						'STRING'
+		attribute 'groupName', 								'STRING'
+		attribute 'groupRef', 								'STRING'
+		attribute 'groupSetting', 							'STRING'
+		attribute 'hasBoiler', 								'STRING'		// Read Only
+		attribute 'hasDehumidifier',						'STRING'		// Read Only
+		attribute 'hasElectric', 							'STRING'		// Read Only
+		attribute 'hasErv', 								'STRING'		// Read Only
+		attribute 'hasForcedAir', 							'STRING'		// Read Only
+		attribute 'hasHeatPump', 							'STRING'		// Read Only
+		attribute 'hasHrv', 								'STRING'		// Read Only
+		attribute 'hasHumidifier', 							'STRING'		// Read Only
+		attribute 'hasUVFilter', 							'STRING'		// Read Only
+		attribute 'heatAtSetpoint', 						'NUMBER'
+		attribute 'heatCoolMinDelta', 						'NUMBER'
+		attribute 'heatDifferential', 						'NUMBER'
+		attribute 'heatMaxTemp', 							'NUMBER'		// Read Only
+		attribute 'heatMinTemp', 							'NUMBER'		// Read Only
+		attribute 'heatMode', 								'STRING'
+		attribute 'heatPumpGroundWater', 					'STRING'		// Read Only
+		attribute 'heatPumpReversalOnCool', 				'STRING'
+		attribute 'heatRange', 								'STRING'
+		attribute 'heatRangeHigh', 							'NUMBER'
+		attribute 'heatRangeLow', 							'NUMBER'
+		attribute 'heatStages', 							'NUMBER'		// Read Only
+		if (ST) attribute 'heatingSetpointDisplay', 		'NUMBER'		// now the same as heatingSetpoint
+		attribute 'heatingSetpointMax',	 					'NUMBER'
+		attribute 'heatingSetpointMin', 					'NUMBER'
+		attribute 'heatingSetpointRange', 					'vector3'
+		if (ST) attribute 'heatingSetpointTile', 			'NUMBER'		// Used to show heatAt/heatTo for MultiTile
+		attribute 'holdAction', 							'STRING'
+		attribute 'holdEndsAt', 							'STRING'
+        attribute 'holdEndDate', 							'STRING'
+		attribute 'holdStatus', 							'STRING'
+		attribute 'hotTempAlert', 							'NUMBER'
+		attribute 'hotTempAlertEnabled', 					'STRING'
+		attribute 'humidifierMode', 						'STRING'
+        attribute 'humidity', 								'NUMBER'
+		attribute 'humidityAlertNotify', 					'STRING'
+		attribute 'humidityAlertNotifyTechnician', 			'STRING'
+		attribute 'humidityHighAlert', 						'NUMBER'		// %
+		attribute 'humidityLowAlert', 						'NUMBER'
+		attribute 'humiditySetpoint', 						'NUMBER'
+		if (ST) attribute 'humiditySetpointDisplay', 		'STRING'
+		attribute 'identifier', 							'STRING'
+		attribute 'installerCodeRequired', 					'STRING'
+		attribute 'isRegistered', 							'STRING' 
+		attribute 'isRentalProperty', 						'STRING'
+		attribute 'isVentilatorTimerOn', 					'STRING'
+		attribute 'lastHoldType', 							'STRING'
+		attribute 'lastModified', 							'STRING' 
+		attribute 'lastOpState', 							'STRING'		// keeps track if we were most recently heating or cooling
+		attribute 'lastPoll', 								'STRING'
+        attribute 'lastRunningMode', 						'STRING'		// for Google Home
+		attribute 'lastServiceDate', 						'STRING'
+		attribute 'locale', 								'STRING'
+		attribute 'logo', 									'STRING'
+		attribute 'maxSetBack', 							'NUMBER'
+		attribute 'maxSetForward', 							'NUMBER'
+        attribute 'microphoneEnabled', 						'STRING'		// From Audio object (boolean)
+		attribute 'mobile', 								'STRING'
+		attribute 'modelNumber', 							'STRING' 
+		attribute 'monthlyElectricityBillLimit', 			'STRING'
+		attribute 'monthsBetweenService', 					'STRING'
+		attribute 'motion', 								'STRING'
+		attribute 'name', 									'STRING'
+        attribute "nextCoolingSetpoint", 					'NUMBER'		// Next 3 are for Smart Vents handling of (Smart Recovery)
+        attribute "nextHeatingSetpoint", 					'NUMBER'		// "
+        attribute 'nextProgramName', 						'STRING'		// ""
+        attribute "notificationMessage", 					'STRING'
+        attribute 'playbackVolume', 						'NUMBER'		// From Audio object
+		attribute 'programsList', 							'STRING'		// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
+		attribute 'quickSaveSetBack', 						'NUMBER'
+		attribute 'quickSaveSetForward', 					'NUMBER'
+		attribute 'randomStartDelayCool', 					'STRING'
+		attribute 'randomStartDelayHeat', 					'STRING'
+		attribute 'remindMeDate', 							'STRING'
+		attribute 'schedText', 								'STRING'
+		//attribute 'schedule', 							'STRING'		// 'currentProgramName' + 'until XXXX' if is a Hold
+		attribute 'scheduledProgram',						'STRING'
+		attribute 'scheduledProgramId',						'STRING'
+		attribute 'scheduledProgramName', 					'STRING'
+        attribute 'scheduledProgramOwner', 					'STRING'
+        attribute 'scheduledProgramType', 					'STRING'
+		attribute 'serviceRemindMe', 						'STRING'
+		attribute 'serviceRemindTechnician', 				'STRING'
+		if (ST) attribute 'setpointDisplay', 				'STRING'
+		attribute 'smartCirculation', 						'STRING'		// not implemented by E3, but by this code it is
+		attribute 'soundAlertVolume', 						'NUMBER'		// From Audio object
+		attribute 'soundTickVolume', 						'NUMBER'		// From Audio object
+		attribute 'stage1CoolingDifferentialTemp', 			'NUMBER'
+		attribute 'stage1CoolingDissipationTime', 			'NUMBER'
+		attribute 'stage1HeatingDifferentialTemp', 			'NUMBER'
+		attribute 'stage1HeatingDissipationTime', 			'NUMBER'
+		attribute 'statHoldAction', 						'STRING'
+		attribute 'supportedThermostatFanModes', 			'JSON_OBJECT' 	// USAGE: List theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(', ')
+		attribute 'supportedThermostatModes', 				'JSON_OBJECT' 	// USAGE: List theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(', ')
+		attribute 'supportedVentModes', 					'JSON_OBJECT' 	// USAGE: List theModes = stat.currentValue('supportedVentModes')[1..-2].tokenize(', ')
+		attribute 'tempAlertNotify', 						'STRING'
+		attribute 'tempAlertNotifyTechnician', 				'STRING'
+		attribute 'tempCorrection', 						'NUMBER'
+		if (ST) attribute 'temperatureDisplay', 			'STRING'
+		attribute 'temperatureScale', 						'STRING'
+		if (ST) attribute 'thermostatFanModeDisplay', 		'STRING'
+		attribute 'thermostatHold', 						'STRING'
+		attribute 'thermostatOperatingStateDisplay', 		'STRING'
+		attribute 'thermostatSetpoint',						'NUMBER'
+		attribute 'thermostatSetpointMax', 					'NUMBER'
+		attribute 'thermostatSetpointMin', 					'NUMBER'
+		attribute 'thermostatSetpointRange', 				'vector3'
+		attribute 'thermostatStatus',						'STRING'
+		attribute 'thermostatTime', 						'STRING'
+		attribute 'timeOfDay', 								'enum', ['day', 'night']
+		attribute 'userAccessCode', 						'STRING'		// Read Only
+		attribute 'userAccessSetting', 						'STRING'		// Read Only
+		attribute 'vent', 									'STRING'		// same as 'ventMode'
+		attribute 'ventMode', 								'STRING'		// Ecobee actually calls it only 'vent'
+		attribute 'ventilatorDehumidify', 					'STRING'
+		attribute 'ventilatorFreeCooling', 					'STRING'
+		attribute 'ventilatorMinOnTime', 					'NUMBER'
+		attribute 'ventilatorMinOnTimeAway', 				'NUMBER'
+		attribute 'ventilatorMinOnTimeHome', 				'NUMBER'
+		attribute 'ventilatorOffDateTime', 					'STRING'		// Read Only
+		attribute 'ventilatorType', 						'STRING'		// Read Only ('none', 'ventilator', 'hrv', 'erv')
+        attribute 'voiceEngines', 							'JSON_OBJECT'	// From Audio object
+		attribute 'weatherDewpoint', 						'NUMBER'
+		attribute 'weatherHumidity', 						'NUMBER'
+		attribute 'weatherPressure', 						'NUMBER'
+		attribute 'weatherSymbol', 							'STRING'
+		attribute 'weatherTemperature', 					'NUMBER'
+        attribute 'weatherTempLowForecast', 				'STRING'		// "lowToday,low1Day,low2Day,low3Day,low4Day" in F (for Smart Humidity Helper)
+		attribute 'wifiOfflineAlert', 						'STRING'
         // These are intentionally last (for now)
         
-        attribute "alertsUpdated", 'NUMBER'
-        attribute "audioUpdated", 'NUMBER'
-        attribute "climatesUpdated", 'NUMBER'
-        attribute "curClimRefUpdated", 'NUMBER'
-        attribute "equipUpdated", 'NUMBER'
-        attribute "extendRTUpdated", 'NUMBER'
-        attribute "eventsUpdated", 'NUMBER'
-        attribute "programUpdated", 'NUMBER'
-        attribute "runtimeUpdated", 'NUMBER'
-        attribute "scheduleUpdated", 'NUMBER'
-        attribute "sensorsUpdated", 'NUMBER'
-        attribute "settingsUpdated", 'NUMBER'
-        attribute "weatherUpdated", 'NUMBER'
+        attribute "alertsUpdated", 							'STRING'
+        attribute "audioUpdated", 							'STRING'
+        attribute "climatesUpdated", 						'STRING'
+        attribute "curClimRefUpdated", 						'STRING'
+        attribute "equipUpdated", 							'STRING'
+        attribute "extendRTUpdated", 						'STRING'
+        attribute "eventsUpdated", 							'STRING'
+        attribute "locationUpdated", 						'STRING'
+        attribute "programUpdated", 						'STRING'
+        attribute "runtimeUpdated", 						'STRING'
+        attribute "scheduleUpdated", 						'STRING'
+        attribute "sensorsUpdated", 						'STRING'
+        attribute "settingsUpdated", 						'STRING'
+        attribute "statInfoUpdated", 						'STRING'
+        attribute "weatherUpdated", 						'STRING'
         
 
 		command "asleep", 					[]						// We cannot overload the internal Java/Groovy definition of 'sleep()'
@@ -369,9 +372,6 @@ metadata {
             command "setVacationFanMinOnTime",[[name:'Fan Min On Time for Vacation Hold*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
         }
 		command "wakeup", 					[]
-
-
-        
 	}
 
 	simulator { }
@@ -953,7 +953,7 @@ def generateEvent(List updates) {
 	boolean isIOS, isAndroid
 	if (ST) {
 		ps = device.currentValue('mobile') ?: getParentSetting('mobile')
-		isIOS = ((ps == null) || (ps == 'iOS'))
+		isIOS = ((ps == null) || (ps == 'iOS') || (ps == 'null'))
 		isAndroid = !isIOS
 	}
 
@@ -1033,7 +1033,7 @@ def generateEvent(List updates) {
 								objectsUpdated++
 							}
 							def heatDiff = ST ? device.currentValue('heatDifferential') : device.currentValue('heatDifferential', true)
-							if (heatDiff == null) heatDiff = 0.0
+							if (!heatDiff || (heatDiff == 'null') || (heatDiff == "")) heatDiff = 0.0
 							String heatAt = roundIt((value.toBigDecimal() - heatDiff.toBigDecimal()), precision.toInteger()).toString()
 							sendEvent(name: 'heatAtSetpoint', value: heatAt, unit: tu, displayed: false)
 							objectsUpdated++
@@ -1053,15 +1053,19 @@ def generateEvent(List updates) {
 						break;
 
 					case 'heatingSetpointDisplay':
-						event = eventFront + [value: sendValue, unit: tu, /* descriptionText: "Heating setpoint is ${sendValue}°", */ displayed: false]
+						if (ST) {
+                        	event = eventFront + [value: sendValue, unit: tu, /* descriptionText: "Heating setpoint is ${sendValue}°", */ displayed: false]
+                        } else objectsUpdated--
 						break;
 
 					case 'coolingSetpoint':
 						if (isChange || forceChange) {
 							//log.debug "coolingSetpoint Change (${isChange}/${forceChange}): ${sendValue}"
 							//LOG("coolingSetpoint: ${sendValue}",3,null,'info')
-							sendEvent(name: 'coolingSetpointDisplay', value: sendValue, unit: tu,  displayed: false) // for the slider
-							objectsUpdated++
+							if (ST) {
+                            	sendEvent(name: 'coolingSetpointDisplay', value: sendValue, unit: tu,  displayed: false) // for the slider
+								objectsUpdated++
+                            }
 							if ((tMode == 'cool') || (lRunMode && (lRunMode == 'cool'))) { 
 								sendEvent(name: 'thermostatSetpoint', value: sendValue, unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°${tu}", displayed: false)
 								objectsUpdated++
@@ -1072,7 +1076,7 @@ def generateEvent(List updates) {
 								objectsUpdated++
 							}
 							def coolDiff = ST ? device.currentValue('coolDifferential') : device.currentValue('coolDifferential', true)
-							if (coolDiff == null) coolDiff = 0.0
+							if (!coolDiff || (coolDiff == 'null') || (coolDiff == "")) coolDiff = 0.0
 							String coolAt = roundIt((value.toBigDecimal() + coolDiff.toBigDecimal()), precision.toInteger()).toString()
 							sendEvent(name: 'coolAtSetpoint', value: coolAt, unit: tu,displayed: false)
 							objectsUpdated++
@@ -1087,12 +1091,13 @@ def generateEvent(List updates) {
 						break;
 
 					case 'coolingSetpointDisplay':
-						event = eventFront + [value: sendValue, unit: tu, /* descriptionText: "Cooling setpoint is ${sendValue}°", */ displayed: false]
+						if (ST) {
+                        	event = eventFront + [value: sendValue, unit: tu, /* descriptionText: "Cooling setpoint is ${sendValue}°", */ displayed: false]
+                        } else objectsUpdated--
 						break;
 
 					case 'thermostatSetpoint':
 						if (isChange || forceChange) {
-							LOG("thermostatSetpoint: ${sendValue}",2,null,'info')
 							def displayValue = isMetric ? sendValue : roundIt(value, 0) // Truncate the decimal point
 							event = eventFront + [value: displayValue.toString(), unit: tu, descriptionText: "Thermostat setpoint is ${sendValue}°${tu}", displayed: true]
 						}
@@ -1125,7 +1130,7 @@ def generateEvent(List updates) {
 						if (ncTos == 'offline') {
 							tempDisplay = '451°'		// As in Fahrenheit 451
 						} else {
-							if (sendValue) {							// don't send null temperature values
+							if (sendValue && (sendValue != 'null') && (sendValue != "")) {			// don't send null temperature values
 								def dValue = sendValue?.toBigDecimal()
 								// Generate the display value that will preserve decimal positions ending in 0
 								if (precision == 0) {
@@ -1183,7 +1188,7 @@ def generateEvent(List updates) {
 											handlerName: "${name}Display", isStateChange: true, displayed: displayDesc)
 							objectsUpdated++
 						}
-						if (sendValue == 'offline') {
+						if (ST && (sendValue == 'offline')) {
 							sendEvent(name: "temperatureDisplay", value: "451°", isStateChange: true, displayed: false, descriptionText:
 											"Fahrenheit 451")
 							objectsUpdated++
@@ -1277,7 +1282,7 @@ def generateEvent(List updates) {
 						if (isChange || forceChange) {
 							def humSetpoint = ST ? device.currentValue('humiditySetpointDisplay') : device.currentValue('humiditySetpoint', true)
 							// if (humSetpoint == null) humSetpoint = 0
-							String setpointText = ((humSetpoint == null) || (humSetpoint == 0)) ? '' : " (setpoint: ${humSetpoint}%)"
+							String setpointText = (!humSetpoint || (humSetpoint == 'null') || (humSetpoint == 0)) ? '' : " (setpoint: ${humSetpoint}%)"
 							event = eventFront + [value: sendValue, unit: '%', descriptionText: "Humidity is ${sendValue}%${setpointText}", displayed: true]
 						}
 						break;
@@ -1303,7 +1308,7 @@ def generateEvent(List updates) {
 							def dispValue = sendValue.replaceAll('-', "-\n")
 							event = eventFront + [value: dispValue, unit: '%', descriptionText: "Humidity setpoint display is ${sendValue}%", isStateChange: true, displayed: true]
 							def hum = ST ?  device.currentValue('humidity') : device.currentValue('humidity', true) 
-							if (hum == null) hum = 0
+							if (!hum || (hum == 'null') || (hum == "")) hum = 0
 							sendEvent( name: 'humidity', value: hum.toString(), unit: '%', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${hum}% (setpoint: ${sendValue}%)", displayed: true )
 							objectsUpdated++
 						}
@@ -1355,11 +1360,6 @@ def generateEvent(List updates) {
 							event = eventFront + [value: sendValue, descriptionText: progText, displayed: true]
 							if (sendValue.endsWith('Temp')) enableAllProgramButtons()
 						}
-						if ((sendValue != 'null') && (sendValue != '')) {
-							String schedText = ST ? device.currentValue('schedText') : device.currentValue('schedText',true)
-							schedText = (schedText && (schedText != 'null')) ? ' ' + schedText : ''
-							sendEvent(name: 'schedule', value: sendValue + (schedText?:''), descriptionText: "Schedule is ${sendValue}${schedText?:''}", displayed: true)			// For Hubitat, we show	 schedule: "Hold: Home until today at 6:30pm"
-						}
 						break;
 
 					case 'currentProgram':
@@ -1395,9 +1395,7 @@ def generateEvent(List updates) {
 							}
 						}
 						if (isChange) {
-							//log.debug "currentProgram Change (${isChange}/${forceChange}): ${sendValue}"
 							event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
-							// sendEvent(name: 'schedule', value: sendValue, isStateChange: true, displayed: false, descriptionText: "Current Schedule is ${sendValue}") // compatibility with new Capability definition
 						}
 						break;
 
@@ -1434,44 +1432,11 @@ def generateEvent(List updates) {
 						}
 						break;
 
-					case 'thermostatHold':
-						if (isChange) {
-							String descText 
-							if (sendValue == 'vacation') {
-								disableVacationButtons()
-								descText = "Vacation hold started"
-							} else if ((sendValue == 'null') || (sendValue == '')) {
-								sendValue = ''
-								def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
-								if (thermostatHold == 'vacation') {
-									enableVacationButtons()
-								}
-								sendEvent(name: 'holdEndsAt', value: '', displayed: false)	// belt and suspenders
-								sendEvent(name: 'holdStatus', value: '', displayed: false)
-								sendEvent(name: 'holdEndDate', value: '', displayed: false)
-								descText = 'Hold finished'
-							} else if (sendValue == 'hold') {
-								String ncCp = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
-								String ncSp = ST ? device.currentValue('scheduledProgram') : device.currentValue('scheduledProgram', true)
-								descText = "Hold for ${ncCp} (${ncSp})" 
-							} else descText = "Hold for ${sendValue}"
-							event = eventFront + [value: sendValue, descriptionText: descText, isStateChange: true, displayed: true]
-							// log.debug "thermostatHold event: ${event}"
-						}
-						break;
-
-					case 'holdStatus':
-						if (isChange || forceChange) {
-							String sendText = sendValue != 'null' ? sendValue : ''
-							if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: sendText, displayed: (sendText != '')]
-						}
-						break;
-
 					case 'motion':
 						if (isChange) {
-							def cMotion = ST ? device.currentValue('motion') : device.currentValue('motion', true)
+							String cMotion = ST ? device.currentValue('motion') : device.currentValue('motion', true)
 							// Once "in/active", prevent inadvertent "not supported" -
-							if ((cMotion == 'null') || (cMotion == null) || !sendValue.startsWith('not') || !cMotion.contains('act')) {
+							if (!cMotion || (cMotion == 'null') || (cMotion == "") || !sendValue.startsWith('not') || !cMotion.contains('act')) {
 								event = eventFront + [value: sendValue, descriptionText: "Motion is "+sendValue, isStateChange: true, displayed: true]
 							}
 						}
@@ -1542,7 +1507,7 @@ def generateEvent(List updates) {
 								} else {
                                 	def hsp = ST ? device.currentValue('heatingSetpoint') : device.currentValue('heatingSetpoint', true)
                                     def csp = ST ? device.currentValue('coolingSetpoint') : device.currentValue('coolingSetpoint', true)
-									newSetpoint = ((hsp != null) && (csp != null)) ? (roundIt(((hsp + csp) / 2.0), precision.toInteger())) : null
+									newSetpoint = ((hsp && (hsp != 'null') && (hsp != "")) && (csp && (csp != 'null') && (csp != ""))) ? (roundIt(((hsp + csp) / 2.0), precision.toInteger())) : 'null'
 								}
 								sendEvent(name: 'thermostatSetpoint', value: newSetpoint.toString(), unit: tu, descriptionText: "Thermostat setpoint is ${newSetpoint}°${tu}", displayed: true)
 								disableModeAutoButton()
@@ -1658,15 +1623,17 @@ def generateEvent(List updates) {
 						// 2017-03-22 15:06:14
 						if (isChange) {
 							event = eventFront + [value: sendValue, isStateChange: true, displayed: false]
-							String tstatDate = new Date().parse('yyyy-MM-dd',sendValue).format('M-d\nyyyy')
-							String tstatTime = new Date().parse('HH:mm',sendValue.drop(11)).format('h:mm\na').toLowerCase()
-							if (isStateChange(device, 'tstatDate', tstatDate)) {
-								sendEvent(name: 'tstatDate', value: tstatDate, isStateChange: true, displayed: false)
-								objectsUpdated++
-							}
-							if (isStateChange(device, 'tstatTime', tstatTime)) {
-								sendEvent(name: 'tstatTime', value: tstatTime, isStateChange: true, displayed: false)
-							}
+                            if (ST) {
+                                String tstatDate = new Date().parse('yyyy-MM-dd',sendValue).format('M-d\nyyyy')
+                                String tstatTime = new Date().parse('HH:mm',sendValue.drop(11)).format('h:mm\na').toLowerCase()
+                                if (isStateChange(device, 'tstatDate', tstatDate)) {
+                                    sendEvent(name: 'tstatDate', value: tstatDate, isStateChange: true, displayed: false)
+                                    objectsUpdated++
+                                }
+                                if (isStateChange(device, 'tstatTime', tstatTime)) {
+                                    sendEvent(name: 'tstatTime', value: tstatTime, isStateChange: true, displayed: false)
+                                }
+                            }
 						}
 						break;
 
@@ -1780,27 +1747,52 @@ def generateEvent(List updates) {
 						}
 						break;
 
-					case 'holdEndDate':
-						String currentProgramName = ST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
-						String schedText = ""
-						if ((sendValue != "") && (sendValue != 'null')) {
-							schedText = 'until '+ sendValue
-							event = eventFront + [value: sendValue, descriptionText: "Hold ends ${sendValue}", displayed: true]
-						} else {
-							event = eventFront + [value: "", descriptionText: "", displayed: false]
-						}
-						sendEvent(name: 'schedText', value: schedText, displayed: false)
-						if (schedText) schedText = ' ' + schedText
-						if (currentProgramName  && ((currentProgramName != '') && (currentProgramName != 'null'))) {
-							sendEvent(name: 'schedule', value: "${currentProgramName}${schedText}", descriptionText: "Schedule is ${currentProgramName}${schedText}", displayed: true)
-						}
+					case 'thermostatHold':
+                        String descText
+                        String sendText = (sendValue && (sendValue != 'null') && (sendValue != '')) ? sendValue : (ST?"":'null')
+                        if (sendText == 'vacation') {
+                            disableVacationButtons()
+                            descText = "Vacation hold started"
+                        } else if (sendText == (ST?"":'null')) {
+                            def thermostatHold = ST ? device.currentValue('thermostatHold') : device.currentValue('thermostatHold', true)
+                            if (thermostatHold == 'vacation') {
+                                enableVacationButtons()
+                            }
+                            descText = 'Hold finished'
+                        } else if (sendText == 'hold') {
+                            String ncCp = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
+                            String ncSp = ST ? device.currentValue('scheduledProgram') : device.currentValue('scheduledProgram', true)
+                            descText = "Hold for ${ncCp} (${ncSp})" 
+                        } else descText = "Hold for ${sendText}"
+                        event = eventFront + [value: sendText, descriptionText: descText, isStateChange: true, displayed: true]
 						break;
-
-					case 'holdEndsAt':                    
-						if (isChange || forceChange) {
-							String sendText = sendValue != 'null' ? sendValue : ''
-							if (isStateChange(device, name, sendText)) event = eventFront + [value: sendText, descriptionText: "", displayed: false, isStateChange: true]
+                        
+					case 'holdStatus':
+                    case 'thermostatStatus':
+						String sendText = (sendValue && sendValue != 'null' && (sendValue != "")) ? sendValue : " "
+						event = eventFront + [value: sendText, descriptionText: sendText, displayed: (sendText != " ")]
+						break;
+                        
+					case 'holdEndDate':
+						String sendText = (sendValue && (sendValue != "") && (sendValue != 'null')) ? sendValue : (ST?"":'null')
+                        String descText = (sendText != (ST?"":'null')) ? "Hold ends ${sendText}" : ""
+						event = eventFront + [value: sendText, descriptionText: descText, displayed: true]
+						break;
+                        
+                    case 'schedText':
+                    	String sendText = (sendValue && (sendValue != "") && (sendValue != 'null')) ? sendValue : (ST?"":'null')
+						event = eventFront + [value: sendText, descriptionText: "", displayed: false]
+                        break;
+                        
+                    case 'schedule':
+						if (isChange) {
+                        	event = eventFront + [value: sendValue, descriptionText: "Schedule is ${sendValue}", isStateChange: true, displayed: true]
 						}
+                        break;
+                        
+					case 'holdEndsAt':                    
+						String sendText = (sendValue && (sendValue != 'null') && (sendValue != "")) ? sendValue : (ST?"":'null')
+						event = eventFront + [value: sendText, descriptionText: "", displayed: false]
 						break;
 
 
@@ -1826,6 +1818,10 @@ def generateEvent(List updates) {
 					case 'scheduleUpdated':
 						event = eventFront + [value: sendValue, isStateChange: true, displayed: false, descriptionText: "Thermostat Schedule last updated: ${sendValue}"]
 						break;
+                        
+       				case 'voiceEngines':
+                    	event = eventFront + [value: ((!sendValue || (sendValue == 'null') || (sendValue == "")) ? [] : sendValue), descriptionText: "", displayed: false]
+                        break;                   
 
 					// The following are all string values that can be 'null' - send "" instead
 					case 'eiLocation':
@@ -1834,21 +1830,17 @@ def generateEvent(List updates) {
 					case 'groupRef':
 					case 'groupSetting':
 					case 'name':
+                    case 'mobile':
 					case 'userAccessCode':
-					case 'thermostatStatus':
 					case 'ventilatorOffDateTime':
 					case 'playbackVolume':
 					case 'microphoneEnabled':
 					case 'soundAlertVolume':
 					case 'soundTickVolume':
-						if (sendValue != 'null') {
-							if (isChange) {
-								event = eventFront + [value: sendValue, descriptionText: "${name} is ${value}", isStateChange: true, displayed: true]
-							}
+						if (sendValue && (sendValue != 'null') && (sendValue != "")) {
+							event = eventFront + [value: sendValue, descriptionText: "${name} is ${value}", displayed: true]
 						} else {
-							if (isStateChange(device, name, '')) {
-								event = eventFront + [value: '', descriptionText: '', isStateChange: true, displayed: false]
-							}
+							event = eventFront + [value: (ST?"":'null'), descriptionText: "", isStateChange: true, displayed: false]
 						}
 						break;
 
@@ -1882,11 +1874,9 @@ def generateEvent(List updates) {
 						break;
                         
                     case 'debugLevel':
-                    	if (isChange || forceChange) {
-                        	String sendText = (sendValue != 'null') ? sendValue : ''
-                        	updateDataValue('debugLevel', sendText)
-							event = eventFront + [value: sendText, descriptionText: "debugLevel is ${sendValue}", displayed: false]
-                        }
+                        String sendText = (sendValue && (sendValue != 'null') && (sendValue != "")) ? sendValue : (ST?"":'null')
+                        updateDataValue('debugLevel', sendText)
+						event = eventFront + [value: sendText, descriptionText: "debugLevel is ${sendValue}", isStateChange: true, displayed: false]
                         break;
 
 					// These are ones we don't need to display or provide descriptionText for (mostly internal or debug use)
@@ -1929,8 +1919,8 @@ def generateEvent(List updates) {
 					case 'nextProgramName':
 					case 'nextHeatingSetpoint':
 					case 'nextCoolingSetpoint':
-						String sendText = (sendValue != 'null') ? sendValue : ''
-						String descText = (sendText != '') ? "${name} is ${sendText}" : ''
+						String sendText = (sendValue && (sendValue != 'null') && (sendValue != "")) ? sendValue : (ST?"":'null')
+						String descText = (sendText != (ST?"":'null')) ? "${name} is ${sendText}" : ""
 						event = eventFront + [value: sendText, descriptionText: descText, /* isStateChange: true, */ displayed: false]
 						break;
 
@@ -1949,7 +1939,7 @@ def generateEvent(List updates) {
 					if (debugLevelFour) LOG("generateEvent() - Out of switch{}, calling sendevent(${event})", 1)
 					sendEvent(event)
 				}
-				if (tempDisplay != "") {
+				if (ST && (tempDisplay != "")) {
 					sendEvent(name: 'temperatureDisplay', value: tempDisplay, unit: tu, linkText: linkText, descriptionText:"Temperature Display is ${tempDisplay}", displayed: false )
 					if (debugLevelFour) LOG("generateEvent() - Temperature updated, calling sendevent(${event})", 4)
 					objectsUpdated++
@@ -1959,6 +1949,9 @@ def generateEvent(List updates) {
 			//generateSetpointEvent()
 			//generateStatusEvent()
 		}
+        // Clear any lingering thermostatStatus strings.
+        String statStatus = ST ? device.currentValue('thermostatStatus') : device.currentValue('thermostatStatus', true)
+        if (statStatus && (statStatus.trim() != "")) sendEvent( name: 'thermostatStatus', value: " ", displayed: false, isStateChange: true)
 	}
 	def elapsed = now() - startMS
 	LOG("Updated ${objectsUpdated} object${objectsUpdated!=1?'s':''} (${elapsed}ms)", 2, this, 'info')
@@ -2883,9 +2876,10 @@ def resumeProgramInternal(resumeAll=true) {
 	sendEvent(name: 'thermostatStatus', value: 'Resuming scheduled Program...', displayed: false, isStateChange: true)
 
 	def deviceId = getDeviceId()
-	sendEvent(name: 'thermostatStatus', value: 'Resuming Scheduled Program', displayed: false, isStateChange: true)
+	//sendEvent(name: 'thermostatStatus', value: 'Resuming Scheduled Program', displayed: false, isStateChange: true)
 	if (parent.resumeProgram(this, deviceId, resumeAll)) {
-		def updates = [[ holdStatus: 'null', thermostatHold: 'null', holdEndsAt: 'null', holdEndDate: 'null' ]]
+    	String schedProgramName = ST ? device.currentValue('scheduledProgramName') : device.currentValue('scheduledProgramName', true)
+		def updates = [[ currentProgramName: schedProgramName, schedule: schedProgramName, holdStatus: 'null', thermostatHold: 'null', holdEndsAt: 'null', holdEndDate: 'null', schedText: 'null' ]]
 		generateEvent(updates)
 		if (ST) sendEvent(name: "resumeProgram", value: "resume dis", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
 		sendEvent(name: 'thermostatStatus', value: 'Resume Program succeeded', displayed: false, isStateChange: true)
@@ -2908,13 +2902,13 @@ void generateProgramEvent(String program, String failedProgram='') {
 	String progHold = (failedProgram == '') ? prog : "Hold: "+prog
     // Quickly update the key hold status variables, even before we hear back from the thermostat/cloud
 	// We have to wait for wait until Ecobee sends us the correct currentProgramId
-	def updates = [[currentProgramName: progHold], [currentProgram: prog]]
+	def updates = [[currentProgramName: progHold], [currentProgram: prog], [schedule: progHold]]
     if (failedProgram == '') {
-    	updates << [thermostatHold: 'null', holdEndsAt: 'null', holdStatus: 'null', holdEndDate: 'null']
+    	updates << [thermostatHold: 'null', holdEndsAt: 'null', holdStatus: 'null', holdEndDate: 'null', schedText: 'null', thermostatStatus: 'null']
     } else {
-    	updates << [thermostatHold:'hold']
+    	updates << [thermostatHold:'hold', thermostatStatus: 'null']	// Have to let ESM update the rest (dates, etc.) 
     }
-    log.debug "generateProgramEvent: ${updates}"
+    //log.debug "generateProgramEvent: ${updates}"
 	generateEvent(updates)
 	if (ST) updateProgramButtons()
 }
@@ -3743,3 +3737,8 @@ def getParentSetting(String settingName) {
 @Field String  hubPlatform 	= getHubPlatform()
 @Field boolean ST 			= getIsST()
 @Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
