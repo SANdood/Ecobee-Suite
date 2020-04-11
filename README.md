@@ -2,7 +2,7 @@
 ======================================================
 ### NOTICE: Latest updates posted 11 April 2020 at 7:30am
 * **Latest update announcements**
-    -[Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/58)
+    - [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/58)
     - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/140)
 * **1 April 2020 update announcements**
    - [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/56)
