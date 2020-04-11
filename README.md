@@ -1,9 +1,10 @@
 ![Universal Ecobee Suite, Version 1.8.00](https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Ecobee-1-8-00-header.png) 
 ======================================================
 ### NOTICE: Latest updates posted 11 April 2020 at 7:30am
-   -[Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/58?u=storageanarchy)
-   - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/140?u=storageanarchy)
-* **1 April 2020 update announcements
+* **Latest update announcements**
+    -[Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/58)
+    - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/140)
+* **1 April 2020 update announcements**
    - [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/56)
    - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/108)
 * **30 March 2020 update announcements**
