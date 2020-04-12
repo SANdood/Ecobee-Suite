@@ -26,11 +26,12 @@
  *	1.8.08 - Fixed mixed Notification devices in sendMessage
  *	1.8.09 - Refactored sendMessage / sendNotifications
  *	1.8.10 - Allow individual un-pause from peers, even if was already paused
+ *	1.8.11 - HOTFIX Fix Switch on/off widget in settings
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -145,6 +146,7 @@ def mainPage() {
 							def s = (settings.startSwitches.size() > 1)
 							input(name: "startOn", type: "enum", title: inputTitle("${s?'Are':'Is'} turned:"), required: true, multiple: false, options: ["on","off"], submitOnChange: true, 
 								  defaultValue: 'on', width: 2)
+                            if (settings.startOn == null) { app.updateSetting('startOn', 'on'); settings.startOn = 'on'; }
 							if (settings.startOn != null) {
 								input(name: "startOff", type: 'bool', title: inputTitle("Turn the switch${s?'es':''} ${settings.startOn=='on'?'off':'on'} after running Actions?"), defaultValue: 'false', 
 									  submitOnChange: true, width: 5)
