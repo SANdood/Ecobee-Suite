@@ -20,11 +20,12 @@
  *	1.8.04 - New SHPL, using Global Fields instead of atomicState
  *	1.8.05 - Allow individual un-pause from peers, even if was already paused
  *	1.8.06 - Enhanced isOkNow() check
+ *	1.8.07 - HOTFIX: Tweaked LOGs to be less chatty
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.06" }
+String getVersionNum()		{ return "1.8.07" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -279,6 +280,8 @@ def initialize() {
 	String version = getVersionLabel()
 	LOG("${version} Initializing...", 2, "", 'info')
     atomicState.versionLabel = getVersionLabel()
+    atomicState.hubPlatform = getHubPlatform
+    
     def tid = getDeviceId(theThermostat.deviceNetworkId)
     atomicState.theTid = tid
 	//boolean ST = isST
@@ -582,18 +585,18 @@ def deltaHandler(evt=null) {
 
 	if (evt) {
     	if (evt.name == 'currentProgram') {
-        	LOG("deltaHandler() - thermostat Program changed to an enabled Program (${evt.value})",3,null,'info')
+        	LOG("Thermostat Program changed to an enabled Program (${evt.value})",3,null,'info')
         } else if (evt.name == 'mode') {
-        	LOG("deltaHandler() - location Mode changed to an enabled Mode (${evt.value})",3,null,'info')
+        	LOG("Location Mode changed to an enabled Mode (${evt.value})",3,null,'info')
         } else {
-        	LOG("deltaHandler() - called with ${evt.device} ${evt.name} ${evt.value}",3,null,'trace')
+        	LOG("${evt.device} ${evt.name} ${evt.value}",3,null,'debug')
         }
         if (settings.minFanOnTime.toInteger() == settings.maxFanOnTime.toInteger()) {
         	if (fanMinOnTime == settings.minFanOnTime.toInteger()) {
-    			LOG('deltaHandler() - configured min==max==fanMinOnTime, nothing to do, skipping...',2,null,'info')
+    			LOG('Configured min==max==fanMinOnTime, nothing to do, skipping...',2,null,'info')
         		return // nothing to do
             } else {
-                LOG("deltaHandler() - configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
+                LOG("Configured min==max, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
                 if (vacationHold && settings.vacationOverride) {
                 	cancelReservation( tid, 'vacaCircOff')
         			theThermostat.setVacationFanMinOnTime(settings.minFanOnTime.toInteger())
@@ -606,7 +609,7 @@ def deltaHandler(evt=null) {
                 return
             }
     	} else if (fanMinOnTime > settings.maxFanOnTime.toInteger()) {
-        	LOG("deltaHandler() - current > max, setting fanMinOnTime(${settings.maxFanOnTime})",2,null,'info')
+        	LOG("Current > max, setting fanMinOnTime(${settings.maxFanOnTime})",2,null,'info')
         	if (vacationHold && settings.vacationOverride) {
                 cancelReservation( tid, 'vacaCircOff')
                 theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime.toInteger())
@@ -617,7 +620,7 @@ def deltaHandler(evt=null) {
             atomicState.circMinutes = settings.maxFanOnTime.toInteger()
             updateMyLabel()
         } else if (fanMinOnTime < settings.minFanOnTime.toInteger()) {
-        	LOG("deltaHandler() - current < min, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
+        	LOG("Current < min, setting fanMinOnTime(${settings.minFanOnTime})",2,null,'info')
         	if (vacationHold && settings.vacationOverride) {
                 cancelReservation( tid, 'vacaCircOff')
                 theThermostat.setVacationFanMinOnTime(settings.minFanOnTime.toInteger())
@@ -629,9 +632,9 @@ def deltaHandler(evt=null) {
             updateMyLabel()
         }
     } else {
-    	LOG("deltaHandler() - called directly", 4, null, 'trace')
+    	LOG("deltaHandler() - called directly", 4, null, 'debug')
     }
-    LOG("deltaHandler() - scheduling calcTemps() in 5 seconds", 3, null, 'info')
+    LOG("deltaHandler() - scheduling calcTemps() in 5 seconds", 3, null, 'debug')
 	runIn(5,'calcTemps',[overwrite: true])
 }
 
@@ -643,7 +646,7 @@ def calcTemps() {
     // def statState = ST ? theThermostat.currentValue("thermostatOperatingState") : theThermostat.currentValue("thermostatOperatingState", true)
 	def statState = ST ? theThermostat.currentValue("thermostatOperatingState") :theThermostat.currentValue("thermostatOperatingState", true)
     if (statState && (statState.contains('ea') || statState.contains('oo'))) {
-    	LOG("calcTemps() - ${theThermostat} is ${statState}, no adjustments made", 4, "", 'info' )
+    	LOG("${theThermostat} is ${statState}, no adjustments made", 4, "", 'info' )
         return
     }
     
@@ -651,7 +654,7 @@ def calcTemps() {
     if (atomicState.lastAdjustmentTime) {
         def minutesLeft = fanAdjustMinutes - ((now() - atomicState.lastAdjustmentTime) / 60000).toInteger()
         if (minutesLeft >0) {
-            LOG("calcTemps() - Not time to adjust yet - ${minutesLeft} minutes left",4,'','info')
+            LOG("Not time to adjust yet - ${minutesLeft} minutes left",4,'','info')
             return
 		}
 	}
@@ -673,9 +676,9 @@ def calcTemps() {
     def avg = 0.0G
     if (i > 1) {
     	avg = roundIt((total / i), 2) 
-	    LOG("calcTemps() - Current temperature readings: ${temps}, average is ${String.format("%.2f",avg)}°", 4, "", 'info')
+	    LOG("Current temperature readings: ${temps}, average is ${String.format("%.2f",avg)}°", 2, "", 'info')
     } else {
-    	LOG("calcTemps() - Only recieved ${temps.size()} valid temperature readings, skipping...",3,"",'warn')
+    	LOG("Only recieved ${temps.size()} valid temperature readings, skipping...",1,"",'warn')
         return 
     }
     // Skip if the in/out delta doesn't match our settings
@@ -684,20 +687,20 @@ def calcTemps() {
         if (outdoorSensor.id == theThermostat.id) {
         	// outTemp = ST ? theThermostat.currentValue("weatherTemperature") : theThermostat.currentValue("weatherTemperature", true)
 			outTemp = roundIt(theThermostat.currentValue("weatherTemperature"), 2)
-            LOG("calcTemps() - Using ${theThermostat.displayName}'s weatherTemperature (${outTemp}°)",4,null,"info")
+            LOG("Using ${theThermostat.displayName}'s weatherTemperature (${outTemp}°)",4,null,"info")
         } else {
         	outTemp = roundIt(outdoorSensor.currentValue("temperature"), 2)
-            LOG("calcTemps() - Using ${outdoorSensor.displayName}'s temperature (${outTemp}°)",4,null,"info")
+            LOG("Using ${outdoorSensor.displayName}'s temperature (${outTemp}°)",4,null,"info")
         }
         def inoutDelta = null
         if (outTemp != null) {
         	inoutDelta = roundIt((outTemp - avg), 2)
         }
         if (inoutDelta == null) {
-        	LOG("calcTemps() - Invalid outdoor temperature, skipping...",1,"","warn")
+        	LOG("Invalid outdoor temperature, skipping...",1,"","warn")
         	return
         }
-        LOG("calcTemps() - Outside temperature is currently ${outTemp}°, inside temperature average is ${avg}°",4,null,'info')
+        LOG("Outside temperature is currently ${outTemp}°, inside temperature average is ${avg}°",4,null,'info')
         // "More than 10 degrees warmer", "5 to 10 degrees warmer", "0 to 4.9 degrees warmer", "-4.9 to -0.1 degrees cooler", -10 to -5 degrees cooler", "More than 10 degrees cooler"
     	def inRange = false
         if (adjRange.endsWith('mer')) {
@@ -718,10 +721,10 @@ def calcTemps() {
             }
         }
         if (!inRange) {
-        	LOG("calcTemps() - In/Out temperature delta (${inoutDelta}°) not in range (${adjRange}), skipping...", 4, null, "info")
+        	LOG("In/Out temperature delta (${inoutDelta}°) not in range (${adjRange}), skipping...", 4, null, "info")
             return
         } else {
-        	LOG("calcTemps() - In/Out temperature delta (${inoutDelta}°) is in range (${adjRange}), adjusting...", 4, null, "info")
+        	LOG("In/Out temperature delta (${inoutDelta}°) is in range (${adjRange}), adjusting...", 4, null, "info")
         }
     }
     def min = 	roundIt(temps.min(), 2)
@@ -741,12 +744,12 @@ def calcTemps() {
 	String tid = getDeviceId(theThermostat.deviceNetworkId)
     
 	if (delta >= (settings.deltaTemp as BigDecimal)) {			// need to increase recirculation (fanMinOnTime)
-    	LOG("calcTemps() - Can we increase fanMinOnTime, it is currently ${currentOnTime}/${settings.maxFanOnTime} (delta = ${delta})", 4, null, 'info')
+    	LOG("Can we increase fanMinOnTime, it is currently ${currentOnTime}/${settings.maxFanOnTime} (delta = ${delta})", 4, null, 'info')
 		if (currentOnTime < settings.maxFanOnTime) {
 			newOnTime = currentOnTime + settings.fanOnTimeDelta
 			if (newOnTime > settings.maxFanOnTime) newOnTime = settings.maxFanOnTime
 			if (currentOnTime != newOnTime) {
-				LOG("calcTemps() - Temperature delta is ${delta}°/${settings.deltaTemp}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
+				LOG("Temperature delta is ${delta}°/${settings.deltaTemp}°, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,"",'info')
 				if (vacationHold) {
 					cancelReservation( tid, 'vacaCircOff')
 					theThermostat.setVacationFanMinOnTime(newOnTime)
@@ -758,31 +761,31 @@ def calcTemps() {
 				atomicState.lastAdjustmentTime = now()
                 atomicState.circMinutes = newOnTime
                 updateMyLabel()
-                LOG("calcTemps() - Done!",3,null,'info')
+                LOG("Done!",3,null,'info')
 				return
 			} else {
-				LOG("calcTemps() - Looks like we're maxed out - cur: ${currentOnTime}, new: ${newOnTime}, max: ${settings.maxFanOnTime}",3,null,'trace')
+				LOG("Looks like we're maxed out - cur: ${currentOnTime}, new: ${newOnTime}, max: ${settings.maxFanOnTime}",3,null,'info')
 				return
 			}
 		} else {
-			LOG("calcTemps() - Curr (${currentOnTime}) >= max (${settings.maxFanOnTime}), no adjustment made",3,null,'trace')
+			LOG("Current (${currentOnTime}) >= max (${settings.maxFanOnTime}), no adjustment made",3,null,'info')
 			return
 		}
 	} else {
-    	LOG("calcTemps() - Can we decrease fanMinOnTime, it is currently ${currentOnTime} (delta = ${delta})", 4, null, 'info')
+    	LOG("Can we decrease fanMinOnTime, it is currently ${currentOnTime} (delta = ${delta})", 4, null, 'info')
 		if (currentOnTime > settings.minFanOnTime) {
 			def target = settings.deltaTemp as BigDecimal
 			if (delta <= target) {			// start adjusting back downwards once we get within 1F or .5556C of the target delta
 				newOnTime = currentOnTime - settings.fanOnTimeDelta
 				if (newOnTime < settings.minFanOnTime) newOnTime = settings.minFanOnTime
 				if (currentOnTime != newOnTime) {
-					LOG("calcTemps() - Temperature delta is ${delta}°/${target}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,null,'info')
+					LOG("Temperature delta is ${delta}°/${target}°, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",3,null,'info')
 					if (vacationHold) {
-						LOG("calcTemps() - Calling setVacationFanMinOnTime(${newOnTime})",3,null,'info')
+						LOG("Calling setVacationFanMinOnTime(${newOnTime})",3,null,'info')
 						cancelReservation( tid, 'vacaCircOff')
 						theThermostat.setVacationFanMinOnTime(newOnTime)
 					} else {
-						LOG("calcTemps() - Calling setFanMinOnTime(${newOnTime})",3,null,'info')
+						LOG("Calling setFanMinOnTime(${newOnTime})",3,null,'info')
 						cancelReservation( tid, 'circOff')
 						theThermostat.setFanMinOnTime(newOnTime)
 					}
@@ -790,18 +793,18 @@ def calcTemps() {
 					atomicState.lastAdjustmentTime = now()
                     atomicState.circMinutes = newOnTime
                     updateMyLabel()
-                    LOG("calcTemps() - Done!",3,null,'info')
+                    LOG("Done!",3,null,'info')
 					return
 				} else {
-					LOG("calcTemps() - Looks like we are as close as we can be - curr: ${currentOnTime}, new: ${newOnTime}, min: ${settings.minFanOnTime}",3,null,'trace')
+					LOG("Looks like we are as close as we can be - curr: ${currentOnTime}, new: ${newOnTime}, min: ${settings.minFanOnTime}",3,null,'info')
 					return
 				}
 			} else {
-				LOG("calcTemps() - Looks like we just need to wait - delta: ${delta}, targetDelta: ${target}, curr: ${currentOnTime}",3,null,'trace')
+				LOG("Looks like we just need to wait - delta: ${delta}, targetDelta: ${target}, curr: ${currentOnTime}",3,null,'info')
 				return
 			}
 		} else {
-			LOG("calcTemps() - Curr (${currentOnTime}) <= min (${settings.minFanOnTime}), no adjustment made",3,null,'trace')
+			LOG("Current (${currentOnTime}) <= min (${settings.minFanOnTime}), no adjustment made",3,null,'info')
 			return
 		}
 	}
