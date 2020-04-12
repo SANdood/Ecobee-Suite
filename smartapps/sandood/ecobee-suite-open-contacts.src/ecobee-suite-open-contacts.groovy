@@ -29,10 +29,11 @@
  *	1.8.12 - Fixed mixed Notification devices in sendMessage
  *	1.8.13 - Refactored sendMessage / sendNotifications
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
+ *	1.8.15 - HOTFIX: formatting for HVAC Off delays
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.14" }
+String getVersionNum()		{ return "1.8.15" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -179,10 +180,12 @@ def mainPage() {
                 	input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					//if (HE) paragraph("", width: 6)
                 	if ((settings?.hvacOff != null) && settings.hvacOff) {
-                    	if (maximize) paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. " +
-								  "Use the Quiet Time Helper for additional control options.\n\n"+
-                                  'Note that no Actions will be run if the HVAC Mode was already Off when the first contact sensor or switch would have turned it ' +
-                		  		  'off; the HVAC will remain Off when all the contacts & switches are reset.')
+						if (maximize) {
+							paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. " +
+									  "Use the Quiet Time Helper for additional control options.\n\n"+
+                                	  'Note that no Actions will be run if the HVAC Mode was already Off when the first contact sensor or switch would have turned it ' +
+                		  		  		'off; the HVAC will remain Off when all the contacts & switches are reset.')
+						} else if (HE) paragraph("", width: 8)
                     }
 				}
 				if (!settings.quietTime && !settings.hvacOff) {
