@@ -28,11 +28,12 @@
  *	1.8.12 - Reset states on location mode change (recalculate everything)
  *	1.8.13 - Refactored sendMessage / sendNotifications
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
+ *	1.8.15 - HOTFIX: allow Ambient Weather Station on Hubitat
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.14" }
+String getVersionNum()		{ return "1.8.15" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -174,7 +175,7 @@ def mainPage() {
                         
                         // Ambient Weather Station (https://github.com/KurtSanders/STAmbientWeather)
                         // NOTES: available for both HE & ST, provides temperature & dewpoint
-                        input(name: "ambientWeatherStation", type: "device.ambientWeatherStation", title: inputTitle("Which Ambient Weather Station?"), required: false, 
+                        input(name: "ambientWeatherStation", type: ST?'device.ambientWeatherStation':'device.AmbientWeatherStation', title: inputTitle("Which Ambient Weather Station?"), required: false, 
                               multiple: false, hideWhenEmpty: true, width: 4)    
 						if (ST) {                                                                
 							// Smart Weather Station Tile
