@@ -50,12 +50,13 @@
  *	1.8.26 - Added global vs. helper pause (helpers can override global wasAlreadyPaused)
  *	1.8.27 - Refactored update collection and queueing, schedule/schedText now sent independently from ESM, clear callQueue when ESM is re-initialized
  *	1.8.28 - HOTFIX: fix to show thermostat names in live logging
+ *	1.8.29 - HOTFIX: setHold JSON error
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.28" }
+String getVersionNum()		{ return "1.8.29" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
