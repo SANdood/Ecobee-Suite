@@ -13,25 +13,23 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - Fix sort issue & noCache currentValue() for HE
- *	1.7.02 - Fixed SMS text entry
- *	1.7.03 - Fixing private method issue caused by grails
- *	1.7.04 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.05 - Optimized isST/isHE, added Global Pause
- *	1.7.06 - Added option to disable local display of log.debug() logs, support Notification devices on ST
- *	1.7.07 - Fixed Helper labelling
- *	1.7.08 - Fixed labels (again), added infoOff, cleaned up preferences setup
- *	1.7.09 - Integrated with Smart Vents Helper
- *	1.7.10 - Uses new updateSensorPrograms() (if not using Smart Vents Helper).
- *	1.7.11 - Added reservation serializer for climate/sensor changes (program.climates)
- *	1.7.12 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - More busy bees
+ *	1.8.03 - Send simultaneous notification Announcements to multiple Echo Speaks devices
+ *	1.8.04 - No longer LOGs to parent (too much overhead for too little value)
+ *	1.8.05 - New SHPL, using Global Fields instead of atomicState
+ *	1.8.06 - Fixed appDisplayName in sendMessage
+ *	1.8.07 - Fixed mixed Notification devices in sendMessage
+ *	1.8.08 - Added customized Notifications
+ *	1.8.09 - Refactored sendMessage / sendNotifications
+ *	1.8.10 - Allow individual un-pause from peers, even if was already paused
  */
-String getVersionNum()		{ return "1.8.01" }
-String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
+import groovy.transform.Field
+
+String getVersionNum()		{ return "1.8.10" }
+String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 				"ecobee Suite Smart Room",
@@ -51,12 +49,13 @@ definition(
 
 preferences {
 	page(name: "mainPage")
+    page(name: "customNotifications")
 }
 
 // Preferences Pages
 def mainPage() {
-	boolean ST = isST
-	boolean HE = !ST
+	//boolean ST = isST
+	//boolean HE = !ST
     def vc = 0			// vent counter
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     String defaultName = "Smart Room"
@@ -123,15 +122,17 @@ def mainPage() {
                 }
             }
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused; Resume below" 
+				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
             	if (maximize) paragraph("A Smart Room is defined by one or more Ecobee Sensors (required)")
         		//input(name: "theSensors", type:"enum", title: inputTitle("Select Ecobee Suite Sensor(s)"), options: getEcobeeSensorsList(), required: true, multiple: true, submitOnChange: true)
                 input(name: "theSensorDevices", type:(ST?"device.ecobeeSuiteSensor":"device.EcobeeSuiteSensor"), title: inputTitle("Select Ecobee Suite Sensor(s)"), required: true, multiple: true, submitOnChange: true)
 				input(name: "activeProgs", type:"enum", title: inputTitle("Select Active programs for this Smart Room"), options: getProgramsList(), required: true, multiple: true, width: 6)
-                if (settings?.theSensorDevices.size() > 1) {
-                	paragraph "WARNING: ${maximize?'Only 1 Ecobee Suite Sensor can be registered for Active/Inactive programs, and you have selected multiple. ':''}Only ${settings?.theSensorDevices[0].displayName} will be included in the "+
-                    		  "selected program(s)."
+                if (settings?.theSensorDevices?.size() > 1) {
+                	paragraph (warningText + 
+							   (maximize?'Only 1 Ecobee Suite Sensor can be registered for Active/Inactive programs, and you have selected multiple. ':'') +
+							   "Only ${isHE?'<b><i>':''}${settings?.theSensorDevices[0].displayName}${isHE?'</i>,</b>':''} will be included in the "+
+                    		  "selected program(s).")
                 }
 				input(name: "inactiveProgs", type:"enum", title: inputTitle("Select Inactive programs for this Smart Room")+" (optional)", options: getProgramsList(), required: false, multiple: true, width: 6)
             }
@@ -161,17 +162,6 @@ def mainPage() {
                 	input(name: "manageSmartVents", type: "bool", title: inputTitle("Manage Smart Vents Helper(s) for this Smart Room?"), defaultValue: false, submitOnChange: true, width: 6)
                 	if (settings?.manageSmartVents) {
                     	input(name: "theVentApps", type: "enum", title: inputTitle("Select Smart Vents Helper(s) to manage"), required: true, multiple: true, submitOnChange: true, options: allVentApps, width: 6)
-                    /*  def appNames = []
-                        if (settings?.theVentApps) {
-                        	settings.theVentApps.each { appId ->
-                        		allVentApps.each{ key, value ->
-                                	String selection = (key == appId) ? value : ''
-                        			if (selection != '') {
-                                		appNames = appNames + [selection]
-                                    }
-                                }
-                            }
-                        } */
 					}
                 }
 				if (!allVentApps || !settings?.manageSmartVents) {
@@ -211,6 +201,13 @@ def mainPage() {
 							  required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
 						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
 							  required: ((settings.phone == null) && !settings.speak && !settings.pushNotify), multiple: true, submitOnChange: true)
+                        if (settings?.notifiers) {
+                            List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+                            if (echo) {
+                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
+                                	  defaultValue: false, submitOnChange: true)
+                            }
+                        }
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
 							  required: (!settings.pushNotify && !settings.notifiers && !settings.speak), submitOnChange: true)
 					}
@@ -237,7 +234,14 @@ def mainPage() {
 					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
 					if (settings.notify) {
 						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true,
-						  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+						  	  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+                    	if (settings?.notifiers) {
+                            List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+                            if (echo) {
+                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
+                                	  defaultValue: false, submitOnChange: true)
+                            }
+                        }
 					}
 				}
 				if (settings.notify) {
@@ -258,6 +262,12 @@ def mainPage() {
 					}
                 }
 			}
+            if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak &&(settings?.speechDevices || settings?.musicDevices)))) {
+                section() {
+                    href name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
+                         description: "Customize notification messages", state: isCustomized()
+                }
+			}	
         }
         section(title: sectionTitle("Operations")) {
         	input(name: "minimize", 	title: inputTitle("Minimize settings text"), 	type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
@@ -275,6 +285,47 @@ def mainPage() {
             }
 		}
     }
+}
+def customNotifications(){
+	String pageLabel = getVersionLabel()
+	pageLabel = pageLabel.take(pageLabel.indexOf(','))
+	dynamicPage(name: "customNotifications", title: pageTitle("${pageLabel}\nCustom Notifications"), uninstall: false, install: false) {
+		section(sectionTitle("Customizations")) {}
+		section(smallerTitle("Notification Prefix")) {
+			input(name: "customPrefix", type: "enum", title: inputTitle("Notification Prefix text:"), defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
+				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
+			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+			if (settings.customPrefix == 'custom') {
+				input(name: "customPrefixText", type: "text", title: inputTitle("Custom Prefix text"), defaultValue: "", required: true, submitOnChange: true)
+			}
+		}
+		section(smallerTitle("Room Name")) {
+			input(name: "customRoomName", type: "enum", title: inputTitle("Refer to the Room as"), defaultValue: "(helper name)", options:
+				  (['(helper name)', 'the room', 'custom'] + (settings.theSensorDevices.size() == 1?['(sensor name)']:[])).sort(false), submitOnChange: true, multiple: false)
+			if (settings?.customRoomName == 'custom') {
+				input(name: "customRoomText", type: "text", title: inputTitle("Custom Room Name"), defaultValue: "", required: true, submitOnChange: true)
+			} 
+			if (settings?.customRoomName == null) { app.updateSetting('customRoomName', '(helper name)'); settings.customTstat = '(helper name)'; }
+			if (['(helper name)', '(sensor name)'].contains(settings?.customRoomName)) {
+				input(name: "roomCleaners", type: 'enum', title: inputTitle("Strip these words from the Room Name"), multiple: true, required: false,
+					  submitOnChange: true, options: ['EcobeeSensor', 'EcoSensor', 'Smart', 'Room', 'Bedroom', 'Sensor', 'Contact'].sort(false))
+				input(name: "roomPrefix", type: 'enum', title: inputTitle("Add this prefix to the Room Name"), multiple: false, required: false,
+					  submitOnChange: true, options: ['the', 'Smart', 'Room', 'Smart Room'].sort(false)) 
+				input(name: "roomSuffix", type: 'enum', title: inputTitle("Add this suffix to the Room Name"), multiple: false, required: false,
+					  submitOnChange: true, options: ['room', 'bedroom', 'Smart Room'].sort(false))
+            	if (settings.roomSuffix == null) {app.updateSetting('roomSuffix', ""); settings.roomSuffix = "";}
+			}
+		}
+		section(title: sampleTitle("Sample Notification Messages"), hideable: true, hidden: false) {
+			String thePrefix = getMsgPrefix()
+			String theRoom = getMsgRoomName()
+            samples = (thePrefix + "I just activated" + theRoom + "\n" + thePrefix + "I just deactivated" + theRoom).replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim()
+			paragraph samples
+		}
+	}
+}
+def isCustomized() {
+	return (customPrefix || customTstat || (useSensorNames != null)) ? "complete" : null
 }
 
 // Main functions
@@ -357,7 +408,7 @@ def initialize() {
 	log.debug "isSRActive: ${atomicState.isSmartRoomActive}"
     if (settings?.manageSmartVents && settings?.theVentApps) {
     	settings.theVentApps.each { appId ->
-        log.debug "calling parent.pauseChildApp(${appId}, ${(atomicState.isSmartRoomActive != true)})"
+        	LOG("calling parent.pauseChildApp(${appId}, ${(atomicState.isSmartRoomActive != true)})",1,null,'info')
         	parent.pauseChildApp( appId, (atomicState.isSmartRoomActive != true))	// unpause if active, pause if not
         }
     } else {
@@ -501,7 +552,7 @@ void checkTheDoors() {
 	Long startTime = now()
 	// check if the door has been closed long enough to turn
     // we use State because we will need to know when the door opened or closed
-    def currentDoorStates = theDoors.latestState('contact')
+    def currentDoorStates = theDoors*.latestState('contact')
 
     if (currentDoorStates.value.contains('open')) {
     	LOG("A door is open", 3, null, 'trace')
@@ -555,7 +606,7 @@ void activateRoom() {
 	LOG("Activating the Smart Room", 3, null, 'info')
     def sensorData = [:]
     atomicState.isSmartRoomActive = true
-	boolean ST = isST
+	//boolean ST = isST
     boolean anyInactive = true
     
     // turn on vents
@@ -622,7 +673,7 @@ void activateRoom() {
         if (anyInactive) { sensorData << [SmartRoom:'active']; atomicState.SmartRoom = 'active'; }
         generateSensorsEvents( sensorData )
     }
-    if (anyInactive) sendMessage("I just activated ${app.label} (Smart Room)")
+    if (anyInactive) sendMessage("I just activated")
     
     LOG("Activated",3,null,'info')
 }
@@ -659,7 +710,7 @@ void deactivateRoom() {
         //un-register this room's sensor(s) from the thermostat for the appropriate program(s)
         //and register this room's sensor(s) with the thermostat for the appropriate program(s)
         anyActive = false
-        boolean ST = isST
+        //boolean ST = isST
         def sensor = theSensorDevices[0]
         def smartRoomStatus = ST ? sensor.currentValue('SmartRoom') : sensor.currentValue('SmartRoom', true) 
         if (smartRoomStatus == 'active') anyActive = true 
@@ -689,7 +740,7 @@ void deactivateRoom() {
     }
     generateSensorsEvents(sensorData)
     atomicState.isRoomOccupied = false	// this gets turned on the first time motion is detected after the doors are closed
-    if (anyActive) sendMessage("I just deactivated ${app.label} (Smart Room)")
+    if (anyActive) sendMessage("I just deactivated")
     LOG("Deactivated",3,null,'info',false,false)
 }
 def programUpdateHandler(evt) {
@@ -782,7 +833,7 @@ def makeClimateChange( sensor, adds, removes ) {
 }
 boolean needClimateChange(sensor, List adds, List removes) {
 	if (!adds && !removes) return false
-    String ac = isST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
+    String ac = ST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
     def activeClimates = ac ? ((ac == '[]') ? [] : ac[1..-2].tokenize(', ').sort(false)) : []
     log.debug "activeClimates: ${activeClimates}"
     boolean updatesToDo = false
@@ -872,17 +923,66 @@ void generateSensorsEvents( Map dataMap ) {
     }
 }
 
+String getMsgPrefix() {
+	String thePrefix = ""
+	if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
+	switch (settings?.customPrefix) {
+		case '(helper):':
+			thePrefix = atomicState.appDisplayName + ': '
+			break
+		case '(helper) at (location):':
+			thePrefix = atomicState.appDisplayName + " at ${location.name}: "
+			break
+		case '(location):':
+			thePrefix = location.name + ': '
+			break
+		case 'custom':
+			thePrefix = settings?.customPrefixText?.trim() + ' '
+			break
+		case 'none':
+			break
+	}
+	return thePrefix
+}
+String getMsgRoomName() {
+	String theRoomName = ""
+	switch (settings?.customRoomName) {
+    	case '(helper name)':
+        	theRoomName = atomicState.appDisplayName.replaceAll(':','')
+            break
+        case '(sensor name)':
+        	theRoomName = settings.theSensorDevices[0].displayName
+            break
+        case 'the room':
+        	theRoomName = 'the room'
+            break
+        case 'custom':
+        	theRoomName = settings?.customRoomText
+            break
+    }
+    theRoomName = ' ' + theRoomName + ' '
+    if (settings?.roomCleaners) {
+    	settings.roomCleaners.each { 
+        	theRoomName = theRoomName.replaceAll(it, '')
+        }
+    }
+	String prefix = settings.roomPrefix ?: ' '
+    String suffix = settings.roomSuffix ?: ' '
+    theRoomName = (' ' + prefix + ' ' + theRoomName + ' ' + suffix).replaceAll(':','').replaceAll('  ',' ')
+    return theRoomName
+}
+
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
-    boolean ST = isST
+   // boolean ST = isST
     if (settings.notify) {
-        String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
+    	String msgPrefix = getMsgPrefix()
+        String msg = msgPrefix + (notificationMessage.trim() + getMsgRoomName()).replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
+        boolean addFrom = (msgPrefix && !msgPrefix.startsWith("From "))
 		if (ST) {
-			if (settings.notifiers != null) {
-				settings.notifiers.each {									// Use notification devices 
-					it.deviceNotification(msg)
-				}
-			}
+			if (settings.notifiers) {
+				sendNotifications(msgPrefix, msg)               
+            }
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
 					def phones = settings.phone.split(";")
@@ -892,61 +992,92 @@ void sendMessage(notificationMessage) {
 					}
 				} else {
 					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)				// Only to SMS contact
+					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
 				}
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)										// Push to everyone
+				sendPushMessage(msg)								// Push to everyone
 			}
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
 					settings.speechDevices.each {
-						it.speak( "From " + msg )
+						it.speak( (addFrom?"From ":"") + msg )
 					}
 				}
 				if (settings.musicDevices != null) {
 					settings.musicDevices.each {
 						it.setLevel( settings.volume )
-						it.playText( "From " + msg )
+						it.playText( (addFrom?"From ":"") + msg )
 					}
 				}
 			}
 		} else {		// HE
-			if (settings.notifiers != null) {
-				settings.notifiers.each {							// Use notification devices on Hubitat
-					it.deviceNotification(msg)
-				}
-			}
+			if (settings.notifiers) {
+                sendNotifications(msgPrefix, msg)               
+            }
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
 					settings.speechDevices.each {
-						it.speak( "From " + msg )
+						it.speak((addFrom?"From ":"") + msg )
 					}
 				}
 				if (settings.musicDevices != null) {
 					settings.musicDevices.each {
 						it.setLevel( settings.volume )
-						it.playText( "From " + msg )
+						it.playText((addFrom?"From ":"") + msg )
 					}
 				}
 			}
 		}
     }
-	// Always send to Hello Home / Location Event log
+    // Always send to Hello Home / Location Event log
 	if (ST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
-		sendLocationEvent(name: "HelloHome", description: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
+		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
 }
-
+// Handles sending to Notification devices, with special handling for Echo Speaks devices (if settings.echoAnnouncements is true)
+boolean sendNotifications( String msgPrefix, String msg ) {
+	if (!settings.notifiers) {
+		LOG("sendNotifications(): no notifiers!",2,null,'warn')
+		return false
+	}
+    if (settings.echoAnnouncements) {
+        List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+        List notEcho = echo ? settings.notifiers - echo : settings.notifiers        
+        List echoDeviceObjs = []
+        if (echo?.size()) {
+			// Get all the Echo Speaks devices to speak at once
+			echo.each { 
+				String deviceType = it.currentValue('deviceType') as String
+				String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
+				echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+			}
+			if (echoDeviceObjs?.size()) {
+				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
+				def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
+				echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
+			}
+			// The rest get a standard deviceNotification
+			if (notEcho) notEcho*.deviceNotification(msg)
+		} else {
+			// No Echo Speaks devices
+			settings.notifiers*.deviceNotification(msg)
+		}
+	} else {
+		// Echo Announcements not enabled
+		settings.notifiers*.deviceNotification(msg)
+	}
+	return true
+}
 def getSensorPrograms(sensor) {
     def cl = sensor.currentValue('climatesList')
     return (cl ? ((cl == '[]') ? ['Away', 'Home', 'Sleep'] : cl[1..-2].tokenize(', ').sort(false)) : ['Away', 'Home', 'Sleep'])
 }
 def getProgramsList() { 
-	boolean ST = isST
+	//boolean ST = isST
 	def programs = []
 	if (settings.theSensorDevices) {
     	settings.theSensorDevices.each { sensor ->
@@ -988,7 +1119,6 @@ List getReservations(String tid, String type='modeOff') {
 List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
-
 void updateMyLabel() {
 	boolean ST = isST
 	
@@ -1021,7 +1151,10 @@ void updateMyLabel() {
     	smartRoom = ' (paused)'
 		newLabel = myLabel + ( ST ? smartRoom : '<span style="color:red">' + smartRoom + '</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
-	} else if (SmartRoom != 'default') {
+    } else if (smartRoom == 'inactive') {
+		newLabel = myLabel + ( ST ? ' ('+smartRoom+')' : '<span style="color:orange"> (' + smartRoom + ')</span>' )
+		if (app.label != newLabel) app.updateLabel(newLabel)
+	} else if (smartRoom != 'default') {
 		newLabel = myLabel + ( ST ? ' ('+smartRoom+')' : '<span style="color:green"> (' + smartRoom + ')</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
@@ -1029,81 +1162,132 @@ void updateMyLabel() {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
-		atomicState.globalPause = true
+        settings.tempDisable = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
 	if (settings.tempDisable) {
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
+            settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-    if (logType == 'debug') {
-    	if (!settings?.debugOff) log.debug message
-    } else if (logType == 'info') {
-    	if (!settings?.infoOff) log.info message
-    } else log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+    switch (logType) {
+    	case 'error':
+        	log.error message
+            break;
+        case 'warn':
+        	log.warn message
+            break;
+        case 'trace':
+        	log.trace message
+            break;
+        case 'info':
+        	if (!settings?.infoOff) log.info message
+            break;
+        case 'debug':
+        default:
+        	if (!settings?.debugOff) log.debug message
+        	break;
+    }
 }
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
-String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
-
 // SmartThings/Hubitat Portability Library (SHPL)
-// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+// Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
+}
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
+}
 
 String getHubPlatform() {
-	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
-											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
-    return pf
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
 }
-boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
