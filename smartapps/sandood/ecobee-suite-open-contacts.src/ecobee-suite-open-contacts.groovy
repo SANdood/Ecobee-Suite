@@ -30,11 +30,12 @@
  *	1.8.13 - Refactored sendMessage / sendNotifications
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
  *	1.8.15 - HOTFIX: formatting for HVAC Off delays
- *	1.8.16 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.16 - HOTFIX: wouldn't even schedule HVAC Off
+ *	1.8.17 - Updated formatting; added Do Not Disturb Modes & Time window
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.16" }
+String getVersionNum()		{ return "1.8.17" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -207,8 +208,7 @@ def mainPage() {
 			if (ST) {
 				List echo = []
 				section("Notifications") {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
-					if (settings.notify) {
+					if (settings?.whichAction != "HVAC Actions Only") {
 						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, 
 							  required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
 						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
@@ -253,10 +253,8 @@ def mainPage() {
 				}
 			} else {		// HE
             	List echo = []
-				section(sectionTitle("Notifications")) {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
-				}
-				if (settings.notify) {
+				section(sectionTitle("Notifications")) {}
+				if (settings?.whichAction != "HVAC Actions Only") {
 					section(smallerTitle("Notification Devices")) {
 						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
 							  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
@@ -699,7 +697,7 @@ void sensorOpened(evt=null) {
         LOG("sensorOpened() - unexpected duplicate open event, or we missed a close event...ignoring", 3, null, 'warn')
         return
     }
-    if (openCount > 0) return			// Belt & Suspenders
+    if (openCount > 1) return			// Belt & Suspenders
     atomicState.openCount = openCount
     
     def HVACModeState = atomicState.HVACModeState
