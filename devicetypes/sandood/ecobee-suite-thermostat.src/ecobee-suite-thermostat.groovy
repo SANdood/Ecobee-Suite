@@ -38,8 +38,9 @@
  *	1.8.09 - Fixed thermostatSetpoint initialization error in auto mode
  *	1.8.10 - Optimizations for HE (no need to update *Display attributes)
  *	1.8.11 - schedule/schedText now sent independently from ESM
+ *	1.8.12 - HOTFIX: DeviceWatch fix for hubless ST locations
  */
-String getVersionNum() 		{ return "1.8.11" }
+String getVersionNum() 		{ return "1.8.12" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -891,19 +892,21 @@ def uninstalled() {
 }
 
 def updated() {
-	getHubPlatform()
+	//getHubPlatform()
 	LOG("${getVersionLabel()} updated",1,null,'trace')
 	
 	if (!device.displayName.contains('TestingForInstall')) {
 	// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
 		sendEvent(name: 'checkInterval', value: 3900, displayed: false, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
 		if (ST) {
-			// sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
 			updateDataValue("EnrolledUTDH", "true")
             sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
 			sendEvent(name: "healthStatus", value: "online")
-			//sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"cloud\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${device.hub.hardwareID}\"}", displayed: false)
-            sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"cloud\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${location.hubs[0].id}\"}", displayed: false)
+            if (location.hubs[0] && location.hubs[0].id) {
+            	sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked", hubHardwareId: location.hubs[0].id.toString()]), displayed: false)
+            } else {
+            	sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
+            }
 		}
 	} else {
 		return
