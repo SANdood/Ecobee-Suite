@@ -24,12 +24,16 @@
  *	1.8.08 - Fixed pageLabel issue of CustomNotifications page
  *	1.8.09 - Fixed appDisplayName in sendMessage
  *	1.8.10 - Fixed mixed Notification devices in sendMessage
- *	1.8.11 - Reset states on location mode change (recalculate everything)
+ *	1.8.11 - Added Ambient Weather Station for both ST & HE
+ *	1.8.12 - Reset states on location mode change (recalculate everything)
+ *	1.8.13 - Refactored sendMessage / sendNotifications
+ *	1.8.14 - Allow individual un-pause from peers, even if was already paused
+ *	1.8.15 - HOTFIX: allow Ambient Weather Station on Hubitat
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.11" }
+String getVersionNum()		{ return "1.8.15" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -168,7 +172,12 @@ def mainPage() {
 						}
 					} else if (settings.tempSource == 'station') {
 						paragraph((maximize ? "Using a ${ST?'SmartThings':'Hubitat'}-based Weather Station - p":"P") + "lease select ${ST?'ONE ':'<b>ONE</b> '}from the list of the supported Weather Station devices below...")
-						if (ST) {
+                        
+                        // Ambient Weather Station (https://github.com/KurtSanders/STAmbientWeather)
+                        // NOTES: available for both HE & ST, provides temperature & dewpoint
+                        input(name: "ambientWeatherStation", type: ST?'device.ambientWeatherStation':'device.AmbientWeatherStation', title: inputTitle("Which Ambient Weather Station?"), required: false, 
+                              multiple: false, hideWhenEmpty: true, width: 4)    
+						if (ST) {                                                                
 							// Smart Weather Station Tile
 							// NOTES: supplies temperature & relative humidity only
 							input(name: "smartWeather", type: "device.smartWeatherStationTile", title: inputTitle('Which SmartWeather Station Tile?'), required: false,
@@ -181,14 +190,14 @@ def mainPage() {
 							
 							// Netatmo Outdoor Module
 							// NOTES: provides temperature & relative humidity only
-							input(name: "netatmoOutdoorModule", type: "device.NetatmoOutdoorModule", title: inputTitle("Which Netatmo Outdoor Module?"), required: false, 
-								  multiple: false, hideWhenEmpty: true, width: 4)
+							input(name: "netatmoOutdoorModule", type: "device.netatmoOutdoorModule", title: inputTitle("Which Netatmo Outdoor Module?"), required: false, 
+								  multiple: false, hideWhenEmpty: true, width: 4)                              
 						} else {
 							// Ambient Weather Device (https://community.hubitat.com/t/ambient-weather-device/3660)
 							// NOTES: provides temperature & dewpoint
 							input(name: "ambientWeatherDevice", type: "device.AmbientWeatherDevice", title: inputTitle("Which Ambient Weather Device?"), required: false, 
 								  multiple: false, hideWhenEmpty: true, width: 4)
-							
+
 							// DarkSky.net Weather Driver (https://community.hubitat.com/t/release-darksky-net-weather-driver-no-pws-required/22699)
 							// NOTES: provides temperature & relative humidity, but dewpoint is optional, so we'll calculate it ourselves
 							input(name: "darkSkyNetWeatherDriver", type: "device.DarkSky.netWeatherDriver", title: inputTitle("Which DarkSky.net Weather Driver?"), 
@@ -200,7 +209,7 @@ def mainPage() {
 								  multiple: false, hideWhenEmpty: true, width: 4)
 						}
 						input(name: "meteoWeather", type: "${ST?'device.meteobridgeWeatherStation':'device.MeteobridgeWeatherStation'}", title: inputTitle('Which Meteobridge Weather Station?'), required: false, 
-								multiple: false, hideWhenEmpty: true, width: 4)		 
+								multiple: false, hideWhenEmpty: true, width: 4)
 					} else if (settings.tempSource == "wunder") {
 						if (maximize) paragraph "Using a specific Weather Underground Weather Station"
 						input(name: 'stationID', type: 'string', title: inputTitle('Enter WeatherUnderground Station identifier'), defaultValue: "${settings.nearestPWS?getPWSID():''}", required: true)
@@ -650,6 +659,24 @@ boolean initialize() {
 					tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
 					temperatureUpdate(tempNow) 
 				}
+			} else if (settings.ambientWeatherStation) {
+				// HE & ST, has temperature & dewpoint
+				def latest
+				if (settings.dewBelowOverride) {
+					subscribe(settings.ambientWeatherStation, 'dewpoint', dewpointChangeHandler)
+					latest = ST ? settings.ambientWeatherStation.currentState('dewpoint') : settings.ambientWeatherStation.currentState('dewpoint', true)
+					if (latest?.numberValue != null) {
+						def d = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+						atomicState.dewpoint = d
+						LOG("Outside Dewpoint is: ${d}°${gu}",3,null,'info')
+					}
+				}
+				subscribe(settings.ambientWeatherStation, 'temperature', tempChangeHandler)
+				latest = ST ? settings.ambientWeatherStation.currentState('temperature') : settings.ambientWeatherStation.currentState('temperature', true)
+				if (latest?.numberValue != null) { 
+					tempNow = roundIt(latest.numberValue, (latest.unit=='C'?2:1))
+					temperatureUpdate(tempNow) 
+				}
 			} else if (settings.darkSkyNetWeatherDriver) {
 				// HE only, optional dewpoint so we calculate ourselves
 				subscribe(settings.darkSkyNetWeatherDriver, 'temperature', tempChangeHandler)
@@ -834,7 +861,7 @@ def insideChangeHandler(evt) {
 			atomicState.locModeEnabled = true
 			if (newMode != null) {
 				String cMode = ST ? evt.device.currentValue('thermostatMode') : evt.device.currentValue('thermostatMode', true)
-				log.debug "newMode: ${newMode}, cMode: ${cMode}"
+				//log.debug "newMode: ${newMode}, cMode: ${cMode}"
 				if (cMode != newMode) {
 					boolean override = ((cMode != 'off') || (settings.insideOverridesOff && (!anyReservations(tid, 'modeOff') || ((countReservations(tid, 'modeOff') == 1) && haveReservation(tid, 'modeOff')))))
 					if (!override) {
@@ -993,7 +1020,7 @@ def temperatureUpdate( BigDecimal temp ) {
 		}
 		return
 	}
-	log.trace "start\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged = false}"
+	//log.trace "start\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged = false}"
 	def desiredMode = null
 	def desiredProgram = null
 	if ((settings.aboveTemp && (temp >= settings.aboveTemp)) || (settings.dewAboveTemp && (atomicState.dewpoint >= settings.dewAboveTemp))) {
@@ -1007,7 +1034,7 @@ def temperatureUpdate( BigDecimal temp ) {
 			atomicState.betweenChanged = false
 			atomicState.belowChanged = false
 		}
-        log.trace "above\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
+        //log.trace "above\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 	} else if (settings.belowTemp && (temp <= settings.belowTemp)) {
 		if (!atomicState.belowChanged) {
 			// We haven't already changed to belowMode/belowSchedule
@@ -1044,7 +1071,7 @@ def temperatureUpdate( BigDecimal temp ) {
 			atomicState.aboveChanged = false
 			atomicState.betweenChanged = false
 			atomicState.belowChanged = true
-            log.trace "below1\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
+            //log.trace "below1\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 		} else {
 			// We have prior changed to the belowMode/belowSchedule - now we have to check if dewpoint is still below the limit
 			if ((settings.belowMode == 'off') && settings.dewBelowOverride && (settings.dewBelowTemp <= atomicState.dewpoint)) {
@@ -1070,7 +1097,7 @@ def temperatureUpdate( BigDecimal temp ) {
 					atomicState.betweeChanged = false
 					atomicState.belowChanged = true		// so we don't change it again...
 				}
-                log.trace "below2\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
+                //log.trace "below2\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 			} else if (!settings.belowMode || (!settings.dewBelowTemp || (settings.dewBelowTemp > atomicState.dewpoint))) {
 				// No belowMode, or not doing dewpointOverride - return to belowMode settings
 				desiredMode = settings.belowMode
@@ -1082,7 +1109,7 @@ def temperatureUpdate( BigDecimal temp ) {
 				atomicState.betweenChanged = false
 				atomicState.belowChanged = true
 			}
-            log.trace "below\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
+            //log.trace "below\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 		}
 	} else if ((settings.aboveTemp || (settings.dewAboveTemp && (atomicState.dewpoint < settings.dewAboveTemp))) && settings.belowTemp && settings.betweenMode) {
 		if (!atomicState.betweenChanged) {
@@ -1095,9 +1122,9 @@ def temperatureUpdate( BigDecimal temp ) {
 			atomicState.betweenChanged = true
 			atomicState.belowChanged = false
 		}
-        log.trace "between\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
+        //log.trace "between\nokMode: ${okMode}\naboveChanged: ${atomicState.aboveChanged}\nbetweenChanged: ${atomicState.betweenChanged}\nbelowChanged: ${atomicState.belowChanged}"
 	}
-	log.debug "desiredMode: ${desiredMode}, desiredProgram: ${desiredProgram}"
+	//log.debug "desiredMode: ${desiredMode}, desiredProgram: ${desiredProgram}"
 	if ((desiredMode != null) || (desiredProgram != null)) {
 		String changeNames = ""
 		def changeNamesList = []
@@ -1128,6 +1155,7 @@ def temperatureUpdate( BigDecimal temp ) {
 									}
 									LOG("desiredProgram: ${desiredProgram}, sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
 									it.setThermostatProgram(desiredProgram, sendHoldType, sendHoldHours)
+                                    atomicState.modeOffNotified = false
 								}
 								changeNames += changeNames ? ", ${it.displayName}" : it.displayName
 								changeNamesList << it
@@ -1137,8 +1165,9 @@ def temperatureUpdate( BigDecimal temp ) {
 								LOG("Reservations: ${reservedBy}", 3, null, 'debug')
 								if (reservedBy == []) reservedBy = ['somebody']
 								def msg = "The outside temperature is ${temp}°${unit}, but I can't change ${getMsgTstat([it])} to '${desiredMode}' Mode because ${reservedBy.toString()[1..-2]} hold 'modeOff' reservations"
-								LOG(msg ,2,null,'warn')
-								sendMessage(msg)
+								LOG(msg,2,null,'warn')
+                                if (!atomicState.modeOffNotified) sendMessage(msg)
+                                atomicState.modeOffNotified = true
 								// here's where we COULD subscribe to the reservations to see when we can turn it back on. For now, let's just let whomever is last deal with it
 							}
 						} else {
@@ -1155,6 +1184,7 @@ def temperatureUpdate( BigDecimal temp ) {
 								}
 								LOG("sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
 								it.setThermostatProgram(desiredProgram, sendHoldType, sendHoldHours)
+                                atomicState.modeOffNotified = false
 								changed = true
 							}
 							if (changed) {
@@ -1734,39 +1764,9 @@ void sendMessage(notificationMessage) {
     	String msgPrefix = getMsgPrefix()
         String msg = (msgPrefix + notificationMessage.replaceAll(':','')).replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
         boolean addFrom = (msgPrefix && !msgPrefix.startsWith("From "))
-        //String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
 		if (ST) {
 			if (settings.notifiers) {
-            	if (settings.echoAnnouncements) {
-                    List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                    List notEcho = echo ? settings.notifiers - echo : settings.notifiers
-
-                    // If we have multiple Echo Speak device targets, get them all to speak at once
-                    List echoDeviceObjs = []
-                    if (echo) {
-                        if (echo?.size() > 1) {
-                            echo?.each { 
-                                String deviceType = it.currentValue('deviceType') as String
-                                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                                echoDeviceObjs?.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
-                            }
-                        }
-                        //Announcement Command Logic
-                        if((echo.size() > 1) && echoDeviceObjs && echoDeviceObjs?.size()) {
-                            //NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
-                            def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
-                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
-                        } else if (echo.size() == 1) {
-                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        }
-						// The rest get a standard deviceNotification
-                        if (notEcho) notEcho*.deviceNotification(msg)
-                    } else {
-                        settings.notifiers*.deviceNotification(msg)
-                    }
-                } else {
-                	settings.notifiers*.deviceNotification(msg)
-                }                
+				sendNotifications(msgPrefix, msg)               
             }
 			if (settings.phone) { // check that the user did select a phone number
 				if ( settings.phone.indexOf(";") > 0){
@@ -1799,36 +1799,7 @@ void sendMessage(notificationMessage) {
 			}
 		} else {		// HE
 			if (settings.notifiers) {
-            	if (settings.echoAnnouncements) {
-                    List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                    List notEcho = echo ? settings.notifiers - echo : settings.notifiers
-
-                    // If we have multiple Echo Speak device targets, get them all to speak at once
-                    List echoDeviceObjs = []
-                    if (echo) {
-                        if (echo?.size() > 1) {
-                            echo?.each { 
-                                String deviceType = it.currentValue('deviceType') as String
-                                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                                echoDeviceObjs?.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
-                            }
-                        }
-                        //Announcement Command Logic
-                        if((echo.size() > 1) && echoDeviceObjs && echoDeviceObjs?.size()) {
-                            //NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
-                            def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
-                            echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
-                        } else if (echo.size() == 1) {
-                            echo[0].playAnnouncement(msg, (msgPrefix?:atomicState.appDisplayName))
-                        }
-						// The rest get a standard deviceNotification
-                        if (notEcho) notEcho*.deviceNotification(msg)
-                    } else {
-                        settings.notifiers*.deviceNotification(msg)
-                    }
-                } else {
-                	settings.notifiers*.deviceNotification(msg)
-                }                
+                sendNotifications(msgPrefix, msg)               
             }
 			if (settings.speak) {
 				if (settings.speechDevices != null) {
@@ -1843,15 +1814,48 @@ void sendMessage(notificationMessage) {
 					}
 				}
 			}
-			
 		}
     }
-	// Always send to Hello Home / Location Event log
+    // Always send to Hello Home / Location Event log
 	if (ST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
+}
+// Handles sending to Notification devices, with special handling for Echo Speaks devices (if settings.echoAnnouncements is true)
+boolean sendNotifications( String msgPrefix, String msg ) {
+	if (!settings.notifiers) {
+		LOG("sendNotifications(): no notifiers!",2,null,'warn')
+		return false
+	}
+    if (settings.echoAnnouncements) {
+        List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+        List notEcho = echo ? settings.notifiers - echo : settings.notifiers        
+        List echoDeviceObjs = []
+        if (echo?.size()) {
+			// Get all the Echo Speaks devices to speak at once
+			echo.each { 
+				String deviceType = it.currentValue('deviceType') as String
+				String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
+				echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+			}
+			if (echoDeviceObjs?.size()) {
+				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
+				def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
+				echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
+			}
+			// The rest get a standard deviceNotification
+			if (notEcho) notEcho*.deviceNotification(msg)
+		} else {
+			// No Echo Speaks devices
+			settings.notifiers*.deviceNotification(msg)
+		}
+	} else {
+		// Echo Announcements not enabled
+		settings.notifiers*.deviceNotification(msg)
+	}
+	return true
 }
 void updateMyLabel() {
 	def opts = [' (paused)', '(Cool', ' (Heat', ' (Aux', ' (Off', ' (Auto', ' (Emer']
@@ -1879,41 +1883,48 @@ void updateMyLabel() {
 	} else {
 		String newLabel = myLabel
 		if (settings.thermostats?.size()) {
-			String modeProgStr = ' (' + thermostats[0].currentValue('thermostatMode').capitalize() + ' - ' + thermostats[0].currentValue('currentProgramName') + ')'
-			newLabel = newLabel + (!ST ? '<span style="color:green">' + modeProgStr + '</span>' : modeProgStr)
+        	String thermostatMode = ST ? thermostats[0].currentValue('thermostatMode').capitalize() : thermostats[0].currentValue('thermostatMode', true).capitalize()
+			String modeProgStr = ' (' + thermostatMode + ' - ' + thermostats[0].currentValue('currentProgramName') + ')'
+            String color = (thermostatMode == 'Off') ? 'red' : 'green'
+			newLabel = newLabel + (!ST ? '<span style="color:' + color + '">' + modeProgStr + '</span>' : modeProgStr)
 		}
 		// log.debug "newLabel: ${newLabel}"
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
 }
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
-		atomicState.globalPause = true
+        settings.tempDisable = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
 	if (settings.tempDisable) {
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
+            settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
