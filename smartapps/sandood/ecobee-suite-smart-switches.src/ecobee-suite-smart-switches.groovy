@@ -13,23 +13,17 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - nonCached currentValue() for HE
- *	1.7.02 - Fixing private method issue caused by grails
- *	1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.04 - Optimized isST/isHE, added Global Pause
- *	1.7.05 - Added option to disable local display of log.debug() logs
- *	1.7.06 - Added optional daily "Actions disabled" time window
- *	1.7.07 - Fixed between time calculation
- *	1.7.08 - Fixed helper labelling
- *	1.7.09 - Fixed labels (again), added infoOff, cleaned up preferences setup
- *	1.7.10 - Added minimizeUI
- *	1.7.11 - Added comprehensive "reverse actions to prior state"
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - More busy bees
+ *	1.8.03 - No longer LOGs to parent (too much overhead for too little value)
+ *	1.8.04 - New SHPL, using Global Fields instead of atomicState
+ *	1.8.05 - Allow individual un-pause from peers, even if was already paused
  */
-String getVersionNum()		{ return "1.8.01" }
-String getVersionLabel() { return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+import groovy.transform.Field
+
+String getVersionNum()		{ return "1.8.05" }
+String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 				"ecobee Suite Smart Switches",
@@ -53,8 +47,8 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	boolean ST = isST
-	boolean HE = !ST
+	//boolean ST = isST
+	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
 	String defaultName = "Smart Switch/Dimmer/Vent"
     
@@ -113,7 +107,7 @@ def mainPage() {
                 }
             }
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused; Resume below" 
+				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
 				input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
 					  multiple: true, required: true, submitOnChange: true)
@@ -129,22 +123,24 @@ def mainPage() {
         	}
        
         	section(title: sectionTitle("Actions")) {
+				paragraph(smallerTitle("Turn on..."))
 				input(name: 'theOnSwitches', type: 'capability.switch', title: inputTitle("Turn On these switches"), multiple: true, required: false, submitOnChange: true, width: 4)
           		input(name: 'theOnDimmers', type: 'capability.switchLevel', title: inputTitle("Set level on these dimmers"), multiple: true, required: false, submitOnChange: true, width: 4)
           		if (settings.theOnDimmers) {
 					input(name: 'onDimmerLevel', type: 'number', title: inputTitle("Set dimmers to level...")+' (0-100)', range: "0..100", required: true, width: 4)
 				} else if (HE) paragraph("", width: 4)
-          		input(name: 'theOffSwitches', type: 'capability.switch', title: inputTitle('Turn Off these switches'), multiple: true, required: false, submitOnChange: true, width: 4)
+				paragraph(smallerTitle("Turn off..."))
+          		input(name: 'theOffSwitches', type: 'capability.switch', title: inputTitle('Turn Off these switches'), multiple: true, required: false, submitOnChange: true)
           		input(name:	'theOffDimmers', type: 'capability.switchLevel', title: inputTitle("Set level on these dimmers"), multiple: true, required: false, submitOnChange: true, width: 4)
           		if (settings.theOffDimmers) {
 					input(name: 'offDimmerLevel', type: 'number', title: inputTitle("Set dimmers to level...")+' (0-100)', range: "0..100", required: true, width: 4)
-				} else if (HE) paragraph("", width: 4)
+				} else if (HE) paragraph("")
             	if (!settings.theOpState?.contains('idle')) {
             		input(name: 'reverseOnIdle', type: 'bool', title: inputTitle("Reverse above Actions when ${settings.theThermostats?.size()>1?'all thermostats return':'thermostat returns'} to 'idle'?"), 
 						  defaultValue: false, submitOnChange: true, width: 6)
             	}
                 if (settings.reverseOnIdle || settings.reverseAtFromTime) {
-                    if (HE) paragraph("", width: 6)
+                    //if (HE) paragraph("", width: 6)
                     input(name: "reversePreserve", type: 'bool', title: inputTitle("Preserve previous state when reversing actions?"), defaultValue: false, submitOnChange: true, width: 6)
                 }
             }
@@ -152,8 +148,8 @@ def mainPage() {
             section(title: sectionTitle("Conditions")) {
         		input(name: "actionDays", type: "enum", title: inputTitle("Select Days of the Week to run the above Actions"), required: true, multiple: true, submitOnChange: true, width: 4,
                 	options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday", "Saturday": "Saturday", "Sunday": "Sunday"])
-     		   	input(name: "fromTime", type: "time", title: inputTitle("Disable Actions daily between From Time (optional)"), required: false, submitOnChange: true, width: 4)
-        		input(name: "toTime", type: "time", title: inputTitle("...and To Time"), required: (settings.fromTime != null), submitOnChange: true, width: 4)
+				input(name: "fromTime", type: "time", title: inputTitle("Disable Actions daily between${HE?'<br>':''}From Time (optional)"), required: false, submitOnChange: true, width: 4)
+				input(name: "toTime", type: "time", title: inputTitle("${HE?'<br>':''}...and To Time"), required: (settings.fromTime != null), submitOnChange: true, width: 4)
                 def between = (((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false)         				
                 if (maximize) paragraph "Actions ${between?'would NOT':'would'} run right now (Hint: set From & To to the same time to block Actions at any time).${settings.reverseOnIdle?' Actions will be reversed on \'idle\' at ANY time.':''}"
                 if (settings.fromTime) {
@@ -219,7 +215,7 @@ def initialize() {
 
 def opStateHandler(evt) {
 	LOG("${evt.name}: ${evt.value}",2,null,'info')
-	boolean ST = atomicState.isST
+	//boolean ST = atomicState.isST
 
 	if (evt.value == 'idle') {
     	if (settings.reverseOnIdle) {
@@ -528,7 +524,7 @@ private boolean dayCheck() {
     return (actionDays.contains(day))
 }
 void updateMyLabel() {
-	boolean ST = atomicState.isST
+	//boolean ST = atomicState.isST
     
 	String flag = ST ? ' (paused)' : '<span '
 	
@@ -548,81 +544,133 @@ void updateMyLabel() {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
-		atomicState.globalPause = true
+        settings.tempDisable = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
 	if (settings.tempDisable) {
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
+            settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 // Helper Functions
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-    if (logType == 'debug') {
-    	if (!settings?.debugOff) log.debug message
-    } else if (logType == 'info') {
-    	if (!settings?.infoOff) log.info message
-    } else log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+    switch (logType) {
+    	case 'error':
+        	log.error message
+            break;
+        case 'warn':
+        	log.warn message
+            break;
+        case 'trace':
+        	log.trace message
+            break;
+        case 'info':
+        	if (!settings?.infoOff) log.info message
+            break;
+        case 'debug':
+        default:
+        	if (!settings?.debugOff) log.debug message
+        	break;
+    }
 }
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
-String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
+}
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
+}
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
 }
 
-// SmartThings/Hubitat Portability Library (SHPL)
-// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-//
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 String getHubPlatform() {
-	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
-											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
-    return pf
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
 }
-boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
