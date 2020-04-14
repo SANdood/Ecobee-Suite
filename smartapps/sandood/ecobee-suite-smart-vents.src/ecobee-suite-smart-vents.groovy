@@ -13,39 +13,22 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.05 - More code optimizations
- *	1.7.06 - Added generic switch control (e.g., to control a fan)
- *	1.7.07 - Update vent status (refresh) before & after taking actions, display vent status in appLabel
- *	1.7.08 - Optimized checks when nothing changes; added vent open/close option for 'fan only'
- *	1.7.09 - Removed redundant log.debug text, fixed new fan only vent option
- *	1.7.10 - Added option to disable local display of log.debug() logs, tweaked myLabel handling
- *	1.7.11 - Check both hasCapability('switchLevel') & hasCommand('setLevel')
- *	1.7.12 - Fix typo in ventsOn(); set 100 instead of 99
- *	1.7.13 - Optimized checkTemperature() to avoid timeout errors on ST
- *	1.7.14 - Added maximumVentLevel and fanOnlyState; more optimizations
- *	1.7.15 - More bugs squashed, settings page cleaned up
- *	1.7.16 - Fixed vents not changing 
- *	1.7.17 - Fixed vents not changing when both minLevel & maxLevel are set
- *	1.7.18 - Added conditional support for "contact sensor" capability, so vents show logical state in HomeKit (as blinds)
- *	1.7.19 - Fixed helper labelling
- *	1.7.20 - Added support for HubConnected EcoVents and Keen Vents; optimized Keen Vent handling; new Fan Only percentage setting
- *	1.7.21 - Fix HubConnect EcoVent selector
- *	1.7.22 - Added optional Ecobee Programs exception & auto Sensor enrollments; show open percentage in label
- *	1.7.23 - Enable Smart Recovery handling when *nextClimate* is enabled (but currently running Program is not), default min/maxVentLevel to 1/98 for silent operation
- *	1.7.24 - Remove extraneous log.debug, fix app.label handling of levels, added 'percentage' as option for Paused
- *	1.7.25 - Fixed labels (again), fixed open contacts, and updated configuration layout, added intro ***
- *	1.7.26 - Integrated with Smart Room and ES Sensors
- *	1.7.27 - Added atomic updateSensorPrograms - add/remove in 1 call
- *	1.7.28 - Added reservation serializer for climate/sensor changes (program.climates)
- *	1.7.29 - Added Mode restriction
- *	1.7.30 - Fixed undefined "excluded" mode/climate vent setting
- *	1.7.31 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - Option to close vents when contact open and fan only; fixed too many ES sensors error when 0 ES sensors, fix Pause warning
+ *	1.8.03 - More busy bees
+ *	1.8.04 - No longer LOGs to parent (too much overhead for too little value)
+ *	1.8.05 - New SHPL, using Global Fields instead of atomicState
+ *	1.8.06 - Allow individual un-pause from peers, even if was already paused
+ *	1.8.07 - Fix to workaround improper dehumidifyOvercoolOffset setting from thermostat (null when should be 0)
+ *	1.8.08 - Enhanced currentProgram() check
  */
-String getVersionNum()		{ return "1.8.01" }
+import groovy.json.*
+import groovy.transform.Field
+
+String getVersionNum()		{ return "1.8.08" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
-import groovy.json.JsonSlurper
+
 
 definition(
 	name: 				"ecobee Suite Smart Vents",
@@ -69,8 +52,8 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	boolean ST = isST
-	boolean HE = !ST
+	//boolean ST = isST
+	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     def vc = 0			// vent counter
     def unit = temperatureScale
@@ -137,7 +120,7 @@ def mainPage() {
                 }
             }
             if (settings?.tempDisable) { 
-            	paragraph "WARNING: Temporarily Paused; Resume below" 
+            	paragraph getFormat("warning","This Helper is temporarily paused...")
             } else {
             	if (maximize) paragraph("Select 1 or more temperature sensors, ideally at least 1 of which is an Ecobee Suite Sensor")
         		input(name: "theSensors", type:"capability.temperatureMeasurement", title: inputTitle("Select Temperature Sensor(s)"), required: true, multiple: true, submitOnChange: true)
@@ -182,6 +165,7 @@ def mainPage() {
             section(title: smallerTitle("Windows & Doors")) {
         		if (maximize) paragraph("Open Windows and Doors will temporarily deactivate (close) the vent${vc>1?'s':''}, except during 'Fan Only'")
             	input(name: "theWindows", type: "capability.contactSensor", title: inputTitle("Monitor these Window/Door contact sensor(s)?")+'(optional)', required: false, multiple: true)
+                input(name: "closeFanOnly", type: "bool", title: "Also close during Fan Only?", required: false, defaultValue: false, submitOnChange: true)
 			}
             section(title: smallerTitle("Thermostat")) {
 				if (maximize) paragraph("Specify which Ecobee Suite Thermostat to monitor for operating state, mode and setpoint change events")
@@ -191,143 +175,154 @@ def mainPage() {
             	input(name: "adjustAlways", type: 'bool', title: inputTitle("Always adjust vents/switches?"), defaultValue: false, submitOnChange: true)
                 if (settings.adjustAlways && maximize) paragraph "NOTE: this setting does not override the Modes or Programs restrictions below"
             }
+			if (settings?.theThermostat) {
             section(title: smallerTitle("Modes")) {
-            	def modes = getThermostatModes()
-            	paragraph
-                input(name: 'theModes', type: 'enum', title: inputTitle("Make vent adjustments only during these thermostat Modes")+' (optional)', required: false, submitOnChange: true,
-                	  multiple: true, options: modes, width: 6)
-                if (settings?.theModes) {
-                	input(name: 'notModeState', type: 'enum', title: inputTitle("Vent state for excluded Modes?"), required: true, submitOnChange: true, defaultValue: 'unchanged',
-                		  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 3)
-                	if (notModeState == 'percentage') {
-                		input(name: 'notModeLevel', type: "number", title: inputTitle("Vent level for excluded Modes?"), required: true, defaultValue:50, description: '50', range: "0..100", width: 3)
-                    }
-                }
-            }
-            section(title: smallerTitle("Programs")) {
-                def programs = getThermostatPrograms()
-                programs = programs + ["Vacation"]
-                input(name: "theClimates", type: 'enum', title: inputTitle("Make vent adjustments only during these thermostat Programs")+" (optional)", required: false, submitOnChange: true, 
-					  multiple: true, options: programs, width: 6)
-                if (settings?.theClimates && (settings?.theClimates.size() != programs.size())) {
-                	input(name: 'notClimateState', type: 'enum', title: inputTitle("Vent state for excluded Programs?"), required: true, submitOnChange: true, defaultValue: 'unchanged',
-                		  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 3)
-                	if (notClimateState == 'percentage') {
-                		input(name: 'notClimateLevel', type: "number", title: inputTitle("Vent level for excluded Programs?"), required: true, defaultValue:50, description: '50', range: "0..100", width: 3)
-                    }
-                }
-                
-                if (settings.theSensors) {
-                	def ecobeeSensors = []
-                    settings.theSensors.each { 
-                    	if (it.hasCommand('updateSensorPrograms')) {
-                        	ecobeeSensors << it
-                        }
-                    }
-                	if (ecobeeSensors.size() == 1) {
-                		if (settings.theClimates) input(name: "enrollClimates", type: 'bool', title: inputTitle("Automatically include sensor ${ecobeeSensors[0].displayName} in the above Programs?"),
-                        								defaulValue: true, submitOnChange: true, width: 6)     
-                        if (settings.enrollClimates && settings.theClimates) {
-                        	def notTheseClimates = programs - theClimates - ['Vacation']
-                            //def these = settings.theClimates.contains(['Vacation']) ? settings.theClimates - ['Vacation'] : settings.theClimates
-                            def these = settings.theClimates - ['Vacation']
-                            String notThese = ''
-                            if (notTheseClimates) notThese = " and removed from (" + notTheseClimates.toString()[1..-2].replace(',',', ') + ')'
-                        	if (maximize) paragraph "${ecobeeSensors[0].displayName} will be added to (${these.toString()[1..-2].replace('"','').replace(',',', ')})${notThese} for ${theThermostat.displayName}. " +
-                        									"It will also be removed from ALL Programs when this Helper is Paused."
-                    	}
-                    } else {
-                    	paragraph("You have selected more than 1 Ecobee Suite Sensor. At this time, this Helper only supports automatically enrolling a single sensor into Ecobee Programs.")
-                        app.updateSetting('enrollClimates', false)
-                        settings.enrollClimates = false
-                    }
-                }
-			}
-		
-			section(title: smallerTitle("Thermostat Setpoints")) {
-            	def cSetpoint
-				def cHeatSetpoint
-				def cCoolSetpoint
-				def cMode
-                def cProgram
-                def cLastRunMode
-            	
-				input(name: "useThermostat", type: "bool", title: inputTitle("Follow the setpoints on ${settings?.theThermostat?settings.theThermostat.displayName:'the thermostat'}?"), required: true, 
-					  defaultValue: true, submitOnChange: true, width: 6)
-                def heatAt = null
-                def coolAt = null
-				if (!settings?.useThermostat) {
-                	input(name: "useVirtualStat", type: "bool", title: inputTitle("Follow the setpoints on a different thermostat?"), width: 6, required: true, 
-						  defaultValue: false, submitOnChange: true)
-                    if (settings?.useVirtualStat == true){
-                    	input(name: "theVirtualStat", type: "capability.thermostat", title: inputTitle("Select a thermostat"),  multiple: false, required: true, submitOnChange: true)
-                    }
-                }
-				if (settings?.useThermostat && settings?.theThermostat) {
-					cSetpoint = 	ST ? settings.theThermostat.currentValue('thermostatSetpoint') 	: 	settings.theThermostat.currentValue('thermostatSetpoint', true)
-					cHeatSetpoint = ST ? settings.theThermostat.currentValue('heatingSetpoint') 	: 	settings.theThermostat.currentValue('heatingSetpoint', true)
-					cCoolSetpoint = ST ? settings.theThermostat.currentValue('coolingSetpoint') 	: 	settings.theThermostat.currentValue('coolingSetpoint', true)
-					cMode = 		ST ? settings.theThermostat.currentValue('thermostatMode') 		: 	settings.theThermostat.currentValue('thermostatMode', true)
-                    cProgram = 		ST ? settings.theThermostat.currentValue('currentProgram') 		: 	settings.theThermostat.currentValue('currentProgram', true)
-                    cLastRunMode = 	ST ? settings.theThermostat.currentValue('lastRunningMode') 	: 	settings.theThermostat.currentValue('lastRunningMode', true)
-					if (maximize) paragraph("${settings.theThermostat.displayName} is in '${cMode}' mode running the '${cProgram}' program. The heating setpoint is ${cHeatSetpoint}°${unit}, " +
-                    		  "the cooling setpoint is ${cCoolSetpoint}°${unit}, and the last operation was '${cLastRunMode}'")
-                } else if (settings?.useVirtualStat && settings?.theVirtualStat) {
-                	cSetpoint = 	ST ? settings.theVirtualStat.currentValue('thermostatSetpoint') : 	settings.theVirtualStat.currentValue('thermostatSetpoint', true)
-					cHeatSetpoint = ST ? settings.theVirtualStat.currentValue('heatingSetpoint') 	: 	settings.theVirtualStat.currentValue('heatingSetpoint', true)
-					cCoolSetpoint = ST ? settings.theVirtualStat.currentValue('coolingSetpoint') 	: 	settings.theVirtualStat.currentValue('coolingSetpoint', true)
-					cMode = 		ST ? settings.theVirtualStat.currentValue('thermostatMode') 	: 	settings.theVirtualStat.currentValue('thermostatMode', true)
-                    cProgram = 		ST ? settings.theVirtualStat.currentValue('schedule') 			: 	settings.theVirtualStat.currentValue('schedule', true)
-                    //cLastRunMode = 	ST ? settings.theVirtualStat.currentValue('lastRunningMode') 	: 	settings.theVirtualStat.currentValue('lastRunningMode', true)
-					if (maximize) paragraph("${settings.theVirtualStat.displayName} is in '${cMode}' mode${(cProgram && (cProgram!='null')) ? ' running the \''+cProgram+'\' program':''}. The heating setpoint is ${cHeatSetpoint}°${unit} " +
-                    		  "and the cooling setpoint is ${cCoolSetpoint}°${unit}")
-                }
-                /////////////////////////////////////////////
-                //
-                // TODO
-                // Do I need a setting for non-Program holds (e.g., Temp, Auto, etc.)
-                //
-                ////////////////////////////////////////////
-                if (!settings?.useThermostat && !settings?.useVirtualStat) {  
-					paragraph "\n"+smallerTitle("Manual Setpoints")
-					input(name: "heatingSetpoint", type: "decimal", title: inputTitle("Target heating setpoint?"), required: true, submitOnChange: true, width: 4)
-					input(name: "coolingSetpoint", type: "decimal", title: inputTitle("Target cooling setpoint?"), required: true, submitOnChange: true, width: 4)
-                    if (settings.heatingSetpoint) heatAt = settings.heatingSetpoint
-                    if (settings.coolingSetpoint) coolAt = settings.coolingSetpoint
-				} else {
-					if (HE) {
-                    	paragraph(smallerTitle("Setpoint Offsets"))
-						if (maximize) paragraph("Setpoint offsets are ADDED to the current thermostat's heating/cooling setpoint. Use negative numbers to reduce the target setpoint, positive to increase it.", width: 9)
-                    } else paragraph(title: "Setpoint Offsets", (maximize?"Setpoint offsets are ADDED to the current thermostat's heating/cooling setpoint. Use negative numbers to reduce the target setpoint, positive to increase it.":''), width: 9)
-                	input(name: "heatOffset", type: "decimal", title: inputTitle("Heating Setpoint Offset?"), defaultValue: 0.0, required: true, range: "-10..10", submitOnChange: true, width: 4)
-					input(name: "coolOffset", type: "decimal", title: inputTitle("Cooling Setpoint Offset?"), defaultValue: 0.0, required: true, range: "-10..10", submitOnChange: true, width: 4)
-                    if (!settings?.heatOffset) {settings.heatOffset = 0.0; app.updateSetting('heatOffset', 0.0); }
-                    if (!settings?.coolOffset) {settings.coolOffset = 0.0; app.updateSetting('coolOffset', 0.0); }
-                    if (cHeatSetpoint && (settings.heatOffset != null)) heatAt = cHeatSetpoint + settings.heatOffset
-                    if (cCoolSetpoint && (settings.coolOffset != null)) coolAt = cCoolSetpoint + settings.coolOffset
-                    if (heatAt && coolAt && maximize) paragraph "In the '${cProgram}' program, the vent${vc>1?'s':''} will open when the observed ambient temperature at the selected " +
-                								"sensor${settings.theSensors?.size()>1?'s':''} is less than ${heatAt}°${unit} or more than ${coolAt}°${unit}"
-                    def overCool
-                    def overCoolOffset
-                    if (settings?.theThermostat) {
-                        overCool = theThermostat.currentValue('dehumidifyWithAC')
-                        overCoolOffset = theThermostat.currentValue('dehumidifyOvercoolOffset')
-                        overCool = ((overCool != null) && ((overCool == true) || (overCool == 'true'))) ? true : false
-                        if (overCool && !overCoolOffset) overCool = false 	// if no offset, or offset is 0.0, then we're not overcooling
-                        if (overCool) {
-                            if (maximize) paragraph "${theThermostat.displayName} is configured to dehumidify using the HVAC to over-cool as much as ${overCoolOffset}°${temperatureScale} lower than the cooling setpoint"
-                            input(name: "overCoolToo", type: "bool", title: "Would you like to overcool this room also?", required: true, defaultValue: false, submitOnChange: true, width: 6)
-                        }
-                    }
+					def modes = getThermostatModes()
+					paragraph
+					input(name: 'theModes', type: 'enum', title: inputTitle("Make vent adjustments only during these thermostat Modes")+' (optional)', required: false, submitOnChange: true,
+						  multiple: true, options: modes, width: 6)
+					if (settings?.theModes) {
+						input(name: 'notModeState', type: 'enum', title: inputTitle("Vent state for excluded Modes?"), required: true, submitOnChange: true, defaultValue: 'unchanged',
+							  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 3)
+						if (notModeState == 'percentage') {
+							input(name: 'notModeLevel', type: "number", title: inputTitle("Vent level for excluded Modes?"), required: true, defaultValue:50, description: '50', range: "0..100", width: 3)
+						}
+					}
 				}
-    		}
+				section(title: smallerTitle("Programs")) {
+					def programs = getThermostatPrograms()
+					programs = programs + ["Vacation"]
+					input(name: "theClimates", type: 'enum', title: inputTitle("Make vent adjustments only during these thermostat Programs")+" (optional)", required: false, submitOnChange: true, 
+						  multiple: true, options: programs, width: 6)
+					if (settings?.theClimates && (settings?.theClimates.size() != programs.size())) {
+						input(name: 'notClimateState', type: 'enum', title: inputTitle("Vent state for excluded Programs?"), required: true, submitOnChange: true, defaultValue: 'unchanged',
+							  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 3)
+						if (notClimateState == 'percentage') {
+							input(name: 'notClimateLevel', type: "number", title: inputTitle("Vent level for excluded Programs?"), required: true, defaultValue:50, description: '50', range: "0..100", width: 3)
+						}
+					}
+
+					if (settings.theSensors) {
+						def ecobeeSensors = []
+						settings?.theSensors.each { 
+							if (it.hasCommand('updateSensorPrograms')) {
+								ecobeeSensors << it
+							}
+						}
+						if (ecobeeSensors?.size() == 1) {
+							if (settings.theClimates) input(name: "enrollClimates", type: 'bool', title: inputTitle("Automatically include sensor ${ecobeeSensors[0].displayName} in the above Programs?"),
+															defaulValue: true, submitOnChange: true, width: 12)     
+							if (settings.enrollClimates && settings.theClimates) {
+								def notTheseClimates = programs - theClimates - ['Vacation']
+								//def these = settings.theClimates.contains(['Vacation']) ? settings.theClimates - ['Vacation'] : settings.theClimates
+								def these = settings.theClimates - ['Vacation']
+								String notThese = ''
+								if (notTheseClimates) notThese = " and removed from (" + notTheseClimates.toString()[1..-2].replace(',',', ') + ')'
+								if (maximize) paragraph "${ecobeeSensors[0].displayName} will be added to (${these.toString()[1..-2].replace('"','').replace(',',', ')})${notThese} for ${theThermostat.displayName}. " +
+																"It will also be removed from ALL Programs when this Helper is Paused."
+							}
+						} else {
+							if (ecobeeSensors == []) paragraph("You have selected more than 1 Ecobee Suite Sensor. At this time, this Helper only supports automatically enrolling a single sensor into Ecobee Programs.")
+							app.updateSetting('enrollClimates', false)
+							settings.enrollClimates = false
+						}
+					}
+				}
+		
+				section(title: smallerTitle("Thermostat Setpoints")) {
+					def cSetpoint
+					def cHeatSetpoint
+					def cCoolSetpoint
+					def cMode
+					def cProgram
+					def cLastRunMode
+
+					input(name: "useThermostat", type: "bool", title: inputTitle("Follow the setpoints on ${settings?.theThermostat?settings.theThermostat.displayName:'the thermostat'}?"), required: true, 
+						  defaultValue: true, submitOnChange: true, width: 6)
+					if (settings.useThermostat == true) {
+						settings.useVirtualStat = false
+						app.updateSetting('useVirtualStat', false)
+					}
+					def heatAt = null
+					def coolAt = null
+					//if (!settings?.useThermostat) {
+						input(name: "useVirtualStat", type: "bool", title: inputTitle("Follow the setpoints on a different thermostat?"), width: 6, required: true, 
+							  defaultValue: !settings.useThermostat, submitOnChange: true)
+						if (settings?.useVirtualStat == true){
+							settings.usrThermostat = false
+							app.updateSetting('useThermostat', false)
+							input(name: "theVirtualStat", type: "capability.thermostat", title: inputTitle("Select a thermostat"),  multiple: false, required: true, submitOnChange: true)
+						}
+					//}
+					if (settings?.useThermostat && settings?.theThermostat) {
+						cSetpoint = 	ST ? settings.theThermostat.currentValue('thermostatSetpoint') 	: 	settings.theThermostat.currentValue('thermostatSetpoint', true)
+						cHeatSetpoint = ST ? settings.theThermostat.currentValue('heatingSetpoint') 	: 	settings.theThermostat.currentValue('heatingSetpoint', true)
+						cCoolSetpoint = ST ? settings.theThermostat.currentValue('coolingSetpoint') 	: 	settings.theThermostat.currentValue('coolingSetpoint', true)
+						cMode = 		ST ? settings.theThermostat.currentValue('thermostatMode') 		: 	settings.theThermostat.currentValue('thermostatMode', true)
+						cProgram = 		ST ? settings.theThermostat.currentValue('currentProgram') 		: 	settings.theThermostat.currentValue('currentProgram', true)
+						cLastRunMode = 	ST ? settings.theThermostat.currentValue('lastRunningMode') 	: 	settings.theThermostat.currentValue('lastRunningMode', true)
+						if (maximize) paragraph("${settings.theThermostat.displayName} is in '${cMode}' mode running the '${cProgram}' program. The heating setpoint is ${cHeatSetpoint}°${unit}, " +
+								  "the cooling setpoint is ${cCoolSetpoint}°${unit}, and the last operation was '${cLastRunMode}'")
+					} else if (settings?.useVirtualStat && settings?.theVirtualStat) {
+						cSetpoint = 	ST ? settings.theVirtualStat.currentValue('thermostatSetpoint') : 	settings.theVirtualStat.currentValue('thermostatSetpoint', true)
+						cHeatSetpoint = ST ? settings.theVirtualStat.currentValue('heatingSetpoint') 	: 	settings.theVirtualStat.currentValue('heatingSetpoint', true)
+						cCoolSetpoint = ST ? settings.theVirtualStat.currentValue('coolingSetpoint') 	: 	settings.theVirtualStat.currentValue('coolingSetpoint', true)
+						cMode = 		ST ? settings.theVirtualStat.currentValue('thermostatMode') 	: 	settings.theVirtualStat.currentValue('thermostatMode', true)
+						cProgram = 		ST ? settings.theVirtualStat.currentValue('schedule') 			: 	settings.theVirtualStat.currentValue('schedule', true)
+						//cLastRunMode = 	ST ? settings.theVirtualStat.currentValue('lastRunningMode') 	: 	settings.theVirtualStat.currentValue('lastRunningMode', true)
+						if (maximize) paragraph("${settings.theVirtualStat.displayName} is in '${cMode}' mode${(cProgram && (cProgram!='null')) ? ' running the \''+cProgram+'\' program':''}. The heating setpoint is ${cHeatSetpoint}°${unit} " +
+								  "and the cooling setpoint is ${cCoolSetpoint}°${unit}")
+					}
+					/////////////////////////////////////////////
+					//
+					// TODO
+					// Do I need a setting for non-Program holds (e.g., Temp, Auto, etc.)
+					//
+					////////////////////////////////////////////
+					if (!settings?.useThermostat && !settings?.useVirtualStat) {  
+						paragraph "\n"+smallerTitle("Manual Setpoints")
+						input(name: "heatingSetpoint", type: "decimal", title: inputTitle("Target heating setpoint?"), required: true, submitOnChange: true, width: 4)
+						input(name: "coolingSetpoint", type: "decimal", title: inputTitle("Target cooling setpoint?"), required: true, submitOnChange: true, width: 4)
+						if (settings.heatingSetpoint) heatAt = settings.heatingSetpoint
+						if (settings.coolingSetpoint) coolAt = settings.coolingSetpoint
+					} else {
+						if (HE) {
+							paragraph(smallerTitle("Setpoint Offsets"))
+							if (maximize) paragraph("Setpoint offsets are ADDED to the current thermostat's heating/cooling setpoint. Use negative numbers to reduce the target setpoint, positive to increase it.", width: 9)
+						} else paragraph(title: "Setpoint Offsets", (maximize?"Setpoint offsets are ADDED to the current thermostat's heating/cooling setpoint. Use negative numbers to reduce the target setpoint, positive to increase it.":''), width: 9)
+						input(name: "heatOffset", type: "decimal", title: inputTitle("Heating Setpoint Offset?"), defaultValue: 0.0, required: true, range: "-10..10", submitOnChange: true, width: 4)
+						input(name: "coolOffset", type: "decimal", title: inputTitle("Cooling Setpoint Offset?"), defaultValue: 0.0, required: true, range: "-10..10", submitOnChange: true, width: 4)
+						if (!settings?.heatOffset) {settings.heatOffset = 0.0; app.updateSetting('heatOffset', 0.0); }
+						if (!settings?.coolOffset) {settings.coolOffset = 0.0; app.updateSetting('coolOffset', 0.0); }
+						if (cHeatSetpoint && (settings.heatOffset != null)) heatAt = cHeatSetpoint + settings.heatOffset
+						if (cCoolSetpoint && (settings.coolOffset != null)) coolAt = cCoolSetpoint + settings.coolOffset
+						if (heatAt && coolAt && maximize) paragraph "In the '${cProgram}' program, the vent${vc>1?'s':''} will open when the observed ambient temperature at the selected " +
+													"sensor${settings.theSensors?.size()>1?'s':''} is less than ${heatAt}°${unit} or more than ${coolAt}°${unit}"
+						def overCool
+						String overCoolOffset
+						if (settings?.theThermostat) {
+							overCool = theThermostat.currentValue('dehumidifyWithAC')
+							overCool = ((overCool != null) && ((overCool == true) || (overCool == 'true'))) ? true : false
+                            if (overCool) {
+                            	overCoolOffset = theThermostat.currentValue('dehumidifyOvercoolOffset').toString()
+                                if ((overCoolOffset == '0') || (overCoolOffset == 'null')) overCool = false		// if no offset, or offset is 0.0, then we're not overcooling
+                            }
+							if (overCool) {
+								if (maximize) paragraph "${theThermostat.displayName} is configured to dehumidify using the HVAC to over-cool as much as ${overCoolOffset}°${temperatureScale} lower than the cooling setpoint"
+								input(name: "overCoolToo", type: "bool", title: "Would you like to overcool this room also?", required: true, defaultValue: false, submitOnChange: true, width: 6)
+							}
+						}
+					}
+				}
+			}
             section(title: smallerTitle("Fan Only State")) {
 				//if (false) input(name: 'closedFanOnly', type: 'bool', title: "Close the vent${vc>1?'s':''} while HVAC is 'fan only'?", defaultValue: false)
                 String foDefault = (settings?.closedFanOnly != null) ? (settings.closedFanOnly ? 'closed' : 'unchanged') : 'unchanged'
                 input(name: 'fanOnlyState', type: 'enum', title: inputTitle("Vent state for 'Fan Only' operation?"), required: true, submitOnChange: true, defaultValue: foDefault,
-                	  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 4)
+                	  options: ['open', 'closed', 'percentage', 'unchanged'], multiple: false, width: 5)
                 if (fanOnlyState == 'percentage') {
-                	input(name: 'fanOnlyLevel', type: "number", title: inputTitle("Fan Only Vent level?"), required: true, defaultValue:50, description: '50', range: "0..100", submitOnChange: true, width: 4)
+                	input(name: 'fanOnlyLevel', type: "number", title: inputTitle("Fan Only Vent level?"), required: true, defaultValue:50, description: '50', 
+						  range: "0..100", submitOnChange: true, width: 4)
                 }
 			}
         }
@@ -375,9 +370,8 @@ void uninstalled() {
 }
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
-    boolean ST = isST
-    boolean HE = !ST
-
+	atomicState.version = getVersionLabel()
+    
     // Housekeeping
     if (settings.closedFanOnly != null) {
     	if (settings.fanOnlyState == null) {
@@ -388,8 +382,7 @@ def initialize() {
         settings.closedFanOnly = null
         if (HE) app.removeSetting('closedFanOnly')
     }
-    atomicState.version = getVersionLabel()
-    atomicState.scheduled = false
+
     // Now, just exit if we are disabled...
 	if (settings.tempDisable) {
         if (settings.disabledVents && (settings.disabledVents != 'unchanged')) {
@@ -409,10 +402,14 @@ def initialize() {
         	log.trace "initialize(): Calling unenrollSensors()"
         	unenrollSensors()
         }
+        atomicState.wasAlreadyPaused = true
         return true
     }
 	if (settings.debugOff) log.info "log.debug() logging disabled"
 	
+    // Not paused anymore
+    atomicState.wasAlreadyPaused = false
+    
     // Ecobee sensors are special: we update the vent status there if SmartRoom is enabled on them
     if (settings.theSensors) {
         def ecobeeSensors = []
@@ -429,44 +426,49 @@ def initialize() {
                      (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
 
 	
-    subscribe(settings.theSensors, 			'temperature', 				changeHandler)	
-	subscribe(settings.theThermostat, 		'thermostatOperatingState', changeHandler)
+    subscribe(settings.theSensors, 			'temperature', 				changeHandler, [filterEvents: true])	
+	subscribe(settings.theThermostat, 		'thermostatOperatingState', changeHandler, [filterEvents: true])
     //subscribe(theThermostat, 				'temperature', 				changeHandler)
-	subscribe(settings.theThermostat,		'thermostatMode', 			changeHandler)
+	subscribe(settings.theThermostat,		'thermostatMode', 			changeHandler, [filterEvents: true])
     //subscribe(theThermostat,				'currentProgram',			changeHandler)
-    subscribe(settings.theVents, 			'level', 					changeHandler)	// In case someone changes them on us
-    subscribe(settings.theVents, 			'switch', 					changeHandler)
+    subscribe(settings.theVents, 			'level', 					changeHandler, [filterEvents: true])	// In case someone changes them on us
+    subscribe(settings.theVents, 			'switch', 					changeHandler, [filterEvents: true])
 	if (settings.theWindows) {
-    	subscribe(settings.theWindows, 		'contact',					changeHandler)
+    	subscribe(settings.theWindows, 		'contact',					changeHandler, [filterEvents: true])
     }
     if (settings.useThermostat) {
-    	subscribe(settings.theThermostat,	'heatingSetpoint', 			changeHandler)
-        subscribe(settings.theThermostat,	'coolingSetpoint', 			changeHandler)
+    	subscribe(settings.theThermostat,	'heatingSetpoint', 			changeHandler, [filterEvents: true])
+        subscribe(settings.theThermostat,	'coolingSetpoint', 			changeHandler, [filterEvents: true])
     //  subscribe(theThermostat, 			'thermostatSetpoint', 		changeHandler)
     } else if (settings.useVirtualStat) {
-    	subscribe(settings.theVirtualStat,	'thermostatOperatingState', changeHandler)
-		subscribe(settings.theVirtualStat,	'thermostatMode', 			changeHandler)
-    	subscribe(settings.theVirtualStat,	'heatingSetpoint', 			changeHandler)
-        subscribe(settings.theVirtualStat,	'coolingSetpoint', 			changeHandler)
+    	subscribe(settings.theVirtualStat,	'thermostatOperatingState', changeHandler, [filterEvents: true])
+		subscribe(settings.theVirtualStat,	'thermostatMode', 			changeHandler, [filterEvents: true])
+    	subscribe(settings.theVirtualStat,	'heatingSetpoint', 			changeHandler, [filterEvents: true])
+        subscribe(settings.theVirtualStat,	'coolingSetpoint', 			changeHandler, [filterEvents: true])
     }
     
     // These don't change much, and we need them frequently, so stash them away and track their changes
     atomicState.heatDifferential = 0.0	// NO LONGER USED theThermostat.currentValue('heatDifferential')
     atomicState.coolDifferential = 0.0	// theThermostat.currentValue('coolDifferential') 
-    def dehumidifyWithAC = theThermostat.currentValue('dehumidifyWithAC')
-    def overcoolOffset = theThermostat.currentValue('dehumidifyOvercoolOffset') ?: 0.0
-    if ((overcoolOffset && (overcoolOffset != 0.0)) && dehumidifyWithAC && ((dehumidifyWithAC == true) || (dehumidifyWithAC == 'true'))) {
+    def dehumidifyWithAC = settings.overCoolToo ? theThermostat.currentValue('dehumidifyWithAC') : false
+    def overcoolOffset =  (settings.overCoolToo && dehumidifyWithAC) ? theThermostat.currentValue('dehumidifyOvercoolOffset') : 0
+    if (((overcoolOffset != null) && (overcoolOffset != 0)) && (dehumidifyWithAC != null) && ((dehumidifyWithAC == true) || (dehumidifyWithAC == 'true'))) {
     	atomicState.dehumidifyWithAC = true
         atomicState.dehumidifyOvercoolOffset = overcoolOffset
     } else {
+    	dehumidifyWithAC = false
+        settings.overCoolToo = false
+        app.updateSetting('overCoolToo', false)
     	atomicState.dehumidifyWithAC = false
         atomicState.dehumidifyOvercoolOffset = 0.0
     }
         
     //subscribe(theThermostat, 'heatDifferential', atomicHandler)
     //subscribe(theThermostat, 'coolDifferential', atomicHandler)
-    subscribe(theThermostat, 				'dehumidifyOvercoolOffset', atomicHandler)
-    subscribe(theThermostat, 				'dehumidifyWithAC', atomicHandler)
+    if (dehumidifyWithAC) {
+        subscribe(theThermostat, 				'dehumidifyOvercoolOffset', atomicHandler)
+        subscribe(theThermostat, 				'dehumidifyWithAC', atomicHandler)
+    }
     
 	atomicState.currentStatus = [:]
 	atomicState.heatOrCool = null
@@ -565,7 +567,7 @@ def programUpdateHandler(evt) {
     cancelReservation(evt.device.currentValue('thermostatId') as String, 'programChange')
     unschedule(clearReservation)
     unsubscribe(evt.device)
-    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler)
+    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler, [filterEvents: true])
     def pendingRequest = atomicState.updateSensorRequest
     if (pendingRequest != null) {
     	atomicState.updateSensorRequest = null
@@ -574,7 +576,7 @@ def programUpdateHandler(evt) {
 }
 def programWaitHandler(evt) {
     unsubscribe(evt.device)
-    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler)
+    if (!settings?.tempDisable) subscribe(evt.device, 'temperature', changeHandler, [filterEvents: true])
     String tid = evt.device.currentValue('thermostatId') as String
     def count = countReservations(tid, 'programChange')
     if ((count > 0) && !haveReservation( tid, 'programChange' )) {
@@ -651,7 +653,7 @@ def makeClimateChange( sensor, adds, removes ) {
 }
 boolean needClimateChange(sensor, List adds, List removes) {
 	if (!adds && !removes) return false
-    String ac = isST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
+    String ac = ST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
     def activeClimates = ac ? ((ac == '[]') ? [] : ac[1..-2].tokenize(', ').sort(false)) : []
     log.debug "activeClimates: ${activeClimates}"
     boolean updatesToDo = false
@@ -681,27 +683,39 @@ boolean needClimateChange(sensor, List adds, List removes) {
     }
 	return updatesToDo
 }
-
+//@Field Random rand = new Random()
+//@Field String lastEvent = "foo"
 void changeHandler(evt) {
-	//log.debug "changeHandler(): ${evt.displayName} ${evt.name} ${evt.value}"
-	updateTheVents()
-	runIn( 2, checkAndSet, [overwrite: true])		// collapse multiple inter-related events into a single thread
+	//String thisEvent = evt.id
+	LOG("changeHandler(): ${evt.displayName} ${evt.name} ${evt.value}, ${evt.id}", 4, null, 'debug')
+    //def lastEvent = atomicState.lastEvent
+//    if (evt.id != lastEvent) {
+//    	lastEvent = evt.id
+//    	int randomSeconds = rand.nextInt(40)
+    	//log.debug "randomSeconds: ${randomSeconds}"
+//        log.debug "new"
+		updateTheVents()
+		runIn( 2, checkAndSet, [overwrite: true])		// collapse multiple inter-related events into a single thread
+    	//atomicState.lastEvent = thisEvent
+//    } else {
+//    	log.debug "dup"
+//    }
 }
-
 void checkAndSet() {
 	if (!atomicState.version || (atomicState.version != getVersionLabel())) {
     	LOG('Helper version changed, re-initializing...',1,null,'info')
     	updated()
     }
+//    log.debug "c&s"
 	setTheVents(checkTemperature())
 }
-
 String checkTemperature() {
-	boolean ST = isST
+	//boolean ST = isST
     
     // Check if we're supposed to do anything during the currently active Ecobee Program (or the upcoming Program if in Smart Recovery)
     if (settings?.theClimates) {
     	def currentProgram = ST ? theThermostat.currentValue('currentProgram') 		: theThermostat.currentValue('currentProgram', true)
+        if (!currentProgram) currentProgram = 'null'
         if (!settings.theClimates.contains(currentProgram)) {
             // If we are in (Smart Recovery), check to see if we're supposed to be adjusting during the upcoming program
             def nextProgram = ST ? theThermostat.currentValue('nextProgramName') 	: theThermostat.currentValue('nextProgramName', true)
@@ -829,7 +843,7 @@ String checkTemperature() {
                 LOG("${theThermostat.displayName} is running 'Fan Only', room temperature is ${cTemp}°, vents-->${vents}${settings?.fanOnlyState == 'percentage'?'%':''}",3,null,'info')
             }
 		}    
-		if ((vents == 'open') && (settings.adjustAlways || (cOpState != 'fan only'))) { // let 'Fan Only' run even if windows are open || (vents.isNumber())) {
+		if ((vents == 'open') && (settings.adjustAlways || ((cOpState != 'fan only') || settings.closeFanOnly))) { // let 'Fan Only' run even if windows are open, unless overriden in settings (1.8.02)
         	if (settings.theWindows) {
             	boolean openWindows = ST ? settings.theWindows*.currentValue('contact').contains('open') : settings.theWindows*.currentValue('contact', true).contains('open')
                 if (openWindows) {
@@ -845,7 +859,7 @@ String checkTemperature() {
 }
 
 def getAverageTemperature() {
-	boolean ST = isST
+	//boolean ST = isST
     
 	def tTemp = 0.0G
     Integer i = 0
@@ -878,7 +892,7 @@ void setTheVents(ventState) {
     	allVentsLevel(ventState as Integer)
         newVentState = (ventState.toInteger() <= settings.minimumVentLevel.toInteger()) ? 'closed' : 'open'
     } else if (ventState == 'unchanged') {
-    	boolean ST = isST	
+    	//boolean ST = isST	
     	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
     					(settings.theKeenVents ?: []) + (settings.theHCKeenVents ?: []) + 
                     	 (settings.theGenericVents ?: []) + (settings.theGenericSwitches ?: [])
@@ -979,7 +993,7 @@ void allVentsLevel(level) {
 }
 
 void ventOff( theVent ) {
-	boolean ST = isST	
+	//boolean ST = isST	
     
 	def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
     def minVentLevel = (settings.minimumVentLevel ?: 1) as Integer
@@ -1030,8 +1044,9 @@ void ventOff( theVent ) {
 }
 
 void ventOn( theVent ) {
-	boolean ST = isST
+	//boolean ST = isST
     boolean changed = false
+    
     def hasSetLevel = (theVent.hasCapability('switchLevel') || theVent.hasCommand('setLevel'))
     def maxVentLevel = (settings.maximumVentLevel ?: 98) as Integer
     def minVentLevel = (settings.minimumVentLevel ?: 1) as Integer
@@ -1083,7 +1098,7 @@ void ventOn( theVent ) {
 }
 
 void ventLevel( theVent, level=50 ) {
-	boolean ST = isST
+	//boolean ST = isST
     if (level == 0) {
     	ventOff(theVent)
         return
@@ -1141,6 +1156,7 @@ def getThermostatPrograms() {
 
 def getThermostatModes() {
     String tm = settings?.theThermostat?.currentValue('supportedThermostatModes')
+	log.debug "thermostatModes: ${tm}"
     return (tm ? ((tm == '[]') ? [] : tm[1..-2].tokenize(', ').sort(false)) : [])
     //return theModes.sort(false)
 }
@@ -1176,7 +1192,7 @@ List getGuestList(String tid, String type='modeOff') {
 }
 
 void updateMyLabel() {
-	boolean ST = isST
+	//boolean ST = isST
 	
 	String flag
 	if (ST) {
@@ -1228,42 +1244,39 @@ void generateSensorsEvents( Map dataMap ) {
         parent.getChildDevice(DNI)?.generateEvent(dataMap)
     }
 }
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-    log.debug "pauseOn()"
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
         settings.tempDisable = true
-		atomicState.globalPause = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
-        updateMyLabel()
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
-    log.debug "pauseOff()"
-    log.debug "paused? ${settings.tempDisable}"
 	if (settings.tempDisable) {
-    log.debug "already? ${atomicState.wasAlreadyPaused}"
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
             settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
-            updateMyLabel()
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 def roundIt( value, decimals=0 ) {
 	return (value == null) ? null : value.toBigDecimal().setScale(decimals, BigDecimal.ROUND_HALF_UP) 
@@ -1272,48 +1285,97 @@ def roundIt( BigDecimal value, decimals=0 ) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-    if (logType == 'debug') {
-    	if (!settings?.debugOff) log.debug message
-    } else if (logType == 'info') {
-    	if (!settings?.infoOff) log.info message
-    } else log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+    switch (logType) {
+    	case 'error':
+        	log.error message
+            break;
+        case 'warn':
+        	log.warn message
+            break;
+        case 'trace':
+        	log.trace message
+            break;
+        case 'info':
+        	if (!settings?.infoOff) log.info message
+            break;
+        case 'debug':
+        default:
+        	if (!settings?.debugOff) log.debug message
+        	break;
+    }
 }
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
-String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
+}
+// SmartThings/Hubitat Portability Library (SHPL)
+// Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
+}
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
 }
 
-// SmartThings/Hubitat Portability Library (SHPL)
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
 String getHubPlatform() {
-	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
-											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
-    return pf
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
 }
-boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
