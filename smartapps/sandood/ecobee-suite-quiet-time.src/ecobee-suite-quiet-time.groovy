@@ -26,9 +26,15 @@
  *  1.7.10 - Fixed labels (again), added infoOff, cleaned up preferences setup ***
  *	1.7.11 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
- *	1.8.01- General Release
+ *	1.8.01 - General Release
+ *	1.8.02 - More busy bees
+ *	1.8.03 - No longer LOGs to parent (too much overhead for too little value)
+ *	1.8.04 - New SHPL, using Global Fields instead of atomicState
+ *	1.8.05 - Allow individual un-pause from peers, even if was already paused
  */
-String getVersionNum()		{ return "1.8.01" }
+import groovy.transform.Field
+
+String getVersionNum()		{ return "1.8.05" }
 String getVersionLabel() 	{ return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -53,8 +59,8 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	boolean ST = isST
-	boolean HE = !ST
+	//boolean ST = isST
+	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     String defaultName = "Quiet Time"
 	
@@ -113,7 +119,7 @@ def mainPage() {
                 }
             }
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused; Resume below" 
+				paragraph getFormat("warning","This Helper is temporarily paused...")  
 			} else { 
             	input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
 					  required: true, multiple: true, submitOnChange: true)
@@ -164,16 +170,17 @@ def mainPage() {
 				input(name: 'fanOff', type: "bool", title: inputTitle("Turn off the Fan?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
 				if (settings.fanOff) {
 					if (maximize) paragraph('Turning off the fan will not stop automatic circulation, even if the HVAC is also off.', width: 8)
-					input(name: 'circOff', type: "bool", title: inputTitle('Also disable Circulation?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
+					input(name: 'circOff', type: "bool", title: inputTitle('Also disable Circulation?'), required: true, defaultValue: false, submitOnChange: true, 
+						  width: 4)
 					if (settings.circOff) {
-						paragraph("Circulation will also be disabled.", width: 4)
+						if (maximize) paragraph("Circulation will also be disabled.", width: 4)
 					} else {
-						paragraph("Circulation will not be modified.", width: 4)
+						if (maximize) paragraph("Circulation will not be modified.", width: 4)
 					}
-					if (HE) paragraph("", width: 4)
-					if (HE) paragraph("", width: 4)
+					if (HE && maximize) paragraph("", width: 4)
+					if (HE && maximize) paragraph("", width: 4)
 					if (maximize) paragraph("At the end of Quiet Time, the Fan Mode will be restored to its prior setting${settings.circOff?', and circulation will be re-enabled':''}.", width: 8)
-				} else if (HE) paragraph("", width: 8)
+				} else if (HE && maximize) paragraph("", width: 8)
 					
 				if (settings.hvacOff || settings.hvacMode || settings.fanOff) {
 					input(name: 'modeResume', type: 'bool', title: inputTitle('Also resume the Current Program at the end of Quiet Time (recommended)?'), defaultValue: true, required: true, width: 10)
@@ -305,7 +312,7 @@ def initialize() {
     def statState = [:]
     settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
-		if (isST) {
+		if (ST) {
 			statState[tid] = [
 								thermostatMode: 	stat.currentValue('thermostatMode'),
 								thermostatFanMode: 	stat.currentValue('thermostatFanMode'),
@@ -454,7 +461,7 @@ def quietOnHandler(evt=null) {
 void turnOnQuietTime() {
 	LOG("Turning On Quiet Time",2,null,'info')
 	def statState = atomicState.statState
-	boolean ST = isST
+	//boolean ST = isST
 	
     clearReservations()			// clean slate
 	settings.theThermostats.each() { stat ->
@@ -553,7 +560,7 @@ def quietOffHandler(evt=null) {
         return
     }
 	LOG("Quiet Time Off requested",2,null,'info')
-	boolean ST = isST
+	//boolean ST = isST
     
     if ((settings.qtAutoOff != null) && (settings.qtAutoOff != '(Disabled)')) { unschedule(turnQuietOff) }
    	atomicState.isQuietTime = false
@@ -811,37 +818,42 @@ void sendMessage(notificationMessage) {
 	}
 }
 */
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
-		atomicState.globalPause = true
+        settings.tempDisable = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
 	if (settings.tempDisable) {
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
+            settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 void updateMyLabel() {
-	boolean ST = isST
+	//boolean ST = isST
     
 	String flag = ST ? ' (paused)' : '<span '
 	
@@ -863,48 +875,98 @@ void updateMyLabel() {
 }
 
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-	if (logType == 'debug') {
-    	if (!settings?.debugOff) log.debug message
-    } else if (logType == 'info') {
-    	if (!settings?.infoOff) log.info message
-    } else log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+    switch (logType) {
+    	case 'error':
+        	log.error message
+            break;
+        case 'warn':
+        	log.warn message
+            break;
+        case 'trace':
+        	log.trace message
+            break;
+        case 'info':
+        	if (!settings?.infoOff) log.info message
+            break;
+        case 'debug':
+        default:
+        	if (!settings?.debugOff) log.debug message
+        	break;
+    }
 }
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
-String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
 
 // SmartThings/Hubitat Portability Library (SHPL)
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
-String getHubPlatform() {
-	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
-											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
-    return pf
+// Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
 }
-boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
+}
+
+String getHubPlatform() {
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
+}
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
