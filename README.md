@@ -1,5 +1,19 @@
 ![Universal Ecobee Suite, Version 1.8.00](https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Ecobee-1-8-00-header.png) 
 ======================================================
+### NOTICE: Latest updates posted 11 April 2020 at 7:30am
+* **Latest update announcements**
+    - [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/58)
+    - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/140)
+* **1 April 2020 update announcements**
+   - [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/56)
+   - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/108)
+* **30 March 2020 update announcements**
+  - [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/47)
+  - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/82)
+* **29 March 2020 update announcements**
+  - [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/46)
+  - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/77)
+
 <a name="overview"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Overview-1-8-00-section.png" width="50%" alt="Overview" /></a>
 
 Ecobee Suite is a collection of applications and device drivers that serve to integrate Ecobee Thermostats with the SmartThings and Hubitat Elevation home automation platforms.
@@ -141,8 +155,8 @@ The following components are part of the Suite:
 
 Here are links to the working version of the repository being developed and maintained:
 * [GitHub.com/SANdood](https://github.com/SANdood/Ecobee-Suite) 
-* [Hubitat Community](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-7-yes-its-still-free/15813)
-* [SmartThings Community](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-7-still-free/163929).
+* [Hubitat Community](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839)
+* [SmartThings Community](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405).
 
 --------------------------------
 ### <a name="motivation">Motivation</a>
@@ -1020,7 +1034,7 @@ On Hubitat, you can get the same information for any App. Simply select the App 
 ----------------------------------------------
 
 ## <a name="reporting-issues">Reporting Issues</a>
-All issues or feature requests should be submitted to the latest release thread on the SmartThings or Hubitat Community. For the major release version 1.7.\*\*, please use the platform-appropriate thread: [on SmartThings](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-7-still-free/163929) or [Hubitat](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-7-yes-its-still-free/15813)
+All issues or feature requests should be submitted to the latest release thread on the SmartThings or Hubitat Community. For the major release version 1.7.\*\*, please use the platform-appropriate thread: [on SmartThings](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405) or [Hubitat](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839)
 
 If you have complaints, please email them to me directly at either [storageanarchy@gmail.com](mailto://storageanarchy@gmail.com) or to @storageanarchy on the SmartThings and/or Hubitat Communities.
 
