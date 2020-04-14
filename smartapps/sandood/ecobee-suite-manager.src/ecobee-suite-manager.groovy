@@ -5406,7 +5406,7 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 	} 
 	
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":[{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + 
-							'","holdType":' + theHoldType + '"}}]}'
+							'","holdType":"' + theHoldType + '"}}]}'
 
 	if (debugLevelFour) LOG("setHold() for thermostat ${child.device.displayName} - about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
 	
