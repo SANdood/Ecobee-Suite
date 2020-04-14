@@ -11,7 +11,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.29"
+      "version": "1.8.30"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
