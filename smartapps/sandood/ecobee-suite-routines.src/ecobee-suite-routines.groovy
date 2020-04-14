@@ -15,30 +15,24 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.04 - noncached currentValue() on HE
- *	1.7.05 - Belt & suspenders for thermostatHold compares
- *	1.7.06 - Cosmetic Cleanups
- *	1.7.07 - Fixed variable definition (ncCp)
- *	1.7.08 - Cleaned up messages (a little - more still to do)
- *	1.7.09 - Fixed SMS text entry
- *	1.7.10 - Fixing private method issue caused by grails, "Vacation" from currentProgramName
- *	1.7.11 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.12 - Optimized isST/isHE, formatting, Global Pause
- *	1.7.13 - Fixed holdType == ES Manager setting, & getEcobeePrograms()
- *	1.7.14 - Clean up appLabel in sendMessage(), eliminate duplicate currentProgram/currentProgramName subscriptions
- *	1.7.15 - Remove fanMode setting, fix fanMinOnTime to not break the hold
- *	1.7.16 - Added option to disable local display of log.debug() logs, support Notification devices on ST
- *	1.7.17 - Option to skip notification if Thermostat Mode is 'Off'
- *	1.7.18 - Fixed helper labelling
- *	1.7.19 - Fixed labels (again), added infoOff, cleaned up preferences setup
- *	1.7.20 - Added minimize UI
- *	1.7.21 - Layout tweaks for Hubitat
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
+ *	1.8.02 - Updated WARNING formatting
+ *	1.8.03 - More busy bees
+ *	1.8.04 - Send simultaneous notification Announcements to multiple Echo Speaks devices
+ *	1.8.05 - No longer LOGs to parent (too much overhead for too little value)
+ *	1.8.06 - New SHPL, using Global Fields instead of atomicState
+ *	1.8.07 - Fixed appDisplayName in sendMessage
+ *	1.8.08 - Fixed mixed Notification devices in sendMessage
+ *	1.8.09 - Refactored sendMessage / sendNotifications
+ *	1.8.10 - Allow individual un-pause from peers, even if was already paused
+ *	1.8.11 - HOTFIX Fix Switch on/off widget in settings
  */
-String getVersionNum()		{ return "1.8.01" }
-String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 import groovy.json.*
+import groovy.transform.Field
+
+String getVersionNum()		{ return "1.8.11" }
+String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 				"ecobee Suite Routines",
@@ -62,8 +56,8 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	boolean ST = isST
-	boolean HE = !ST
+	//boolean ST = isST
+	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     String defaultName = "Mode${ST?'/Routine':''}/Switches/Program"
 	
@@ -123,7 +117,7 @@ def mainPage() {
                 }
             }
         	if(settings.tempDisable) { 
-				paragraph "WARNING: Temporarily Paused; Resume below" 
+				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
         		input ("myThermostats", "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), required: true, 
 					   multiple: true, submitOnChange: true)            
@@ -134,7 +128,7 @@ def mainPage() {
 			section(title: sectionTitle("Trigger Selection")) {
         		// Settings option for using Mode or Routine
 				input(name: "modeOrRoutine", title: inputTitle("Select a Trigger"), type: "enum", required: true, multiple: false, submitOnChange: true, width: 6,
-					  options: (isST?["Mode":'Location Mode Change',"Routine":'Routine Execution',"Switch(es)":'Switch(es) On/Off',"Ecobee Program":'Ecobee Program Change']:
+					  options: (ST?["Mode":'Location Mode Change',"Routine":'Routine Execution',"Switch(es)":'Switch(es) On/Off',"Ecobee Program":'Ecobee Program Change']:
 							   /*HE*/["Mode":'Location Mode Change',"Switch(es)":'Switch(es) On/Off',"Ecobee Program":'Ecobee Program Change']))
 					  
 				if (settings?.modeOrRoutine != null) {
@@ -152,6 +146,7 @@ def mainPage() {
 							def s = (settings.startSwitches.size() > 1)
 							input(name: "startOn", type: "enum", title: inputTitle("${s?'Are':'Is'} turned:"), required: true, multiple: false, options: ["on","off"], submitOnChange: true, 
 								  defaultValue: 'on', width: 2)
+                            if (settings.startOn == null) { app.updateSetting('startOn', 'on'); settings.startOn = 'on'; }
 							if (settings.startOn != null) {
 								input(name: "startOff", type: 'bool', title: inputTitle("Turn the switch${s?'es':''} ${settings.startOn=='on'?'off':'on'} after running Actions?"), defaultValue: 'false', 
 									  submitOnChange: true, width: 5)
@@ -258,7 +253,7 @@ def mainPage() {
 
 			if (ST) {
 				section("Notifications") {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
+					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (settings.notify) {
 						input(name: "noOffNotify", type: "bool", title: inputTitle("Suppress notifications if Thermostat Mode is Off?"), required: true, 
 							  defaultValue: false, submitOnChange: true)
@@ -266,6 +261,13 @@ def mainPage() {
 							  required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
 						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
 							  required: ((settings.phone == null) && !settings.speak && !settings.pushNotify), multiple: true, submitOnChange: true)
+                        if (settings?.notifiers) {
+                            List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+                            if (echo) {
+                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
+                                	  defaultValue: false, submitOnChange: true)
+                            }
+                        }
 						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
 							  required: (!settings.pushNotify && !settings.notifiers && !settings.speak), submitOnChange: true)
 					}
@@ -289,12 +291,19 @@ def mainPage() {
                 }
 			} else {		// HE
 				section(sectionTitle("Notifications")) {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
+					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (settings.notify) {
 						input(name: "noOffNotify", type: "bool", title: inputTitle("Suppress notifications if Thermostat Mode is Off?"), required: true, 
-							  defaultValue: false, submitOnChange: true, width: 9)
+							  defaultValue: false, submitOnChange: true, width: 8)
                         input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true,
                               required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+                    	if (settings?.notifiers) {
+                            List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+                            if (echo) {
+                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
+                                	  defaultValue: false, submitOnChange: true)
+                            }
+                        }
 					}
 				}
 				if (settings.notify) {
@@ -310,9 +319,7 @@ def mainPage() {
 					}
 				}
                 if (maximize) {
-					section(){
-						paragraph "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken"		
-					}
+					section("A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken"	){}
                 }
 			}
 		}
@@ -585,9 +592,9 @@ void changeSwitches() {
 }
 
 def changeProgramHandler(evt) {
-	LOG("changeProgramHander() entered with evt: ${evt.name}: ${evt.value}", 4, null, 'trace')
-	boolean ST = atomicState.isST
-	boolean HE = !ST
+	LOG("changeProgramHandler() entered with evt: ${evt.name}: ${evt.value}", 4, null, 'trace')
+	//boolean ST = atomicState.isST
+	//boolean HE = !ST
 	
 	if (settings.modeOrRoutine != "Switch(es)") {
 		// If we aren't using switches, validate that we got the intended event
@@ -787,7 +794,7 @@ String whatHoldType(statDevice) {
             }
             break;
         case 'Thermostat Setting':
-       		String statHoldType = atomicState.isST ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
+       		String statHoldType = ST ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
             switch(statHoldType) {
             	case 'useEndTime4hour':
                 	sendHoldType = 4
@@ -859,95 +866,110 @@ def getThermostatModes() {
 
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
-    
-    	// Always send to Hello Home / Location Event log
-	if (atomicState.isST) { 
+    // Always send to Hello Home / Location Event log
+	if (ST) { 
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 	}
     
-    if (!settings.notify) return
-    
-    if (settings.noOffNotify && myThermostats*.currentValue('thermostatMode').contains('off')) {
-    	LOG("Skipping notification because all thermostats are Off and Off Notifications are disabled",2, null, "info")
-        return
+    if (settings.notify) {
+        if (settings.noOffNotify && myThermostats*.currentValue('thermostatMode').contains('off')) {
+            LOG("Skipping notification because all thermostats are Off and Off Notifications are disabled",2, null, "info")
+            return
+        }
+    	String msgPrefix = atomicState.appDisplayName + " at ${location.name}: "
+        String msg = msgPrefix + notificationMessage
+        boolean addFrom = true // (msgPrefix && !msgPrefix.startsWith("From "))
+		if (ST) {
+			if (settings.notifiers) {
+				sendNotifications(msgPrefix, notificationMessage)               
+            }
+			if (settings.phone) { // check that the user did select a phone number
+				if ( settings.phone.indexOf(";") > 0){
+					def phones = settings.phone.split(";")
+					for ( def i = 0; i < phones.size(); i++) {
+						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
+						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
+					}
+				} else {
+					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
+					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
+				}
+			} 
+			if (settings.pushNotify) {
+				LOG("Sending Push to everyone", 3, null, 'warn')
+				sendPushMessage(msg)								// Push to everyone
+			}
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak( (addFrom?"From ":"") + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText( (addFrom?"From ":"") + msg )
+					}
+				}
+			}
+		} else {		// HE
+			if (settings.notifiers) {
+                sendNotifications(msgPrefix, notificationMessage)               
+            }
+			if (settings.speak) {
+				if (settings.speechDevices != null) {
+					settings.speechDevices.each {
+						it.speak((addFrom?"From ":"") + msg )
+					}
+				}
+				if (settings.musicDevices != null) {
+					settings.musicDevices.each {
+						it.setLevel( settings.volume )
+						it.playText((addFrom?"From ":"") + msg )
+					}
+				}
+			}
+		}
     }
-    
-    String msg = "${atomicState.appDisplayName} at ${location.name}: " + notificationMessage		// for those that have multiple locations, tell them where we are
-    if (atomicState.isST) {
-        if (settings.notifiers != null) {
-            settings.notifiers.each {									// Use notification devices (if any)
-                it.deviceNotification(msg)
-            }
-        }
-        if (settings.phone) { // check that the user did select a phone number
-            if ( settings.phone.indexOf(";") > 0){
-                def phones = settings.phone.split(";")
-                for ( def i = 0; i < phones.size(); i++) {
-                    LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-                    sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-                }
-            } else {
-                LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-                sendSmsMessage(settings.phone.trim(), msg)				// Only to SMS contact
-            }
-        } 
-        if (settings.pushNotify) {
-            LOG("Sending Push to everyone", 3, null, 'warn')
-            sendPushMessage(msg)										// Push to everyone
-        }
-        if (settings.speak) {
-            if (settings.speechDevices != null) {
-                settings.speechDevices.each {
-                    it.speak( "From " + msg )
-                }
-            }
-            if (settings.musicDevices != null) {
-                settings.musicDevices.each {
-                    it.setLevel( settings.volume )
-                    it.playText( "From " + msg )
-                }
-            }
-        }
-    } else {		// isHE
-        if (settings.notifiers != null) {
-            settings.notifiers.each {							// Use notification devices on Hubitat
-                it.deviceNotification(msg)
-            }
-        }
-        if (settings.phone != null) {
-            if ( settings.phone.indexOf(",") > 0){
-                def phones = phone.split(",")
-                for ( def i = 0; i < phones.size(); i++) {
-                    LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-                    sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-                }
-            } else {
-                LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-                sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
-            }
-        }
-        if (settings.speak) {
-            if (settings.speechDevices != null) {
-                settings.speechDevices.each {
-                    it.speak( "From " + msg )
-                }
-            }
-            if (settings.musicDevices != null) {
-                settings.musicDevices.each {
-                    it.setLevel( settings.volume )
-                    it.playText( "From " + msg )
-                }
-            }
-        }
-
-    }
-
 }
-
+// Handles sending to Notification devices, with special handling for Echo Speaks devices (if settings.echoAnnouncements is true)
+boolean sendNotifications( String msgPrefix, String msg ) {
+	if (!settings.notifiers) {
+		LOG("sendNotifications(): no notifiers!",2,null,'warn')
+		return false
+	}
+    if (settings.echoAnnouncements) {
+        List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+        List notEcho = echo ? settings.notifiers - echo : settings.notifiers        
+        List echoDeviceObjs = []
+        if (echo?.size()) {
+			// Get all the Echo Speaks devices to speak at once
+			echo.each { 
+				String deviceType = it.currentValue('deviceType') as String
+				String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
+				echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+			}
+			if (echoDeviceObjs?.size()) {
+				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
+				def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
+				echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
+			}
+			// The rest get a standard deviceNotification
+			if (notEcho) notEcho*.deviceNotification(msg)
+		} else {
+			// No Echo Speaks devices
+			settings.notifiers*.deviceNotification(msg)
+		}
+	} else {
+		// Echo Announcements not enabled
+		settings.notifiers*.deviceNotification(msg)
+	}
+	return true
+}
 void updateMyLabel() {
-	boolean ST = atomicState.isST
+	//boolean ST = atomicState.isST
     
 	String flag = ST ? ' (paused)' : '<span '
 	
@@ -967,34 +989,39 @@ void updateMyLabel() {
 		if (app.label != myLabel) app.updateLabel(myLabel)
 	}
 }
-def pauseOn() {
+def pauseOn(global = false) {
 	// Pause this Helper
-	atomicState.wasAlreadyPaused = (settings.tempDisable && !atomicState.globalPause)
+	atomicState.wasAlreadyPaused = settings.tempDisable //!atomicState.globalPause)
 	if (!settings.tempDisable) {
-		LOG("performing Global Pause",2,null,'info')
+		LOG("pauseOn(${global}) - performing ${global?'Global':'Helper'} Pause",2,null,'info')
 		app.updateSetting("tempDisable", true)
-		atomicState.globalPause = true
+        settings.tempDisable = true
+		atomicState.globalPause = global
 		runIn(2, updated, [overwrite: true])
+        // updateMyLabel()
 	} else {
-		LOG("was already paused, ignoring Global Pause",3,null,'info')
+		LOG("pauseOn(${global}) - was already paused...",3,null,'info')
 	}
 }
-def pauseOff() {
+def pauseOff(global = false) {
 	// Un-pause this Helper
 	if (settings.tempDisable) {
-		def wasAlreadyPaused = atomicState.wasAlreadyPaused
-		if (!wasAlreadyPaused) { // && settings.tempDisable) {
-			LOG("performing Global Unpause",2,null,'info')
+		// Allow peer Apps to individually re-enable anytime
+        // NB: they won't be able to unpause us if we are in a global pause (they will also be paused)
+        if (!global || !atomicState.wasAlreadyPaused) { 													// 
+			LOG("pauseOff(${global}) - performing ${global?'Global':'Helper'} Unpause",2,null,'info')
 			app.updateSetting("tempDisable", false)
+            settings.tempDisable = false
+            atomicState.wasAlreadyPaused = false
 			runIn(2, updated, [overwrite: true])
 		} else {
-			LOG("was paused before Global Pause, ignoring Global Unpause",3,null,'info')
+			LOG("pauseOff(${global}) - was already paused before Global Pause, ignoring...",3,null,'info')
 		}
 	} else {
-		LOG("was already unpaused, skipping Global Unpause",3,null,'info')
+		LOG("pauseOff(${global}) - not currently paused...",3,null,'info')
 		atomicState.wasAlreadyPaused = false
 	}
-	atomicState.globalPause = false
+	atomicState.globalPause = global
 }
 // return all the fan modes that ALL thermostats support
 def getThermostatFanModes() {
@@ -1011,51 +1038,97 @@ def getThermostatFanModes() {
     return theFanModes*.capitalize().sort(false)
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
-	String msg = "${atomicState.appDisplayName} ${message}"
-    if (logType == null) logType = 'debug'
-	if (logType == 'debug') {
-    	if (!settings?.debugOff) log.debug message
-    } else if (logType == 'info') {
-    	if (!settings?.infoOff) log.info message
-    } else log."${logType}" message
-	parent.LOG(msg, level, null, logType, event, displayEvent)
+    switch (logType) {
+    	case 'error':
+        	log.error message
+            break;
+        case 'warn':
+        	log.warn message
+            break;
+        case 'trace':
+        	log.trace message
+            break;
+        case 'info':
+        	if (!settings?.infoOff) log.info message
+            break;
+        case 'debug':
+        default:
+        	if (!settings?.debugOff) log.debug message
+        	break;
+    }
 }
 
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
+String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return isHE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return isHE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return isHE ? getFormat('header-nobee','<h3><b>'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (isHE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
-String sampleTitle	(String txt) 	{ return isHE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return isHE ? '<b>'+txt+'</b>'								: txt }
+String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
+String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
+String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
+String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
+String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
+String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
 String getFormat(type, myText=""){
-	if(type == "header-ecobee") return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
-	if(type == "header-nobee") 	return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
-    if(type == "line") 			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
-	if(type == "title")			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+	switch(type) {
+		case "header-ecobee":
+			return "<div style='color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${theBee}${myText}</div>"
+			break;
+		case "header-nobee":
+			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
+			break;
+    	case "line":
+			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			break;
+		case "title":
+			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
+			break;
+		case "warning":
+			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			break;
+		case "note":
+			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			break;
+		default:
+			return myText
+			break;
+	}
 }
-
-// **************************************************************************************************************************
 // SmartThings/Hubitat Portability Library (SHPL)
-// Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
-String  getPlatform() { return (physicalgraph?.device?.HubAction ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST()     { return (atomicState?.isST != null) ? atomicState.isST : (physicalgraph?.device?.HubAction ? true : false) }					// if (isST) ...
-boolean getIsHE()     { return (atomicState?.isHE != null) ? atomicState.isHE : (hubitat?.device?.HubAction ? true : false) }						// if (isHE) ...
+// Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
+String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+boolean getIsST() {
+	if (ST == null) {
+    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
+        if (HE == null) HE = getIsHE()
+        ST = !HE
+    }
+    return ST    
+}
+boolean getIsHE() {
+	if (HE == null) {
+    	HE = hubitat?.device?.HubAction ? true : false
+        if (ST == null) ST = !HE
+    }
+    return HE
+}
 
 String getHubPlatform() {
-	def pf = getPlatform()
-    atomicState?.hubPlatform = pf			// if (atomicState.hubPlatform == 'Hubitat') ... 
-											// or if (state.hubPlatform == 'SmartThings')...
-    atomicState?.isST = pf.startsWith('S')	// if (atomicState.isST) ...
-    atomicState?.isHE = pf.startsWith('H')	// if (atomicState.isHE) ...
-    return pf
+    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
+	return hubPlatform
 }
-boolean getIsSTHub() { return atomicState.isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return atomicState.isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return isST }					// if (isSTHub) ...
+boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return isST ? parent?.settings?."${settingName}" : parent?."${settingName}"	
+	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field String  hubPlatform 	= getHubPlatform()
+@Field boolean ST 			= getIsST()
+@Field boolean HE 			= getIsHE()
+@Field String  debug		= 'debug'
+@Field String  error		= 'error'
+@Field String  info			= 'info'
+@Field String  trace		= 'trace'
+@Field String  warn			= 'warn'
