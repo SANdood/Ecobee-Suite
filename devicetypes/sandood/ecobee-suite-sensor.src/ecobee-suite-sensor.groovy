@@ -36,11 +36,12 @@
  *	1.8.04 - New SHPL, using Global Fields instead of State
  *	1.8.05 - Fixed icon for Samsung Smart Things mobile app (the new one)
  *	1.8.06 - Clean up null vs. 'null' attributes - HE doesn't overwrite existing attrs with null
+  *	1.8.07 - HOTFIX: DeviceWatch fix for hubless ST locations
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum() 		{ return "1.8.06" }
+String getVersionNum() 		{ return "1.8.07" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 
@@ -309,7 +310,11 @@ void updated() {
 			updateDataValue("EnrolledUTDH", "true")
             sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
 			sendEvent(name: "healthStatus", value: "online")
-			sendEvent(name: "DeviceWatch-Enroll", value: "{\"protocol\": \"cloud\", \"scheme\":\"untracked\", \"hubHardwareId\": \"${location.hubs[0].id}\"}", displayed: false)
+            if (location.hubs[0] && location.hubs[0].id) {
+            	sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked", hubHardwareId: location.hubs[0].id.toString()]), displayed: false)
+            } else {
+            	sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
+            }
 		}
 	}
 }
