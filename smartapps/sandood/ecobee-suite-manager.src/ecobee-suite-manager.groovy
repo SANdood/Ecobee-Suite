@@ -50,13 +50,14 @@
  *	1.8.26 - Added global vs. helper pause (helpers can override global wasAlreadyPaused)
  *	1.8.27 - Refactored update collection and queueing, schedule/schedText now sent independently from ESM, clear callQueue when ESM is re-initialized
  *	1.8.28 - HOTFIX: fix to show thermostat names in live logging
- *	1.8.29 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.29 - HOTFIX: setHold JSON error
+ *	1.8.30 - Updated formatting; added Do Not Disturb Modes & Time window
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.29" }
+String getVersionNum()		{ return "1.8.30" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -5431,7 +5432,7 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 	} 
 	
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":[{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + 
-							'","holdType":' + theHoldType + '"}}]}'
+							'","holdType":"' + theHoldType + '"}}]}'
 
 	if (debugLevelFour) LOG("setHold() for thermostat ${child.device.displayName} - about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
 	
