@@ -30,10 +30,11 @@
  *	1.8.13 - Refactored sendMessage / sendNotifications
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
  *	1.8.15 - HOTFIX: formatting for HVAC Off delays
+ *	1.8.16 - HOTFIX: wouldn't even schedule HVAC Off
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.15" }
+String getVersionNum()		{ return "1.8.16" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
