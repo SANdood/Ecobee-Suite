@@ -562,6 +562,7 @@ def preferencesPage() {
             	paragraph "A 'HelloHome' notification is always sent to the Location Event log"
             }
 		}
+        section(title: sectionTitle("Configuration")) {}
 		if (ST) {
 			section("Mobile Device") {
 				input(name: 'mobile', type: 'enum', options: ["Android", "iOS"], title: 'Select your primary mobile device type', defaultValue: 'iOS', submitOnChange: true, required: true, multiple: false)
@@ -614,6 +615,7 @@ def preferencesPage() {
 				  options:["0", "1", "2"], submitOnChange: true, width: 4)
             if (settings?.tempDecimals == null) { app.updateSetting('tempDecimals', digits); settings?.tempDecimals = digits; }
 		}
+        section(title: sectionTitle("Operations")) {}
 		section(title: smallerTitle("Debug Log Level")) {
         	paragraph("Select the debug logging level. Higher levels send more information to IDE Live Logging. A setting of 2 is recommended for normal operations.", width: 8)
 			if (HE) paragraph("", width: 4)
