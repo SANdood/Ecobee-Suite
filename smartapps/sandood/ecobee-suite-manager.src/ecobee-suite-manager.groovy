@@ -51,7 +51,7 @@
  *	1.8.27 - Refactored update collection and queueing, schedule/schedText now sent independently from ESM, clear callQueue when ESM is re-initialized
  *	1.8.28 - HOTFIX: fix to show thermostat names in live logging
  *	1.8.29 - HOTFIX: setHold JSON error
- *	
+ *	1.8.30 - HOTFIX: for auth error on SmartThings
  */
 import groovy.json.*
 import groovy.transform.Field
@@ -947,7 +947,7 @@ def callback() {
             }
 		} catch(Exception e) {
             LOG("auth callback() Exception: ${e}", 1, null, "error")
-			if (resp) parseAuthResponse(resp)
+			//if (resp) parseAuthResponse(resp)
         }
 		if (atomicState.authToken) { success() } else { fail() }
 
