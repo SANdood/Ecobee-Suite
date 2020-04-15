@@ -51,13 +51,14 @@
  *	1.8.27 - Refactored update collection and queueing, schedule/schedText now sent independently from ESM, clear callQueue when ESM is re-initialized
  *	1.8.28 - HOTFIX: fix to show thermostat names in live logging
  *	1.8.29 - HOTFIX: setHold JSON error
- *	1.8.30 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.30 - HOTFIX: for auth error on SmartThings
+ *	1.8.31 - Updated formatting; added Do Not Disturb Modes & Time window
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.30" }
+String getVersionNum()		{ return "1.8.31" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -931,7 +932,7 @@ void parseAuthResponse(resp) {
 	resp.headers.each {
         str += "\n${it.name}: ${it.value}, "
     }
-    log.debug "response headers: ${str}"
+    //log.debug "response headers: ${str}"
 	log.debug("response status: "+resp.status)
     // Trying to parse the params throws an error on ST
     //str = ""
@@ -974,7 +975,7 @@ def callback() {
             }
 		} catch(Exception e) {
             LOG("auth callback() Exception: ${e}", 1, null, "error")
-			if (resp) parseAuthResponse(resp)
+			//if (resp) parseAuthResponse(resp)
         }
 		if (atomicState.authToken) { success() } else { fail() }
 
