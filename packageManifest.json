@@ -138,54 +138,6 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
       "required": true,
       "version": "1.8.07"
-    },
-    {
-      "id": "71a545f8-bfe1-4cff-aeb3-59f5bde16e6d",
-      "name": "EcoNet Vent",
-      "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/EcoNet%20Vent.groovy",
-      "required": false,
-      "version": "1.8.01"
-    },
-    {
-      "id": "c4cadeb4-91e1-48f6-85a4-fb963fd57559",
-      "name": "HubConnect EcoVent",
-      "namespace": "shackrat",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect%20%20EcoVent.groovy",
-      "required": false,
-      "version": "1.8.01"
-    },
-    {
-      "id": "abe02ac0-14e1-43ce-a867-502f470be79c",
-      "name": "Keen Home Smart Vent",
-      "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/Keen%20Home%20Smart%20Vent.groovy",
-      "required": false,
-	  "version": "1.8.01"
-    },
-    {
-      "id": "71ea8020-77d5-4776-b8ae-6d491ea724b5",
-      "name": "HubConnect Keen Home Smart Vent",
-      "namespace": "shackrat",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect%20Keen%20Home%20Smart%20Vent.groovy",
-      "required": false,
-      "version": "1.8.01"
-    },
-    {
-      "id": "1ca88f35-538e-462e-aa51-cad12f8e83d1",
-      "name": "HubConnect Ecobee Suite Thermostat",
-      "namespace": "shackrat",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect-Ecobee-Suite-Thermostat.groovy",
-      "required": false,
-      "version": "1.8.01"
-    },
-    {
-      "id": "26a62a35-374b-494b-9337-069fd324f441",
-      "name": "HubConnect Ecobee Suite Sensor",
-      "namespace": "shackrat",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect-Ecobee-Suite-Sensor.groovy",
-      "required": false,
-      "version": "1.8.01"
     }
   ]
 }
