@@ -31,11 +31,12 @@
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
  *	1.8.15 - HOTFIX: formatting for HVAC Off delays
  *	1.8.16 - HOTFIX: wouldn't even schedule HVAC Off
- *	1.8.17 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.17 - Reapply prior hotfix
+ *	1.8.18 - Updated formatting; added Do Not Disturb Modes & Time window
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.17" }
+String getVersionNum()		{ return "1.8.18" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
