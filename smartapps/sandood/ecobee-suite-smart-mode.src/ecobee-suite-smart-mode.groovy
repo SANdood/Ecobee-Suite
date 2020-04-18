@@ -438,6 +438,19 @@ def mainPage() {
 				}
                 if (settings.notify && (echo || settings.speak)) {
                 	section(smallerTitle("Do Not Disturb")) {
+                    	/* if (settings.parentDND == null) { app.updateSetting('parentDND', false); settings.parentDND = false; }
+                    	input(name: "parentDND", type: "bool", title: inputTitle("Load ES Manager's Do Not Disturb settings?"), submitOnChange: true, width: 6, defaultValue: false)
+                        if (settings.parentDND) {
+                    		List parentModes = getParentSetting("speakModes")
+                            app.updateSetting("speakModes", parentModes); settings.speakModes = parentModes;
+                            def parentTimeStart = getParentSetting("speakTimeStart")
+                            app.updateSetting("speakTimeStart", parentTimeStart); settings.speakTimeStart = parentTimeStart;
+                            def parentTimeEnd = getParentSetting("speakTimeEnd")
+                            app.updateSetting("speakTimeEnd", parentTimeEnd); settings.speakTimeEnd = parentTimeEnd;
+                            paragraph(width: 6, "ES Manager's Modes: ${parentModes}, Start: ${parentTimeStart}, End: ${parentTimeEnd}")
+                            app.updateSetting('parentDND', false); settings.parentDND = false;
+                        } else if (HE) paragraph("", width: 6)
+                        */
                     	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
                         input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
                         input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
