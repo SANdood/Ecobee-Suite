@@ -29,11 +29,12 @@
  *	1.8.13 - Refactored sendMessage / sendNotifications
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
  *	1.8.15 - HOTFIX: allow Ambient Weather Station on Hubitat
+ *	1.8.16 - Updated formatting; added Do Not Disturb Modes & Time window
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.15" }
+String getVersionNum()		{ return "1.8.16" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -359,6 +360,7 @@ def mainPage() {
 				//paragraph HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
 			}			 
 			if (ST) {
+				List echo = []
 				section("Notifications") {
 					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
 					if (settings.notify) {
@@ -367,9 +369,9 @@ def mainPage() {
 						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
 							  required: ((settings.phone == null) && !settings.speak && !settings.pushNotify), multiple: true, submitOnChange: true)
                         if (settings?.notifiers) {
-                            List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+                            echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
                             if (echo) {
-                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
+                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?", 
                                 	  defaultValue: false, submitOnChange: true)
                             }
                         }
@@ -378,7 +380,7 @@ def mainPage() {
 					}
 				}
 				if (settings.notify) {
-					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "") {
+					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "Speech Devices") {
 						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 						if (settings.speak) {
 							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", 
@@ -389,48 +391,84 @@ def mainPage() {
 						}
 					}
 				}
+				if (settings.notify && (echo || settings.speak)) {
+                	section("Do Not Disturb") {
+                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true)
+                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications from:'), required: (settings.speakTimeEnd != null))
+                        input(name: "speakTimeEnd", type: "time", title: inputTitle("Only speak notifications until:"), required: (settings.speakTimeStart != null))
+						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
+										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
+						if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
+                    }
+                }
 				if (maximize)  {
 					section() {
 						paragraph ( "A notification is always sent to the Hello Home log whenever an action is taken")
 					}
 				}
 			} else {		// HE
+            	List echo = []
 				section(sectionTitle("Notifications")) {
 					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
-					if (settings.notify) {
-						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true,
+				}
+				if (settings.notify) {
+					section(smallerTitle("Notification Devices")) {
+						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
 							  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
-                        if (settings?.notifiers) {
-                            List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                            if (echo) {
-                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
-                                	  defaultValue: false, submitOnChange: true)
-                            }
-                        }
+						if (settings?.notifiers) {
+							echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+							if (echo) {
+								input(name: "echoAnnouncements", type: "bool", title: inputTitle("Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?"), 
+									  defaultValue: false, submitOnChange: true)
+							}
+						}
 					}
 				}
 				if (settings.notify) {
-					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "") {
+					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
 						input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
 						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select speech devices"), 
+							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select Speech devices"), 
 								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select music devices"), 
+							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select Music devices"), 
 								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
 							input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
 						}
 					}
 				}
+                if (settings.notify && (echo || settings.speak)) {
+                	section(smallerTitle("Do Not Disturb")) {
+                    	/* if (settings.parentDND == null) { app.updateSetting('parentDND', false); settings.parentDND = false; }
+                    	input(name: "parentDND", type: "bool", title: inputTitle("Load ES Manager's Do Not Disturb settings?"), submitOnChange: true, width: 6, defaultValue: false)
+                        if (settings.parentDND) {
+                    		List parentModes = getParentSetting("speakModes")
+                            app.updateSetting("speakModes", parentModes); settings.speakModes = parentModes;
+                            def parentTimeStart = getParentSetting("speakTimeStart")
+                            app.updateSetting("speakTimeStart", parentTimeStart); settings.speakTimeStart = parentTimeStart;
+                            def parentTimeEnd = getParentSetting("speakTimeEnd")
+                            app.updateSetting("speakTimeEnd", parentTimeEnd); settings.speakTimeEnd = parentTimeEnd;
+                            paragraph(width: 6, "ES Manager's Modes: ${parentModes}, Start: ${parentTimeStart}, End: ${parentTimeEnd}")
+                            app.updateSetting('parentDND', false); settings.parentDND = false;
+                        } else if (HE) paragraph("", width: 6)
+                        */
+                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
+                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
+                        input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
+						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
+										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
+						if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
+                    }
+                }
 				if (maximize) {
 					section(){
-						paragraph "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken"		
+						paragraph "A <i>'HelloHome'</i> notification is always sent to the Location Event log whenever an action is taken"		
 					}
 				}
 			}
-			if (true) { //((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak && (settings?.speechDevices || settings?.musicDevices)))) {
-				section() {
-					href name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
-								 description: "Customize notification messages", state: isCustomized()
+			if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak && (settings?.speechDevices || settings?.musicDevices)))) {
+				section(smallerTitle("Customization")) {
+					href(name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
+								 description: "Customize the notification messages", state: isCustomized())
 				}
 			}
 		}
@@ -1758,6 +1796,27 @@ String getMsgTstat(statList = []) {
 	}
 	return theTstat
 }
+boolean notifyNowOK() {
+	// If both provided, both must be true; else only the provided one needs to be true
+	boolean modeOK = settings.speakModes ? (settings.speakModes && settings.speakModes.contains(location.mode)) : true
+	boolean timeOK = settings.speakTimeStart? myTimeOfDayIsBetween(timeToday(settings.speakTimeStart), timeToday(settings.speakTimeEnd), new Date(), location.timeZone) : true
+	return (modeOK && timeOK)
+}
+private myTimeOfDayIsBetween(String fromTime, String toTime, Date checkDate, String timeZone) {
+	return myTimeOfDayIsBetween(timeToday(fromTime), timeToday(toTime), checkDate, timeZone)
+}
+private myTimeOfDayIsBetween(Date fromDate, Date toDate, Date checkDate, timeZone)     {
+	if (toDate == fromDate) {
+		return false	// blocks the whole day
+	} else if (toDate < fromDate) {
+		if (checkDate.before(fromDate)) {
+			fromDate = fromDate - 1
+		} else {
+			toDate = toDate + 1
+		}
+	}
+    return (!checkDate.before(fromDate) && !checkDate.after(toDate))
+}
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "info")
     if (settings.notify) {
@@ -1784,7 +1843,7 @@ void sendMessage(notificationMessage) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
 				sendPushMessage(msg)								// Push to everyone
 			}
-			if (settings.speak) {
+			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
 					settings.speechDevices.each {
 						it.speak( (addFrom?"From ":"") + msg )
@@ -1801,7 +1860,7 @@ void sendMessage(notificationMessage) {
 			if (settings.notifiers) {
                 sendNotifications(msgPrefix, msg)               
             }
-			if (settings.speak) {
+			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
 					settings.speechDevices.each {
 						it.speak((addFrom?"From ":"") + msg )
@@ -1829,31 +1888,33 @@ boolean sendNotifications( String msgPrefix, String msg ) {
 		LOG("sendNotifications(): no notifiers!",2,null,'warn')
 		return false
 	}
+    
+    List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+    List notEcho = echo ? settings.notifiers - echo : settings.notifiers        
+    List echoDeviceObjs = []
     if (settings.echoAnnouncements) {
-        List echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-        List notEcho = echo ? settings.notifiers - echo : settings.notifiers        
-        List echoDeviceObjs = []
         if (echo?.size()) {
-			// Get all the Echo Speaks devices to speak at once
-			echo.each { 
-				String deviceType = it.currentValue('deviceType') as String
-				String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-				echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
-			}
-			if (echoDeviceObjs?.size()) {
+        	// Get all the Echo Speaks devices to speak at once
+            echo.each { 
+                String deviceType = it.currentValue('deviceType') as String
+                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
+                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+            }
+			if (echoDeviceObjs?.size() && notifyNowOK()) {
 				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
 				def devJson = new groovy.json.JsonOutput().toJson(echoDeviceObjs)
 				echo[0].sendAnnouncementToDevices(msg, (msgPrefix?:atomicState.appDisplayName), echoDeviceObjs)	// , changeVol, restoreVol) }
 			}
 			// The rest get a standard deviceNotification
-			if (notEcho) notEcho*.deviceNotification(msg)
+			if (notEcho.size()) notEcho*.deviceNotification(msg)
 		} else {
 			// No Echo Speaks devices
 			settings.notifiers*.deviceNotification(msg)
 		}
 	} else {
-		// Echo Announcements not enabled
-		settings.notifiers*.deviceNotification(msg)
+		// Echo Announcements not enabled - just do deviceNotifications, but only if Do Not Disturb is not on
+        if (echo?.size() && notifyNowOK()) echo*.deviceNotification(msg)
+		if (notEcho.size()) notEcho*.deviceNotification(msg)
 	}
 	return true
 }
@@ -1934,7 +1995,7 @@ String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SA
 String pageTitle	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
 String pageTitleOld (String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>')	: txt }
 String sectionTitle (String txt)	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>'				: txt) : '' }
+String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
 String sampleTitle	(String txt)	{ return HE ? '<b><i>'+txt+'<i></b>'						: txt }
 String inputTitle	(String txt)	{ return HE ? '<b>'+txt+'</b>'								: txt }
 String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }

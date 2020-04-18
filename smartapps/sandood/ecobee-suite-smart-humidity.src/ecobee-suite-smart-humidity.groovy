@@ -20,11 +20,12 @@
  *	1.8.04 - New SHPL, using Global Fields instead of atomicState
  *	1.8.05 - Allow individual un-pause from peers, even if was already paused
  *	1.8.06 - Enhanced isOkNow() check
+ *	1.8.07 - Updated formatting; added Do Not Disturb Modes & Time window
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.06" }
+String getVersionNum()		{ return "1.8.07" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Humidity Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -739,7 +740,7 @@ String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SA
 String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
 String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
 String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle	(String txt) 	{ return txt ? (HE ? '<h3><b>'+txt+'</b></h3>' 				: txt) : '' }
+String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
 String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
 String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
 String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }

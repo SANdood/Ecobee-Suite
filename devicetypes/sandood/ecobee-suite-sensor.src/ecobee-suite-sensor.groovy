@@ -36,7 +36,7 @@
  *	1.8.04 - New SHPL, using Global Fields instead of State
  *	1.8.05 - Fixed icon for Samsung Smart Things mobile app (the new one)
  *	1.8.06 - Clean up null vs. 'null' attributes - HE doesn't overwrite existing attrs with null
-  *	1.8.07 - HOTFIX: DeviceWatch fix for hubless ST locations
+  *	1.8.07 - HOTFIX: DeviceWatch fix for hubless ST locations 
  */
 import groovy.json.*
 import groovy.transform.Field

@@ -39,8 +39,9 @@
  *	1.8.10 - Optimizations for HE (no need to update *Display attributes)
  *	1.8.11 - schedule/schedText now sent independently from ESM
  *	1.8.12 - HOTFIX: DeviceWatch fix for hubless ST locations
+ *	1.8.13 - Attribute cleanup
  */
-String getVersionNum() 		{ return "1.8.12" }
+String getVersionNum() 		{ return "1.8.13" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -135,7 +136,7 @@ metadata {
 		attribute 'disablePreCooling', 						'STRING'
 		attribute 'disablePreHeating', 						'STRING'
 		attribute 'drAccept', 								'STRING'
-        attribute 'ecoPlus',								'STRING'
+        //attribute 'ecoPlus',								'STRING'
 		attribute 'ecobeeConnected', 						'STRING'
 		attribute 'eiLocation', 							'STRING'
 		attribute 'electricityBillCycleMonths', 			'STRING'
