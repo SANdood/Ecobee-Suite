@@ -22,7 +22,7 @@
  *	1.8.06 - Allow individual un-pause from peers, even if was already paused
  *	1.8.07 - Fix to workaround improper dehumidifyOvercoolOffset setting from thermostat (null when should be 0)
  *	1.8.08 - Enhanced currentProgram() check
- *	1.8.09 - Updated formatting
+ *	1.8.09 - Updated formatting 
  */
 import groovy.json.*
 import groovy.transform.Field
