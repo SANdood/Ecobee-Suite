@@ -57,6 +57,7 @@
  *	1.8.32 - Fixed attribute updates (typo && (null == false))
  *	1.8.33 - Optimized sensorStates into a single Map
  *	
+
  */
 import groovy.json.*
 import groovy.transform.Field
