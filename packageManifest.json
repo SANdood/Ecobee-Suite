@@ -20,7 +20,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.15"
+      "version": "1.8.17"
     },
     {
       "id": "74d41ded-9a35-4916-98e3-2309364b477b",
