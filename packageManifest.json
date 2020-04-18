@@ -11,7 +11,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.31"
+      "version": "1.8.33"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -20,7 +20,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.16"
+      "version": "1.8.18"
     },
     {
       "id": "74d41ded-9a35-4916-98e3-2309364b477b",
@@ -129,7 +129,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.8.12"
+      "version": "1.8.13"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
