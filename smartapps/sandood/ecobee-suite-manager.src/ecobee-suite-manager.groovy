@@ -1,5 +1,4 @@
 /**
- *	Based on original code Copyright 2015 SmartThings /**
  *	Based on original code Copyright 2015 SmartThings 
  *	Additional changes Copyright 2016 Sean Kendall Schneyer
  *	Additional changes Copyright 2017, 2018, 2019 Barry A. Burke
@@ -56,12 +55,13 @@
  *	1.8.31 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.32 - Fixed attribute updates (typo && (null == false))
  *	1.8.33 - Optimized sensorStates into a single Map
+ *	1.8.34 - HOTFIX typo causing extraneous updates to statInfo attributes
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.33" }
+String getVersionNum()		{ return "1.8.34" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -2688,26 +2688,26 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 						}
 					}
 					// if (stat.oemCfg) tempOemCfg[tid] =	stat.oemCfg
-					Map tempInfo = [brand:			stat.brand,
+					HashMap tempInfo = [brand:			stat.brand,
 									features:		stat.features,
 									identifier:		stat.identifier as String,
 									isRegistered:	stat.isRegistered,
 									modelNumber:	stat.modelNumber,
 									name:			stat.name
-                            	   ]
+                            	   ] as HashMap
                     if (true) {
                         if (!tempStatInfo) tempStatInfo = atomicState.statInfo
                         if (!tempStatInfo || !tempStatInfo[tid] || (tempStatInfo[tid] != tempInfo)) {
                             statInfoUpdated = true
                             statUpdates[tid].add('statInfo')
-                            tempStatInfo[tid] = tempInfo
+                            tempStatInfo[tid] = tempInfo as HashMap
                         }
                     }
 				}
 				if (runtimeUpdated || forcePoll) {
 					if (stat.runtime) {
 						// Collect only the data values we use - no need to deal with the date/time/revisions (that always change)
-						Map temp = [actualHumidity:		stat.runtime.actualHumidity,
+						HashMap temp = [actualHumidity:		stat.runtime.actualHumidity,
 									actualTemperature:	stat.runtime.actualTemperature,
 									connected:			stat.runtime.connected,
 									desiredCool:		stat.runtime.desiredCool,
@@ -2733,7 +2733,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
                             } else {
                             	statUpdates[tid].add('rtReally')
                             }
-							tempRuntime[tid] = temp
+							tempRuntime[tid] = temp as HashMap
 						}
 					}                 
 					if (stat.remoteSensors)	{
@@ -4304,7 +4304,7 @@ void updateThermostatData() {
                 	tempStatInfo[tid].each { key, value ->
                         String deviceVal = ((value == null) || (value == "")) ? 'null' : value.toString()
                         deviceValues << [(key.toString()): deviceVal]
-                        if (changeDevice[tid].(kety.toString()) != deviceVal) {
+                        if (changeDevice[tid].(key.toString()) != deviceVal) {
                             data << [ (key.toString()): deviceVal ]
                             if (!devChanged) devChanged = true
                         }
