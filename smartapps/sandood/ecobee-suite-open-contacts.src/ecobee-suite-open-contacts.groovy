@@ -33,10 +33,11 @@
  *	1.8.16 - HOTFIX: wouldn't even schedule HVAC Off
  *	1.8.17 - Reapply prior hotfix
  *	1.8.18 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.19 - HOTFIX: Notifications not being sent
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.18" }
+String getVersionNum()		{ return "1.8.19" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -65,6 +66,11 @@ def mainPage() {
 	//boolean ST = isST
 	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
+    boolean notify = false
+	if (settings?.notify != null) {
+    	if (ST) app.deleteSetting('notify')		// clean up old garbage
+    	if (HE) app.removeSetting('notify')
+	}
     String defaultName = "Contacts & Switches"
     
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
@@ -143,7 +149,7 @@ def mainPage() {
     
 		if (!settings.tempDisable && ((settings.theThermostats?.size() > 0) || (settings.myThermostats?.size() > 0))) {
 			section(title: sectionTitle("Triggers")+(ST?"\n":'')+smallerTitle("Contact Sensors")) {
-				input(name: "contactSensors", title: inputTitle("Select Contact Sensors: "), type: "capability.contactSensor", required: false, multiple: true,  submitOnChange: true, width: 6)
+				input(name: "contactSensors", title: inputTitle("Select Contact Sensors: "), type: "capability.contactSensor", required: (!settings?.theSwitches), multiple: true,  submitOnChange: true, width: 6)
                 if (settings.contactSensors) {
                 	input(name: 'contactOpen', type: 'bool', title: inputTitle("Trigger Actions when ${settings.contactSensors.size()>1?'any of the contacts are':'the contact is'} open?"), 
                     	  required: true, defaultValue: true, submitOnChange: true, width: 8)
@@ -151,7 +157,7 @@ def mainPage() {
                 }
 			}
             section(title: smallerTitle("Switches")) {
-            	input(name: "theSwitches", title: inputTitle("Select Switches: "), type: "capability.switch", required: false, multiple: true,  submitOnChange: true, width: 6)
+            	input(name: "theSwitches", title: inputTitle("Select Switches: "), type: "capability.switch", required: (!settings?.contactSensors), multiple: true,  submitOnChange: true, width: 6)
                 if (settings.theSwitches) {
                 	input(name: 'switchOn', type: 'bool', title: inputTitle("Trigger Actions when ${settings.theSwitches.size()>1?'any of the switches are':'the switch is'} turned on?"), 
                     	  required: true, defaultValue: true, submitOnChange: true, width: 8)
@@ -210,6 +216,7 @@ def mainPage() {
 				List echo = []
 				section("Notifications") {
 					if (settings?.whichAction != "HVAC Actions Only") {
+                    	notify = true
 						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, 
 							  required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
 						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
@@ -225,7 +232,7 @@ def mainPage() {
 							  required: (!settings.pushNotify && !settings.notifiers && !settings.speak), submitOnChange: true)
 					}
 				}
-				if (settings.notify) {
+				if (notify) {
 					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "Speech Devices") {
 						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
 						if (settings.speak) {
@@ -237,7 +244,7 @@ def mainPage() {
 						}
 					}
 				}
-				if (settings.notify && (echo || settings.speak)) {
+				if (notify && (echo || settings.speak)) {
                 	section("Do Not Disturb") {
                     	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true)
                         input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications from:'), required: (settings.speakTimeEnd != null))
@@ -256,6 +263,7 @@ def mainPage() {
             	List echo = []
 				section(sectionTitle("Notifications")) {}
 				if (settings?.whichAction != "HVAC Actions Only") {
+                	notify = true
 					section(smallerTitle("Notification Devices")) {
 						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
 							  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
@@ -268,7 +276,7 @@ def mainPage() {
 						}
 					}
 				}
-				if (settings.notify) {
+				if (notify) {
 					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
 						input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
 						if (settings.speak) {
@@ -280,7 +288,7 @@ def mainPage() {
 						}
 					}
 				}
-                if (settings.notify && (echo || settings.speak)) {
+                if (notify && (echo || settings.speak)) {
                 	section(smallerTitle("Do Not Disturb")) {
                     	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
                         input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
@@ -296,7 +304,7 @@ def mainPage() {
 					}
 				}
 			}
-			if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak && (settings?.speechDevices || settings?.musicDevices)))) {
+			if (notify && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak && (settings?.speechDevices || settings?.musicDevices)))) {
 				section(smallerTitle("Customization")) {
 					href(name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
 								 description: "Customize the notification messages", state: isCustomized())
@@ -1374,8 +1382,9 @@ private myTimeOfDayIsBetween(Date fromDate, Date toDate, Date checkDate, timeZon
     return (!checkDate.before(fromDate) && !checkDate.after(toDate))
 }
 void sendMessage(notificationMessage) {
+	boolean notify = (settings?.whichAction != "HVAC Actions Only")
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "info")
-    if (settings.notify) {
+    if (notify) {
     	String msgPrefix = getMsgPrefix()
         String msg = (msgPrefix + notificationMessage.replaceAll(':','')).replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
         boolean addFrom = (msgPrefix && !msgPrefix.startsWith("From "))
