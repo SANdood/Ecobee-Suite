@@ -30,11 +30,12 @@
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
  *	1.8.15 - HOTFIX: allow Ambient Weather Station on Hubitat
  *	1.8.16 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.17 - Fixed location.mode subscription
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.16" }
+String getVersionNum()		{ return "1.8.17" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -814,7 +815,7 @@ boolean initialize() {
 	}
 	//atomicState.locModeEnabled = settings.theModes ? settings.theModes.contains(location.mode) : true
 	if (settings.theModes) {
-		subscribe(location, locationModeChangeHandler)
+		subscribe(location, "mode", locationModeChangeHandler)
 		atomicState.locModeEnabled = settings.theModes.contains(location.mode)
 	} else { atomicState.locModeEnabled = true }
 	
@@ -982,7 +983,7 @@ def tempChangeHandler(evt) {
 						latest = settings.darkSkyNetWeatherDriver.currentState('relativeHumidity', true)
 					} else if (settings.netatmoOutdoorModule) {			// both ST & HE
 						latest = ST ? settings.netatmoOutdoorModule.currentState('relativeHumidity') : settings.netatmoOutdoorModule.currentState('relativeHumidity', true)
-					}
+					} 
 					if (latest.numberValue != null) {
 						h = latest.numberValue
 						LOG("Outside Humidity is: ${h}%",3,null,'info')
