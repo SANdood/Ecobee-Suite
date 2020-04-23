@@ -30,7 +30,7 @@
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
  *	1.8.15 - HOTFIX: allow Ambient Weather Station on Hubitat
  *	1.8.16 - Updated formatting; added Do Not Disturb Modes & Time window
- *	1.8.17 - Fixed location.mode subscription
+ *	1.8.17 - Fixed location.mode subscription, type error on setThermostatProgram
  */
 import groovy.json.*
 import groovy.transform.Field
@@ -1186,10 +1186,10 @@ def temperatureUpdate( BigDecimal temp ) {
 								// nobody else has a reservation on modeOff
 								if (desiredMode && (cMode != desiredMode)) it.setThermostatMode(desiredMode)
 								if (desiredProgram && (cProgram != desiredProgram)) {
-									def sendHoldType = whatHoldType(stat)
-									def sendHoldHours = null
-									if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
-										sendHoldHours = sendHoldType
+									String sendHoldType = whatHoldType(stat)
+									Integer sendHoldHours = null
+									if ((sendHoldType != null) && sendHoldType.isInteger()) {
+										sendHoldHours = sendHoldType.toInteger()
 										sendHoldType = 'holdHours'
 									}
 									LOG("desiredProgram: ${desiredProgram}, sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
@@ -1215,10 +1215,10 @@ def temperatureUpdate( BigDecimal temp ) {
 							cancelReservation(tid, 'modeOff')	// just in case
 							if (desiredMode && (cMode != desiredMode)) { it.setThermostatMode(desiredMode); changed = true }
 							if (desiredProgram && (cProgram != desiredProgram)) {
-								def sendHoldType = whatHoldType(stat)
-								def sendHoldHours = null
-								if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
-									sendHoldHours = sendHoldType
+								String sendHoldType = whatHoldType(stat)
+								Integer sendHoldHours = null
+								if ((sendHoldType != null) && sendHoldType.isInteger()) {
+									sendHoldHours = sendHoldType.toInteger()
 									sendHoldType = 'holdHours'
 								}
 								LOG("sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}",3,null,'info')
@@ -1468,7 +1468,7 @@ String whatHoldType(statDevice) {
 		case '4 Hours':
 			sendHoldType = 4
 		case 'Specified Hours':
-			if (settings.holdHours && settings.holdHours.isNumber()) {
+			if (settings.holdHours && settings.holdHours.isInteger()) {
 				sendHoldType = settings.holdHours
 			} else if ((parentHoldType == 'Specified Hours') && (parentHoldHours != null)) {
 				sendHoldType = parentHoldHours
