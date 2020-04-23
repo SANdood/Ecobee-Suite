@@ -58,12 +58,13 @@
  *	1.8.34 - HOTFIX: typo causing extraneous updates to statInfo attributes
  *	1.8.35 - HOTFIX: fixed disconnected notification message
  *	1.8.36 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
+ *	1.8.37 - HOTFIX: log new "touSetback" event
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.36" }
+String getVersionNum()		{ return "1.8.37" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -3915,6 +3916,10 @@ void updateThermostatData() {
                         currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco' : 'Eco!'		// Tag mandatory DR events
                         currentClimateId = runningEvent.name as String
                         currentClimateType = 'program'
+                        break;
+                    case 'touSetback':
+                    	currentClimateName = 'touSetback'
+                        log.debug "touSetback event: ${runningEvent}"
                         break;
                     default:		
                         LOG("Unexpected runningEvent.type: (${runningEvent.type}) - please notify Barry",1,null,'warn')
