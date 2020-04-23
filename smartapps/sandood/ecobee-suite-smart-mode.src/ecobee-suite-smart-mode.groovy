@@ -30,7 +30,7 @@
  *	1.8.14 - Allow individual un-pause from peers, even if was already paused
  *	1.8.15 - HOTFIX: allow Ambient Weather Station on Hubitat
  *	1.8.16 - Updated formatting; added Do Not Disturb Modes & Time window
- *	1.8.17 - Fixed location.mode subscription, type error on setThermostatProgram
+ *	1.8.17 - HOTFIX: location.mode subscription; sendHoldHours in setThermostatProgram()
  */
 import groovy.json.*
 import groovy.transform.Field
@@ -1504,7 +1504,7 @@ String whatHoldType(statDevice) {
 	}
 	if (sendHoldType) {
 		LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
-		return sendHoldType
+		return sendHoldType as String
 	} else {
 		LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
 		return 'indefinite'
