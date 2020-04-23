@@ -31,11 +31,12 @@
  *	1.8.15 - HOTFIX: allow Ambient Weather Station on Hubitat
  *	1.8.16 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.17 - HOTFIX: location.mode subscription; sendHoldHours in setThermostatProgram()
+ *	1.8.18 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.17" }
+String getVersionNum()		{ return "1.8.18" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1898,8 +1899,9 @@ boolean sendNotifications( String msgPrefix, String msg ) {
         	// Get all the Echo Speaks devices to speak at once
             echo.each { 
                 String deviceType = it.currentValue('deviceType') as String
-                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+                // deviceSerial is an attribute as of Echo Speaks device version 3.6.2.0
+                String deviceSerial = (it.currentValue('deviceSerial') ?: it.deviceNetworkId.toString().split(/\|/).last()) as String
+                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: deviceSerial]) 
             }
 			if (echoDeviceObjs?.size() && notifyNowOK()) {
 				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
