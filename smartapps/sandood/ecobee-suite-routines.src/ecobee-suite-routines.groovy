@@ -28,11 +28,12 @@
  *	1.8.10 - Allow individual un-pause from peers, even if was already paused
  *	1.8.11 - HOTFIX Fix Switch on/off widget in settings
  *	1.8.12 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.13 - HOTFIX: sendHoldHours in setThermostatProgram()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.12" }
+String getVersionNum()		{ return "1.8.13" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -731,10 +732,10 @@ def changeProgramHandler(evt) {
            				// Looks like we are setting a Hold: 
                 		def fanSet = false
 
-                        def sendHoldType = whatHoldType(stat)
-    					def sendHoldHours = null
-    					if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
-    						sendHoldHours = sendHoldType
+                        String sendHoldType = whatHoldType(stat)
+    					Integer sendHoldHours = null
+    					if ((sendHoldType != null) && sendHoldType.isInteger()) {
+    						sendHoldHours = sendHoldType.toInteger()
     						sendHoldType = 'holdHours'
 						}
                         LOG("sendHoldType: ${sendHoldType}, sendHoldHours: ${sendHoldHours}", 3, null, 'debug')
@@ -804,7 +805,7 @@ String whatHoldType(statDevice) {
         case '4 Hours':
         	sendHoldType = 4
         case 'Specified Hours':
-            if (settings.holdHours && settings.holdHours.isNumber()) {
+            if (settings.holdHours && settings.holdHours.isInteger()) {
             	sendHoldType = settings.holdHours
             } else if ((parentHoldType == 'Specified Hours') && (parentHoldHours != null)) {
             	sendHoldType = parentHoldHours
@@ -840,7 +841,7 @@ String whatHoldType(statDevice) {
     }
     if (sendHoldType) {
     	LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
-        return sendHoldType
+        return sendHoldType as String
     } else {
     	LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
         return 'indefinite'
