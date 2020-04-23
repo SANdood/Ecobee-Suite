@@ -25,11 +25,12 @@
  *	1.8.09 - Allow individual un-pause from peers, even if was already paused
  *	1.8.10 - Better currentProgram handling
  *	1.8.11 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.12 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.11" }
+String getVersionNum()		{ return "1.8.12" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -359,7 +360,7 @@ def mainPage() {
 			} else {		// HE
             	List echo = []
 				section(sectionTitle("Notifications")) {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on setpoint adjustments?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
+					input(name: "notify", type: "bool", title: inputTitle("Notify on setpoint adjustments?"), required: true, defaultValue: false, submitOnChange: true, width: 6)
 				}
 				if (settings.notify) {
 					section(smallerTitle("Notification Devices")) {
@@ -1113,8 +1114,9 @@ boolean sendNotifications( String msgPrefix, String msg ) {
         	// Get all the Echo Speaks devices to speak at once
             echo.each { 
                 String deviceType = it.currentValue('deviceType') as String
-                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+                // deviceSerial is an attribute as of Echo Speaks device version 3.6.2.0
+                String deviceSerial = (it.currentValue('deviceSerial') ?: it.deviceNetworkId.toString().split(/\|/).last()) as String
+                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: deviceSerial]) 
             }
 			if (echoDeviceObjs?.size() && notifyNowOK()) {
 				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
