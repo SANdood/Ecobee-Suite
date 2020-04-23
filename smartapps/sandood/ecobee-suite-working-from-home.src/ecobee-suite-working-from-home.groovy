@@ -26,11 +26,12 @@
  *	1.8.10 - Allow individual un-pause from peers, even if was already paused
  *	1.8.11 - Better currentProgram handling
  *	1.8.12 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.13 - HOTFIX: sendHoldHours in setThermostatProgram()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.12" }
+String getVersionNum()		{ return "1.8.13" }
 String getVersionLabel() 	{ return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -449,10 +450,10 @@ def checkPresence() {
 				String currentProgram = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
                 if (!currentProgram) currentProgram = 'null'
 				if (currentProgram && (currentProgram != homeTarget)) {
-               		def sendHoldType = whatHoldType(tstat)
-                	def sendHoldHours = null
-                	if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
-                    	sendHoldHours = sendHoldType
+               		String sendHoldType = whatHoldType(tstat)
+                	Integer sendHoldHours = null
+                	if ((sendHoldType != null) && sendHoldType.isInteger()) {
+                    	sendHoldHours = sendHoldType.toInteger()
                     	sendHoldType = 'holdHours'
                 	}
                     LOG("${app.label} checkPresence(): calling setThermostatProgram(${homeTarget}, ${sendHoldType}, ${sendHoldHours})",2,null,'info')
@@ -506,10 +507,10 @@ def checkHome() {
 			String  currentProgram = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
             if (!currentProgram) currentProgram = 'null'
         	if (currentProgram && (currentProgram != homeTarget)) { 	// Need to check if in Vacation Mode also...
-                def sendHoldType = whatHoldType(tstat)
-                def sendHoldHours = null
-                if ((sendHoldType != null) && sendHoldType.toString().isNumber()) {
-                    sendHoldHours = sendHoldType
+                String sendHoldType = whatHoldType(tstat)
+                Integer sendHoldHours = null
+                if ((sendHoldType != null) && sendHoldType.isInteger()) {
+                    sendHoldHours = sendHoldType.toInteger()
                     sendHoldType = 'holdHours'
                 }
                 LOG("${app.label} checkHome(): calling setThermostatProgram(${homeTarget}, ${sendHoldType}, ${sendHoldHours})",2,null,'info')
@@ -659,7 +660,7 @@ String whatHoldType(statDevice) {
         	sendHoldType = 4
         case 'Specified Hours':
 		case 'Custom Hours':
-            if (settings.holdHours && settings.holdHours.isNumber()) {
+            if (settings.holdHours && settings.holdHours.isInteger()) {
             	sendHoldType = settings.holdHours
             } else if (((parentHoldType == 'Specified Hours') || (parentHoldType == 'Custom Hours')) && ((parentHoldHours != null) && parentHoldHours.isNumber())) {
             	sendHoldType = parentHoldHours
@@ -695,7 +696,7 @@ String whatHoldType(statDevice) {
     }
     if (sendHoldType) {
     	LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
-        return sendHoldType
+        return sendHoldType as String
     } else {
     	LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
         return 'indefinite'
