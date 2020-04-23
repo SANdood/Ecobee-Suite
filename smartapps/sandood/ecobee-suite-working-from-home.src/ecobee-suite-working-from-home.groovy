@@ -27,11 +27,12 @@
  *	1.8.11 - Better currentProgram handling
  *	1.8.12 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.13 - HOTFIX: sendHoldHours in setThermostatProgram()
+ *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.13" }
+String getVersionNum()		{ return "1.8.14" }
 String getVersionLabel() 	{ return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -883,8 +884,9 @@ boolean sendNotifications( String msgPrefix, String msg ) {
         	// Get all the Echo Speaks devices to speak at once
             echo.each { 
                 String deviceType = it.currentValue('deviceType') as String
-                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+                // deviceSerial is an attribute as of Echo Speaks device version 3.6.2.0
+                String deviceSerial = (it.currentValue('deviceSerial') ?: it.deviceNetworkId.toString().split(/\|/).last()) as String
+                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: deviceSerial]) 
             }
 			if (echoDeviceObjs?.size() && notifyNowOK()) {
 				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
