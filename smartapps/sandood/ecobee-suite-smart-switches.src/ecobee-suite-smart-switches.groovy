@@ -20,10 +20,11 @@
  *	1.8.04 - New SHPL, using Global Fields instead of atomicState
  *	1.8.05 - Allow individual un-pause from peers, even if was already paused
  *	1.8.06 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.07 - Fixed reverseActions()
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.06" }
+String getVersionNum()		{ return "1.8.07" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -243,15 +244,15 @@ def opStateHandler(evt) {
     		LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
         	return
     	}
-        def priorState = atomicState.priorState
-        if (!priorState) priorState = [:]
+        HashMap priorState = atomicState.priorState as HashMap
+        if (!priorState) priorState = [:] as HashMap
         
         if (settings.theOnSwitches) {
 			settings.theOnSwitches.each { theSwitch ->
             	String cs = theSwitch.currentSwitch
             	if (settings.reversePreserve) {    	
             		String dni = theSwitch.device.deviceNetworkId as String
-                    if (!priorState?.dni) priorState.dni = []
+                    if (!priorState[dni]) priorState[dni] = []
                     priorState[dni] << [action: 'on', type: 'switch', value: cs]
                 }
                 if (cs != 'on') { 
@@ -270,7 +271,7 @@ def opStateHandler(evt) {
                 String cs = dimmer.currentSwitch
             	if (settings.reversePreserve) {
                 	String dni = dimmer.device.deviceNetworkId
-                    if (!priorState?.dni) priorState.dni = []
+                    if (!priorState[dni]) priorState[dni] = []
                     priorState[dni] << [action: 'on', type: 'dimmer', value: dl]
                     priorState[dni] << [action: 'on', type: 'switch', value: cs]
                 }
@@ -293,7 +294,7 @@ def opStateHandler(evt) {
             	String cs = theSwitch.currentSwitch
             	if (settings.reversePreserve) {    	
             		String dni = theSwitch.device.deviceNetworkId as String
-                    if (!priorState?.dni) priorState.dni = []
+                    if (!priorState[dni]) priorState[dni] = []
                     priorState[dni] << [action: 'off', type: 'switch', value: cs]
                 }
                 if (cs != 'off') { 
@@ -311,7 +312,7 @@ def opStateHandler(evt) {
                 String cs = dimmer.currentSwitch
             	if (settings.reversePreserve) {
                 	String dni = dimmer.device.deviceNetworkId
-                    if (!priorState?.dni) priorState.dni = []
+                    if (!priorState[dni]) priorState[dni] = []
                     priorState[dni] << [action: 'off', type: 'dimmer', value: dl]
                     priorState[dni] << [action: 'off', type: 'switch', value: cs]
                 }
@@ -344,7 +345,7 @@ void reverseActionsScheduled() {
 	if (dayCheck) reverseActions()
 }
 void reverseActions() {
-	def priorState = settings.reversePreserve ? atomicState.priorState : [:]
+	Map priorState = settings.reversePreserve ? atomicState.priorState : [:]
     
     // Turn on the "off" dimmers
 	if (settings.theOffDimmers) {
@@ -353,14 +354,14 @@ void reverseActions() {
             def cl = dimmer.currentLevel
         	if (settings.reversePreserve) {
             	String dni = dimmer.device.deviceNetworkId
-                if (priorState && priorState[dni]) priorState[dni].each { ->
-                	if (it.action == 'off') {
+                if (priorState && priorState[dni]) priorState[dni].each { saved ->
+                	if (saved.action == 'off') {
                     	String sw
                         def lv
-                		if (it.type == 'switch') {
-                           	sw = it.value
-                        } else if (it.type == 'dimmer') {
-                           	lv = it.value
+                		if (saved.type == 'switch') {
+                           	sw = saved.value
+                        } else if (saved.type == 'dimmer') {
+                           	lv = saved.value
                         }
                     }
                     if (lv && sw) { 					// dimmers will have both
@@ -393,9 +394,9 @@ void reverseActions() {
             String cs = theSwitch.currentSwitch
             if (settings.reversePreserve) {    	
                 String dni = theSwitch.device.deviceNetworkId as String
-                if (priorState && priorState[dni]) priorState[dni].each { ->
-            		if ((it.action == 'off') && (it.type == 'switch')) {
-                    	String sw = it.value
+                if (priorState && priorState[dni]) priorState[dni].each { saved ->
+            		if ((saved.action == 'off') && (saved.type == 'switch')) {
+                    	String sw = saved.value
                         if (cs != sw) {
                         	theSwitch."${sw}()"
                             LOG("Returning ${theSwitch.displayName} to prior state (${sw})",2,null,'info')
@@ -423,14 +424,14 @@ void reverseActions() {
             def cl = dimmer.currentLevel
         	if (settings.reversePreserve) {
             	String dni = dimmer.device.deviceNetworkId
-                if (priorState && priorState[dni]) priorState[dni].each { ->
-                	if (it.action == 'on') {
+                if (priorState && priorState[dni]) priorState[dni].each { saved ->
+                	if (saved.action == 'on') {
                     	String sw
                         def lv
-                		if (it.type == 'switch') {
-                           	sw = it.value
-                        } else if (it.type == 'dimmer') {
-                           	lv = it.value
+                		if (saved.type == 'switch') {
+                           	sw = saved.value
+                        } else if (saved.type == 'dimmer') {
+                           	lv = saved.value
                         }
                     }
                     if (lv && sw) { 		// dimmers will have both
@@ -466,16 +467,16 @@ void reverseActions() {
             String cs = theSwitch.currentSwitch
             if (settings.reversePreserve) {    	
                 String dni = theSwitch.device.deviceNetworkId as String
-                if (priorState && priorState[dni]) priorState[dni].each { ->
-                    if ((it.action == 'on') && (it.type == 'switch')) {
-                        String sw = it.value
-                        if (cs != sw) {
-                            theSwitch."${sw}()"
-                            LOG("Returning ${theSwitch.displayName} to prior state (${sw})",2,null,'info')
-                        } else {
-                            LOG("${theSwitch.displayName} is already ${sw}",2,null,'info')
-                        }
-                    }
+				if (priorState && priorState[dni]) priorState[dni].each { saved ->
+					if ((saved.action == 'on') && (saved.type == 'switch')) {
+						String sw = saved.value
+						if (cs != sw) {
+							theSwitch."${sw}()"
+							LOG("Returning ${theSwitch.displayName} to prior state (${sw})",2,null,'info')
+						} else {
+							LOG("${theSwitch.displayName} is already ${sw}",2,null,'info')
+						}
+					}					 
                 }
             } else {
                 if (cs != 'off') { 
@@ -487,6 +488,7 @@ void reverseActions() {
             }
         }
     }
+	atomicState.priorState = [:]
 }
 
 // SmartThings internal function format (Strings instead of Dates)
