@@ -55,12 +55,15 @@
  *	1.8.31 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.32 - Fixed attribute updates (typo && (null == false))
  *	1.8.33 - Optimized sensorStates into a single Map
+ *	1.8.34 - HOTFIX: typo causing extraneous updates to statInfo attributes
+ *	1.8.35 - HOTFIX: fixed disconnected notification message
+ *	1.8.36 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.33" }
+String getVersionNum()		{ return "1.8.36" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1891,10 +1894,10 @@ boolean spawnDaemon(daemon="all", unsched=true) {
 		if (debugLevelFour) LOG("spawnDaemon() - Performing seance for daemon (${daemon}) in 'poll'", 1, null, "trace")
 		// Reschedule the daemon
 		try {
-			if ( unsched ) { unschedule("pollScheduled") }
+			if ( unsched ) { unschedule(pollScheduled) }
 			if ( HE || canSchedule() ) { 
 				//LOG("Using runEvery to setup polling with pollingInterval: ${pollingInterval}", 1, null, 'trace')
-				"runEvery${pollingInterval}Minute${pollingInterval!=1?'s':''}"("pollScheduled")
+				"runEvery${pollingInterval}Minute${pollingInterval!=1?'s':''}"(pollScheduled)
 				// Only poll now if we were recovering - if not asked to unschedule, then whoever called us will handle the first poll (as in initialize())
 				if (unsched) result = pollScheduled() && result
 			} else {
@@ -2687,26 +2690,26 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 						}
 					}
 					// if (stat.oemCfg) tempOemCfg[tid] =	stat.oemCfg
-					Map tempInfo = [brand:			stat.brand,
+					HashMap tempInfo = [brand:			stat.brand,
 									features:		stat.features,
 									identifier:		stat.identifier as String,
 									isRegistered:	stat.isRegistered,
 									modelNumber:	stat.modelNumber,
 									name:			stat.name
-                            	   ]
+                            	   ] as HashMap
                     if (true) {
                         if (!tempStatInfo) tempStatInfo = atomicState.statInfo
                         if (!tempStatInfo || !tempStatInfo[tid] || (tempStatInfo[tid] != tempInfo)) {
                             statInfoUpdated = true
                             statUpdates[tid].add('statInfo')
-                            tempStatInfo[tid] = tempInfo
+                            tempStatInfo[tid] = tempInfo as HashMap
                         }
                     }
 				}
 				if (runtimeUpdated || forcePoll) {
 					if (stat.runtime) {
 						// Collect only the data values we use - no need to deal with the date/time/revisions (that always change)
-						Map temp = [actualHumidity:		stat.runtime.actualHumidity,
+						HashMap temp = [actualHumidity:		stat.runtime.actualHumidity,
 									actualTemperature:	stat.runtime.actualTemperature,
 									connected:			stat.runtime.connected,
 									desiredCool:		stat.runtime.desiredCool,
@@ -2732,7 +2735,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
                             } else {
                             	statUpdates[tid].add('rtReally')
                             }
-							tempRuntime[tid] = temp
+							tempRuntime[tid] = temp as HashMap
 						}
 					}                 
 					if (stat.remoteSensors)	{
@@ -4303,7 +4306,7 @@ void updateThermostatData() {
                 	tempStatInfo[tid].each { key, value ->
                         String deviceVal = ((value == null) || (value == "")) ? 'null' : value.toString()
                         deviceValues << [(key.toString()): deviceVal]
-                        if (changeDevice[tid].(kety.toString()) != deviceVal) {
+                        if (changeDevice[tid].(key.toString()) != deviceVal) {
                             data << [ (key.toString()): deviceVal ]
                             if (!devChanged) devChanged = true
                         }
@@ -6336,8 +6339,9 @@ boolean sendNotifications( String msgPrefix, String msg ) {
         	// Get all the Echo Speaks devices to speak at once
             echo.each { 
                 String deviceType = it.currentValue('deviceType') as String
-                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+                // deviceSerial is an attribute as of Echo Speaks device version 3.6.2.0
+                String deviceSerial = (it.currentValue('deviceSerial') ?: it.deviceNetworkId.toString().split(/\|/).last()) as String
+                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: deviceSerial]) 
             }
 			if (echoDeviceObjs?.size() && notifyNowOK()) {
 				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
@@ -6564,7 +6568,7 @@ void apiLost(where = "[where not specified]") {
 	}
    
 	// provide cleanup steps when API Connection is lost
-	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager ${ST?'Smart':''}App and re-enter your account login credentials."
+	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager ${ST?'Smart':''}App and re-enter your account login credentials."
 	atomicState.connected = "lost"
 	updateMyLabel()
 	atomicState.authToken = null
@@ -6581,14 +6585,14 @@ void apiLost(where = "[where not specified]") {
 			LOG("apiLost() - notifying each child: ${oneChild.device.displayName} of loss", 1, child, "error")
 		}
 	}
-	unschedule("pollScheduled")
-	unschedule("scheduleWatchdog")
-	runEvery3Hours("notifyApiLost")
+	unschedule(pollScheduled)
+	unschedule(scheduleWatchdog)
+	runEvery3Hours(notifyApiLost)
 }
 
 void notifyApiLost() {
 
-	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
+	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
 	if ( atomicState.connected == "lost" ) {
 		generateEventLocalParams()
 		sendMessage(notificationMessage)
