@@ -34,10 +34,12 @@
  *	1.8.17 - Reapply prior hotfix
  *	1.8.18 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.19 - HOTFIX: Notifications not being sent
+ *	1.8.20 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
+ *	1.8.21 - Miscellaneous updates & fixes
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.19" }
+String getVersionNum()		{ return "1.8.21" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -320,11 +322,17 @@ def mainPage() {
 		}       
 		// Standard footer
         if (ST) {
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+            section("") {
+        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
+                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
+    		}
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
         } else {
         	section() {
         		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+						  "<small><i>donation is appreciated!</i></small></div>" )
             }
 		}
     }
@@ -1459,11 +1467,12 @@ boolean sendNotifications( String msgPrefix, String msg ) {
     List echoDeviceObjs = []
     if (settings.echoAnnouncements) {
         if (echo?.size()) {
-        	// Get all the Echo Speaks devices to speak at once
+    		// Get all the Echo Speaks devices to speak at once
             echo.each { 
                 String deviceType = it.currentValue('deviceType') as String
-                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+                // deviceSerial is an attribute as of Echo Speaks device version 3.6.2.0
+                String deviceSerial = (it.currentValue('deviceSerial') ?: it.deviceNetworkId.toString().split(/\|/).last()) as String
+                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: deviceSerial]) 
             }
 			if (echoDeviceObjs?.size() && notifyNowOK()) {
 				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing

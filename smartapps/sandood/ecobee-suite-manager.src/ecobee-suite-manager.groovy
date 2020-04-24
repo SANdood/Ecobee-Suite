@@ -55,13 +55,17 @@
  *	1.8.31 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.32 - Fixed attribute updates (typo && (null == false))
  *	1.8.33 - Optimized sensorStates into a single Map
- *	1.8.34 - HOTFIX typo causing extraneous updates to statInfo attributes
+ *	1.8.34 - HOTFIX: typo causing extraneous updates to statInfo attributes
+ *	1.8.35 - HOTFIX: fixed disconnected notification message
+ *	1.8.36 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
+ *	1.8.37 - HOTFIX: log new "touSetback" event
+ *	1.8.38 - Miscellaneous updates & fixes
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.34" }
+String getVersionNum()		{ return "1.8.38" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -272,11 +276,17 @@ def mainPage() {
 		}
 		// Standard footer
         if (ST) {
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+            section("") {
+        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
+                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
+    		}
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
         } else {
         	section() {
         		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+						  "<small><i>donation is appreciated!</i></small></div>" )
             }
 		}
 	}
@@ -1892,10 +1902,10 @@ boolean spawnDaemon(daemon="all", unsched=true) {
 		if (debugLevelFour) LOG("spawnDaemon() - Performing seance for daemon (${daemon}) in 'poll'", 1, null, "trace")
 		// Reschedule the daemon
 		try {
-			if ( unsched ) { unschedule("pollScheduled") }
+			if ( unsched ) { unschedule(pollScheduled) }
 			if ( HE || canSchedule() ) { 
 				//LOG("Using runEvery to setup polling with pollingInterval: ${pollingInterval}", 1, null, 'trace')
-				"runEvery${pollingInterval}Minute${pollingInterval!=1?'s':''}"("pollScheduled")
+				"runEvery${pollingInterval}Minute${pollingInterval!=1?'s':''}"(pollScheduled)
 				// Only poll now if we were recovering - if not asked to unschedule, then whoever called us will handle the first poll (as in initialize())
 				if (unsched) result = pollScheduled() && result
 			} else {
@@ -3913,6 +3923,12 @@ void updateThermostatData() {
                         currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco' : 'Eco!'		// Tag mandatory DR events
                         currentClimateId = runningEvent.name as String
                         currentClimateType = 'program'
+                        break;
+                    case 'touSetback':
+                    	// Time of Use setback - pre-cooling/heating when the power is (supposedly) less expensive
+                    	currentClimateName = 'touSetback'
+                        currentClimateOwner = 'ecoPlus'
+                        log.debug "PLEASE SEND THIS TO BARRY: touSetback event: ${runningEvent}"
                         break;
                     default:		
                         LOG("Unexpected runningEvent.type: (${runningEvent.type}) - please notify Barry",1,null,'warn')
@@ -6337,8 +6353,9 @@ boolean sendNotifications( String msgPrefix, String msg ) {
         	// Get all the Echo Speaks devices to speak at once
             echo.each { 
                 String deviceType = it.currentValue('deviceType') as String
-                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+                // deviceSerial is an attribute as of Echo Speaks device version 3.6.2.0
+                String deviceSerial = (it.currentValue('deviceSerial') ?: it.deviceNetworkId.toString().split(/\|/).last()) as String
+                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: deviceSerial]) 
             }
 			if (echoDeviceObjs?.size() && notifyNowOK()) {
 				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
@@ -6565,7 +6582,7 @@ void apiLost(where = "[where not specified]") {
 	}
    
 	// provide cleanup steps when API Connection is lost
-	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager ${ST?'Smart':''}App and re-enter your account login credentials."
+	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager ${ST?'Smart':''}App and re-enter your account login credentials."
 	atomicState.connected = "lost"
 	updateMyLabel()
 	atomicState.authToken = null
@@ -6582,14 +6599,14 @@ void apiLost(where = "[where not specified]") {
 			LOG("apiLost() - notifying each child: ${oneChild.device.displayName} of loss", 1, child, "error")
 		}
 	}
-	unschedule("pollScheduled")
-	unschedule("scheduleWatchdog")
-	runEvery3Hours("notifyApiLost")
+
+	unschedule(pollScheduled)
+	unschedule(scheduleWatchdog)
+	runEvery3Hours(notifyApiLost)
 }
 
 void notifyApiLost() {
-
-	def notificationMessage = "${settings.thermostats.size()>1?'are':'is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
+	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
 	if ( atomicState.connected == "lost" ) {
 		generateEventLocalParams()
 		sendMessage(notificationMessage)

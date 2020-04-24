@@ -26,11 +26,14 @@
  *	1.8.10 - Allow individual un-pause from peers, even if was already paused
  *	1.8.11 - Fixed HelloHome log msg to include room name
  *	1.8.12 - Updated formatting; added Do Not Disturb Modes & Time window
+ *	1.8.13 - Don't use EcoSensor's occupancy if there are other motion sensors
+ *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
+ *	1.8.15 - Miscellaneous updates & fixes
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.12" }
+String getVersionNum()		{ return "1.8.15" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -302,11 +305,17 @@ def mainPage() {
 		}       
 		// Standard footer
         if (ST) {
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+            section("") {
+        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
+                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
+    		}
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
         } else {
         	section() {
         		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+						  "<small><i>donation is appreciated!</i></small></div>" )
             }
 		}
     }
@@ -403,9 +412,10 @@ def initialize() {
     }
     if (settings?.theSensorDevices) {
     	subscribe(settings?.theSensorDevices, "SmartRoom", smartRoomHandler)
-    	subscribe(settings?.theSensorDevices, "motion", motionHandler)
+        // Ecobee sensors are very slow to respond, so don't use them for motion if we don't have to
+    	if (!settings.moreMotionSensors) subscribe(settings?.theSensorDevices, "motion", motionHandler)		
     }
-    if (moreMotionSensors) subscribe(moreMotionSensors, "motion", motionHandler)
+    if (settings.moreMotionSensors) subscribe(settings.moreMotionSensors, "motion", motionHandler)
     
     // Doors control a Smart Room, so we check here during initialization if we should be active or inactive
     String doorStatus = 'default'
@@ -1018,7 +1028,7 @@ private myTimeOfDayIsBetween(Date fromDate, Date toDate, Date checkDate, timeZon
     return (!checkDate.before(fromDate) && !checkDate.after(toDate))
 }
 void sendMessage(notificationMessage) {
-	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "trace")
+	LOG("Notification Message (notify=${settings.notify}): ${notificationMessage + getMsgRoomName()}", 2, null, "trace")
    // boolean ST = isST
     if (settings.notify) {
     	String msgPrefix = getMsgPrefix()
@@ -1098,8 +1108,9 @@ boolean sendNotifications( String msgPrefix, String msg ) {
         	// Get all the Echo Speaks devices to speak at once
             echo.each { 
                 String deviceType = it.currentValue('deviceType') as String
-                String serialNumber = it.deviceNetworkId.toString().split(/\|/).last() as String
-                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: serialNumber]) 
+                // deviceSerial is an attribute as of Echo Speaks device version 3.6.2.0
+                String deviceSerial = (it.currentValue('deviceSerial') ?: it.deviceNetworkId.toString().split(/\|/).last()) as String
+                echoDeviceObjs.push([deviceTypeId: deviceType, deviceSerialNumber: deviceSerial]) 
             }
 			if (echoDeviceObjs?.size() && notifyNowOK()) {
 				//NOTE: Only sends command to first device in the list | We send the list of devices to announce one and then Amazon does all the processing
