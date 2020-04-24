@@ -25,7 +25,7 @@
  *	1.8.01 - General Release
  *	1.8.02 - Fixed smartAuto settings bug
  *	1.8.03 - Updated WARNING & NOTE: formatting
- *	1.8.04 - Fix holdEndDate during transitions; supportedThermostatModes initialization loophole
+ *	1.8.04 - Fix holdEndDate during transitions; supportedThermostatModes initialization loophole 
  *	1.8.05 - Fix attribute initialization logic
  *	1.8.06 - Fix thermostatAsSensor selection page
  *	1.8.07 - Improve http error handling
