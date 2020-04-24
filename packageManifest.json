@@ -11,7 +11,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.34"
+      "version": "1.8.38"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -20,7 +20,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.19"
+      "version": "1.8.21"
     },
     {
       "id": "74d41ded-9a35-4916-98e3-2309364b477b",
@@ -29,7 +29,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.06"
+      "version": "1.8.07"
     },
     {
       "id": "c630b027-9cdf-49ff-bff6-28ced385a9e2",
@@ -38,7 +38,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.12"
+      "version": "1.8.15"
     },
     {
       "id": "cc05b8d1-01b7-449e-b12b-9f56ccbdf23c",
@@ -47,7 +47,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.08"
+      "version": "1.8.09"
     },
     {
       "id": "d14d22cf-bdb4-4d12-8c89-ac849a5e0e53",
@@ -56,7 +56,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.07"
+      "version": "1.8.08"
     },
     {
       "id": "7d7849d3-333f-4782-b52b-4f910bf5380f",
@@ -65,7 +65,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.16"
+      "version": "1.8.19"
     },
     {
       "id": "8d9d8751-6679-4581-b594-41549106c789",
@@ -74,7 +74,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.12"
+      "version": "1.8.15"
     },
     {
       "id": "a07da3bd-6638-4d9a-a739-4efc37273095",
@@ -83,7 +83,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.06"
+      "version": "1.8.08"
     },
     {
       "id": "e60053c8-a397-4231-ba7f-59ef23505740",
@@ -92,7 +92,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.09"
+      "version": "1.8.10"
     },
     {
       "id": "329710ed-0ee3-41a6-9e47-f04b7a6174a6",
@@ -101,7 +101,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.08"
+      "version": "1.8.09"
     },
     {
       "id": "487d8dde-077c-4ae3-b17b-180039b3e59d",
@@ -110,7 +110,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.11"
+      "version": "1.8.13"
     },
     {
       "id": "1438882b-2411-406d-a831-997c4b569c31",
@@ -119,7 +119,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.12"
+      "version": "1.8.15"
     }
   ],
   "drivers": [
