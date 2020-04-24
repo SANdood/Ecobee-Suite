@@ -2,7 +2,7 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.1.8",
-  "dateReleased": "2020-04-11",
+  "dateReleased": "2020-04-18",
   "apps": [
     {
       "id": "70b3ec47-c06f-4570-b4ae-5ee76da59db8",
@@ -11,7 +11,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.33"
+      "version": "1.8.34"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -20,7 +20,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.18"
+      "version": "1.8.19"
     },
     {
       "id": "74d41ded-9a35-4916-98e3-2309364b477b",

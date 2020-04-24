@@ -6599,13 +6599,13 @@ void apiLost(where = "[where not specified]") {
 			LOG("apiLost() - notifying each child: ${oneChild.device.displayName} of loss", 1, child, "error")
 		}
 	}
+
 	unschedule(pollScheduled)
 	unschedule(scheduleWatchdog)
 	runEvery3Hours(notifyApiLost)
 }
 
 void notifyApiLost() {
-
 	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
 	if ( atomicState.connected == "lost" ) {
 		generateEventLocalParams()
