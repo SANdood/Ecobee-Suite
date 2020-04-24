@@ -59,12 +59,13 @@
  *	1.8.35 - HOTFIX: fixed disconnected notification message
  *	1.8.36 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.37 - HOTFIX: log new "touSetback" event
+ *	1.8.38 - Miscellaneous updates & fixes
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.37" }
+String getVersionNum()		{ return "1.8.38" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -275,11 +276,17 @@ def mainPage() {
 		}
 		// Standard footer
         if (ST) {
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.\n\nhttps://github.com/SANdood/Ecobee-Suite") {}
+            section("") {
+        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
+                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
+    		}
+        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
         } else {
         	section() {
         		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-                		  "<a href='https://github.com/SANdood/Ecobee-Suite' target='_blank' style='color:#5BBD76'><u>Click here for the Ecobee Suite GitHub Repository</u></a></div>")
+						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+						  "<small><i>donation is appreciated!</i></small></div>" )
             }
 		}
 	}
@@ -3918,8 +3925,10 @@ void updateThermostatData() {
                         currentClimateType = 'program'
                         break;
                     case 'touSetback':
+                    	// Time of Use setback - pre-cooling/heating when the power is (supposedly) less expensive
                     	currentClimateName = 'touSetback'
-                        log.debug "touSetback event: ${runningEvent}"
+                        currentClimateOwner = 'ecoPlus'
+                        log.debug "PLEASE SEND THIS TO BARRY: touSetback event: ${runningEvent}"
                         break;
                     default:		
                         LOG("Unexpected runningEvent.type: (${runningEvent.type}) - please notify Barry",1,null,'warn')
