@@ -22,10 +22,11 @@
  *	1.8.06 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.07 - Fixed reverseActions()
  *	1.8.08 - Miscellaneous updates & fixes
+ *	1.8.09 - Added status to app.label
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.08" }
+String getVersionNum()		{ return "1.8.09" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -97,18 +98,23 @@ def mainPage() {
                 	atomicState.appDisplayName = app.label
                 }
 			} else {
-            	if (app.label.contains(' (paused)')) {
-                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
+                def opts = [' (paused', ' (Cool', ' (Heat', ' (Fan', ' (Idle', ' (Pend', ' (Vent']
+				String flag
+                opts.each {
+                	if (!flag && app.label.contains(it)) flag = it
+				}
+				if (flag) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(flag)) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                        String myLabel = app.label.substring(0, app.label.indexOf(flag))
                         atomicState.appDisplayName = myLabel
                         app.updateLabel(myLabel)
                     }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
-            }
+			}
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
@@ -203,6 +209,8 @@ void uninstalled() {
 }
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+    if (!atomicState.thermostatOpState) atomicState.thermostatOpState = theThermostats[0].currentValue('thermostatOperatingState')
+	if (!atomicState.currentAction) atomicState.currentAction = ' - waiting...'
 	updateMyLabel()
 	
     atomicState.scheduled = false
@@ -226,29 +234,43 @@ def opStateHandler(evt) {
 	LOG("${evt.name}: ${evt.value}",2,null,'info')
 	//boolean ST = atomicState.isST
 
+	String oldOpState = atomicState.thermostatOpState
+	String newOpState = evt.value
+	atomicState.thermostatOpState = evt.value
+	if (!settings.theOpState.contains(oldOpState) && !settings.theOpState.contains(newOpState)) {
+		atomicState.currentAction = ' - unchanged'
+		updateMyLabel()
+		return
+	}
+    atomicState.currentAction = ' - unchanged'
+    
 	if (evt.value == 'idle') {
     	if (settings.reverseOnIdle) {
         	def isReallyIdle = true
         	if (settings.theThermostats.size() > 1) {
             	settings.theThermostats.each { 
 					String ncTos = ST ? it.currentValue('thermostatOperatingState') : it.currentValue('thermostatOperatingState', true)
-					if (ncTos != 'idle') isReallyIdle = false }
+					if (ncTos != 'idle') isReallyIdle = false 
+				}
             }
             if (isReallyIdle) {	
 				reverseActions()
             }
+            updateMyLabel()
             return
         }
     }
 	if (settings.theOpState.contains(evt.value)) {
     	if (!dayCheck()) {
         	LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
+            updateMyLabel()
             return
         }
     	def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false
         
         if (between) {
     		LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
+            updateMyLabel()
         	return
     	}
         HashMap priorState = atomicState.priorState as HashMap
@@ -269,6 +291,7 @@ def opStateHandler(evt) {
                   	LOG("${theSwitch.displayName} was already on",2,null,'info')
                 }
             }
+            atomicState.currentAction = ' - activated'
         }
         
         if (settings.theOnDimmers) {
@@ -294,6 +317,7 @@ def opStateHandler(evt) {
                 	dimmer.on()
                 }
             }
+            atomicState.currentAction = ' - activated'
         }
         
         if (settings.theOffSwitches) {
@@ -311,6 +335,7 @@ def opStateHandler(evt) {
                   	LOG("${theSwitch.displayName} was already off",2,null,'info')
                 }
             }
+            atomicState.currentAction = ' - activated'
         }
 
         if (settings.theOffDimmers) {
@@ -344,16 +369,18 @@ def opStateHandler(evt) {
                     }
                 }
             }
+            atomicState.currentAction = ' - activated'
         }
         atomicState.priorState = priorState
     }
+    updateMyLabel()
 }
 void reverseActionsScheduled() {
 	if (dayCheck) reverseActions()
 }
 void reverseActions() {
 	Map priorState = settings.reversePreserve ? atomicState.priorState : [:]
-    
+	LOG("reverseActions() - ${priorState}", 3, null, debug)
     // Turn on the "off" dimmers
 	if (settings.theOffDimmers) {
     	settings.theOffDimmers.each { dimmer ->
@@ -393,6 +420,7 @@ void reverseActions() {
                 }
             }
         }
+        atomicState.currentAction = ' - deactivated'
     }
     
     // turn on the "off" switches
@@ -421,6 +449,7 @@ void reverseActions() {
                 }
             }
         }
+        atomicState.currentAction = ' - deactivated'
     }
     
     //if (settings.theOnDimmers) dimmersOff(settings.theOnDimmers)
@@ -467,6 +496,7 @@ void reverseActions() {
                 }
             }
         }
+        atomicState.currentAction = ' - deactivated'
     }
     // turn off the "on" switches
     if (settings.theOnSwitches) {
@@ -494,8 +524,10 @@ void reverseActions() {
                 }
             }
         }
+        atomicState.currentAction = ' - deactivated'
     }
 	atomicState.priorState = [:]
+    // updateMyLabel() - caller will do the update
 }
 
 // SmartThings internal function format (Strings instead of Dates)
@@ -534,25 +566,44 @@ private boolean dayCheck() {
     return (actionDays.contains(day))
 }
 void updateMyLabel() {
-	//boolean ST = atomicState.isST
-    
-	String flag = ST ? ' (paused)' : '<span '
-	
-	String myLabel = atomicState.appDisplayName
+    def opts = [' (paused', ' (Cool', ' (Heat', ' (Fan', ' (Idle', ' (Pend', ' (Vent']
+	String flag
+	if (ST) {
+		opts.each {
+			if (!flag && app.label.contains(it)) flag = it
+		}
+	} else {
+		flag = '<span '
+	}
+    String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
-		myLabel = app.label
+		myLabel = app.label ?: app.name
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains(flag)) {
+	if (flag && myLabel.contains(flag)) {
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
+	String newLabel
 	if (settings.tempDisable) {
-		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
-		if (app.label != myLabel) app.updateLabel(myLabel)
+		newLabel = myLabel
+		if (settings.theThermostats?.size()) {
+        	String thermostatOpState = ' (' + capitalizeAll(atomicState.thermostatOpState)
+			String currentAction = atomicState.currentAction + ')'
+            String color = (atomicState.thermostatOpState == 'idle') ? 'green' : 'blue'
+			newLabel = newLabel + (HE ? '<span style="color:' + color + '">' + thermostatOpState + currentAction + '</span>' : thermostatOpState + currentAction)
+		}
+		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
+}
+String capitalizeAll(String str) {
+    if (str == null || str.isEmpty()) {
+        return str;
+    }
+    str.split(" ").collect{it.capitalize()}.join(" ")
 }
 def pauseOn(global = false) {
 	// Pause this Helper
