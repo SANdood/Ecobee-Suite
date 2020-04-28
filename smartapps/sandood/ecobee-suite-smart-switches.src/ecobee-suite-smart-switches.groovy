@@ -27,7 +27,7 @@
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8." }
+String getVersionNum()		{ return "1.8.10" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
