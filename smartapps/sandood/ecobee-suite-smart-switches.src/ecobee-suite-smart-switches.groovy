@@ -23,7 +23,7 @@
  *	1.8.07 - Fixed reverseActions()
  *	1.8.08 - Miscellaneous updates & fixes
  *	1.8.09 - Added status to app.label
- *	1.8.10 - 
+ *	1.8.10 - Option to treat 'fan only' as 'idle'
  */
 import groovy.transform.Field
 
