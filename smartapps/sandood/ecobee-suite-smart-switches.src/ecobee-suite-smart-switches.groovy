@@ -23,10 +23,11 @@
  *	1.8.07 - Fixed reverseActions()
  *	1.8.08 - Miscellaneous updates & fixes
  *	1.8.09 - Added status to app.label
+ *	1.8.10 - 
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.09" }
+String getVersionNum()		{ return "1.8." }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -51,8 +52,6 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
 	String defaultName = "Smart Switch/Dimmer/Vent"
     
@@ -129,6 +128,7 @@ def mainPage() {
         		input(name: "theOpState", type: "enum", title: inputTitle("When ${settings?.theThermostats?.size()>1?'any ':'the '} thermostat changes to one of these Operating States"), 
 					  options:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer'], required: true, multiple: true, submitOnChange: true, width: 6)
 				// mode(title: inputTitle("Enable only for specific mode(s)"))
+                input(name: "fanOnly", type: "bool", title: inputTitle("Deactivate when 'fan only'?"), defaultValue: !settings.theOpState.contains('fan only'), submitOnChange: true, width: 6)
         	}
        
         	section(title: sectionTitle("Actions")) {
@@ -244,13 +244,13 @@ def opStateHandler(evt) {
 	}
     atomicState.currentAction = ' - unchanged'
     
-	if (evt.value == 'idle') {
+	if ((evt.value == 'idle') || (settings.fanOnly && (evt.value == 'fan only'))) {
     	if (settings.reverseOnIdle) {
         	def isReallyIdle = true
         	if (settings.theThermostats.size() > 1) {
             	settings.theThermostats.each { 
 					String ncTos = ST ? it.currentValue('thermostatOperatingState') : it.currentValue('thermostatOperatingState', true)
-					if (ncTos != 'idle') isReallyIdle = false 
+					if ((ncTos != 'idle') && (!settings.fanOnly || (ncTos != 'fan only')))  isReallyIdle = false 
 				}
             }
             if (isReallyIdle) {	
