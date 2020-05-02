@@ -60,12 +60,13 @@
  *	1.8.36 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.37 - HOTFIX: log new "touSetback" event
  *	1.8.38 - Miscellaneous updates & fixes
+ *	1.8.38a- HOTFIX: Data type error (rare)
  *	
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.38" }
+String getVersionNum()		{ return "1.8.38a" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -2146,7 +2147,7 @@ void generateTheEvents() {
 	Map stats = atomicState.thermostats
 	Map sensors = atomicState.remoteSensorsData
 	stats?.each { DNI ->
-		if (DNI.value?.data) getChildDevice(DNI.key).generateEvent(DNI.value.data as List)
+		if (DNI.value?.data) getChildDevice(DNI.key).generateEvent(DNI.value.data)
 	}
 	sensors?.each { DNI ->
 		if (DNI.value?.data) getChildDevice(DNI.key).generateEvent(DNI.value.data)
