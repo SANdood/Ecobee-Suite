@@ -61,12 +61,12 @@
  *	1.8.37 - HOTFIX: log new "touSetback" event
  *	1.8.38 - Miscellaneous updates & fixes
  *	1.8.38a- HOTFIX: Data type error (rare)
- *	
+ *	1.8.39b- HOTFIX: Tag thermostatHolds sooner
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.38a" }
+String getVersionNum()		{ return "1.8.38b" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -5472,7 +5472,8 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 		//def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (tempCoolAt.toInteger() / 10.0), 'F', userPrecision)
 		def updates = [ [heatingSetpoint: 	myConvertTemperatureIfNeeded( (h.toInteger() / 10.0), 'F', userPrecision)],	
 					    [coolingSetpoint: 	myConvertTemperatureIfNeeded( (c.toInteger() / 10.0), 'F', userPrecision)],	
-					    [currentProgramName: 'Hold: Temp']
+					    [currentProgramName: 'Hold: Temp'],
+					    [thermostatHold:	'hold'],
 					  ]
 		if (debugLevelFour) LOG("setHold() for ${child.device.displayName} (${deviceId}) - ${updates}",4,null,'trace')
 		child.generateEvent(updates)			// force-update the calling device attributes that it can't see
@@ -5627,6 +5628,7 @@ boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', s
 					    [coolingSetpoint: 	myConvertTemperatureIfNeeded( (climate.coolTemp.toInteger() / 10.0), 'F', userPrecision)],
 					    [currentProgram:	program],
 					    [currentProgramId:	climateRef],
+					    [thermostatHold:	'hold'],
                        // [currentProgramName:"Hold: ${program}"]
 					  ]
 		if (debugLevelFour) LOG("setProgram(${climateRef}) for ${child.device.displayName} (${deviceId}): ${updates}",4,child,'info')
