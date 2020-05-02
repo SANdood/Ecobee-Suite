@@ -60,12 +60,15 @@
  *	1.8.36 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.37 - HOTFIX: log new "touSetback" event
  *	1.8.38 - Miscellaneous updates & fixes
- *	
+ *	1.8.38a- HOTFIX: Data type error (rare)
+ *	1.8.38b- HOTFIX: Tag thermostatHold sooner
+ *	1.8.39 - Optimized stat.settings change detection
+ *	1.8.40 - Better error handling for new installations
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.38" }
+String getVersionNum()		{ return "1.8.40" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1487,6 +1490,7 @@ def initialize() {
 	atomicState.myStatsClimates 	= [:]
 	atomicState.oemCfg 				= [:]
 	atomicState.program 			= [:]
+    atomicState.remoteSensorsData	= [:]
 	atomicState.runningEvent 		= [:]
 	atomicState.runtime 			= [:]
 	atomicState.schedule 			= [:]
@@ -1590,7 +1594,9 @@ def createChildrenSensors() {
 				if ("${e}".startsWith("${ST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) {
 					LOG("You MUST add the ${getChildSensorName()} Device ${ST?'Handler':'Driver'} to the ${getHubPlatform} IDE BEFORE running the setup.", 1, null, "error")
 					return false
-				}
+				} else if ("${e}".contains("unique.error")) {
+                	LOG("Duplicate DNI Exception while creating ${getChildSensorName()} - another process already owns ${dni}",1,null,warn)
+                } else LOG("Exception while creating ${getChildSensorName()}: ${e}",1,null,warn)
 			}
 			LOG("created ${d.displayName} with id $dni", 4, null, 'trace')
 		} else {
@@ -2037,6 +2043,7 @@ void pollChildren(String deviceId="",force=false) {
                     }
                 } else atomicState.forceDevices = []
             }
+            log.trace "prior poll not finished, skipping..."
 			return
 		} else {
 			atomicState.skipTime = null
@@ -2146,10 +2153,10 @@ void generateTheEvents() {
 	Map stats = atomicState.thermostats
 	Map sensors = atomicState.remoteSensorsData
 	stats?.each { DNI ->
-		if (DNI.value?.data) getChildDevice(DNI.key).generateEvent(DNI.value.data as List)
+		if (DNI?.value?.data) getChildDevice(DNI.key).generateEvent(DNI.value.data)
 	}
 	sensors?.each { DNI ->
-		if (DNI.value?.data) getChildDevice(DNI.key).generateEvent(DNI.value.data)
+		if (DNI?.value?.data) getChildDevice(DNI.key).generateEvent(DNI.value.data)
 	}
 	def allDone = now()
     def deviceUpdates = allDone - startMS
@@ -2631,7 +2638,17 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				if (thermostatUpdated || forcePoll ) {
                     if (stat.settings) {
 						if (!tempSettings) tempSettings = atomicState.settings as HashMap
-						if (!tempSettings || !tempSettings[tid] || (tempSettings[tid] != stat.settings)) {
+						if (!tempSettings || !tempSettings[tid] || (tempSettings[tid].fanMinOnTime != stat.settings.fanMinOnTime) || 				// fanMinOnTime, humidity(Level), hvacMode & dehumidityLevel
+                        											(tempSettings[tid].humidity != stat.settings.humidity) || 						// are pretty much the only things that change in 
+                                                                     (tempSettings[tid].hvacMode != stat.settings.hvacMode) ||						// stat.settings, so we check for them first...
+                                                                      (tempSettings[tid].dehumidifierLevel != stat.settings.dehumidifierLevel) ||
+                           											   (tempSettings[tid] != stat.settings)) {										// otherwise, we do the heavy compare (which makes no-change cycles a little longer)
+                            if (tempSettings[tid]) {
+                            	def commonKeys = stat.settings*.key
+								def changedKeys = commonKeys.findAll { tempSettings[tid].it != stat.settings?.it }
+                            	if (changedKeys) log.debug "settings changed: ${changedKeys}"
+                            }
+                            
                             settingsUpdated = true
                             statUpdates[tid].add('settings')
 							tempSettings[tid] = stat.settings as HashMap
@@ -5471,7 +5488,8 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 		//def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (tempCoolAt.toInteger() / 10.0), 'F', userPrecision)
 		def updates = [ [heatingSetpoint: 	myConvertTemperatureIfNeeded( (h.toInteger() / 10.0), 'F', userPrecision)],	
 					    [coolingSetpoint: 	myConvertTemperatureIfNeeded( (c.toInteger() / 10.0), 'F', userPrecision)],	
-					    [currentProgramName: 'Hold: Temp']
+					    [currentProgramName: 'Hold: Temp'],
+                        [thermostatHold:	'hold'],
 					  ]
 		if (debugLevelFour) LOG("setHold() for ${child.device.displayName} (${deviceId}) - ${updates}",4,null,'trace')
 		child.generateEvent(updates)			// force-update the calling device attributes that it can't see
@@ -5626,6 +5644,7 @@ boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', s
 					    [coolingSetpoint: 	myConvertTemperatureIfNeeded( (climate.coolTemp.toInteger() / 10.0), 'F', userPrecision)],
 					    [currentProgram:	program],
 					    [currentProgramId:	climateRef],
+                        [thermostatHold:	'hold'],
                        // [currentProgramName:"Hold: ${program}"]
 					  ]
 		if (debugLevelFour) LOG("setProgram(${climateRef}) for ${child.device.displayName} (${deviceId}): ${updates}",4,child,'info')
@@ -6599,13 +6618,13 @@ void apiLost(where = "[where not specified]") {
 			LOG("apiLost() - notifying each child: ${oneChild.device.displayName} of loss", 1, child, "error")
 		}
 	}
-
 	unschedule(pollScheduled)
 	unschedule(scheduleWatchdog)
 	runEvery3Hours(notifyApiLost)
 }
 
 void notifyApiLost() {
+
 	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
 	if ( atomicState.connected == "lost" ) {
 		generateEventLocalParams()
