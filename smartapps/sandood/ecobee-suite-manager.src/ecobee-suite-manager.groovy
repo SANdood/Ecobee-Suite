@@ -61,7 +61,7 @@
  *	1.8.37 - HOTFIX: log new "touSetback" event
  *	1.8.38 - Miscellaneous updates & fixes
  *	1.8.38a- HOTFIX: Data type error (rare)
- *	1.8.39b- HOTFIX: Tag thermostatHolds sooner
+ *	1.8.38b- HOTFIX: Tag thermostatHolds sooner
  */
 import groovy.json.*
 import groovy.transform.Field
