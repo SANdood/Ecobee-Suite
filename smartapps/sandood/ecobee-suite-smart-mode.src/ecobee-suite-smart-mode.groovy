@@ -34,11 +34,12 @@
  *	1.8.18 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.19 - Miscellaneous updates & fixes
  *	1.8.20 - Fix label display for " (Cool"
+ *	1.8.21 - Fix climates & modes tokenize()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.20" }
+String getVersionNum()		{ return "1.8.21" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1410,9 +1411,9 @@ def getThermostatModes() {
 	settings.thermostats?.each { stat ->
 		def tm = stat.currentValue('supportedThermostatModes')
 		if (statModes == []) {	
-			if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+			if (tm && (tm != '[]')) statModes = tm[1..-2].split(", ")
 		} else {
-			def nm = (tm && (tm != '[]')) ? statModes = tm[1..-2].tokenize(", ") : []
+			def nm = (tm && (tm != '[]')) ? statModes = tm[1..-2].split(", ") : []
 			if (nm) statModes = statModes.intersect(nm)
 		}	
 	}
@@ -1426,7 +1427,7 @@ def getThermostatPrograms() {
 			def progs = []
 			def cl = stat.currentValue('climatesList')
 			if (cl && (cl != '[]')) {
-				progs = cl[1..-2].tokenize(', ')
+				progs = cl[1..-2].split(', ')
 			} else {
 				def pl = stat.currentValue('programsList')
 				tp = pl ? new JsonSlurper().parseText(pl) : []
