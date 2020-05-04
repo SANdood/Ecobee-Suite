@@ -24,10 +24,11 @@
  *	1.8.08 - Miscellaneous updates & fixes
  *	1.8.09 - Added status to app.label
  *	1.8.10 - Option to treat 'fan only' as 'idle'
+ *	1.8.11 - Fix cl/dl/tl mishmash
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -297,17 +298,17 @@ def opStateHandler(evt) {
         if (settings.theOnDimmers) {
         	//LOG("Turning on ${settings.theOnDimmers*.displayName.toString()[1..-2]} to "${settings.onDimmerLevel?:99}%",2,null,'info')
             settings.theOnDimmers.each { dimmer ->
-            	String dl = dimmer.currentLevel
+            	def cl = dimmer.currentLevel
                 String cs = dimmer.currentSwitch
             	if (settings.reversePreserve) {
                 	String dni = dimmer.device.deviceNetworkId
                     if (!priorState[dni]) priorState[dni] = []
-                    priorState[dni] << [action: 'on', type: 'dimmer', value: dl]
+                    priorState[dni] << [action: 'on', type: 'dimmer', value: cl]
                     priorState[dni] << [action: 'on', type: 'switch', value: cs]
                 }
                 def tl = settings.onDimmerLevel?:99
-                if (dl != tl) {
-                	dimmer.setLevel(dl)
+                if (cl != tl) {
+                	dimmer.setLevel(tl)
                     LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
                 } else {
                 	LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
@@ -340,19 +341,19 @@ def opStateHandler(evt) {
 
         if (settings.theOffDimmers) {
             settings.theOffDimmers.each { dimmer ->
-            	String dl = dimmer.currentLevel
+            	def cl = dimmer.currentLevel
                 String cs = dimmer.currentSwitch
             	if (settings.reversePreserve) {
                 	String dni = dimmer.device.deviceNetworkId
                     if (!priorState[dni]) priorState[dni] = []
-                    priorState[dni] << [action: 'off', type: 'dimmer', value: dl]
+                    priorState[dni] << [action: 'off', type: 'dimmer', value: cl]
                     priorState[dni] << [action: 'off', type: 'switch', value: cs]
                 }
                 def tl = settings.offDimmerLevel?:0
                 if (tl != 0) {
                 	// we're just turning down the dimmer
-                	if (dl != tl) {
-                		dimmer.setLevel(dl)
+                	if (cl != tl) {
+                		dimmer.setLevel(tl)
                     	LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
                 	} else {
                 		LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
@@ -361,7 +362,7 @@ def opStateHandler(evt) {
                 		LOG("Turning on ${dimmer.displayName}",2,null,'info')
                 		dimmer.on()
                 	}
-                } else if (dl != 0) {
+                } else if (cl != 0) {
                 	if (dimmer.currentSwitch != 'off') {
                 		LOG("Turning off ${dimmer.displayName}",2,null,'info')
                         dimmer.setLevel(0)
@@ -387,11 +388,11 @@ void reverseActions() {
         	String cs = dimmer.currentSwitch
             def cl = dimmer.currentLevel
         	if (settings.reversePreserve) {
+            	String sw
+                def lv
             	String dni = dimmer.device.deviceNetworkId
                 if (priorState && priorState[dni]) priorState[dni].each { saved ->
                 	if (saved.action == 'off') {
-                    	String sw
-                        def lv
                 		if (saved.type == 'switch') {
                            	sw = saved.value
                         } else if (saved.type == 'dimmer') {
@@ -408,8 +409,8 @@ void reverseActions() {
                 }
             } else {
             	def tl = settings.onDimmerLevel?:99
-                if (dl != tl) {
-                	dimmer.setLevel(dl)
+                if (cl != tl) {
+                	dimmer.setLevel(tl)
                     LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
                 } else {
                 	LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
@@ -460,10 +461,10 @@ void reverseActions() {
             def cl = dimmer.currentLevel
         	if (settings.reversePreserve) {
             	String dni = dimmer.device.deviceNetworkId
+				String sw
+                def lv
                 if (priorState && priorState[dni]) priorState[dni].each { saved ->
                 	if (saved.action == 'on') {
-                    	String sw
-                        def lv
                 		if (saved.type == 'switch') {
                            	sw = saved.value
                         } else if (saved.type == 'dimmer') {
