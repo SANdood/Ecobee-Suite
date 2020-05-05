@@ -64,11 +64,12 @@
  *	1.8.38b- HOTFIX: Tag thermostatHold sooner
  *	1.8.39 - Optimized stat.settings change detection
  *	1.8.40 - Better error handling for new installations
+ *	1.8.41 - Rename Smart Switch/Dimmer/Vent to Switch/Dimmer/Fan
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.40" }
+String getVersionNum()		{ return "1.8.41" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -100,7 +101,7 @@ def getHelperSmartApps() {
 			title: "New Smart Room Helper..."],
 		[name: "ecobeeSwitchesChild", appName: "ecobee Suite Smart Switches",
 			namespace: myNamespace, multiple: true,
-			title: "New Smart Switch/Dimmer/Vent Helper..."],
+			title: "New Smart Switch/Dimmer/Fan Helper..."],
 		[name: "ecobeeVentsChild", appName: "ecobee Suite Smart Vents",
 			namespace: myNamespace, multiple: true,
 			title: "New Smart Vents & Switches Helper..."],
