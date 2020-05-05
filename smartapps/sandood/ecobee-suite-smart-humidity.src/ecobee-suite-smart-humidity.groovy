@@ -22,11 +22,12 @@
  *	1.8.06 - Enhanced isOkNow() check
  *	1.8.07 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.08 - Miscellaneous updates & fixes
+ *	1.8.09 - Fix for multi-word Climate names
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.08" }
+String getVersionNum()		{ return "1.8.09" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Humidity Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -284,8 +285,8 @@ def mainPage() {
 				if (maximize) paragraph "By default, Smart Humidity adjusts the setpoint any time that the tuning parameters, internal temperature, and/or or the low temperature forecasts change"
 				input(name: "theModes", type: "mode", title: inputTitle("Adjust when ${location.name}'s Location Mode is"), multiple: true, required: false, submitOnChange: true, width: 4)
                 input(name: "statModes", type: "enum", title: inputTitle("Adjust when the ${settings?.theThermostat?:'thermostat'}'s Operating Mode is"), 
-					  multiple: true, required: false, submitOnChange: true, options: getThermostatModesList(), width: 4)
-				def programOptions = getProgramsList() + ['Vacation']
+					  multiple: true, required: false, submitOnChange: true, options: getThermostatModes(), width: 4)
+				def programOptions = getThermostatPrograms() + ['Vacation']
             	input(name: "thePrograms", type: "enum", title: inputTitle("Adjust when the ${settings.theThermostat?:'thermostat'}'s Program is"), 
 					  multiple: true, required: false, submitOnChange: true, options: programOptions, width: 4)
 				boolean any = (settings?.theModes || settings?.statModes || settings?.thePrograms)
@@ -649,15 +650,21 @@ def pauseOff(global = false) {
 	atomicState.globalPause = global
 }
 // Thermostat Programs & Modes
-def getProgramsList() {
+List getThermostatPrograms() {
 	def programs = ["Away","Home","Sleep"]
-	if (theThermostat) {
-    	def pl = theThermostat.currentValue('programsList')
-        if (pl) programs = new JsonSlurper().parseText(pl)
+	if (settings?.theThermostat) {
+    	String cl = settings.theThermostat.currentValue('climatesList')
+    	if (cl && (cl != '[]')) {
+        	programs = cl[1..-2].split(', ')
+        } else {
+    		String pl = settings?.theThermostat?.currentValue('programsList')
+        	def progs = pl ? new JsonSlurper().parseText(pl) : []
+            if (progs) programs = progs
+        }
     }
     return programs.sort(false)
 }
-def getThermostatModesList() {
+List getThermostatModes() {
 	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
     if (settings.theThermostat) {
     	def tempModes = theThermostat.currentValue('supportedThermostatModes')
