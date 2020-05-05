@@ -1406,21 +1406,21 @@ def roundIt( BigDecimal value, decimals=0) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 // return all the modes that ALL thermostats support
-def getThermostatModes() {
+List getThermostatModes() {
 	def statModes = []
 	settings.thermostats?.each { stat ->
 		def tm = stat.currentValue('supportedThermostatModes')
 		if (statModes == []) {	
-			if (tm && (tm != '[]')) statModes = tm[1..-2].split(", ")
+			if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
 		} else {
-			def nm = (tm && (tm != '[]')) ? statModes = tm[1..-2].split(", ") : []
+			def nm = (tm && (tm != '[]')) ? statModes = tm[1..-2].tokenize(", ") : []
 			if (nm) statModes = statModes.intersect(nm)
 		}	
 	}
 	return statModes.sort(false)
 }
 // get the combined set of Ecobee Programs applicable for these thermostats
-def getThermostatPrograms() {
+List getThermostatPrograms() {
 	def programs = []
 	if (thermostats?.size() > 0) {
 		thermostats.each { stat ->
