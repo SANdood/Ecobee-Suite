@@ -23,11 +23,12 @@
  *	1.8.07 - HOTFIX: Tweaked LOGs to be less chatty
  *	1.8.08 - Updated formatting
  *	1.8.09 - Miscellaneous updates & fixes
+ *	1.8.10 - Fix for multi-word Climate names
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.09" }
+String getVersionNum()		{ return "1.8.10" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -897,12 +898,12 @@ def pauseOff(global = false) {
 	atomicState.globalPause = global
 }
 // Thermostat Programs & Modes
-def getThermostatPrograms() {
+List getThermostatPrograms() {
 	def programs = ["Away","Home","Sleep"]
 	if (settings?.theThermostat) {
     	String cl = settings.theThermostat.currentValue('climatesList')
     	if (cl && (cl != '[]')) {
-        	programs = cl[1..-2].tokenize(', ')
+        	programs = cl[1..-2].split(', ')
         } else {
     		String pl = settings?.theThermostat?.currentValue('programsList')
         	def progs = pl ? new JsonSlurper().parseText(pl) : []
@@ -911,7 +912,7 @@ def getThermostatPrograms() {
     }
     return programs.sort(false)
 }
-def getThermostatModes() {
+List getThermostatModes() {
 	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
     if (settings.theThermostat) {
     	String tm = theThermostat.currentValue('supportedThermostatModes')
