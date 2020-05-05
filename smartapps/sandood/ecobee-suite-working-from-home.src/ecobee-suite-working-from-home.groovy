@@ -29,11 +29,12 @@
  *	1.8.13 - HOTFIX: sendHoldHours in setThermostatProgram()
  *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.15 - Miscellaneous updates & fixes
+ *	1.8.16 - Fix for multi-word Climate names
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.14" }
+String getVersionNum()		{ return "1.8.16" }
 String getVersionLabel() 	{ return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -135,7 +136,7 @@ def mainPage() {
                 	  required: (settings.timeOfDay == null), submitOnChange: true, width: 6)
 				input(name: "timeOfDay", type: "time", title: inputTitle("At this time of day"),  required: !settings.onAway, submitOnChange: true, width: 6)
                 if (settings.onAway) {
-                	def programs = getEcobeePrograms()
+                	def programs = getThermostatPrograms()
                     programs = programs - ["Resume"]
                 	input(name: 'awayPrograms', type: 'enum', title: inputTitle("When Program changes to any of these: "), options: programs, required: true, defaultValue: 'Away', multiple: true, 
                           submitOnChange: true, width: 6)
@@ -152,7 +153,7 @@ def mainPage() {
         		input(name: "setHome", type: "bool", title: inputTitle("Change thermostat${settings?.myThermostats?.size()>1?'\'s':'s\''} Program?"), defaulValue: true, 
                 	  submitOnChange: true, width: 4)
                 if (settings.setHome) {
-                	def programs = getEcobeePrograms()
+                	def programs = getThermostatPrograms()
                     programs = programs - ((settings.awayPrograms?:[]) + ["Resume"])
                 	input(name: 'homeProgram', type: 'enum', title: inputTitle("Change Program to: "), options: programs, required: true, defaultValue: 'Home', multiple: false, 
                           submitOnChange: true, width: 4)
@@ -568,25 +569,32 @@ String becauseText(who) {
 }
 
 // get the combined set of Ecobee Programs applicable for these thermostats
-def getEcobeePrograms() {
+List getThermostatPrograms() {
 	def programs
 	if (settings.myThermostats?.size() > 0) {
 		settings.myThermostats.each { stat ->
-			def pl = stat.currentValue('programsList')
+        	def progs = []
+        	String cl = stat.currentValue('climatesList')
+    			if (cl && (cl != '[]')) {
+        		progs = cl[1..-2].split(', ')
+        	} else {
+    			String pl = settings?.theThermostat?.currentValue('programsList')
+        		progs = pl ? new JsonSlurper().parseText(pl) : []
+        	}
 			if (!programs) {
-				if (pl) programs = new JsonSlurper().parseText(pl)
+				if (progs) programs = progs
 			} else {
-				if (pl) programs = programs.intersect(new JsonSlurper().parseText(pl))
+				if (progs) programs = programs.intersect(progs)
 			}
         }
 	} 
 	if (!programs) programs =  ['Away', 'Home', 'Sleep']
-    LOG("getEcobeePrograms: returning ${programs}", 4, null, 'info')
+    LOG("getThermostatPrograms: returning ${programs}", 4, null, 'info')
     return programs.sort(false)
 }
 
 // return all the modes that ALL thermostats support
-def getThermostatModes() {
+List getThermostatModes() {
 	def theModes = []
     
     settings.myThermostats?.each { stat ->
