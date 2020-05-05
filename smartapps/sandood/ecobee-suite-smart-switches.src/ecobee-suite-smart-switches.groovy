@@ -25,12 +25,12 @@
  *	1.8.09 - Added status to app.label
  *	1.8.10 - Option to treat 'fan only' as 'idle'
  *	1.8.11 - Fix cl/dl/tl mishmash
- *	1.8.12 - Added fanControl support
+ *	1.8.12 - Added fanControl support, changed name to Smart Switch/Dimmer/Fan
  */
 import groovy.transform.Field
 
 String getVersionNum()		{ return "1.8.12" }
-String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Fan/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Fan Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 				"ecobee Suite Smart Switches",
