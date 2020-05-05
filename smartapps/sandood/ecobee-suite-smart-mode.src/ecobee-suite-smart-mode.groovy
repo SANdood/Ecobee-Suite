@@ -34,7 +34,7 @@
  *	1.8.18 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.19 - Miscellaneous updates & fixes
  *	1.8.20 - Fix label display for " (Cool"
- *	1.8.21 - Fix climates & modes tokenize()
+ *	1.8.21 - Fix for multi-word Climate names
  */
 import groovy.json.*
 import groovy.transform.Field
