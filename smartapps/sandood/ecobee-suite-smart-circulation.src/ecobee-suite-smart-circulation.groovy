@@ -24,11 +24,12 @@
  *	1.8.08 - Updated formatting
  *	1.8.09 - Miscellaneous updates & fixes
  *	1.8.10 - Fix for multi-word Climate names
+ *	1.8.11 - Fix settings descriptive text for minFanOnTime==0
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -164,15 +165,16 @@ def mainPage() {
 				if (maximize) paragraph "Circulation time (min/hr) will be increased/decreased when the difference between the maximum and the minimum temperature reading of the above sensors is more/less than the Temperature Delta."
 				if (!maximize && HE) paragraph("", width: 6)
             	input(name: "minFanOnTime", type: "number", title: inputTitle("Minimum fan on time")+" (min/hr - 0-${settings.maxFanOnTime!=null?settings.maxFanOnTime:55})", 
-                	  required: true, defaultValue: "5", /*description: "5",*/ range: "0..${settings.maxFanOnTime!=null?settings.maxFanOnTime:55}", submitOnChange: true, width: 3)
+                	  required: true, defaultValue: 5, /*description: "5",*/ range: "0..${settings.maxFanOnTime!=null?settings.maxFanOnTime:55}", submitOnChange: true, width: 3)
+                // if (settings.minFanOnTime == null) { app.updateSetting('minFanOnTime', 5); settings.minFanOnTime = 5; }
             	input(name: "maxFanOnTime", type: "number", title: inputTitle("Maximum fan on time")+" (min/hr - ${settings.minFanOnTime!=null?settings.minFanOnTime:5}-55)", 
-                	  required: true, defaultValue: "55", /* description: "55",*/ range: "${settings.minFanOnTime!=null?settings.minFanOnTime:5}..55", submitOnChange: true, width: 3)
-				input(name: "fanAdjustMinutes", type: "number", title: inputTitle("Adjustment frequency")+" (minutes - 5-60)", required: true, defaultValue: "10", 
+                	  required: true, defaultValue: 55, /* description: "55",*/ range: "${settings.minFanOnTime!=null?settings.minFanOnTime:5}..55", submitOnChange: true, width: 3)
+				input(name: "fanAdjustMinutes", type: "number", title: inputTitle("Adjustment frequency")+" (minutes - 5-60)", required: true, defaultValue: 10, 
                 	  /*description: "10",*/ range: "5..60", width: 3, submitOnChange: true)
-            	input(name: "fanOnTimeDelta", type: "number", title: inputTitle("Adjustment Increments")+" (minutes - 1-20)", required: true, defaultValue: "5", /* description: "5",*/ 
+            	input(name: "fanOnTimeDelta", type: "number", title: inputTitle("Adjustment Increments")+" (minutes - 1-20)", required: true, defaultValue: 5, /* description: "5",*/ 
                 	  range: "1..20", width: 3, submitOnChange: true)            	
 				if (maximize) paragraph "Circulation time includes the Heating, Cooling and Fan Only run time. Adjustments will be made every ${settings?.fanAdjustMinutes?:10} minutes, " +
-						  "and the circulation time will change in ${settings?.fanOnTimeDelta?:5} minute increments within the range of ${settings?.minFanOnTime?:5} to " +
+						  "and the circulation time will change in ${settings?.fanOnTimeDelta?:5} minute increments within the range of ${settings?.minFanOnTime!=null?settings.minFanOnTime:5} to " +
 						  "${settings?.maxFanOnTime?:10} minutes"
         	}
             
