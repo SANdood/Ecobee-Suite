@@ -29,11 +29,12 @@
  *	1.8.13 - Miscellaneous updates & fixes
  *	1.8.14 - Fix for multi-word Climate names
  *	1.8.15 - Add missing functions for DND 
+ *	1.8.16 - HOTFIX: Custom Notifications page name
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.15" }
+String getVersionNum()		{ return "1.8.16" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -439,7 +440,7 @@ def mainPage() {
 def customNotifications(){
 	//boolean ST = isST
 	//boolean HE = !ST
-	pageLabel = pageLabel.take(pageLabel.indexOf(','))
+	String pageLabel = versionLabel.take(versionLabel.indexOf(','))
 	dynamicPage(name: "customNotifications", title: pageTitle("${pageLabel}\nCustom Notifications"), uninstall: false, install: false) {
 		section(sectionTitle("Customizations")) {}
         section(smallerTitle("Notification Prefix")) {
