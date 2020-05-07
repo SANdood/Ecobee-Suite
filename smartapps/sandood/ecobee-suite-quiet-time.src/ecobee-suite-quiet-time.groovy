@@ -33,10 +33,11 @@
  *	1.8.05 - Allow individual un-pause from peers, even if was already paused
  *	1.8.06 - Updated formatting
  *	1.8.07 - Miscellaneous updates & fixes
+ *	1.8.08 - Fix for multi-word Climate names
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.07" }
+String getVersionNum()		{ return "1.8.08" }
 String getVersionLabel() 	{ return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -734,7 +735,7 @@ String getDeviceId(networkId) {
 }
 
 // return all the modes that ALL thermostats support
-def getThermostatModes() {
+List getThermostatModes() {
 	//log.debug "${app.name}, ${app.label}"
 	def theModes = []
     

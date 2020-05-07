@@ -22,17 +22,21 @@
  *	1.8.06 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.07 - Fixed reverseActions()
  *	1.8.08 - Miscellaneous updates & fixes
+ *	1.8.09 - Added status to app.label
+ *	1.8.10 - Option to treat 'fan only' as 'idle'
+ *	1.8.11 - Fix cl/dl/tl mishmash
+ *	1.8.12 - Added fanControl support, changed name to Smart Switch/Dimmer/Fan
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.08" }
-String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Vent Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
+String getVersionNum()		{ return "1.8.12" }
+String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Fan Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 				"ecobee Suite Smart Switches",
 	namespace: 			"sandood",
 	author: 			"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled switches, dimmers and generic vents based on thermostat operating state",
+	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled switches, dimmers, fans and generic vents based on thermostat operating state",
 	category: 			"Convenience",
 	parent: 			"sandood:Ecobee Suite Manager",
 	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
@@ -50,10 +54,8 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
-	String defaultName = "Smart Switch/Dimmer/Vent"
+	String defaultName = "Smart Switch/Dimmer/Fan/Vent"
     
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
@@ -97,18 +99,23 @@ def mainPage() {
                 	atomicState.appDisplayName = app.label
                 }
 			} else {
-            	if (app.label.contains(' (paused)')) {
-                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
+                def opts = [' (paused', ' (Cool', ' (Heat', ' (Fan', ' (Idle', ' (Pend', ' (Vent']
+				String flag
+                opts.each {
+                	if (!flag && app.label.contains(it)) flag = it
+				}
+				if (flag) {
+					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(flag)) {
 						app.updateLabel(atomicState.appDisplayName)
 					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
+                        String myLabel = app.label.substring(0, app.label.indexOf(flag))
                         atomicState.appDisplayName = myLabel
                         app.updateLabel(myLabel)
                     }
                 } else {
                 	atomicState.appDisplayName = app.label
                 }
-            }
+			}
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
@@ -123,21 +130,36 @@ def mainPage() {
         		input(name: "theOpState", type: "enum", title: inputTitle("When ${settings?.theThermostats?.size()>1?'any ':'the '} thermostat changes to one of these Operating States"), 
 					  options:['heating','cooling','fan only','idle','pending cool','pending heat','vent economizer'], required: true, multiple: true, submitOnChange: true, width: 6)
 				// mode(title: inputTitle("Enable only for specific mode(s)"))
+                input(name: "fanOnly", type: "bool", title: inputTitle("Deactivate when 'fan only'?"), defaultValue: !settings?.theOpState?.contains('fan only'), submitOnChange: true, width: 6)
         	}
        
         	section(title: sectionTitle("Actions")) {
 				paragraph(smallerTitle("Turn on..."))
-				input(name: 'theOnSwitches', type: 'capability.switch', title: inputTitle("Turn On these switches"), multiple: true, required: false, submitOnChange: true, width: 4)
-          		input(name: 'theOnDimmers', type: 'capability.switchLevel', title: inputTitle("Set level on these dimmers"), multiple: true, required: false, submitOnChange: true, width: 4)
+				input(name: 'theOnSwitches', type: 'capability.switch', title: inputTitle("Turn on these switches"), multiple: true, required: false, submitOnChange: true)
+          		input(name: 'theOnDimmers', type: 'capability.switchLevel', title: inputTitle("Set level on these dimmers"), multiple: true, required: false, submitOnChange: true)
           		if (settings.theOnDimmers) {
 					input(name: 'onDimmerLevel', type: 'number', title: inputTitle("Set dimmers to level...")+' (0-100)', range: "0..100", required: true, width: 4)
-				} else if (HE) paragraph("", width: 4)
+				}
+                input(name: 'theOnFans', type: 'capability.fanControl', title: inputTitle("Set speed on these fans"), multiple: true, required: false, submitOnChange: true, width: 4, hideWhenEmpty: true)
+                if (settings.theOnFans) {
+                	input(name: 'onFanSpeed', type: 'enum', title: inputTitle("Set fan speed to..."), options: ["low","medium low","medium","medium high","high","on","off","auto"], required: true, defaultValue: "low",
+                    	  submitOnChange: true, width: 4)
+                    if (!settings?.onFanSpeed) { app.updateSetting('onFanSpeed', 'low'); settings.onFanSpeed = 'low'; }
+                }
+                
 				paragraph(smallerTitle("Turn off..."))
-          		input(name: 'theOffSwitches', type: 'capability.switch', title: inputTitle('Turn Off these switches'), multiple: true, required: false, submitOnChange: true)
+          		input(name: 'theOffSwitches', type: 'capability.switch', title: inputTitle('Turn off these switches'), multiple: true, required: false, submitOnChange: true)
           		input(name:	'theOffDimmers', type: 'capability.switchLevel', title: inputTitle("Set level on these dimmers"), multiple: true, required: false, submitOnChange: true, width: 4)
           		if (settings.theOffDimmers) {
 					input(name: 'offDimmerLevel', type: 'number', title: inputTitle("Set dimmers to level...")+' (0-100)', range: "0..100", required: true, width: 4)
-				} else if (HE) paragraph("")
+				}
+                input(name: 'theOffFans', type: 'capability.fanControl', title: inputTitle("Set speed on these fans"), multiple: true, required: false, submitOnChange: true, width: 4, hideWhenEmpty: true)
+                if (settings.theOffFans) {
+                	input(name: 'offFanSpeed', type: 'enum', title: inputTitle("Set fan speed to..."), options: ["low","medium low","medium","medium high","high","on","off","auto"], required: true, defaultValue: "off",
+                    	  submitOnChange: true, width: 4)
+                    if (!settings?.offFanSpeed) { app.updateSetting('offFanSpeed', 'off'); settings.offFanSpeed = 'off'; }
+                }
+                
             	if (!settings.theOpState?.contains('idle')) {
             		input(name: 'reverseOnIdle', type: 'bool', title: inputTitle("Reverse above Actions when ${settings.theThermostats?.size()>1?'all thermostats return':'thermostat returns'} to 'idle'?"), 
 						  defaultValue: false, submitOnChange: true, width: 6)
@@ -203,6 +225,8 @@ void uninstalled() {
 }
 def initialize() {
 	LOG("${getVersionLabel()} Initializing...", 2, "", 'info')
+    if (!atomicState.thermostatOpState) atomicState.thermostatOpState = theThermostats[0].currentValue('thermostatOperatingState')
+	if (!atomicState.currentAction) atomicState.currentAction = ' - waiting...'
 	updateMyLabel()
 	
     atomicState.scheduled = false
@@ -226,34 +250,49 @@ def opStateHandler(evt) {
 	LOG("${evt.name}: ${evt.value}",2,null,'info')
 	//boolean ST = atomicState.isST
 
-	if (evt.value == 'idle') {
+	String oldOpState = atomicState.thermostatOpState
+	String newOpState = evt.value
+	atomicState.thermostatOpState = evt.value
+	if (!settings.theOpState.contains(oldOpState) && !settings.theOpState.contains(newOpState)) {
+		atomicState.currentAction = ' - unchanged'
+		updateMyLabel()
+		return
+	}
+    atomicState.currentAction = ' - unchanged'
+    
+	if ((evt.value == 'idle') || (settings.fanOnly && (evt.value == 'fan only'))) {
     	if (settings.reverseOnIdle) {
         	def isReallyIdle = true
         	if (settings.theThermostats.size() > 1) {
             	settings.theThermostats.each { 
 					String ncTos = ST ? it.currentValue('thermostatOperatingState') : it.currentValue('thermostatOperatingState', true)
-					if (ncTos != 'idle') isReallyIdle = false }
+					if ((ncTos != 'idle') && (!settings.fanOnly || (ncTos != 'fan only')))  isReallyIdle = false 
+				}
             }
             if (isReallyIdle) {	
 				reverseActions()
             }
+            updateMyLabel()
             return
         }
     }
 	if (settings.theOpState.contains(evt.value)) {
     	if (!dayCheck()) {
         	LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
+            updateMyLabel()
             return
         }
     	def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false
         
         if (between) {
     		LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
+            updateMyLabel()
         	return
     	}
         HashMap priorState = atomicState.priorState as HashMap
         if (!priorState) priorState = [:] as HashMap
         
+        // Turn on the "on" switches
         if (settings.theOnSwitches) {
 			settings.theOnSwitches.each { theSwitch ->
             	String cs = theSwitch.currentSwitch
@@ -269,33 +308,62 @@ def opStateHandler(evt) {
                   	LOG("${theSwitch.displayName} was already on",2,null,'info')
                 }
             }
+            atomicState.currentAction = ' - activated'
         }
         
+        // Turn on the "on" dimmers
         if (settings.theOnDimmers) {
-        	//LOG("Turning on ${settings.theOnDimmers*.displayName.toString()[1..-2]} to "${settings.onDimmerLevel?:99}%",2,null,'info')
             settings.theOnDimmers.each { dimmer ->
-            	String dl = dimmer.currentLevel
+            	def cl = dimmer.currentLevel
                 String cs = dimmer.currentSwitch
             	if (settings.reversePreserve) {
                 	String dni = dimmer.device.deviceNetworkId
                     if (!priorState[dni]) priorState[dni] = []
-                    priorState[dni] << [action: 'on', type: 'dimmer', value: dl]
+                    priorState[dni] << [action: 'on', type: 'dimmer', value: cl]
                     priorState[dni] << [action: 'on', type: 'switch', value: cs]
                 }
                 def tl = settings.onDimmerLevel?:99
-                if (dl != tl) {
-                	dimmer.setLevel(dl)
+                if (cl != tl) {
+                	dimmer.setLevel(tl)
                     LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
                 } else {
                 	LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
                 }
-                if (dimmer.currentSwitch != 'on') {
+                if (cs != 'on') {
                 	LOG("Turning on ${dimmer.displayName}",2,null,'info')
                 	dimmer.on()
                 }
             }
+            atomicState.currentAction = ' - activated'
         }
         
+        // Turn on the "on" fans
+        if (settings.theOnFans) {
+            settings.theOnFans.each { fan ->
+            	String fs = fan.currentSpeed
+                String cs = fan.getSupportedCommands().contains("on") ? fan.currentSwitch : ""
+            	if (settings.reversePreserve) {
+                	String dni = fan.device.deviceNetworkId
+                    if (!priorState[dni]) priorState[dni] = []
+                    priorState[dni] << [action: 'on', type: 'speed', value: fs]
+                    priorState[dni] << [action: 'on', type: 'switch', value: cs]
+                }
+                String ts = settings.onFanSpeed?:"low"
+                if (fs != ts) {
+                	fan.setSpeed(ts)
+                    LOG("Setting ${fan.displayName} to ${ts}",2,null,'info')
+                } else {
+                	LOG("${fan.displayName} was already set to ${ts}",2,null,'info')
+                }
+                if (cs && (cs != 'on')) {
+                	LOG("Turning on ${fan.displayName}",2,null,'info')
+                	fan.on()
+                }
+            }
+            atomicState.currentAction = ' - activated'
+        }
+        
+        // Turn off the "off" switches
         if (settings.theOffSwitches) {
 			settings.theOffSwitches.each { theSwitch ->
             	String cs = theSwitch.currentSwitch
@@ -311,23 +379,25 @@ def opStateHandler(evt) {
                   	LOG("${theSwitch.displayName} was already off",2,null,'info')
                 }
             }
+            atomicState.currentAction = ' - activated'
         }
-
+        
+        // Turn off the "off" dimmers
         if (settings.theOffDimmers) {
             settings.theOffDimmers.each { dimmer ->
-            	String dl = dimmer.currentLevel
+            	def cl = dimmer.currentLevel
                 String cs = dimmer.currentSwitch
             	if (settings.reversePreserve) {
                 	String dni = dimmer.device.deviceNetworkId
                     if (!priorState[dni]) priorState[dni] = []
-                    priorState[dni] << [action: 'off', type: 'dimmer', value: dl]
+                    priorState[dni] << [action: 'off', type: 'dimmer', value: cl]
                     priorState[dni] << [action: 'off', type: 'switch', value: cs]
                 }
                 def tl = settings.offDimmerLevel?:0
                 if (tl != 0) {
                 	// we're just turning down the dimmer
-                	if (dl != tl) {
-                		dimmer.setLevel(dl)
+                	if (cl != tl) {
+                		dimmer.setLevel(tl)
                     	LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
                 	} else {
                 		LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
@@ -336,7 +406,7 @@ def opStateHandler(evt) {
                 		LOG("Turning on ${dimmer.displayName}",2,null,'info')
                 		dimmer.on()
                 	}
-                } else if (dl != 0) {
+                } else if (cl != 0) {
                 	if (dimmer.currentSwitch != 'off') {
                 		LOG("Turning off ${dimmer.displayName}",2,null,'info')
                         dimmer.setLevel(0)
@@ -344,15 +414,82 @@ def opStateHandler(evt) {
                     }
                 }
             }
+            atomicState.currentAction = ' - activated'
+        }
+        
+        // Turn off the "off" fans
+        if (settings.theOffFans) {
+            settings.theOffFans.each { fan ->
+            	String fs = fan.currentSpeed
+                String cs = fan.getSupportedCommands().contains("off") ? fan.currentSwitch : ""
+            	if (settings.reversePreserve) {
+                	String dni = fan.device.deviceNetworkId
+                    if (!priorState[dni]) priorState[dni] = []
+                    priorState[dni] << [action: 'off', type: 'speed', value: fs]
+                    priorState[dni] << [action: 'off', type: 'switch', value: cs]
+                }
+                String ts = settings.offFanSpeed?:"off"
+                if (fs != ts) {
+                	fan.setSpeed(ts)
+                    LOG("Setting ${fan.displayName} to ${ts}",2,null,'info')
+                } else {
+                	LOG("${fan.displayName} was already set to ${ts}",2,null,'info')
+                }
+                if (cs && (cs != 'off')) {
+                	LOG("Turning off ${fan.displayName}",2,null,'info')
+                	fan.off()
+                }
+            }
+            atomicState.currentAction = ' - activated'
         }
         atomicState.priorState = priorState
     }
+    updateMyLabel()
 }
 void reverseActionsScheduled() {
 	if (dayCheck) reverseActions()
 }
 void reverseActions() {
 	Map priorState = settings.reversePreserve ? atomicState.priorState : [:]
+	LOG("reverseActions() - ${priorState}", 3, null, debug)
+    
+    // Turn on the "off" fans
+    if (settings.theOffFans) {
+    	settings.theOffFans.each { fan ->
+        	String cs = fan.getSupportedCommands().contains("on") ? fan.currentSwitch : ""
+            String fs = fan.currentSpeed
+        	if (settings.reversePreserve) {
+            	String sw
+                String sp
+            	String dni = fan.device.deviceNetworkId
+                if (priorState && priorState[dni]) priorState[dni].each { saved ->
+                	if (saved.action == 'off') {
+                		if (saved.type == 'switch') {
+                           	sw = saved.value
+                        } else if (saved.type == 'speed') {
+                           	sp = saved.value
+                        }
+                    }
+                }
+                LOG("Returning ${fan.displayName} to prior state (${sw} @ ${sp})",2,null,'info')
+                if (!fs || (sp != fs)) fan.setSpeed(sp)
+				if (cs && (cs != sw)) fan."${sw}"()
+            } else {
+            	def sp = settings.onFanSpeed?:"low"
+                if (!fs || (fs != sp)) {
+                	fan.setSpeed(sp)
+                    LOG("Setting ${fan.displayName} to ${sp}",2,null,'info')
+                } else {
+                	LOG("${fan.displayName} was already set to ${sp}",2,null,'info')
+                }
+                if (cs && (cs != 'on')) {
+                	LOG("Turning on ${fan.displayName}",2,null,'info')
+                	fan.on()
+                }
+            }
+        }
+        atomicState.currentAction = ' - deactivated'
+    }
     
     // Turn on the "off" dimmers
 	if (settings.theOffDimmers) {
@@ -360,39 +497,38 @@ void reverseActions() {
         	String cs = dimmer.currentSwitch
             def cl = dimmer.currentLevel
         	if (settings.reversePreserve) {
+            	String sw
+                def lv
             	String dni = dimmer.device.deviceNetworkId
                 if (priorState && priorState[dni]) priorState[dni].each { saved ->
                 	if (saved.action == 'off') {
-                    	String sw
-                        def lv
                 		if (saved.type == 'switch') {
                            	sw = saved.value
                         } else if (saved.type == 'dimmer') {
                            	lv = saved.value
                         }
                     }
-                    if (lv && sw) { 					// dimmers will have both
-                        if ((lv != cl) || (cs != sw)) {
-                        	LOG("Returning ${dimmer.displayName} to prior state (${sw} @ ${lv}%)",2,null,'info')
-                        	dimmer.setLevel(lv)
-                        	dimmer."${sw}"()
-                        }
-                    }
                 }
+                LOG("Returning ${dimmer.displayName} to prior state (${sw} @ ${lv}%)",2,null,'info')
+                if (lv && (lv != cl)) dimmer.setLevel(lv)
+                if (cs && (cs != sw)) dimmer."${sw}"()
             } else {
             	def tl = settings.onDimmerLevel?:99
-                if (dl != tl) {
-                	dimmer.setLevel(dl)
-                    LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
-                } else {
-                	LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
+                if (cl) {
+                    if (cl != tl) {
+                        dimmer.setLevel(tl)
+                        LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
+                    } else {
+                        LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
+                    }
                 }
-                if (dimmer.currentSwitch != 'on') {
+                if (cs && (cs != 'on')) {
                 	LOG("Turning on ${dimmer.displayName}",2,null,'info')
                 	dimmer.on()
                 }
             }
         }
+        atomicState.currentAction = ' - deactivated'
     }
     
     // turn on the "off" switches
@@ -421,9 +557,53 @@ void reverseActions() {
                 }
             }
         }
+        atomicState.currentAction = ' - deactivated'
+    }
+        
+    // turn off the "on" fans
+    if (settings.theOnFans) {
+    	settings.theOnFans.each { fan ->
+        	String cs = fan.getSupportedCommands().contains("off") ? fan.currentSwitch : ""
+            String fs = fan.currentSpeed
+        	if (settings.reversePreserve) {
+            	String dni = fan.device.deviceNetworkId
+				String sw
+                String sp
+                if (priorState && priorState[dni]) priorState[dni].each { saved ->
+                	if (saved.action == 'on') {
+                		if (saved.type == 'switch') {
+                           	sw = saved.value
+                        } else if (saved.type == 'speed') {
+                           	sp = saved.value
+                        }
+                    }
+                }
+                LOG("Returning ${fan.displayName} to prior state (${sw} @ ${sp})",2,null,'info')
+                if (fs && (fs != sp)) fan.setSpeed(sp)
+                if (cs && (cs != sw)) fan."${sw}"()
+            } else {
+            	String sp = settings.offFanSpeed?:"off"
+                if (fs) {
+                	if (fs != sp) {
+                		fan.setSpeed(sp)
+                    	LOG("Setting ${fan.displayName} to ${sp}",2,null,'info')
+                	} else {
+                		LOG("${fan.displayName} was already set to ${sp}",2,null,'info')
+                	}
+                }
+                if (cs) {
+                	if (cs != 'off') {
+                		LOG("Turning off ${fan.displayName}",2,null,'info')
+                		fan.off()
+                	} else {
+                    	LOG("${fan.displayName} was already off",2,null,'info')
+                	}
+                }
+            }
+        }
+        atomicState.currentAction = ' - deactivated'
     }
     
-    //if (settings.theOnDimmers) dimmersOff(settings.theOnDimmers)
     // turn off the "on" dimmers
     if (settings.theOnDimmers) {
     	settings.theOnDimmers.each { dimmer ->
@@ -431,43 +611,43 @@ void reverseActions() {
             def cl = dimmer.currentLevel
         	if (settings.reversePreserve) {
             	String dni = dimmer.device.deviceNetworkId
+				String sw
+                def lv
                 if (priorState && priorState[dni]) priorState[dni].each { saved ->
                 	if (saved.action == 'on') {
-                    	String sw
-                        def lv
                 		if (saved.type == 'switch') {
                            	sw = saved.value
                         } else if (saved.type == 'dimmer') {
                            	lv = saved.value
                         }
                     }
-                    if (lv && sw) { 		// dimmers will have both
-                        if ((lv != cl) || (cs != sw)) {
-                        	LOG("Returning ${dimmer.displayName} to prior state (${sw} @ ${lv}%)",2,null,'info')
-                        	dimmer.setLevel(lv)
-                        	dimmer."${sw}"()
-                        }
-                    } else {
-                    	// Error: didn't get both values from priorState
-                    }
-                } else {
-                	// Error: didn't get ANY values from priorState
                 }
+                LOG("Returning ${dimmer.displayName} to prior state (${sw} @ ${lv}%)",2,null,'info')
+                if (lv && (lv != cl)) dimmer.setLevel(lv)
+                if (cs && (cs != sw)) dimmer."${sw}"()
             } else {
             	def tl = settings.offDimmerLevel?:0
-                if (cl != tl) {
-                	dimmer.setLevel(tl)
-                    LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
-                } else {
-                	LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
+                if (cl != null) {
+                    if (cl != tl) {
+                        dimmer.setLevel(tl)
+                        LOG("Setting ${dimmer.displayName} to ${tl}%",2,null,'info')
+                    } else {
+                        LOG("${dimmer.displayName} was already at ${tl}%",2,null,'info')
+                    }
                 }
-                if (dimmer.currentSwitch != 'off') {
-                	LOG("Turning off ${dimmer.displayName}",2,null,'info')
-                	dimmer.on()
+                if (cs) {
+                    if (cs != 'off') {
+                        LOG("Turning off ${dimmer.displayName}",2,null,'info')
+                        dimmer.off()
+                    } else {
+                        LOG("${dimmer.displayName} was already off",2,null,'info')
+                    }
                 }
             }
         }
+        atomicState.currentAction = ' - deactivated'
     }
+    
     // turn off the "on" switches
     if (settings.theOnSwitches) {
         settings.theOnSwitches.each { theSwitch ->
@@ -478,7 +658,7 @@ void reverseActions() {
 					if ((saved.action == 'on') && (saved.type == 'switch')) {
 						String sw = saved.value
 						if (cs != sw) {
-							theSwitch."${sw}()"
+							theSwitch."${sw}"()
 							LOG("Returning ${theSwitch.displayName} to prior state (${sw})",2,null,'info')
 						} else {
 							LOG("${theSwitch.displayName} is already ${sw}",2,null,'info')
@@ -494,8 +674,10 @@ void reverseActions() {
                 }
             }
         }
+        atomicState.currentAction = ' - deactivated'
     }
 	atomicState.priorState = [:]
+    // updateMyLabel() - caller will do the update
 }
 
 // SmartThings internal function format (Strings instead of Dates)
@@ -534,25 +716,44 @@ private boolean dayCheck() {
     return (actionDays.contains(day))
 }
 void updateMyLabel() {
-	//boolean ST = atomicState.isST
-    
-	String flag = ST ? ' (paused)' : '<span '
-	
-	String myLabel = atomicState.appDisplayName
+    def opts = [' (paused', ' (Cool', ' (Heat', ' (Fan', ' (Idle', ' (Pend', ' (Vent']
+	String flag
+	if (ST) {
+		opts.each {
+			if (!flag && app.label.contains(it)) flag = it
+		}
+	} else {
+		flag = '<span '
+	}
+    String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
-		myLabel = app.label
+		myLabel = app.label ?: app.name
 		if (!myLabel.contains(flag)) atomicState.appDisplayName = myLabel
 	} 
-	if (myLabel.contains(flag)) {
+	if (flag && myLabel.contains(flag)) {
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
+	String newLabel
 	if (settings.tempDisable) {
-		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
-		if (app.label != myLabel) app.updateLabel(myLabel)
+		newLabel = myLabel
+		if (settings.theThermostats?.size()) {
+        	String thermostatOpState = ' (' + capitalizeAll(atomicState.thermostatOpState)
+			String currentAction = atomicState.currentAction + ')'
+            String color = (atomicState.thermostatOpState == 'idle') ? 'green' : 'blue'
+			newLabel = newLabel + (HE ? '<span style="color:' + color + '">' + thermostatOpState + currentAction + '</span>' : thermostatOpState + currentAction)
+		}
+		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
+}
+String capitalizeAll(String str) {
+    if (str == null || str.isEmpty()) {
+        return str;
+    }
+    str.split(" ").collect{it.capitalize()}.join(" ")
 }
 def pauseOn(global = false) {
 	// Pause this Helper

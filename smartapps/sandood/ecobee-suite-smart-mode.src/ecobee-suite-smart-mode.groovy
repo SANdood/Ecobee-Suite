@@ -33,11 +33,13 @@
  *	1.8.17 - HOTFIX: location.mode subscription; sendHoldHours in setThermostatProgram()
  *	1.8.18 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.19 - Miscellaneous updates & fixes
+ *	1.8.20 - Fix label display for " (Cool"
+ *	1.8.21 - Fix for multi-word Climate names
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.19" }
+String getVersionNum()		{ return "1.8.21" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1192,7 +1194,10 @@ def temperatureUpdate( BigDecimal temp ) {
 							cancelReservation(tid,'modeOff')
 							if (countReservations(tid, 'modeOff') == 0) {
 								// nobody else has a reservation on modeOff
-								if (desiredMode && (cMode != desiredMode)) it.setThermostatMode(desiredMode)
+								if (desiredMode && (cMode != desiredMode)) {
+                                	log.debug "${tid} - currentMode: ${cMode}, desiredMode: ${desiredMode}, changing mode"
+                                	it.setThermostatMode(desiredMode)
+                                }
 								if (desiredProgram && (cProgram != desiredProgram)) {
 									String sendHoldType = whatHoldType(stat)
 									Integer sendHoldHours = null
@@ -1221,7 +1226,11 @@ def temperatureUpdate( BigDecimal temp ) {
 							// Not off currently, so we can change freely
 							boolean changed = false
 							cancelReservation(tid, 'modeOff')	// just in case
-							if (desiredMode && (cMode != desiredMode)) { it.setThermostatMode(desiredMode); changed = true }
+                            if (desiredMode && (cMode != desiredMode)) {
+                                log.debug "${tid} - currentMode: ${cMode}, desiredMode: ${desiredMode}, changing mode"
+                                it.setThermostatMode(desiredMode)
+                                changed = true 
+                            }
 							if (desiredProgram && (cProgram != desiredProgram)) {
 								String sendHoldType = whatHoldType(stat)
 								Integer sendHoldHours = null
@@ -1397,7 +1406,7 @@ def roundIt( BigDecimal value, decimals=0) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_UP) 
 }
 // return all the modes that ALL thermostats support
-def getThermostatModes() {
+List getThermostatModes() {
 	def statModes = []
 	settings.thermostats?.each { stat ->
 		def tm = stat.currentValue('supportedThermostatModes')
@@ -1411,14 +1420,14 @@ def getThermostatModes() {
 	return statModes.sort(false)
 }
 // get the combined set of Ecobee Programs applicable for these thermostats
-def getThermostatPrograms() {
+List getThermostatPrograms() {
 	def programs = []
 	if (thermostats?.size() > 0) {
 		thermostats.each { stat ->
 			def progs = []
 			def cl = stat.currentValue('climatesList')
 			if (cl && (cl != '[]')) {
-				progs = cl[1..-2].tokenize(', ')
+				progs = cl[1..-2].split(', ')
 			} else {
 				def pl = stat.currentValue('programsList')
 				tp = pl ? new JsonSlurper().parseText(pl) : []
@@ -1929,7 +1938,7 @@ boolean sendNotifications( String msgPrefix, String msg ) {
 	return true
 }
 void updateMyLabel() {
-	def opts = [' (paused)', '(Cool', ' (Heat', ' (Aux', ' (Off', ' (Auto', ' (Emer']
+	def opts = [' (paused)', ' (Cool', ' (Heat', ' (Aux', ' (Off', ' (Auto', ' (Emer']
 	String flag
 	if (ST) {
 		opts.each {

@@ -24,11 +24,12 @@
  *	1.8.08 - Enhanced currentProgram() check
  *	1.8.09 - Updated formatting
  *	1.8.10 - Miscellaneous updates & fixes
+ *	1.8.11 - Tweaks for minimumVentLevel type conversions
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 
@@ -898,7 +899,7 @@ void setTheVents(ventState) {
         newVentState = 'closed'
 	} else if (ventState.toString().isNumber()) {
     	allVentsLevel(ventState as Integer)
-        newVentState = (ventState.toInteger() <= settings.minimumVentLevel.toInteger()) ? 'closed' : 'open'
+        newVentState = ((ventState as Integer) <= (settings.minimumVentLevel as Integer)) ? 'closed' : 'open'
     } else if (ventState == 'unchanged') {
     	//boolean ST = isST	
     	def theVents = (settings.theEconetVents ?: []) + (settings.theHCEcoVents ?: []) + 
@@ -910,7 +911,7 @@ void setTheVents(ventState) {
         	def hasLevel = theVents[0].hasAttribute('level')
             if (hasLevel) {
         		def currentLevel = (ST ? theVents[0].currentValue('level') : theVents[0].currentValue('level', true))?.toInteger()
-        		if (currentLevel <= minimumVentLevel.toInteger()) {
+        		if (currentLevel <= (settings.minimumVentLevel as Integer)) {
                 	// while physically 'open', we are set to the minimum vent level, so we are logically 'closed'
 	            	newVentState = 'closed'
                 }

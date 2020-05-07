@@ -27,11 +27,13 @@
  *	1.8.11 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.12 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.13 - Miscellaneous updates & fixes
+ *	1.8.14 - Fix for multi-word Climate names
+ *	1.8.15 - Add missing functions for DND 
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.13" }
+String getVersionNum()		{ return "1.8.15" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -495,15 +497,26 @@ void updated() {
     atomicState.because = " because ${app.label} was reinitialized"
     initialize()
 }
-def getThermostatPrograms() {
-    def cl = settings?.theThermostat?.currentValue('climatesList')
-    return (cl ? ((cl == '[]') ? ['Away', 'Home', 'Sleep'] : cl[1..-2].tokenize(', ').sort(false)) : ['Away', 'Home', 'Sleep'])
+// Thermostat Programs & Modes
+List getThermostatPrograms() {
+	def programs = ["Away","Home","Sleep"]
+	if (settings?.theThermostat) {
+    	String cl = settings.theThermostat.currentValue('climatesList')
+    	if (cl && (cl != '[]')) {
+        	programs = cl[1..-2].split(', ')
+        } else {
+    		String pl = settings?.theThermostat?.currentValue('programsList')
+        	def progs = pl ? new JsonSlurper().parseText(pl) : []
+            if (progs) programs = progs
+        }
+    }
+    return programs.sort(false)
 }
-def getThermostatModes() {
-    def statModes = ["heat","cool","auto","auxHeatOnly"]
+List getThermostatModes() {
+	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
     if (settings.theThermostat) {
-        def tm = theThermostat.currentValue('supportedThermostatModes')
-        if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+    	def tempModes = theThermostat.currentValue('supportedThermostatModes')
+        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
     }
     return statModes.sort(false)
 }
@@ -1040,7 +1053,27 @@ String getMsgTstat() {
 	}
 	return theTstat
 }
-
+boolean notifyNowOK() {
+	// If both provided, both must be true; else only the provided one needs to be true
+	boolean modeOK = settings.speakModes ? (settings.speakModes && settings.speakModes.contains(location.mode)) : true
+	boolean timeOK = settings.speakTimeStart? myTimeOfDayIsBetween(timeToday(settings.speakTimeStart), timeToday(settings.speakTimeEnd), new Date(), location.timeZone) : true
+	return (modeOK && timeOK)
+}
+private myTimeOfDayIsBetween(String fromTime, String toTime, Date checkDate, String timeZone) {
+	return myTimeOfDayIsBetween(timeToday(fromTime), timeToday(toTime), checkDate, timeZone)
+}
+private myTimeOfDayIsBetween(Date fromDate, Date toDate, Date checkDate, timeZone)     {
+	if (toDate == fromDate) {
+		return false	// blocks the whole day
+	} else if (toDate < fromDate) {
+		if (checkDate.before(fromDate)) {
+			fromDate = fromDate - 1
+		} else {
+			toDate = toDate + 1
+		}
+	}
+    return (!checkDate.before(fromDate) && !checkDate.after(toDate))
+}
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${notify}): ${notificationMessage}", 2, null, "info")
     if (settings.notify) {

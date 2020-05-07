@@ -31,11 +31,12 @@
  *	1.8.13 - HOTFIX: sendHoldHours in setThermostatProgram()
  *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.15 - Miscellaneous updates & fixes
+ *	1.8.16 - Fix for multi-word Climate names
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.15" }
+String getVersionNum()		{ return "1.8.16" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -858,14 +859,14 @@ String whatHoldType(statDevice) {
 
 // Helper Functions
 // get the combined set of Ecobee Programs applicable for these thermostats
-def getThermostatPrograms() {
+List getThermostatPrograms() {
 	def programs
-	if (myThermostats?.size() > 0) {
-		myThermostats.each { stat ->
+	if (settings.myThermostats?.size() > 0) {
+		settings.myThermostats.each { stat ->
         	def progs = []
         	String cl = stat.currentValue('climatesList')
     			if (cl && (cl != '[]')) {
-        		progs = cl[1..-2].tokenize(', ')
+        		progs = cl[1..-2].split(', ')
         	} else {
     			String pl = settings?.theThermostat?.currentValue('programsList')
         		progs = pl ? new JsonSlurper().parseText(pl) : []
@@ -883,7 +884,7 @@ def getThermostatPrograms() {
 }
 
 // return all the modes that ALL thermostats support
-def getThermostatModes() {
+List getThermostatModes() {
 	def theModes = []
     
     settings.myThermostats.each { stat ->
@@ -1084,9 +1085,9 @@ def getThermostatFanModes() {
     
     settings.myThermostats.each { stat ->
     	if (theFanModes == []) {
-        	theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(", ")
+        	theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].split(", ")
         } else {
-        	theFanModes = theFanModes.intersect(stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(", "))
+        	theFanModes = theFanModes.intersect(stat.currentValue('supportedThermostatFanModes')[1..-2].split(", "))
         }   
     }
     theFanModes = (theFanModes - ['off']) + ['default']		// off isn't fully implemented yet

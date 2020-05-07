@@ -29,11 +29,12 @@
  *	1.8.13 - Don't use EcoSensor's occupancy if there are other motion sensors
  *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.15 - Miscellaneous updates & fixes
+ *	1.8.16 - Better active/inactive determinations
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.15" }
+String getVersionNum()		{ return "1.8.16" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -641,7 +642,6 @@ void activateRoom() {
 	LOG("Activating the Smart Room", 3, null, 'info')
     def sensorData = [:]
     atomicState.isSmartRoomActive = true
-	//boolean ST = isST
     boolean anyInactive = true
     
     // turn on vents
@@ -922,8 +922,7 @@ def motionHandler(evt) {
                     atomicState.isRoomOccupied = true
                 }
             } else {
-            	// There's somebody in here and the door is closed, but Smart Room is not Active - activate?
-                // For now, let's ignore it - must be a phantom motion report
+            	// There's somebody in here and the door is closed, but Smart Room is not Active - activate
                 // TODO:
                 // we could check if it is within the doorOpenMinutes time - that is, someone just opened the door, came in, closed the door...if a new 
                 // motion event happens within the doorOpenMinutes then we could activate the room...
@@ -944,6 +943,9 @@ def motionHandler(evt) {
             }
         }
 	} else {
+    	if (!theDoors.currentContact.contains('open')) {	
+    		LOG("Motion stopped while door(s) are all shut, ignoring",2,null,'info')
+        }
     	// motion just went inactive
         // we could check if the doors have been open since we first saw motion while the doors were shut, and if not we could assume our occupant is "sleeping".
         // for now, don't do anything. 
@@ -952,7 +954,7 @@ def motionHandler(evt) {
 
 // Ask our parents for help sending the events to our peer sensor devices
 void generateSensorsEvents( Map dataMap ) {
-	LOG("generating ${dataMap} events for ${theSensorDevices}",3,null,'trace')
+	LOG("generating ${dataMap} events for ${theSensorDevices}",3,null,'debug')
 	theSensorDevices.each {
     	parent.generateChildEvent( it.deviceNetworkId, dataMap)
     }
