@@ -65,7 +65,7 @@
  *	1.8.39 - Optimized stat.settings change detection
  *	1.8.40 - Better error handling for new installations
  *	1.8.41 - Rename Smart Switch/Dimmer/Vent to Switch/Dimmer/Fan
- *	1.8.42 - Fix conversion error in setProgramSetpoints()
+ *	1.8.42 - Fix conversion error in setProgramSetpoints() 
  */
 import groovy.json.*
 import groovy.transform.Field
