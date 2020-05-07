@@ -65,11 +65,12 @@
  *	1.8.39 - Optimized stat.settings change detection
  *	1.8.40 - Better error handling for new installations
  *	1.8.41 - Rename Smart Switch/Dimmer/Vent to Switch/Dimmer/Fan
+ *	1.8.42 - Fix conversion error in setProgramSetpoints()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.41" }
+String getVersionNum()		{ return "1.8.42" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -5449,8 +5450,8 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 		resumeProgram(child, deviceId, true)
 	}
 	def isMetric = (temperatureScale == "C")
-	def h = roundIt((isMetric ? (cToF(heating) * 10.0) : (heating * 10.0)), 0)		// better precision using BigDecimal round-half-up
-	def c = roundIt((isMetric ? (cToF(cooling) * 10.0) : (cooling * 10.0)), 0)
+	def h = roundIt((isMetric ? (cToF(heating as BigDecimal) * 10.0) : ((heating as BigDecimal) * 10.0)), 0)		// better precision using BigDecimal round-half-up
+	def c = roundIt((isMetric ? (cToF(cooling as BigDecimal) * 10.0) : ((cooling as BigDecimal) * 10.0)), 0)
 	
 	LOG("setHold() for ${child.device.displayName} (${deviceId}) - h: ${heating}(${h}), c: ${cooling}(${c}), ${sendHoldType}, ${sendHoldHours}", 2, child, 'trace')
 	
@@ -5848,8 +5849,8 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
 	
 	// convert C temps to F
 	def isMetric = (temperatureScale == "C")
-	def ht = (heatingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(heatingSetpoint) * 10.0) : (heatingSetpoint * 10.0)), 0)) : null )		// better precision using BigDecimal round-half-up
-	def ct = (coolingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(coolingSetpoint) * 10.0) : (coolingSetpoint * 10.0)), 0)) : null )
+	def ht = (heatingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(heatingSetpoint as BigDecimal) * 10.0) : ((heatingSetpoint as BigDecimal) * 10.0)), 0)) : null )		// better precision using BigDecimal round-half-up
+	def ct = (coolingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(coolingSetpoint as BigDecimal) * 10.0) : ((coolingSetpoint as BigDecimal) * 10.0)), 0)) : null )
 	
 	// IFF autoHeatCoolFeatureEnabled, then enforce the minimum delta
     def hasAutoMode = atomicState.settings ? atomicState.settings[deviceId].autoHeatCoolFeatureEnabled : false
@@ -6416,16 +6417,16 @@ def myConvertTemperatureIfNeeded(scaledSensorValue, String cmdScale, precision) 
         	cmdScale = 'C'		// Normalize
         } else {
 			LOG("Invalid temp scale used: ${cmdScale}", 2, null, "error")
-			return roundIt(scaledSensorValue, precision)
+			return roundIt((scaledSensorValue as BigDecimal), precision)
         }
 	}
 	if (cmdScale == temperatureScale) {
 		// The platform scale is the same as the current value scale
-        return roundIt(scaledSensorValue, precision)
+        return roundIt((scaledSensorValue as BigDecimal), precision)
 	} else if (cmdScale == 'F') {				
-        return roundIt(fToC(scaledSensorValue), precision)
+        return roundIt(fToC(scaledSensorValue as BigDecimal), precision)
 	} else {
-        return roundIt(cToF(scaledSensorValue), precision)
+        return roundIt(cToF(scaledSensorValue as BigDecimal), precision)
 	}
 }
 def roundIt( value, decimals=0 ) {
