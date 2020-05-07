@@ -25,7 +25,7 @@
  *	1.8.01 - General Release
  *	1.8.02 - Fixed smartAuto settings bug
  *	1.8.03 - Updated WARNING & NOTE: formatting
- *	1.8.04 - Fix holdEndDate during transitions; supportedThermostatModes initialization loophole
+ *	1.8.04 - Fix holdEndDate during transitions; supportedThermostatModes initialization loophole 
  *	1.8.05 - Fix attribute initialization logic
  *	1.8.06 - Fix thermostatAsSensor selection page
  *	1.8.07 - Improve http error handling
@@ -61,7 +61,7 @@
  *	1.8.37 - HOTFIX: log new "touSetback" event
  *	1.8.38 - Miscellaneous updates & fixes
  *	1.8.38a- HOTFIX: Data type error (rare)
- *	1.8.38b- HOTFIX: Tag thermostatHold sooner
+ *	1.8.38b- HOTFIX: Tag thermostatHolds sooner
  *	1.8.39 - Optimized stat.settings change detection
  *	1.8.40 - Better error handling for new installations
  *	1.8.41 - Rename Smart Switch/Dimmer/Vent to Switch/Dimmer/Fan
@@ -5491,7 +5491,7 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 		def updates = [ [heatingSetpoint: 	myConvertTemperatureIfNeeded( (h.toInteger() / 10.0), 'F', userPrecision)],	
 					    [coolingSetpoint: 	myConvertTemperatureIfNeeded( (c.toInteger() / 10.0), 'F', userPrecision)],	
 					    [currentProgramName: 'Hold: Temp'],
-                        [thermostatHold:	'hold'],
+					    [thermostatHold:	'hold'],
 					  ]
 		if (debugLevelFour) LOG("setHold() for ${child.device.displayName} (${deviceId}) - ${updates}",4,null,'trace')
 		child.generateEvent(updates)			// force-update the calling device attributes that it can't see
@@ -5646,8 +5646,8 @@ boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', s
 					    [coolingSetpoint: 	myConvertTemperatureIfNeeded( (climate.coolTemp.toInteger() / 10.0), 'F', userPrecision)],
 					    [currentProgram:	program],
 					    [currentProgramId:	climateRef],
-                        [thermostatHold:	'hold'],
-                       // [currentProgramName:"Hold: ${program}"]
+					    [thermostatHold:	'hold'],
+              [currentProgramName:"Hold: ${program}"]
 					  ]
 		if (debugLevelFour) LOG("setProgram(${climateRef}) for ${child.device.displayName} (${deviceId}): ${updates}",4,child,'info')
 		child.generateEvent(updates)			// force-update the calling device attributes that it can't see
