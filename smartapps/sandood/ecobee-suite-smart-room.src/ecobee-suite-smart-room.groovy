@@ -30,11 +30,12 @@
  *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.15 - Miscellaneous updates & fixes
  *	1.8.16 - Better active/inactive determinations
+*	1.8.17 - Even better active/inactive checks
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.16" }
+String getVersionNum()		{ return "1.8.17" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -519,7 +520,9 @@ def smartRoomHandler(evt) {
 
 def doorOpenHandler(evt) {
 	LOG("A door opened: ${evt.device.displayName} is ${evt.value}", 3, null, 'trace')
-    
+    atomicState.doorOpenedAt = now()
+	atomicState.doorClosedAt = 0
+	
     Integer i = 0
     theDoors.each { if (it.currentContact == 'open') i++ }
     if (i == 1) {								// if we're the first/only door open
@@ -537,13 +540,18 @@ def openCheck() { checkTheDoors() }
 
 def doorClosedHandler(evt) {
 	LOG("A door closed: ${evt.device.displayName} is ${evt.value}", 3, null, 'trace')
+	
     if (!theDoors.currentContact.contains('open')) {								// if we are the last door closed...
+		atomicState.doorClosedAt = now()
+		atomicState.doorOpenedAt = 0
     	generateSensorsEvents([doors:'closed'])
         unschedule(openCheck)
         // don't need to schedule the disable check if we are already (still) disabled (door was opened only briefly).
 		if (atomicState.isSmartRoomActive) {
         	runIn((doorClosedHours.toInteger() * 3600), closedCheck, [overwrite:true])	// schedule the door check
-        } 
+		} else {
+			unschedule(closedCheck)
+		}
     }
 }
 
@@ -627,7 +635,7 @@ void checkTheDoors() {
         }
 		if (!closedRecently) {
             // all the doors have been closed at least doorClosedHours
-            deactivateRoom()	// Matters not if the windows are open
+            if (atomicState.isSmartRoomActive) deactivateRoom()	// Matters not if the windows are open
             if (theWindows) atomicState.isWaitingForWindows = false
         } else {
             // One or more doors has been open for less than the required time
@@ -639,6 +647,8 @@ void checkTheDoors() {
 }
 	
 void activateRoom() {
+	if (atomicState.isSmartRoomActive) return			// Already active, don't repeat ourselves
+	
 	LOG("Activating the Smart Room", 3, null, 'info')
     def sensorData = [:]
     atomicState.isSmartRoomActive = true
@@ -714,6 +724,7 @@ void activateRoom() {
 }
 
 void deactivateRoom() {
+	if (!atomicState.isSmartRoomActive) return		// do nothing if not currently active
 	LOG("Deactivating Smart Room", 3, null, 'info')
     def sensorData = [:]
     boolean anyActive = true
@@ -929,13 +940,16 @@ def motionHandler(evt) {
                 if (true) {
                 	if (!theWindows || !theWindows.currentContact.contains('open')) {
                 		// no windows or no windows are open
-                		activateRoom()
-                		if (theWindows) atomicState.isWaitingForWindows = false
-                    	atomicState.isRoomOccupied = true
+						def secondsClosed = (now() - atomicState.doorClosedAt) / 1000
+						if (secondsClosed > (doorOpenMinutes.toInteger() * 60)) {
+                			activateRoom()
+                			if (theWindows) atomicState.isWaitingForWindows = false
+						}
+						atomicState.isRoomOccupied = true
 					} else {
                			// A window is open, so we can't be a Smart Room right now
                         // log.debug "motionHandler - deactivateRoom"
-                		deactivateRoom()
+                		//deactivateRoom()
                 		if (theWindows) atomicState.isWaitingForWindows = true
                     	atomicState.isRoomOccupied = true
             		}
