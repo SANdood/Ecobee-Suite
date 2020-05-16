@@ -30,11 +30,12 @@
  *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.15 - Miscellaneous updates & fixes
  *	1.8.16 - Fix for multi-word Climate names
+ *	1.8.17 - Fix getThermostatPrograms()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.16" }
+String getVersionNum()		{ return "1.8.17" }
 String getVersionLabel() 	{ return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -570,10 +571,10 @@ String becauseText(who) {
 
 // get the combined set of Ecobee Programs applicable for these thermostats
 List getThermostatPrograms() {
-	def programs
+	List programs = []
 	if (settings.myThermostats?.size() > 0) {
 		settings.myThermostats.each { stat ->
-        	def progs = []
+        	List progs = []
         	String cl = stat.currentValue('climatesList')
     			if (cl && (cl != '[]')) {
         		progs = cl[1..-2].split(', ')
