@@ -2,9 +2,9 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.1.8",
-  "dateReleased": "2020-05-07",
+  "dateReleased": "2020-05-16",
   "releaseNotes": "Fixes getThermostatPrograms() in applicable Helpers\nAdds currentProgramName to Open Contacts Helper\nBetter Smart Room activation logic\nRemove redundant resumeProgram() in Thermostat device when changing programs",
-  "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839",
+  "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/112",
   "apps": [
     {
       "id": "70b3ec47-c06f-4570-b4ae-5ee76da59db8",
