@@ -25,11 +25,12 @@
  *	1.8.09 - Updated formatting
  *	1.8.10 - Miscellaneous updates & fixes
  *	1.8.11 - Tweaks for minimumVentLevel type conversions
+ *	1.8.12 - Fix getThermostatPrograms()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.11" }
+String getVersionNum()		{ return "1.8.12" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 
@@ -1158,11 +1159,21 @@ void generateSensorEvents( Map dataMap ) {
         parent.getChildDevice(DNI)?.generateEvent(dataMap)
     }
 }
-def getThermostatPrograms() {
-    def cl = settings?.theThermostat?.currentValue('climatesList')
-    return (cl ? ((cl == '[]') ? ['Away', 'Home', 'Sleep'] : cl.toString()[1..-2].tokenize(', ').sort(false)) : ['Away', 'Home', 'Sleep'])
+// Thermostat Programs & Modes
+List getThermostatPrograms() {
+	List programs = ["Away","Home","Sleep"]
+	if (settings?.theThermostat) {
+    	String cl = settings.theThermostat?.currentValue('climatesList')
+    	if (cl && (cl != '[]')) {
+        	programs = cl[1..-2].split(', ')
+        } else {
+    		String pl = settings?.theThermostat?.currentValue('programsList')
+        	def progs = pl ? new JsonSlurper().parseText(pl) : []
+            if (progs) programs = progs
+        }
+    }
+    return programs.sort(false)
 }
-
 def getThermostatModes() {
     String tm = settings?.theThermostat?.currentValue('supportedThermostatModes')
 	log.debug "thermostatModes: ${tm}"
