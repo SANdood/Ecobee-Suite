@@ -36,10 +36,11 @@
  *	1.8.19 - HOTFIX: Notifications not being sent
  *	1.8.20 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.21 - Miscellaneous updates & fixes
+*	1.8.22 - Expanded label display to include actual thermostatMode
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.21" }
+String getVersionNum()		{ return "1.8.22" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1515,12 +1516,14 @@ void updateMyLabel() {
 		newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
-    	String myStatus = atomicState.HVACModeState
+		def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
+		def HVACModeState = atomicState.HVACModeState
+    	String myStatus = (HVACModeState && (HVACModeState == 'on')) ? ('On - ' + ((ST ? theStats[0].currentValue('thermostatMode') : theStats[0].currentValue('thermostatMode', true)).capitalize())) : HVACModeState.capitalize()
         if (!myStatus) myStatus = 'initializing...'
         if (ST) {
         	newLabel = myLabel + " (HVAC: ${myStatus})"
         } else {
-        	String color = myStatus.contains('off') ? 'red' : 'green'
+        	String color = myStatus.contains('Off') ? 'red' : 'green'
         	newLabel = myLabel + "<span style=\"color:${color}\"> (HVAC: ${myStatus})</span>"
         }
 		if (app.label != newLabel) app.updateLabel(newLabel)
