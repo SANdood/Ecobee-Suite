@@ -36,11 +36,12 @@
  *	1.8.19 - HOTFIX: Notifications not being sent
  *	1.8.20 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.21 - Miscellaneous updates & fixes
-*	1.8.22 - Expanded label display to include actual thermostatMode
+ *	1.8.22 - Expanded label display to include actual thermostatMode
+ *	1.8.23 - Fixed label initialization
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.22" }
+String getVersionNum()		{ return "1.8.23" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -173,48 +174,53 @@ def mainPage() {
                       options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true, width: 6)
                 if (settings?.whichAction == null) { app.updateSetting('whichAction', 'Notify Only'); settings?.whichAction = 'Notify Only'; }
 				if (HE) paragraph("",width: 6)
-				
-				if (!settings.hvacOff && !settings.adjustSetpoints) {
-            		if (maximize) paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle Actions by turning on Quiet Time from this Helper instead of running HVAC Actions directly. '+
-							  'The Quiet Time Helper also offers additional control options (e.g.; fan/circulation off, dehumidifier off, etc.).')
-                	input(name: 'quietTime', type: 'bool', title: inputTitle('Enable Quiet Time?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
-                	if (settings.quietTime) {
-                		input(name: 'qtSwitch', type: 'capability.switch', required: true, title: inputTitle('Which switch controls Quiet Time?'), multiple: false, submitOnChange: true)
-                    	if (settings.qtSwitch) {
-                        	input(name: "qtOn", type: "enum", title: inputTitle("Enable Quiet Time when switch ${settings.qtSwitch.displayName} is:"), required: true, multiple: false, 
-                        	  	  options: ["on","off"], submitOnChange: true, width: 3)
-							if (HE) paragraph("", width: 9)
-                        	if (settings.qtOn != null) paragraph("Switch ${settings.qtSwitch.displayName} will be turned ${settings.qtOn?'On':'Off'} when HVAC Off Actions are taken.")
-                    	}
+				if (settings?.whichAction != 'Notify Only') {
+					if (!settings.hvacOff && !settings.adjustSetpoints) {
+						if (maximize) paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle Actions by turning on Quiet Time from this Helper instead of running HVAC Actions directly. '+
+								  'The Quiet Time Helper also offers additional control options (e.g.; fan/circulation off, dehumidifier off, etc.).')
+						input(name: 'quietTime', type: 'bool', title: inputTitle('Enable Quiet Time?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
+						if (settings.quietTime) {
+							input(name: 'qtSwitch', type: 'capability.switch', required: true, title: inputTitle('Which switch controls Quiet Time?'), multiple: false, submitOnChange: true)
+							if (settings.qtSwitch) {
+								input(name: "qtOn", type: "enum", title: inputTitle("Enable Quiet Time when switch ${settings.qtSwitch.displayName} is:"), required: true, multiple: false, 
+									  options: ["on","off"], submitOnChange: true, width: 3)
+								if (HE) paragraph("", width: 9)
+								if (settings.qtOn != null) paragraph("Switch ${settings.qtSwitch.displayName} will be turned ${settings.qtOn?'On':'Off'} when HVAC Off Actions are taken.")
+							}
+						}
+					} 
+					if (!settings.quietTime && !settings.adjustSetpoints) {
+						input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
+						//if (HE) paragraph("", width: 6)
+						if ((settings?.hvacOff != null) && settings.hvacOff) {
+							if (maximize) {
+								paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. " +
+										  "Use the Quiet Time Helper for additional control options.\n\n"+
+										  'Note that no Actions will be run if the HVAC Mode was already Off when the first contact sensor or switch would have turned it ' +
+											'off; the HVAC will remain Off when all the contacts & switches are reset.')
+							} else if (HE) paragraph("", width: 8)
+						}
 					}
-                } 
-				if (!settings.quietTime && !settings.adjustSetpoints) {
-                	input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
-					//if (HE) paragraph("", width: 6)
-                	if ((settings?.hvacOff != null) && settings.hvacOff) {
-						if (maximize) {
-							paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. " +
-									  "Use the Quiet Time Helper for additional control options.\n\n"+
-                                	  'Note that no Actions will be run if the HVAC Mode was already Off when the first contact sensor or switch would have turned it ' +
-                		  		  		'off; the HVAC will remain Off when all the contacts & switches are reset.')
-						} else if (HE) paragraph("", width: 8)
-                    }
+					if (!settings.quietTime && !settings.hvacOff) {
+						input(name: 'adjustSetpoints', type: 'bool', title: inputTitle('Adjust heat/cool setpoints?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
+						if (adjustSetpoints) {
+							//paragraph ("", width: 6)
+							input(name: 'heatAdjust', type: 'decimal', title: inputTitle('Heating setpoint adjustment')+' (+/-20°) ', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
+							input(name: 'coolAdjust', type: 'decimal', title: inputTitle('Cooling setpoint adjustment')+' (+/-20°) ', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
+						}
+					}
 				}
-				if (!settings.quietTime && !settings.hvacOff) {
-                    input(name: 'adjustSetpoints', type: 'bool', title: inputTitle('Adjust heat/cool setpoints?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
-                    if (adjustSetpoints) {
-						//paragraph ("", width: 6)
-                        input(name: 'heatAdjust', type: 'decimal', title: inputTitle('Heating setpoint adjustment')+' (+/-20°) ', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
-                        input(name: 'coolAdjust', type: 'decimal', title: inputTitle('Cooling setpoint adjustment')+' (+/-20°) ', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
-                    }
-           		}
-                if ((settings?.contactSensors != null) || (settings?.theSwitches != null) || settings?.hvacOff) {
-					input(name: "offDelay", title: inputTitle("Select the Delay Time before turning ${settings?.quietTime?'on Quiet Time':'off the HVAC'} or Sending Notifications")+" (minutes)", type: "enum", required: true, 
-                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '5', width: 6)
-					input(name: "onDelay", title: inputTitle("Select the Delay Time before turning ${settings?.quietTime?'off Quiet Time':'the HVAC back on'} or Sending Notifications")+" (minutes)", type: "enum", required: true, 
-                    	options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0', width: 6)
-	        	}
-            }
+				if ((settings?.contactSensors != null) || (settings?.theSwitches != null) || settings?.hvacOff) {
+					String offString = settings?.quietTime ? 'turning on Quiet Time' : (settings?.whichAction == 'Notify Only' ? 'sending "off" Notifications' : 
+																					   (settings.whichAction.contains('and') ? 'turning off the HVAC and sending Notifications' : 'turning off the HVAC'))
+					String onString = settings?.quietTime ? 'turning off Quiet Time' : (settings?.whichAction == 'Notify Only' ? 'sending "on" Notifications' : 
+																					   (settings.whichAction.contains('and') ? 'turning the HVAC back on and sending Notifications' : 'turning the HVAC back on'))
+					input(name: "offDelay", title: inputTitle("Select the Delay Time before " + offString) + " (minutes)", type: "enum", required: true, 
+						options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '5', width: 6)
+					input(name: "onDelay", title: inputTitle("Select the Delay Time before " + onString) + " (minutes)", type: "enum", required: true, 
+						options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0', width: 6)
+				}
+			}
 			if (ST) {
 				List echo = []
 				section("Notifications") {
@@ -1518,8 +1524,9 @@ void updateMyLabel() {
 	} else {
 		def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 		def HVACModeState = atomicState.HVACModeState
-    	String myStatus = (HVACModeState && (HVACModeState == 'on')) ? ('On - ' + ((ST ? theStats[0].currentValue('thermostatMode') : theStats[0].currentValue('thermostatMode', true)).capitalize())) : HVACModeState.capitalize()
-        if (!myStatus) myStatus = 'initializing...'
+    	// String myStatus = (HVACModeState && (HVACModeState == 'on')) ? ('On - ' + ((ST ? theStats[0].currentValue('thermostatMode') : theStats[0].currentValue('thermostatMode', true)).capitalize())) : HVACModeState.capitalize()
+        String myStatus = HVACModeState ? ((HVACModeState == 'on') ? ('On - ' + ((ST ? theStats[0].currentValue('thermostatMode') : theStats[0].currentValue('thermostatMode', true)).capitalize())) : HVACModeState.capitalize()) : "Pending..."
+        //if (!myStatus) myStatus = 'initializing...'
         if (ST) {
         	newLabel = myLabel + " (HVAC: ${myStatus})"
         } else {
