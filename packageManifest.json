@@ -2,8 +2,8 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.1.8",
-  "dateReleased": "2020-05-16",
-  "releaseNotes": "Fixes getThermostatPrograms() in applicable Helpers\nAdds currentProgramName to Open Contacts Helper\nBetter Smart Room activation logic\nRemove redundant resumeProgram() in Thermostat device when changing programs",
+  "dateReleased": "2020-05-22",
+  "releaseNotes": "Workaround for Hubitat Dashboard/thermostat template bug\nOptimized timeZone/zipCode initialization\nLog if Ecobee location is not set\nSmart Switches only deactivate during 'enabled' time window",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/112",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.42"
+      "version": "1.8.43"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -22,7 +22,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.22"
+      "version": "1.8.23"
     },
     {
       "id": "74d41ded-9a35-4916-98e3-2309364b477b",
@@ -85,7 +85,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.12"
+      "version": "1.8.13"
     },
     {
       "id": "e60053c8-a397-4231-ba7f-59ef23505740",
