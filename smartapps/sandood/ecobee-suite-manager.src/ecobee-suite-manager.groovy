@@ -65,12 +65,13 @@
  *	1.8.39 - Optimized stat.settings change detection
  *	1.8.40 - Better error handling for new installations
  *	1.8.41 - Rename Smart Switch/Dimmer/Vent to Switch/Dimmer/Fan
- *	1.8.42 - Fix conversion error in setProgramSetpoints() 
+ *	1.8.42 - Fix conversion error in setProgramSetpoints()
+ *	1.8.43 - Optimize zipCode, timeZone, sunRise/sunSet and weatherStation handling
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.42" }
+String getVersionNum()		{ return "1.8.43" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1406,30 +1407,36 @@ def initialize() {
     atomicState.callsQueued = 0
     atomicState.callsRun = 0
 
+	atomicState.timeZone = ""
+	atomicState.zipCode = ""
 	getTimeZone()		// these will set/refresh atomicState.timeZone
 	getZipCode()		// and atomicState.zipCode
 	
 	// get sunrise/sunset for the location of the thermostats (getZipCode() prefers thermostat.location.postalCode)
 	// def sunriseAndSunset = (atomicState.zipCode != null) ? getSunriseAndSunset(zipCode: atomicState.zipCode) : getSunRiseAndSunset()
 	def sunriseAndSunset = null
-	if (atomicState.zipCode) {
+	boolean isOk = false
+	//GPS Coordinates are the most accurate
+	if (location.longitude && location.latitude) {
+		LOG("Trying to get sunrise/set using geographic coordinates for '${location.name}'",1,null,'info')
+		try {
+			sunriseAndSunset = getSunriseAndSunset()
+		} catch (Exception e) {
+			LOG("Failed to get sunrise/set using location coordinates. Exception: ${e}",1,null,'warn')
+			sunriseAndSunset = null
+		}
+	} else if (atomicState.zipCode) {
 		LOG("Trying to get sunrise/set using postal code '${atomicState.zipCode}'",1,null,'info')
 		try {
 			sunriseAndSunset = getSunriseAndSunset(zipCode: atomicState.zipCode)
 		} catch (Exception e) {
-			LOG("Failed to get sunrise/set using postal code: Exception: ${e}",1,null,'error')
+			LOG("Failed to get sunrise/set using postal code. Exception: ${e}",1,null,'warn')
 			sunriseAndSunset = null
 		}
 	} 
-	if (!sunriseAndSunset && location.longitude && location.latitude) {
-		LOG("Trying to get sunrise/set using geographic coordinates for '${location.name}'",1,null,'info')
-		sunriseAndSunset = getSunriseAndSunset()
-	} else {
-		if (!sunriseAndSunset) LOG("*** INITIALIZATION ERROR *** PLEASE SET LATITUDE/LONGITUDE FOR LOCATION '${location.name}' IN YOUR MOBILE APP",1,null,'error')
-	}
-	boolean isOk = false
 	if (!sunriseAndSunset || (!(sunriseAndSunset.sunrise instanceof Date) || !(sunriseAndSunset.sunset instanceof Date))) {
 		LOG("Can't get valid sunrise/set times, using generic defaults (05:00-->18:00)",1,null,'warn')
+		LOG("PLEASE SET THE ZIPCODE AND THE LATITUDE/LONGITUDE FOR LOCATION ${location.name}${ST?'IN YOUR MOBILE APP':'IN YOUR HUB\'S SETTINGS/LOCATION'}",1,null,'error')
 	} else {
 		isOk = true
 		LOG("Got valid sunrise/set data: ${sunriseAndSunset}",1,null,'info')
@@ -2780,32 +2787,43 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				// let's don't copy all pf the weather info...we only need a few bits bits of it
 				if (getWeather || forcePoll) {
 					if (stat.weather) {
-                    	// Find the lowest temperature forecasted for today, today+1 (2 days), today+2 (3 days), ... today+4 (5 days) - (used by Smart Humidity helper)
-                        def low24 = stat.weather.forecasts[0].temperature	// Temperature right now
-                        for (int j=5; j<9; j++) {
-                        	if (stat.weather.forecasts[j].temperature < low24) low24 = stat.weather.forecasts[j].temperature 	// Temperature forecast for priorTempTime+6 hours (iterated)
-                        }
-                        low24 = low24 / 10.0
-                        def low1Day = stat.weather.forecasts[1].tempLow / 10.0
-                        def low2Day = stat.weather.forecasts[2].tempLow / 10.0
-                        def low3Day = stat.weather.forecasts[3].tempLow / 10.0
-                        def low4Day = stat.weather.forecasts[4].tempLow / 10.0
+						// Make sure we have a valid weather station - if not, the map coordinates are probably not set
+						if (stat.weather.weatherStation) {
+							// Find the lowest temperature forecasted for today, today+1 (2 days), today+2 (3 days), ... today+4 (5 days) - (used by Smart Humidity helper)
+							def low24 = stat.weather.forecasts[0].temperature	// Temperature right now
+							for (int j=5; j<9; j++) {
+								if (stat.weather.forecasts[j].temperature < low24) low24 = stat.weather.forecasts[j].temperature 	// Temperature forecast for priorTempTime+6 hours (iterated)
+							}
+							low24 = low24 / 10.0
+							def low1Day = stat.weather.forecasts[1].tempLow / 10.0
+							def low2Day = stat.weather.forecasts[2].tempLow / 10.0
+							def low3Day = stat.weather.forecasts[3].tempLow / 10.0
+							def low4Day = stat.weather.forecasts[4].tempLow / 10.0
 
-						Map temp = [timestamp:		stat.weather.timestamp,
-									temperature:	stat.weather.forecasts[0]?.temperature.toString(),
-									humidity:		stat.weather.forecasts[0]?.relativeHumidity,
-                                    tempLowForecast:"${low24},${low1Day},${low2Day},${low3Day},${low4Day}",		// Send as °F - let the Helper do the conversion if needed
-									dewpoint:		stat.weather.forecasts[0]?.dewpoint,
-									pressure:		stat.weather.forecasts[0]?.pressure,
-									weatherSymbol:	stat.weather.forecasts[0]?.weatherSymbol.toString()
-                                   ]
-                        if (!tempWeather) tempWeather = atomicState.weather
-                        if (!tempWeather || !tempWeather[tid] || (tempWeather[tid] != temp)) {
-                            weatherUpdated = true
-                            statUpdates[tid].add('weather')
-                            tempWeather[tid] = temp
-                        }
-                    }
+							Map temp = [timestamp:		stat.weather.timestamp,
+										temperature:	stat.weather.forecasts[0]?.temperature.toString(),
+										humidity:		stat.weather.forecasts[0]?.relativeHumidity,
+										tempLowForecast:"${low24},${low1Day},${low2Day},${low3Day},${low4Day}",		// Send as °F - let the Helper do the conversion if needed
+										dewpoint:		stat.weather.forecasts[0]?.dewpoint,
+										pressure:		stat.weather.forecasts[0]?.pressure,
+										weatherSymbol:	stat.weather.forecasts[0]?.weatherSymbol.toString()
+									   ]
+							if (!tempWeather) tempWeather = atomicState.weather
+							if (!tempWeather || !tempWeather[tid] || (tempWeather[tid] != temp)) {
+								weatherUpdated = true
+								statUpdates[tid].add('weather')
+								tempWeather[tid] = temp
+							}
+						} else {
+							if (!tempLocation) tempLocation = atomicState.statLocation
+							def mapCoordinates = (tempLocation && tempLocation[tid]) ? tempLocation[tid].mapCoordinates : ""
+							if (!mapCoordinates) {
+								LOG("UNABLE TO GET WEATHER DATA (NO WEATHERSTATION) - PLEASE SET THE THERMOSTAT'S LOCATION IN YOUR ECOBEE MOBILE APP (ACCOUNT/MANAGE HOMES/YOUR HOME/EDIT)",1,null,warn)
+							} else {
+								LOG("UNABLE TO GET WEATHER DATA (NO WEATHERSTATION) - PLEASE VERIFY THE THERMOSTAT'S LOCATION IN YOUR ECOBEE MOBILE APP (ACCOUNT/MANAGE HOMES/YOUR HOME)",1,null,warn)
+							}
+						}
+					}
                 }
                 if ((alertsUpdated || forcePoll)) {
 					if (stat.alerts) {
@@ -3568,8 +3586,8 @@ void updateThermostatData() {
     if (debugLevelFour) LOG("updateThermostatData() - updatesLog: ${updatesLog}", 1, null, 'trace')
     
 	if (forcePoll) {
-		if (atomicState.timeZone == null) getTimeZone()	// both will update atomicState with valid timezone/zipcode if available
-		if (atomicState.zipCode == null) getZipCode()
+		if (!atomicState.timeZone) getTimeZone()	// both will update atomicState with valid timezone/zipcode if available
+		if (!atomicState.zipCode) getZipCode()
 	}
     boolean usingMetric 		= wantMetric() 			// cache the value to save the function calls
 	int apiPrecision 			= usingMetric ? 2 : 1	// highest precision available from the API
@@ -6490,14 +6508,16 @@ String getTimestamp() {
 
 String getTimeOfDay(tid = null) {
 	def nowTime 
-	if(atomicState.timeZone) {
+	if (atomicState.timeZone) {
 		nowTime = new Date().format("HHmm", TimeZone.getTimeZone(atomicState.timeZone)).toInteger()
-	} else if (tid && atomicState.statLocation && atomicState.statLocation[tid]) {
-		nowTime = new Date().format("HHmm", TimeZone.getTimeZone(atomicState.statLocation[tid].timeZone)).toInteger()
 	} else {
-		nowTime = new Date().format("HHmm").toInteger()
+		def tempLocation = atomicState.statLocation
+		if (tid && tempLocation && tempLocation[tid]) {
+			nowTime = new Date().format("HHmm", TimeZone.getTimeZone(tempLocation[tid].timeZone)).toInteger()
+		} else {
+			nowTime = new Date().format("HHmm").toInteger()
+		}
 	}
-	//if (debugLevel(4)) LOG("getTimeOfDay() - nowTime = ${nowTime}", 1, null, "trace")
 	if ( (nowTime < atomicState.sunriseTime) || (nowTime > atomicState.sunsetTime) ) {
 		return "night"
 	} else {
@@ -6509,16 +6529,20 @@ String getTimeOfDay(tid = null) {
 // if thermostats don't have a timeZone, use the SmartThings location.timeZone
 // if ST location doesn't have a time zone, we're just going to have to use ST's "local time"
 String getTimeZone() {
-	def updatesLog = atomicState.updatesLog
-	if ((atomicState.timeZone == null) || updatesLog.forcePoll) {
+	def numStats = settings.thermostats?.size() ?: 0
+	String theTimeZone = atomicState.timeZone
+	if (theTimeZone && (numStats == 1) && !atomicState.updatesLog?.forcePoll) return theTimeZone
+	
+	if (!theTimeZone || atomicState.updatesLog?.forcePoll) {
 		// default to the SmartThings location's timeZone (if there is one)
-		def myTimeZone = location?.timeZone ? location.timeZone.ID : null
+		String myTimeZone = location?.timeZone ? location.timeZone.ID : ""
 		def timeZones = []
-        boolean debugLevelFour = debugLevel(4)
+		boolean debugLevelFour = debugLevel(4)
+		def tempLocation = atomicState.statLocation
 		settings.thermostats?.each {
 			def tid = it.split(/\./).last()
-			def statTimeZone = (atomicState.statLocation && atomicState.statLocation[tid]) ? atomicState.statLocation[tid].timeZone : null
-			if (statTimeZone != null) {
+			String statTimeZone = (tempLocation && tempLocation[tid]) ? tempLocation[tid].timeZone : ""
+			if (statTimeZone) {
 				if (debugLevelFour) LOG("thermostat ${tid}'s timeZone ID: ${statTimeZone}",4,null,'trace')
 				// let's see how many timeZones we are using across all the thermostats
 				if (!timeZones || (!timeZones.contains(statTimeZone))) timeZones += [statTimeZone]
@@ -6526,46 +6550,31 @@ String getTimeZone() {
 				if (myTimeZone != statTimeZone) myTimeZone = statTimeZone
 			}
 		}
-		if (timeZones.size() != 1) {
+		if (timeZones.size() > 1) {
 			// we have thermostats in more than one time zone - going to have to use location data every time
-			myTimeZone = null
+			myTimeZone = ""
 		}
-		if (myTimeZone != null) {
-			atomicState.timeZone = myTimeZone		// can't save the timeZone object, so we store the ID/Name
-			return myTimeZone
-		}
+		atomicState.timeZone = myTimeZone		// can't save the timeZone object, so we store the ID/Name
+		return myTimeZone
 	}
-	return atomicState.timeZone
+	return theTimeZone
 }
 
 String getZipCode() {
-	// default to the SmartThings location's timeZone (if there is one)
-	String myZipCode = location?.zipCode
-	if (myZipCode == null) {
-		LOG("*** INITIALIZATION ERROR *** PLEASE SET POSTAL CODE FOR LOCATION '${location.name}'",1,null,'warn')
-		atomicState.zipCode == null
+	// Ecobee no longer stores postalCode in the location object (starting sometime before 05/2020),
+	// so we have no choice but to use the hub location's postal code (if there is one)
+	String theZipCode = atomicState.zipCode
+	String hubZipCode = location?.zipCode
+	if (theZipCode && hubZipCode && (theZipCode == hubZipCode)) return theZipCode
+	if (hubZipCode) {
+		if (!theZipCode || (theZipCode != hubZipCode)) atomicState.zipCode = hubZipCode
+		LOG("getZipCode() returning ${hubZipCode}",2,null,'info')
+		return hubZipCode
+	} else {
+		LOG("*** INITIALIZATION ERROR *** PLEASE SET POSTAL CODE FOR LOCATION '${location.name}'",1,null,'error')
+		if (theZipCode) atomicState.zipCode == ""
+		return ""
 	}
-	def updatesLog = atomicState.updatesLog
-	if ((atomicState.zipCode == null) || updatesLog.forcePoll) {
-		def zipCodes = []
-		settings.thermostats?.each{
-			String tid = it.split(/\./).last()
-			String statZipCode = (atomicState.statLocation && atomicState.statLocation[tid]) ? atomicState.statLocation[tid].postalCode : ''
-			if (!statZipCode?.isInteger() || (statZipCode != 0)) { // allow non-numeric zip codes from Ecobee API
-				// let's see how many postalCodes we are using across all the thermostats
-				if (!zipCodes || (!zipCodes.contains(statZipCode))) zipCodes += [statZipCode]
-				// if we have the Thermostat Location, use the postalCode from the thermostat
-				if (myZipCode != statZipCode) myZipCode = statZipCode
-			}
-		}
-		if (zipCodes.size() > 1) {
-			// we have thermostats in more than one postalCode - going to have to use location data every time
-			myZipCode = null
-		} 
-	}
-	atomicState.zipCode = myZipCode
-	LOG("getZipCode() returning ${myZipCode}",3,null,'info')
-	return myZipCode
 }
 
 // Are we connected with the Ecobee service?
