@@ -40,8 +40,10 @@
  *	1.8.11 - schedule/schedText now sent independently from ESM
  *	1.8.12 - HOTFIX: DeviceWatch fix for hubless ST locations
  *	1.8.13 - Attribute cleanup
+ *	1.8.14 - Avoid double resumeProgram() when changing programs
+ *	1.8.15 - Fix Hold programs check
  */
-String getVersionNum() 		{ return "1.8.13" }
+String getVersionNum() 		{ return "1.8.15" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2736,7 +2738,7 @@ void setThermostatProgram(String program, String holdType="", Integer holdHours=
 			}
 		}
 	} else {
-		resumeProgramInternal(true)							// resumeAll before we change the program
+		if ((currentThermostatHold == 'hold') || (currentProgramName.startsWith('Auto')) || (currentProgramName.startsWith('Hold:'))) resumeProgramInternal(true)	// resumeAll before we change the program
 		needRefresh = false
 	}
 	if ( parent.setProgram(this, program, deviceId, sendHoldType, sendHoldHours) ) {
