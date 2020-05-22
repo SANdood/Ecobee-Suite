@@ -26,10 +26,11 @@
  *	1.8.10 - Option to treat 'fan only' as 'idle'
  *	1.8.11 - Fix cl/dl/tl mishmash
  *	1.8.12 - Added fanControl support, changed name to Smart Switch/Dimmer/Fan
+ *	1.8.13 - Only "deactivate" during selected days and outside of "disabled" time window
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.12" }
+String getVersionNum()		{ return "1.8.13" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Fan Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -260,6 +261,21 @@ def opStateHandler(evt) {
 	}
     atomicState.currentAction = ' - unchanged'
     
+    // Note that this ensures that things are both "activated" AND "deactivated" only on approriate days and during the "enabled" time window
+    // Thus if the fan is turned on during the "disabled" time window, it will stay on
+    if (!dayCheck()) {
+        LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
+        updateMyLabel()
+        return
+    }
+    def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false
+
+    if (between) {
+        LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
+        updateMyLabel()
+        return
+    }
+    
 	if ((evt.value == 'idle') || (settings.fanOnly && (evt.value == 'fan only'))) {
     	if (settings.reverseOnIdle) {
         	def isReallyIdle = true
@@ -275,20 +291,7 @@ def opStateHandler(evt) {
             updateMyLabel()
             return
         }
-    }
-	if (settings.theOpState.contains(evt.value)) {
-    	if (!dayCheck()) {
-        	LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
-            updateMyLabel()
-            return
-        }
-    	def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false
-        
-        if (between) {
-    		LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
-            updateMyLabel()
-        	return
-    	}
+    } else if (settings.theOpState.contains(evt.value)) {
         HashMap priorState = atomicState.priorState as HashMap
         if (!priorState) priorState = [:] as HashMap
         
