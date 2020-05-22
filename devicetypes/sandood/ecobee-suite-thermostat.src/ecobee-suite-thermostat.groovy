@@ -42,8 +42,9 @@
  *	1.8.13 - Attribute cleanup
  *	1.8.14 - Avoid double resumeProgram() when changing programs
  *	1.8.15 - Fix Hold programs check
+ *	1.8.16 - Remove whitespace from thermostatMode & fanMode (Hubitat Dashboard adds extra " " to fanMode)
  */
-String getVersionNum() 		{ return "1.8.15" }
+String getVersionNum() 		{ return "1.8.16" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2557,7 +2558,8 @@ void generateQuickEvent(String name, String value, Integer pollIn=0) {
 // ***************************************************************************
 void setThermostatMode(String value) {
 	//	Uses Ecobee Modes: "auxHeatOnly" "heat" "cool" "off" "auto"
-	
+	value = value.trim()			// Hubitat Dashboard's Thermostat template adds extra space to fanMode, so just in case...
+    
 	if (value.startsWith('emergency')) { value = 'auxHeatOnly' }
 	LOG("setThermostatMode(${value})", 5)
 
@@ -2934,12 +2936,13 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 		LOG("setThermostatFanMode(${value}, ${holdType}) fan mode change requested but thermostat is in Vacation mode, ignoring request",2,null,'warn')
 		return
 	}
+    value = value.trim()		// Hubitat Dashboard's thermostat template adds extra space to some fanModes (" on", at least).
 	String setValue = value
 	// This is to work around a bug in some SmartApps that are using fanOn and fanAuto as inputs here, which is wrong
-	if (value == "fanOn" || value == "on" ) { value = 'on'; setValue = "on" }
-	else if (value == "fanAuto" || value == "auto" ) { value = 'auto'; setValue = "auto" }
-	else if (value == "fanCirculate" || value == "circulate")  { value = 'circulate'; setValue == "circulate" }	// Ecobees don't have a 'circulate' mode, per se, uses fanMinOnTime
-	else if (value == "fanOff" || value == "off") { value = 'off'; setValue = "auto" }
+	if (value == "on" || value == "fanOn" ) 					{ value = 'on'; 		setValue = "on" }
+	else if (value == "auto" || value == "fanAuto" ) 			{ value = 'auto'; 		setValue = "auto" }
+	else if (value == "circulate" || value == "fanCirculate")	{ value = 'circulate'; 	setValue = "circulate" }	// Ecobees don't have a 'circulate' mode, per se, uses fanMinOnTime
+	else if (value == "off" || value == "fanOff") 				{ value = 'off'; 		setValue = "auto" }
 	else {
 		LOG("setThermostatFanMode() - Unrecognized Fan Mode: ${value}. Setting to 'auto'", 1, null, "error")
 		setValue = "auto"
