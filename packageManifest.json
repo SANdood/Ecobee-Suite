@@ -3,7 +3,7 @@
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.1.8",
   "dateReleased": "2020-05-22",
-  "releaseNotes": "Workaround for Hubitat Dashboard/thermostat template bug\nOptimized timeZone/zipCode initialization\nLog if Ecobee location is not set\nSmart Switches only deactivate during 'enabled' time window",
+  "releaseNotes": "Fixed hourly setHold()\nAdded \"Hold\" and \"Vacation\" as valid Program selection for Smart Room\nAdded \"Hold\" as valid Program selection for Smart Vents",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/112",
   "apps": [
     {
