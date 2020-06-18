@@ -26,11 +26,12 @@
  *	1.8.10 - Miscellaneous updates & fixes
  *	1.8.11 - Tweaks for minimumVentLevel type conversions
  *	1.8.12 - Fix getThermostatPrograms()
+ *	1.8.13 - Added "Hold" as a selectable program
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.12" }
+String getVersionNum()		{ return "1.8.13" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 
@@ -195,7 +196,7 @@ def mainPage() {
 				}
 				section(title: smallerTitle("Programs")) {
 					def programs = getThermostatPrograms()
-					programs = programs + ["Vacation"]
+					programs = programs + ["Hold","Vacation"]
 					input(name: "theClimates", type: 'enum', title: inputTitle("Make vent adjustments only during these thermostat Programs")+" (optional)", required: false, submitOnChange: true, 
 						  multiple: true, options: programs, width: 6)
 					if (settings?.theClimates && (settings?.theClimates.size() != programs.size())) {
@@ -217,9 +218,9 @@ def mainPage() {
 							if (settings.theClimates) input(name: "enrollClimates", type: 'bool', title: inputTitle("Automatically include sensor ${ecobeeSensors[0].displayName} in the above Programs?"),
 															defaulValue: true, submitOnChange: true, width: 12)     
 							if (settings.enrollClimates && settings.theClimates) {
-								def notTheseClimates = programs - theClimates - ['Vacation']
+								def notTheseClimates = programs - theClimates - ['Vacation'] - ['Hold']
 								//def these = settings.theClimates.contains(['Vacation']) ? settings.theClimates - ['Vacation'] : settings.theClimates
-								def these = settings.theClimates - ['Vacation']
+								def these = settings.theClimates - ['Vacation'] - ['Hold']
 								String notThese = ''
 								if (notTheseClimates) notThese = " and removed from (" + notTheseClimates.toString()[1..-2].replace(',',', ') + ')'
 								if (maximize) paragraph "${ecobeeSensors[0].displayName} will be added to (${these.toString()[1..-2].replace('"','').replace(',',', ')})${notThese} for ${theThermostat.displayName}. " +
