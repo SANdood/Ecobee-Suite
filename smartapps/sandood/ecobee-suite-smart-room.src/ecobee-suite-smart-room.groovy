@@ -30,12 +30,13 @@
  *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.15 - Miscellaneous updates & fixes
  *	1.8.16 - Better active/inactive determinations
-*	1.8.17 - Even better active/inactive checks
+ *	1.8.17 - Even better active/inactive checks
+ *	1.8.18 - Added "Hold" and "Vacation" as valid programs
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.17" }
+String getVersionNum()		{ return "1.8.18" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -134,14 +135,14 @@ def mainPage() {
             	if (maximize) paragraph("A Smart Room is defined by one or more Ecobee Sensors (required)")
         		//input(name: "theSensors", type:"enum", title: inputTitle("Select Ecobee Suite Sensor(s)"), options: getEcobeeSensorsList(), required: true, multiple: true, submitOnChange: true)
                 input(name: "theSensorDevices", type:(ST?"device.ecobeeSuiteSensor":"device.EcobeeSuiteSensor"), title: inputTitle("Select Ecobee Suite Sensor(s)"), required: true, multiple: true, submitOnChange: true)
-				input(name: "activeProgs", type:"enum", title: inputTitle("Select Active programs for this Smart Room"), options: getProgramsList(), required: true, multiple: true, width: 6)
+				input(name: "activeProgs", type:"enum", title: inputTitle("Select Active programs for this Smart Room"), options: getProgramsList()+["Hold","Vacation"], required: true, multiple: true, width: 6)
                 if (settings?.theSensorDevices?.size() > 1) {
                 	paragraph (warningText + 
 							   (maximize?'Only 1 Ecobee Suite Sensor can be registered for Active/Inactive programs, and you have selected multiple. ':'') +
 							   "Only ${isHE?'<b><i>':''}${settings?.theSensorDevices[0].displayName}${isHE?'</i>,</b>':''} will be included in the "+
                     		  "selected program(s).")
                 }
-				input(name: "inactiveProgs", type:"enum", title: inputTitle("Select Inactive programs for this Smart Room")+" (optional)", options: getProgramsList(), required: false, multiple: true, width: 6)
+				input(name: "inactiveProgs", type:"enum", title: inputTitle("Select Inactive programs for this Smart Room")+" (optional)", options: getProgramsList()+["Hold","Vacation"], required: false, multiple: true, width: 6)
             }
 		}
 		
@@ -867,6 +868,8 @@ void doPendedUpdates() {
 def makeClimateChange( sensor, adds, removes ) {
     subscribe( sensor, 'activeClimates', programUpdateHandler )
     atomicState.updateSensorRequest = adds ? 'enroll' : 'unenroll'
+    if (adds) adds = adds - ["Hold", "Vacation"]
+    if (removes) removes = removes - ["Hold", "Vacation"]
     sensor.updateSensorPrograms( adds, removes)
     runIn(150, clearReservation, [overwrite: true])
     if (!adds) {
@@ -878,7 +881,10 @@ def makeClimateChange( sensor, adds, removes ) {
     // programUpdateHandler will release the reservation for us
 }
 boolean needClimateChange(sensor, List adds, List removes) {
+	if (adds) adds = adds - ["Hold", "Vacation"]
+    if (removes) removes = removes - ["Hold", "Vacation"]
 	if (!adds && !removes) return false
+    
     String ac = ST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
     def activeClimates = ac ? ((ac == '[]') ? [] : ac[1..-2].tokenize(', ').sort(false)) : []
     log.debug "activeClimates: ${activeClimates}"
