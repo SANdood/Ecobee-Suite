@@ -67,11 +67,12 @@
  *	1.8.41 - Rename Smart Switch/Dimmer/Vent to Switch/Dimmer/Fan
  *	1.8.42 - Fix conversion error in setProgramSetpoints()
  *	1.8.43 - Optimize zipCode, timeZone, sunRise/sunSet and weatherStation handling
+ *	1.8.44 - Fix hourly setHold
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.43" }
+String getVersionNum()		{ return "1.8.44" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -5488,7 +5489,7 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 			return true 
 		}
 	} else if (theHoldType == 'holdHours') {
-		theHoldType = '"holdHours","holdHours":"' + sendHoldHours.toString()
+		theHoldType = 'holdHours","holdHours":"' + sendHoldHours.toString()
 	} 
 	
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":[{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + 
