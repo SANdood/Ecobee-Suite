@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.43"
+      "version": "1.8.44"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -76,7 +76,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.17"
+      "version": "1.8.18"
     },
     {
       "id": "a07da3bd-6638-4d9a-a739-4efc37273095",
@@ -94,7 +94,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.11"
+      "version": "1.8.13"
     },
     {
       "id": "329710ed-0ee3-41a6-9e47-f04b7a6174a6",
