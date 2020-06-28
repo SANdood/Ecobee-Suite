@@ -33,11 +33,12 @@
  *	1.8.15 - Miscellaneous updates & fixes
  *	1.8.16 - Fix for multi-word Climate names
  *	1.8.17 - Fix getThermostatPrograms()
+ *	1.8.18 - Allow for no more Routines on SmartThings, don't require runAction or runMode
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.17" }
+String getVersionNum()		{ return "1.8.18" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -234,7 +235,7 @@ def mainPage() {
 						settings?.runModeOrRoutine = 'Mode'
 					}
 					if ((settings.runModeOrRoutine == null) || (settings.runModeOrRoutine == "Mode")) {
-						input(name: "runMode", type: "mode", title: inputTitle("Change Location Mode to: "), required: true, multiple: false, width: 4)
+						input(name: "runMode", type: "mode", title: inputTitle("Change Location Mode to: "), required: false, multiple: false, width: 4, submitOnChange: true)
 					} else if (HE) {
 						paragraph("", width: 6)
 					} else if (ST && settings.runModeOrRoutine == "Routine") {
@@ -242,13 +243,14 @@ def mainPage() {
 						def actions = location.helloHome?.getPhrases()*.label
 						if (actions) {
 							actions.sort()
-							input(name:"runAction", type:"enum", title: inputTitle("Execute this Routine: "), options: actions, required: true, multiple: false)
+							input(name:"runAction", type:"enum", title: inputTitle("Execute this Routine: "), options: actions, required: false, multiple: false, submitOnChange: true)
 						} // End if (actions)
 					} // End if (Routine)
 				} // End else Program --> Mode/Routine
 				// switches
-
-				input(name: 'doneSwitches', type: 'capability.switch', title: inputTitle("Also change these switches (optional)"), required: false, multiple: true, submitOnChange: true)
+				String also = (settings.runMode || settings.runAction) ? "Also c" : "C"
+                boolean reqd = !settings.runMode && !settings.runAction
+				input(name: 'doneSwitches', type: 'capability.switch', title: inputTitle("${also}hange these switches${reqd?'':' (optional)'}"), required: reqd, multiple: true, submitOnChange: true)
 				if (settings.doneSwitches) {
 					def s = (settings.doneSwitches.size() > 1)
 					input(name: "doneOn", type: "enum", title: inputTitle("Turn the Switch${s?'es':''}:"), required: true, multiple: false, defaultValue: 'off', options: ["on","off"], 
@@ -501,10 +503,10 @@ def changeSwitchHandler(evt) {
 	if (settings.modeOrRoutine && (settings.modeOrRoutine != 'Ecobee Program')) {
 		changeProgramHandler( evt )
 	} else {
-		if ((settings.runModeOrRoutine == null) || (settings.runModeOrRoutine == "Mode")) {
+		if (!settings.runModeOrRoutine || ((settings.runModeOrRoutine == "Mode") && settings.runMode)) {
 			LOG("Changing Mode to ${settings.runMode} because ${evt.device.displayName} was turned ${settings.startOn}",2,null,'info')
 			changeMode(true) 
-		} else {
+		} else if (settings.runModeOrRoutine && (settings.runModeOrRoutine == "Routine") && settings.runAction) {
 			LOG("Executing Routine ${settings.runAction} because ${evt.device.displayName} was turned ${settings.startOn}",2,null,'info')
 			runRoutine(true) 
 		}
@@ -551,7 +553,7 @@ def changeSTHandler(evt) {
         	atomicState.ecobeeThatChanged = evt.displayName
             atomicState.ecobeeNewProgram = evt.value
         }
-    	if (settings.runModeOrRoutine == "Mode") {
+        if (!settings.runModeOrRoutine || ((settings.runModeOrRoutine == "Mode") && settings.runMode)) {
         	LOG("Changing Mode to ${settings.runMode} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}",2,null,'info')
         	if (settings.myThermostats.size() == 1) { 
             	changeMode() 
@@ -561,7 +563,7 @@ def changeSTHandler(evt) {
                 parent.poll()
             	runIn(5, changeMode, [overwrite: true]) 
             }	
-        } else {
+        } else if (settings.runModeOrRoutine && (settings.runModeOrRoutine == "Routine") && settings.runAction) {
         	LOG("Executing Routine ${settings.runAction} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}",2,null,'info')
         	if (settings.myThermostats.size() == 1) { 
             	runRoutine() 
@@ -575,44 +577,48 @@ def changeSTHandler(evt) {
 }
 
 void changeMode(aSwitch = null) {
-	if (aSwitch != null) {
-		if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
-			if (location.modes?.find {it.name == settings.runMode}) {
-				sendMessage("Changing Mode to ${settings.runMode} because ${aSwitch} was turned ${settings.startOn}")
-				location.setMode(settings.runMode)
-			} else {
-				sendMessage("${aSwitch} was turned ${settings.startOn}, but the requested Mode change (${settings.runMode}) is no longer supported by this location")
-			}
-		} else {
-			sendMessage("${aSwitch} was turned ${settings.startOn}, and your location is already in the requested ${settings.runMode} mode")
-		}
-	} else {
-		if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
-			if (atomicState.ecobeeThatChanged) {
-				if (location.modes?.find {it.name == settings.runMode}) {
-					sendMessage("Changing Mode to ${settings.runMode} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}")
-					location.setMode(settings.runMode)
-				} else {
-					sendMessage("${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}, but the requested Mode change (${settings.runMode}) is no longer supported by this location")
-				}
-			}
-		} else {
-			sendMessage("${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}, and your location is already in the requested ${settings.runMode} mode")
-		}
-		atomicState.ecobeeThatChanged = null
-	}
+	if (settings.runMode) {
+        if (aSwitch != null) {
+            if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
+                if (location.modes?.find {it.name == settings.runMode}) {
+                    sendMessage("Changing Mode to ${settings.runMode} because ${aSwitch} was turned ${settings.startOn}")
+                    location.setMode(settings.runMode)
+                } else {
+                    sendMessage("${aSwitch} was turned ${settings.startOn}, but the requested Mode change (${settings.runMode}) is no longer supported by this location")
+                }
+            } else {
+                sendMessage("${aSwitch} was turned ${settings.startOn}, and your location is already in the requested ${settings.runMode} mode")
+            }
+        } else {
+            if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
+                if (atomicState.ecobeeThatChanged) {
+                    if (location.modes?.find {it.name == settings.runMode}) {
+                        sendMessage("Changing Mode to ${settings.runMode} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}")
+                        location.setMode(settings.runMode)
+                    } else {
+                        sendMessage("${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}, but the requested Mode change (${settings.runMode}) is no longer supported by this location")
+                    }
+                }
+            } else {
+                sendMessage("${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}, and your location is already in the requested ${settings.runMode} mode")
+            }
+            atomicState.ecobeeThatChanged = null
+        }
+    }
 }
 
 void runRoutine(aSwitch = null) {
-	if (aSwitch != null) {
-		sendMessage("Executing Routine ${settings.runAction} because ${aSwitch} was turned ${settings.startOn}")
-	} else {
-		if (atomicState.ecobeeThatChanged) {
-			sendMessage("Executing Routine ${settings.runAction} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}")
-    		atomicState.ecobeeThatChanged = null
-		}
-	}
-	location.helloHome?.execute(settings.runAction)
+    if (settings.runAction) {
+        if (aSwitch != null) {
+            sendMessage("Executing Routine ${settings.runAction} because ${aSwitch} was turned ${settings.startOn}")
+        } else {
+            if (atomicState.ecobeeThatChanged) {
+                sendMessage("Executing Routine ${settings.runAction} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}")
+                atomicState.ecobeeThatChanged = null
+            }
+        }
+        location.helloHome?.execute(settings.runAction)
+    }
 }
 
 void changeSwitches() {
