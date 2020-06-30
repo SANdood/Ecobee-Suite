@@ -34,11 +34,12 @@
  *	1.8.16 - Fix for multi-word Climate names
  *	1.8.17 - Fix getThermostatPrograms()
  *	1.8.18 - Allow for no more Routines on SmartThings, don't require runAction or runMode
+ *	1.8.19 - Fix switch on()/off()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.18" }
+String getVersionNum()		{ return "1.8.19" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -250,7 +251,7 @@ def mainPage() {
 				// switches
 				String also = (settings.runMode || settings.runAction) ? "Also c" : "C"
                 boolean reqd = !settings.runMode && !settings.runAction
-				input(name: 'doneSwitches', type: 'capability.switch', title: inputTitle("${also}hange these switches${reqd?'':' (optional)'}"), required: reqd, multiple: true, submitOnChange: true)
+				input(name: 'doneSwitches', type: 'capability.switch', title: inputTitle("${also}hange these switches ${reqd?'':'(optional)'}"), required: reqd, multiple: true, submitOnChange: true)
 				if (settings.doneSwitches) {
 					def s = (settings.doneSwitches.size() > 1)
 					input(name: "doneOn", type: "enum", title: inputTitle("Turn the Switch${s?'es':''}:"), required: true, multiple: false, defaultValue: 'off', options: ["on","off"], 
@@ -624,7 +625,9 @@ void runRoutine(aSwitch = null) {
 void changeSwitches() {
 	if (settings.doneSwitches) {
 		settings.doneSwitches.each() {
-			it."${doneOn}()"
+			//it."${settings.doneOn}"()
+            if (settings.doneOn == 'on') it.on()
+            else it.off()
 		}
 		def s = settings.doneSwitches.size() > 1
 		sendMessage("Plus, I made sure that the ${s?'switches':'switch'} ${settings.doneSwitches.toString()[1..-2]} ${s?'are all':'is'} ${settings.doneOn}")
