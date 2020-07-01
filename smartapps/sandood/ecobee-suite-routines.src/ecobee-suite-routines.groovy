@@ -35,11 +35,12 @@
  *	1.8.17 - Fix getThermostatPrograms()
  *	1.8.18 - Allow for no more Routines on SmartThings, don't require runAction or runMode
  *	1.8.19 - Fix switch on()/off()
+ *	1.8.20 - Fix runIn() typo
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.19" }
+String getVersionNum()		{ return "1.8.20" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -573,7 +574,7 @@ def changeSTHandler(evt) {
             	runIn(10, runRoutine, [overwrite: true]) 
             }
         }
-		if (settings.doneSwitches) runin(15, changeSwitches, [overwrite: true])
+		if (settings.doneSwitches) runIn(15, changeSwitches, [overwrite: true])
     }
 }
 
