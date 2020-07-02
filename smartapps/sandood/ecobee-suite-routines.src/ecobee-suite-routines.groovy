@@ -36,11 +36,12 @@
  *	1.8.18 - Allow for no more Routines on SmartThings, don't require runAction or runMode
  *	1.8.19 - Fix switch on()/off()
  *	1.8.20 - Fix runIn() typo
+ *	1.8.21 - Don't require doneSwitches, even if no Mode/Routine (could be notify only, I guess)
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.20" }
+String getVersionNum()		{ return "1.8.21" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -251,8 +252,8 @@ def mainPage() {
 				} // End else Program --> Mode/Routine
 				// switches
 				String also = (settings.runMode || settings.runAction) ? "Also c" : "C"
-                boolean reqd = !settings.runMode && !settings.runAction
-				input(name: 'doneSwitches', type: 'capability.switch', title: inputTitle("${also}hange these switches ${reqd?'':'(optional)'}"), required: reqd, multiple: true, submitOnChange: true)
+                //boolean reqd = !settings.runMode && !settings.runAction
+				input(name: 'doneSwitches', type: 'capability.switch', title: inputTitle("${also}hange these switches (optional)"), required: false, multiple: true, submitOnChange: true)
 				if (settings.doneSwitches) {
 					def s = (settings.doneSwitches.size() > 1)
 					input(name: "doneOn", type: "enum", title: inputTitle("Turn the Switch${s?'es':''}:"), required: true, multiple: false, defaultValue: 'off', options: ["on","off"], 
