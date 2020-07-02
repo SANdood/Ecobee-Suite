@@ -40,7 +40,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.20"
+      "version": "1.8.21"
     },
     {
       "id": "cc05b8d1-01b7-449e-b12b-9f56ccbdf23c",
