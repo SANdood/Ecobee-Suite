@@ -87,6 +87,7 @@ metadata {
 	preferences {
 		input "referenceTemp", "decimal", title: "<b>Reference temperature</b>", description: "Enter current reference temperature reading", displayDuringSetup: false
 		input "skipTemp", "bool", title: "<b>Send every 10th temperature event</b>", defaultValue: false
+		input "disableExtras", "bool", title: "<b>Disable Temp & Pressure reports</b>", defaultValue: false
 		input "debugOn", "bool", title: "<b>Enable debug logging for 1/2 hour</b>", defaultValue: true
 		input "infoOn", "bool", title: "<b>Enable descriptionText logging?</b>", defaultValue: true
     }
@@ -112,34 +113,42 @@ def initialize() {
 	configure()
 	
 	// handle reference temperature / tempOffset automation
-	if (settings.referenceTemp != null) {
-		if (state.sensorTemp) {
-			state.sensorTemp = roundIt(state.sensorTemp, 2)
-			state.tempOffset = roundIt(referenceTemp - state.sensorTemp, 2)
-			settings.referenceTemp = null
-			device.clearSetting('referenceTemp')
-			if (debugOn) log.debug "sensorTemp: ${state.sensorTemp}, referenceTemp: ${referenceTemp}, offset: ${state.tempOffset}"
-			sendEvent(makeTemperatureResult(state.sensorTemp))
-		} // else, preserve settings.referenceTemp, state.tempOffset will be calculate on the next temperature report
-	} else if (state.tempOffset == null) {
-		// Initialize the offset, converting from the old attribute-based approach if necessary
-		def offset = device.currentValue('tempOffset')
-		if (offset != null) {
-			log.info "${linkText} One-time tempOffset conversion completed"
-			sendEvent(name: 'tempOffset', value: null, descriptionText: "One-time tempOffset conversion completed")
-			device.clearSetting('tempOffset')
-			state.tempOffset = roundIt(offset, 2)
-			if (state.sensorTemp) sendEvent(makeTemperatureResult(state.sensorTemp))
-		} else {
-			state.tempOffset = 0.0
+	if (!disableExtras) {
+		if (settings.referenceTemp != null) {
+			if (state.sensorTemp) {
+				state.sensorTemp = roundIt(state.sensorTemp, 2)
+				state.tempOffset = roundIt(referenceTemp - state.sensorTemp, 2)
+				settings.referenceTemp = null
+				device.clearSetting('referenceTemp')
+				if (debugOn) log.debug "sensorTemp: ${state.sensorTemp}, referenceTemp: ${referenceTemp}, offset: ${state.tempOffset}"
+				sendEvent(makeTemperatureResult(state.sensorTemp))
+			} // else, preserve settings.referenceTemp, state.tempOffset will be calculate on the next temperature report
+		} else if (state.tempOffset == null) {
+			// Initialize the offset, converting from the old attribute-based approach if necessary
+			def offset = device.currentValue('tempOffset')
+			if (offset != null) {
+				log.info "${linkText} One-time tempOffset conversion completed"
+				sendEvent(name: 'tempOffset', value: null, descriptionText: "One-time tempOffset conversion completed")
+				device.clearSetting('tempOffset')
+				state.tempOffset = roundIt(offset, 2)
+				if (state.sensorTemp) sendEvent(makeTemperatureResult(state.sensorTemp))
+			} else {
+				state.tempOffset = 0.0
+			}
 		}
 	}
-	
 	if (debugOn) {
 		// turn off debug logging after 1/2 hour
 		runIn(1800, debugOff, [overwrite: true])
 	}
-	if (settings.skipTemp) state.tempCounter = 10	// send next temperature update
+	if (disableExtras) {
+		log.debug "disabling temperature and pressure reports"
+		sendEvent(name: "temperature", value: 0.0, isStateChange: true)
+		sendEvent(name: "pressure", value: 0.0, isStateChange: true)
+		sendEvent(name: "pascals", value: 0.0, isStateChange: true)
+	} else {
+		if (settings.skipTemp) state.tempCounter = 10	// send next temperature update
+	}
 }
 
 
@@ -178,11 +187,13 @@ private Map parseCatchAllMessage(String description) {
                 break
 
             case 0x0402:
-                // temp is last 2 data values. reverse to swap endian
-                String temp = cluster.data[-2..-1].reverse().collect { cluster.hex1(it) }.join()
-                def value = convertTemperatureHex(temp)
-                if (value > 50.0) return makeTemperatureResult(value)
-                break
+				if (!disableExtras) {
+					// temp is last 2 data values. reverse to swap endian
+					String temp = cluster.data[-2..-1].reverse().collect { cluster.hex1(it) }.join()
+					def value = convertTemperatureHex(temp)
+					if (value > 32.0) return makeTemperatureResult(value)
+				}
+                break;
 
             case 0x0006:
                 return makeOnOffResult(cluster.data[-1])
@@ -222,14 +233,18 @@ private Map parseReportAttributeMessage(String description) {
         return makeLevelResult(descMap.value)
     }
     else if (descMap.cluster == "0402" && descMap.attrId == "0000") {
-        def value = convertTemperatureHex(descMap.value)
-        if (value > 50.0)return makeTemperatureResult(value)
+		if (!disableExtras) {
+        	def value = convertTemperatureHex(descMap.value)
+        	if (value > 32.0) return makeTemperatureResult(value)
+		}
     }
     else if (descMap.cluster == "0001" && descMap.attrId == "0021") {
         return makeBatteryResult(Integer.parseInt(descMap.value, 16))
     }
     else if (descMap.cluster == "0403" && descMap.attrId == "0020") {
-        return makePressureResult(Integer.parseInt(descMap.value, 16))
+		if (!disableExtras) {
+        	return makePressureResult(Integer.parseInt(descMap.value, 16))
+		}
     }
     else if (descMap.cluster == "0000" && descMap.attrId == "0006") {
         return makeSerialResult(new String(descMap.value.decodeHex()))
@@ -243,12 +258,15 @@ private Map parseCustomMessage(String description) {
 	if (debugOn) log.debug "parseCustomMessage(${description})"
     Map resultMap = [:]
     if (description?.startsWith('temperature: ')) {
-        // if (debugOn) log.debug "${description}"
-        // def value = zigbee.parseHATemperatureValue(description, "temperature: ", getTemperatureScale())
-        // if (debugOn) log.debug "split: " + description.split(": ")
-        def value = Double.parseDouble(description.split(": ")[1])
-        // if (debugOn) log.debug "${value}"
-        if (value > 50.0) resultMap = makeTemperatureResult(convertTemperature(value))
+		if (!disableExtras) {
+			// if (debugOn) log.debug "${description}"
+			// def value = zigbee.parseHATemperatureValue(description, "temperature: ", getTemperatureScale())
+			// if (debugOn) log.debug "split: " + description.split(": ")
+			def value = Double.parseDouble(description.split(": ")[1])
+			// if (debugOn) log.debug "${value}"
+			def result = convertTemperature(value)
+			if (result > 32.0) resultMap = makeTemperatureResult(result)
+		}
     }
     return resultMap
 }
@@ -312,14 +330,14 @@ private Map makePressureResult(rawValue) {
 
     def pascals = rawValue / 10
 	def inHg = roundIt( (pascals / 3386.3886666667), 2)
-    Map result = [
-        name: 'pascals',
-		descriptionText: "${linkText} pascals is ${pascals} Pa",
-        value: pascals,
-		unit:  'Pa'
-    ]
-	sendEvent(result)
-	result = [
+    //Map result = [
+    //    name: 'pascals',
+	//	descriptionText: "${linkText} pascals is ${pascals} Pa",
+    //    value: pascals,
+	//	unit:  'Pa'
+    //]
+	//sendEvent(result)
+	Map result = [
 		name: 	'pressure',
 		descriptionText: "${linkText} pressure is ${inHg} inHg",
 		value: 	inHg,
@@ -677,13 +695,15 @@ def configure() {
         // temperature - type: int16s, change: 0xA = 10 = 0.1C, 0x32=50=0.5C
         //"zcl global send-me-a-report 0x0402 0 0x29 300 600 {1900}", "delay 200",
         //"send 0x${device.deviceNetworkId} 1 1", "delay 1500",
-		"zcl global send-me-a-report 0x0402 0 0x29 60 60 {0A00}", "delay 200",
+		"zcl global send-me-a-report 0x0402 0 0x29 60 60 {3200}", "delay 200",
         "send 0x${device.deviceNetworkId} 1 1", "delay 1500",
 		
         // Send update when pressure changes by 50 Pa instead of 0.1Pa, every 1-5 minutes
         // pressure - type: int32u, change: 1 = 0.1Pa, 500=50 Pa
-        "zcl mfg-code 0x115B", "delay 200",
-        "zcl global send-me-a-report 0x0403 0x20 0x22 60 60 {010000}", "delay 200",
+        "zcl mfg-code 0x115B", "delay 1200",
+	 // "zcl global send-me-a-report 0x0403 0x20 0x22 300 600 {01F400}", "delay 200",
+	 // "zcl global send-me-a-report 0x0403 0x20 0x22 60 3600 {010000}", "delay 200",
+        "zcl global send-me-a-report 0x0403 0x20 0x22 60 300 {000100}", "delay 1200",
         "send 0x${device.deviceNetworkId} 1 1", "delay 1500",
 
         // mike 2015/06/2: preconfigured; see tech spec
