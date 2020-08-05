@@ -1,6 +1,6 @@
 ![Universal Ecobee Suite, Version 1.8.00](https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Ecobee-1-8-00-header.png) 
 ======================================================
-### NOTICE: Latest updates posted 18 June 2020 at 4:00pm
+### NOTICE: Latest updates posted 5 August 2020 at 8:45am
 * **Latest update announcements**
     - [Hubitat Community announcement](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176)
     - [SmartThings Community announcement](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405/385)
