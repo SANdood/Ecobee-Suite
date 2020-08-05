@@ -2,8 +2,8 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.1.8",
-  "dateReleased": "2020-06-28",
-  "releaseNotes": "Routine/Mode/Switch/Programs now allows switch Action only (Mode or Routine no longer required)",
+  "dateReleased": "2020-08-05",
+  "releaseNotes": "Optimizes scheduled Comfort Settings changes when setpoints don't change\nHandles new demandResponsePrecool/Preheat events\nRemoved extraneous debug messages\nNow works with new Ecobee Authentication services",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/112",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.44"
+      "version": "1.8.47"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.8.16"
+      "version": "1.8.17"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
