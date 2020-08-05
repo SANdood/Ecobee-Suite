@@ -43,8 +43,9 @@
  *	1.8.14 - Avoid double resumeProgram() when changing programs
  *	1.8.15 - Fix Hold programs check
  *	1.8.16 - Remove whitespace from thermostatMode & fanMode (Hubitat Dashboard adds extra " " to fanMode)
+ *	1.8.17 - Remove debugging "log.error" in generateEvent()
  */
-String getVersionNum() 		{ return "1.8.16" }
+String getVersionNum() 		{ return "1.8.17" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -940,7 +941,7 @@ def ping() {
 	parent.pollChildren(getDeviceId(),true)		// forcePoll just me
 }
 def generateEvent(Map updates) {
-	log.error "generateEvent(Map): ${updates}"
+	//log.error "generateEvent(Map): ${updates}"
 	generateEvent([updates])
 }
 def generateEvent(List updates) {
