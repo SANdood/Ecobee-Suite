@@ -67,12 +67,15 @@
  *	1.8.41 - Rename Smart Switch/Dimmer/Vent to Switch/Dimmer/Fan
  *	1.8.42 - Fix conversion error in setProgramSetpoints()
  *	1.8.43 - Optimize zipCode, timeZone, sunRise/sunSet and weatherStation handling
- *	1.8.44 - Fix hourly setHold
+ *	1.8.44 - Fixed hourly setHold
+ *	1.8.45 - Handle events overriding program.currentClimateRef
+ *	1.8.46 - Get thermostat.programs at x:03 and x:33 (when programs change)
+ *	1.8.47 - Handle demandResponsePrecool/Preheat Eco+ events
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.44" }
+String getVersionNum()		{ return "1.8.47" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1334,6 +1337,8 @@ def cleanupStates() {
 
 def initialize() {	
 	LOG("${getVersionLabel()} Initializing...", 1, null, 'trace')
+    def foo = randomSeed.nextInt(100)	// get the random number generator going
+    
     if (atomicState.inSetup) atomicState.inSetup = false
 
     try {
@@ -1394,6 +1399,7 @@ def initialize() {
 	atomicState.lastUserDefinedEventDate = getTimestamp()  
 	atomicState.lastRevisions = [:]
 	atomicState.latestRevisions = [:]
+    atomicState.needPrograms = true
 	atomicState.skipCount = 0
 	atomicState.sendJsonRetry = false
 
@@ -1549,12 +1555,17 @@ def initialize() {
 		atomicState.initializedEpic = nowTime
 		atomicState.initializedDate = nowDate
 	}
+    schedule("0 3/30 * * * ?", programUpdater)
+    
 	runIn(90, forceNextPoll, [overwrite: true])		// get ALL the data (again) once things settle down
     runIn(180, runCallQueue, [overwrite: true])
     
 	LOG("${getVersionLabel()} - initialization complete",1,null,'debug')
 	// atomicState.versionLabel = getVersionLabel()
 	return aOK
+}
+def programUpdater() {
+	if (!atomicState.needPrograms) atomicState.needPrograms = true		// force getting the thermostat summary at the first poll after x:03 and x:33
 }
 def pauseSwitchHandler(evt) {
 	if (evt.value == 'on') {
@@ -1907,7 +1918,7 @@ boolean spawnDaemon(daemon="all", unsched=true) {
 	// Daemon options: "poll", "auth", "watchdog", "all"	
 	def daemonList = ["poll", "auth", "watchdog", "all"]
 	boolean debugLevelFour = debugLevel(4)
-	Random rand = new Random()
+	//Random rand = new Random()
 	
 	Integer pollingInterval = getPollingInterval()
 	
@@ -2101,7 +2112,7 @@ void pollChildren(String deviceId="",force=false) {
             }
             atomicState.forceDevices = []
         }
-        if (!thermostatsToPoll) thermostatsToPoll =  getChildThermostatDeviceIdsString()
+        if (!thermostatsToPoll) thermostatsToPoll = getChildThermostatDeviceIdsString()
 	} else {
 		forcePoll = updatesLog.forcePoll
 		thermostatsToPoll = getChildThermostatDeviceIdsString()
@@ -2134,7 +2145,7 @@ void pollChildren(String deviceId="",force=false) {
 	boolean somethingChanged = forcePoll ?: checkThermostatSummary(thermostatsToPoll)
 	if (!forcePoll) thermostatsToPoll = atomicState.changedThermostatIds
 	
-	if (somethingChanged) {
+	if (somethingChanged) { //  || atomicState.needPrograms) {
 		//List tids = []
 		//tids = thermostatsToPoll.split(",")
 		//String names = ""
@@ -2206,7 +2217,8 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 	boolean thermostatUpdated 	= updatesLog.thermostatUpdated
 	boolean alertsUpdated 		= updatesLog.alertsUpdated
 	boolean runtimeUpdated 		= updatesLog.runtimeUpdated
-	boolean getAllStats 		= (runtimeUpdated || thermostatUpdated || alertsUpdated )
+    boolean needPrograms 		= atomicState.needPrograms
+	boolean getAllStats 		= (runtimeUpdated || thermostatUpdated || alertsUpdated || needPrograms)
 	
 	boolean debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("checkThermostatSummary() - ${thermostatIdsString}",1,null,'trace')
@@ -2264,7 +2276,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 							//if (settings.askAlexa && (lastDetails[1] != latestDetails[1])) tau = true	// alerts
 							if (lastDetails[1] != latestDetails[1]) tau = true	// alerts
 							// log.debug "alertsChanged? ${tau}"
-							if (lastDetails[0] != latestDetails[0]) ttu = true	// thermostat 
+							if (needPrograms || (lastDetails[0] != latestDetails[0])) ttu = true	// thermostat 
 						} else {					// no priors, assume all have been updated
 							tru = true 
 							if (settings.askAlexa) tau = true
@@ -2417,6 +2429,7 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	boolean alertsUpdated		= updatesLog.alertsUpdated
 	boolean runtimeUpdated 		= updatesLog.runtimeUpdated
 	boolean getWeather			= updatesLog.getWeather
+    boolean needPrograms 		= atomicState.needPrograms
 	
 	//String preText = debugLevel(2) ? '' : 'pollEcobeeAPI() - '
 	boolean somethingChanged 	= (thermostatIdsString != '')
@@ -2443,8 +2456,7 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 			atomicState.hourlyForcedUpdate = 0		// reset the hourly check counter if we are forcePolling ALL the thermostats
 		} 
 		somethingChanged = true
-	}
-	
+	} 
 	// if nothing has changed, and this isn't a forced poll, just return (keep count of polls we have skipped)
 	// This probably can't happen anymore...shouldn't even be here if nothing has changed and not a forced poll...
 	if (!somethingChanged && !forcePoll) {	
@@ -2452,8 +2464,8 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
         atomicState.inPollChildren = false
 		return true		// act like we completed the heavy poll without error
 	} else {
-		// if getting the weather, get for all thermostats at the same time. Else, just get the thermostats that changed
-		checkTherms = (getWeather) ? allMyChildren : checkTherms // (forcePoll ? checkTherms : atomicState.changedThermostatIds)
+		// if getting the weather or programs, get for all thermostats at the same time. Else, just get the thermostats that changed
+		checkTherms = (getWeather || needPrograms) ? allMyChildren : checkTherms // (forcePoll ? checkTherms : atomicState.changedThermostatIds)
 	}  
 	
 	// Let's only check those thermostats that actually changed...unless this is a forcePoll - or if we are getting the weather 
@@ -2463,7 +2475,9 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	// get equipmentStatus every time
 	String jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + checkTherms + '","includeEquipmentStatus":"true"'
 	String gw = '( equipmentStatus'
+
 	if (thermostatUpdated || forcePoll) {
+        if (debugLevelFour) LOG("thermostatUpdated: ${thermostatUpdated}, forcePoll: ${forcePoll}, a.needPrograms: ${needPrograms}, checking: ${checkTherms}", 1, null, 'trace')
 		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true","includeAudio":"true"'
 		gw += ' settings program events audio'
 	}
@@ -2497,7 +2511,7 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	List tids = checkTherms.split(",")
 	String names = ""
 	tids.each { names = (names=="") ? getThermostatName(it) : names+", "+getThermostatName(it) }
-	LOG("Requesting ${gw} for thermostat${checkTherms.contains(',')?'s':''} ${names} (${checkTherms})", 2, null, 'info')
+	LOG("Requesting ${gw} for thermostat${checkTherms.contains(',')?'s':''} ${names} (${checkTherms}) - [${needPrograms}]", 2, null, 'info')
     //LOG("Requesting ${gw} for thermostats ${checkTherms}",2,null,'info')
 	jsonRequestBody += '}}'	  
 	if (debugLevelFour) LOG("pollEcobeeAPI() - jsonRequestBody is: ${jsonRequestBody}", 1, null, 'trace')
@@ -2664,7 +2678,19 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 							tempSettings[tid] = stat.settings as HashMap
 						}
                     }
+                    if (stat.events) { 
+						if (!tempEvents) tempEvents = atomicState.events as HashMap
+						if (!tempEvents || !tempEvents[tid] || (tempEvents[tid] != stat.events)) {
+							eventsUpdated = true
+                            statUpdates[tid].add('events')
+							tempEvents[tid] = stat.events
+						}
+                        //log.debug "${tid} eventsUpdated: ${eventsUpdated}"
+                    }
                     if (stat.program) {
+                        //def tempProg = atomicState.program
+                        //tempProg[tid] = stat.program
+                        //atomicState.program = tempProg
                         if (stat.program.climates) {
                         	if (!tempClimates) tempClimates = atomicState.climates as HashMap
                     		if (!tempClimates || !tempClimates[tid] || (tempClimates[tid] != stat.program.climates)) {
@@ -2682,9 +2708,13 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
                             }
                         }
                         if (stat.program.currentClimateRef) {
+                        	// log.warn "program.currentClimateRef: ${stat.program.currentClimateRef}"
                             if (!tempCurrentClimateRef)  tempCurrentClimateRef = atomicState.currentClimateRef
-                            if (!tempCurrentClimateRef || !tempCurrentClimateRef[tid] || (tempCurrentClimateRef[tid] != stat.program.currentClimateRef)) {
+                            
+                            // Note that events can override stat.program.currentClimateRef, so force a climateRef check if events just changed
+                            if (eventsUpdated || !tempCurrentClimateRef || !tempCurrentClimateRef[tid] || (tempCurrentClimateRef[tid] != stat.program.currentClimateRef)) {
                                 curClimRefUpdated = true
+                                //log.warn "curClimRefUpdated"
                                 statUpdates[tid].addAll(['program','curClimRef'])
                                 tempCurrentClimateRef[tid] = stat.program.currentClimateRef
                             }
@@ -2697,17 +2727,10 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
                         		tempTimeSchedule[tid] = timeSchedule
                         	}
                         }
-						programUpdated = (curClimRefUpdated || climatesUpdated || scheduleUpdated)		// just in case
+						programUpdated = (curClimRefUpdated || climatesUpdated || scheduleUpdated )		// just in case
+                        //log.warn "programUpdated: ${programUpdated}"
                    	}
-					if (stat.events) { 
-						if (!tempEvents) tempEvents = atomicState.events as HashMap
-						if (!tempEvents || !tempEvents[tid] || (tempEvents[tid] != stat.events)) {
-							eventsUpdated = true
-                            statUpdates[tid].add('events')
-							tempEvents[tid] = stat.events
-						}
-                        //log.debug "${tid} eventsUpdated: ${eventsUpdated}"
-                    }
+					
 					if (stat.location) { 
 						if (!tempLocation) tempLocation = atomicState.statLocation
 						if (!tempLocation || !tempLocation[tid] || (tempLocation[tid] != stat.location)) {
@@ -2942,9 +2965,11 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 
 		if (settings.thermostats) {
 			if (forcePoll || thermostatUpdated || rtReallyUpdated || extendRTUpdated || settingsUpdated || weatherUpdated || equipUpdated || audioUpdated) {
+            	// if (atomicState.needPrograms) atomicState.needPrograms = false // (SR) - To handle rare occasions that atomicState.needPrograms does not properly reset after
 				updateThermostatData()		// update thermostats first (some sensor data is dependent upon thermostat changes)
 			} else {
 				LOG("No thermostat updates...", 2, null, 'info')
+                //if (atomicState.needPrograms) atomicState.needPrograms = false
 			}
 		}
 		if (settings.ecobeesensors) {						// Only update configured sensors (and then only if they have changes)
@@ -3329,6 +3354,7 @@ void updateSensorData() {
             	climatesUpdated		= statUpdates[tid]?.contains('climates')
             	scheduleUpdated		= statUpdates[tid]?.contains('schedule')
 			} else {
+            //log.warn "No statUpdates[${tid}] - forcePoll: ${forcePoll}"
 				sensorsUpdated 		= false
             	programUpdated 		= false
             	eventsUpdated 		= false
@@ -3639,6 +3665,9 @@ void updateThermostatData() {
     HashMap changeOften
     boolean oftenChanged 	= false
     
+    atomicState.needPrograms = false
+    boolean needPrograms 	= false	// Global flag - will be set true if ANY thermostat needs thermostat.programs
+    
 	def statData = changedTids.inject([:]) { collector, tid ->
         String DNI = (HE?'ecobee_suite-thermostat-':'') + ([ app.id, tid ].join('.'))
         String tstatName = getThermostatName(tid)
@@ -3765,9 +3794,10 @@ void updateThermostatData() {
             if (((curClimRefUpdated || climatesUpdated || eventsUpdated || forcePoll) && (currentClimateRef != "") && climates)) { 
                 scheduledClimateId			= currentClimateRef 
                 schedClimateRef				= climates.find { it.climateRef == scheduledClimateId }
-                scheduledClimateName		= schedClimateRef.name
-                scheduledClimateOwner		= schedClimateRef.owner
-                scheduledClimateType		= schedClimateRef.type
+                //log.warn "schedClimateRef: ${schedClimateRef}"
+                scheduledClimateName		= schedClimateRef?.name
+                scheduledClimateOwner		= schedClimateRef?.owner
+                scheduledClimateType		= schedClimateRef?.type
                 climates.each { programsList += '"'+it.name+'"'; climatesList << it.name; } // read with: programsList = new JsonSlurper().parseText(theThermostat.currentValue('programsList'))
                 climatesList.sort()
                 programsList.sort()
@@ -3952,6 +3982,14 @@ void updateThermostatData() {
                         currentClimateOwner = holdClimateRef?.owner
                         currentClimateType = holdClimateRef?.type
                         break;
+                    case 'demandResponsePrecool':
+                    case 'demandResponsePreheat':
+                    	currentClimateName = 'Hold: Eco Prep'
+                        currentClimateOwner = 'demandResponse'
+                        currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco' : 'Eco!'		// Tag mandatory DR events
+                        currentClimateId = runningEvent.name as String
+                        currentClimateType = 'program'
+                        break;
                     case 'demandResponse':
                         // if ((runningEvent.isTemperatureAbsolute == false) && (runningEvent.isTemperatureRelative == false))
                         // Oddly, the *RelativeTemp values are always POSITIVE to reduce the load, and NEGATIVE to increase it (ie., pre-cool/pre-heat)
@@ -3966,10 +4004,10 @@ void updateThermostatData() {
                     	// Time of Use setback - pre-cooling/heating when the power is (supposedly) less expensive
                     	currentClimateName = 'touSetback'
                         currentClimateOwner = 'ecoPlus'
-                        log.debug "PLEASE SEND THIS TO BARRY: touSetback event: ${runningEvent}"
+                        //log.debug "PLEASE SEND THIS TO BARRY: touSetback event: ${runningEvent}"
                         break;
                     default:		
-                        LOG("Unexpected runningEvent.type: (${runningEvent.type}) - please notify Barry",1,null,'warn')
+                        LOG("PLEASE SEND THIS TO BARRY: Unexpected ${runningEvent.type} event: ${runningEvent}",1,null,'warn')
                         currentClimateName = (runningEvent.type != null) ? runningEvent.type : 'null'
                         break;
                 }
@@ -4541,25 +4579,25 @@ void updateThermostatData() {
                 }
             }
             boolean rareChanged = false
-            boolean needPrograms = false
+            boolean needP = false
             if (!changeRarely) changeRarely = atomicState.changeRarely as HashMap
             //if (thermostatUpdated || runtimeUpdated ||	equipUpdated || forcePoll || /*settingsUpdated || eventsUpdated || programUpdated || runtimeUpdated || extendRTUpdated ||*/ (changeRarely == [:]) || !changeRarely.containsKey(tid)) { // || (changeRarely[tid] != rarelyList)) {	
             if (programUpdated || runtimeUpdated || eventsUpdated || equipUpdated || settingsUpdated || runningEvent || forcePoll || !changeRarely || !changeRarely[tid]) { // || (changeRarely[tid] != rarelyList)) {	
             	boolean needAll = false
                 if (!changeRarely || !changeRarely[tid]) {
-                	changeRarely[tid] = ["x"]*20 as List		// ['x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x']
+                	changeRarely[tid] = ["x"]*21 as List		// ['x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x']
                     rarelyChanged = true
                     needAll = true
                 }
                 // The order of these is IMPORTANT - Do setpoints and all equipment changes before notifying of the hold and program change...
-                if (tempHeatingSetpoint && (forcePoll || (changeRarely[tid][19] != tempHeatingSetpoint) || userPChanged))	{ 
-                    needPrograms = true
+                if (tempHeatingSetpoint && (rarelyChanged || forcePoll || (changeRarely[tid][19] != tempHeatingSetpoint) || userPChanged))	{ 
+                    needP = true
                     changeRarely[tid][19] = tempHeatingSetpoint
                     data << [heatingSetpoint: myConvertTemperatureIfNeeded((tempHeatingSetpoint.toInteger() / 10.0), "F", userPrecision)] // roundIt(tempHeatingSetpoint, userPrecision)] // String.format("%.${userPrecision}f", roundIt(tempHeatingSetpoint, userPrecision))]
                     rareChanged = true
                 }
-                if (tempCoolingSetpoint && (forcePoll || (changeRarely[tid][20] != tempCoolingSetpoint) || userPChanged))	{ 
-                    needPrograms = true
+                if (tempCoolingSetpoint && (rarelyChanged || forcePoll || (changeRarely[tid][20] != tempCoolingSetpoint) || userPChanged))	{ 
+                    needP = true
                     changeRarely[tid][20] = tempCoolingSetpoint
                     data << [coolingSetpoint: myConvertTemperatureIfNeeded((tempCoolingSetpoint.toInteger() / 10.0), "F", userPrecision)] // roundIt(tempCoolingSetpoint, userPrecision)] //String.format("%.${userPrecision}f", roundIt(tempCoolingSetpoint, userPrecision))] 
                     rareChanged = true
@@ -4583,7 +4621,8 @@ void updateThermostatData() {
                     if (changeRarely[tid][7]  != currentClimate)		{ data << [currentProgram: currentClimate];					changeRarely[tid][7]  = currentClimate;			if (!rareChanged) rareChanged = true; }
                     if (changeRarely[tid][8]  != currentClimateName)	{ data << [currentProgramName: currentClimateName, 
                     															   schedule: currentClimateName + schedText];		changeRarely[tid][8]  = currentClimateName;		if (!rareChanged) rareChanged = true; }
-                    if (changeRarely[tid][9]  != currentClimateId)		{ data << [currentProgramId: currentClimateId];				changeRarely[tid][9]  = currentClimateId;		if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][9]  != currentClimateId)		{ data << [currentProgramId: currentClimateId];				changeRarely[tid][9]  = currentClimateId;		if (!rareChanged) rareChanged = true; 
+                    																																								if (needP) needP = false; }
                     if (changeRarely[tid][15] != currentClimateOwner)	{ data << [currentProgramOwner: currentClimateOwner];		changeRarely[tid][15] = currentClimateOwner;	if (!rareChanged) rareChanged = true; }
                     if (changeRarely[tid][16] != currentClimateType)	{ data << [currentProgramType: currentClimateType];			changeRarely[tid][16] = currentClimateType;		if (!rareChanged) rareChanged = true; }
                 }
@@ -4594,10 +4633,11 @@ void updateThermostatData() {
                 if (changeRarely[tid][2]  != holdEndsAt)				{ data << [holdEndsAt: holdEndsAt];							changeRarely[tid][2]  = holdEndsAt;				if (!rareChanged) rareChanged = true; }
                 if (changeRarely[tid][3]  != statusMsg)					{ data << [holdStatus: statusMsg];							changeRarely[tid][3]  = statusMsg;				if (!rareChanged) rareChanged = true; }
                 
-                if (programUpdated || forcePoll || needAll) {
+                if (programUpdated || eventsUpdated || forcePoll || needAll) {
                     if (changeRarely[tid][10] != scheduledClimateName)	{ data << [scheduledProgramName: scheduledClimateName,
                                                                                    scheduledProgram: scheduledClimateName];			changeRarely[tid][10] = scheduledClimateName;	if (!rareChanged) rareChanged = true; }
-                    if (changeRarely[tid][11] != scheduledClimateId)	{ data << [scheduledProgramId: scheduledClimateId];			changeRarely[tid][11] = scheduledClimateId;		if (!rareChanged) rareChanged = true; }
+                    if (changeRarely[tid][11] != scheduledClimateId)	{ data << [scheduledProgramId: scheduledClimateId];			changeRarely[tid][11] = scheduledClimateId;		if (!rareChanged) rareChanged = true; 
+                    																																								if (needP) needP = false; }
                     if (changeRarely[tid][17] != scheduledClimateOwner) { data << [scheduledProgramOwner: scheduledClimateOwner];	changeRarely[tid][17] = scheduledClimateOwner;	if (!rareChanged) rareChanged = true; }
                     if (changeRarely[tid][18] != scheduledClimateType)	{ data << [scheduledProgramType: scheduledClimateType];		changeRarely[tid][18] = scheduledClimateType;	if (!rareChanged) rareChanged = true; }
                 }
@@ -4609,7 +4649,12 @@ void updateThermostatData() {
                 // If the setpoints change, then double-check to see if the currently running Program has changed.
                 // We do this by ensuring that the rest of the thermostat datasets (settings, program, events) are 
                 // collected on the next poll, if they weren't collected in this poll.
-                atomicState.needPrograms = (needPrograms && (!thermostatUpdated && !forcePoll))
+                //if (debugLevelFour) LOG("programUpdated: ${programUpdated}, forcePoll: ${forcePoll}, a.needPrograms: ${atomicState.needPrograms}, needPrograms: ${needPrograms}",1,null,'trace')
+                //atomicState.needPrograms = needPrograms ?: (needPrograms && (!programUpdated && !forcePoll))
+                //if (debugLevelFour) LOG("a.needPrograms: ${atomicState.needPrograms}",1,null,'trace')
+                //if (needPrograms && (programUpdated || forcePoll)) needPrograms = false
+                //needPrograms = !needPrograms ? (!prog
+                if (!needPrograms && needP) needPrograms = (!programUpdated && !forcePoll)
 
                 if (programUpdated || eventsUpdated || forcePoll || needAll) {
                     def tempProgram = [:]
@@ -4708,7 +4753,8 @@ void updateThermostatData() {
     if (neverChanged)		atomicState.changeNever 	= changeNever
     if (rarelyChanged)		atomicState.changeRarely 	= changeRarely
     if (oftenChanged)		atomicState.changeOften		= changeOften
-
+    
+	atomicState.needPrograms = needPrograms	// should be true if ANY thermostat setpoints changed and the program data wasn't updated
 	atomicState.thermostats = statData
 	Integer nSize = tstatNames.size()
 	if (nSize > 1) tstatNames.sort()
@@ -6287,7 +6333,7 @@ void debugEvent(message, displayEvent = false) {
 	sendEvent (results)
 }
 void debugEventFromParent(child, message) {
-	if (child) { child.generateEvent([[debugEventFromParent: message]]) }
+	if (child) { child.generateEvent([debugEventFromParent: message]) }
 }
 boolean notifyNowOK() {
 	// If both provided, both must be true; else only the provided one needs to be true
@@ -6800,17 +6846,19 @@ List getGuestList(String statId, String type='modeOff') {
 	return result
 }
 
+@Field Random randomSeed = new Random()
+
 void runEvery2Minutes(handler) {
-	Random rand = new Random()
+	//Random rand = new Random()
 	//log.debug "Random2: ${rand}"
-	int randomSeconds = rand.nextInt(59)
+	int randomSeconds = randomSeed.nextInt(59)
 	schedule("${randomSeconds} 0/2 * * * ?", handler)
 }
 
 void runEvery3Minutes(handler) {
-	Random rand = new Random()
+	//Random rand = new Random()
 	//log.debug "Random3: ${rand}"
-	int randomSeconds = rand.nextInt(59)
+	int randomSeconds = randomSeed.nextInt(59)
 	schedule("${randomSeconds} 0/3 * * * ?", handler)
 }
 
