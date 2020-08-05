@@ -4,7 +4,7 @@
   "minimumHEVersion": "2.1.8",
   "dateReleased": "2020-08-05",
   "releaseNotes": "Optimizes scheduled Comfort Settings changes when setpoints don't change\nHandles new demandResponsePrecool/Preheat events\nRemoved extraneous debug messages\nNow works with new Ecobee Authentication services",
-  "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/112",
+  "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
   "apps": [
     {
       "id": "70b3ec47-c06f-4570-b4ae-5ee76da59db8",
