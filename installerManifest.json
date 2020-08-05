@@ -23,7 +23,7 @@
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.8.44",
+			"version": 	"1.8.47",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -144,7 +144,7 @@
 			"name": 	"Ecobee Suite Thermostat",
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published":	true,
-			"version": 	"1.8.16",
+			"version": 	"1.8.17",
 			"appUrl": 	"devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
 			"optional": 	false
 		},
