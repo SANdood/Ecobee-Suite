@@ -2238,6 +2238,7 @@ void pollChildren(String deviceId="",force=false) {
         LOG("Polling ${thermostatsToPoll} ${forcePoll?'(forced)':''}",2,null,'info')
 		pollEcobeeAPI(thermostatsToPoll)		// This will queue the async request, and values will be generated and sent from pollEcobeeAPICallback
 	} else if (settings.ecobeeswitches?.size() > 0) {
+		LOG("Polling switches",2,null,'info')
 		pollEcobeeSwitchAPI()
 	} else {	 
 		LOG('No updates', 2, null, 'trace')
@@ -3285,8 +3286,10 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	} 	
 	
 	if (debugLevelFour) LOG("<===== Leaving pollEcobeeAPICallback() results: ${result}", 1, null, 'trace')
-	if (settings.ecobeeswitches?.size() > 0)
+	if (settings.ecobeeswitches?.size() > 0) {
+		LOG("Polling switches",2,null,'info')
 		pollEcobeeSwitchAPI()
+	}
 	else
     	atomicState.inPollChildren = false
 	return result
