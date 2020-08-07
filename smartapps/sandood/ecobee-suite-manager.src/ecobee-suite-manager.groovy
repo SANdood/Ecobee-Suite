@@ -108,6 +108,7 @@ preferences {
 	page(name: "authPage")
 	page(name: "thermsPage")
 	page(name: "sensorsPage")
+	page(name: "switchesPage")
 	page(name: "preferencesPage")
 	page(name: "askAlexaPage")
 	page(name: "helperSmartAppsPage")	 
@@ -182,6 +183,7 @@ def mainPage() {
 				def howManyThermsSel = settings.thermostats?.size() ?: 0
 				def howManyTherms = atomicState.numAvailTherms ?: "?"
 				def howManySensors = atomicState.numAvailSensors ?: "?"
+				def howManySwitches = atomicState.numAvailSwitches ?: "?"
 				
 				// Thermostats
 				atomicState.settingsCurrentTherms = settings.thermostats ?: []
@@ -194,6 +196,12 @@ def mainPage() {
 					if ((howManySensors != "?") && (howManySensorsSel > howManySensors)) { howManySensorsSel = howManySensors } // This is due to the fact that you can remove already selected hidden items
 					href ("sensorsPage", title: inputTitle("Sensors"), description: "${HE?'Click':'Tap'} to select Ecobee Sensors [${howManySensorsSel}/${howManySensors}]")
 				}
+
+				// Switches
+				atomicState.settingsCurrentSwitches = settings.ecobeeswitches ?: []
+				def howManySwitchesSel = settings?.ecobeeswitches?.size() ?: 0
+				if ((howManySwitches != "?") && (howManySwitchesSel > howManySwitches)) { howManySwitchesSel = howManySwitches } // This is due to the fact that you can remove already selected hidden items
+				href ("switchesPage", title: inputTitle("Switches"), description: "${HE?'Click':'Tap'} to select Ecobee Switches [${howManySwitchesSel}/${howManySwitches}]")
 			}		 
 			section(sectionTitle("Preferences")) {
 				href ("preferencesPage", title: inputTitle("Ecobee Suite Preferences"), description: "${HE?'Click':'Tap'} to manage global Preferences")
@@ -414,6 +422,38 @@ def sensorsPage() {
 		    LOG("sensorsPage(): No sensors found.", 4)
 			section() { 
 				paragraph("No associated sensors were found. ${HE?'Click':'Tap'} Done${settings.thermostats?'':' and select one or more Thermostats'}")
+			}
+		}		 
+	}
+}
+
+def switchesPage() {
+	LOG("=====> switchesPage() entered. settings: ${settings}", 5)
+	atomicState.switchessPageVisited = true
+
+	def options = getEcobeeSwitches() ?: []
+	def numFound = options.size() ?: 0
+	
+	LOG("options = getEcobeeSwitches == ${options}")
+
+	dynamicPage(name: "switchesPage", title: pageTitle("Ecobee Suite Manager\nSwitches"), nextPage: "") {
+		if (numFound > 0)  {
+			section(title: sectionTitle('Switch Selection')) {
+            	paragraph("${HE?'Click':'Tap'} below to see the list of ecobee switches available and choose the ones you want to connect to ${ST?'SmartThings':'Hubitat'}.")
+				LOG("switchesPage(): atomicState.settingsCurrentSwitches=${atomicState.settingsCurrentSwitches} / ecobeeswitches=${settings.ecobeeswitches}", 1, null, "trace")
+				if (atomicState.settingsCurrentSwitches != settings.ecobeeswitches) {
+					LOG("atomicState.settingsCurrentSwitches != ecobeeswitches: changes detected!", 1, null, "warn")					
+				} else { 
+                	LOG("atomicState.settingsCurrentSwitches == ecobeeswitches: No changes detected!", 1, null, "trace")
+                }
+				input(name: "ecobeeswitches", title:inputTitle("Select Ecobee Switches (${numFound} found)"), type: "enum", required:false, description: "${HE?'Click':'Tap'} to choose", multiple:true, 
+					  options: options, width: 8, height: 1)
+			}
+		} else {
+			// No switches were found
+		    LOG("switchesPage(): No switches found.", 4)
+			section() { 
+				paragraph("No associated switches were found. ${HE?'Click':'Tap'} Done")
 			}
 		}		 
 	}
@@ -880,7 +920,7 @@ void acknowledgeEcobeeAlert( String deviceId, String ackRef ) {
 	def jsonRequestBody = '{"functions":[{"type":"acknowledge","params":{"thermostatIdentifier":"' + deviceId + '","ackRef":"' + ackRef + '","ackType":"accept"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	if (debugLevel(4)) LOG("acknowledgeEcobeeAlert(${deviceId},${ackRef}): jsonRequestBody = ${jsonRequestBody}", 4, null, 'trace')
 	// need to get child from the deviceId
-	result = sendJson(null, jsonRequestBody)
+	result = sendjson(null, "Post", "/1/thermostat", jsonRequestBody)
 	if (result) LOG("Acknowledged Ecobee Alert ${ackRef} for thermostat ${deviceId})",2,null,'info')
 }
 // End of Ask Alexa Helpers
@@ -1202,6 +1242,61 @@ Map getEcobeeSensors() {
     //atomicState.thermostatData = [:]		// release the memory
 	return sensorMap
 }
+
+def getEcobeeSwitches() {	
+	LOG("====> getEcobeeSwitches() entered", 2,null,'trace')
+
+    def switchListParams = [
+        uri: apiEndpoint,
+        path: "/ea/devices",
+        headers: ["Content-Type": "application/json", "Authorization": "Bearer ${atomicState.authToken}"],
+        timeout: 30
+    ]
+    if (switchListParams != [:]) {
+        def switchList = [:]
+        try {
+            httpGet(switchListParams) { resp ->                
+            	LOG("getEcobeeSwitches() - httpGet() response: ${resp.data}", 4, null, 'trace')	
+
+                if (resp && resp.isSuccess() && resp.status && (resp.status == 200)) {
+                    LOG("getEcobeeSwitches() - httpGet() in 200 Response", 3, null, 'trace')
+                    atomicState.numAvailSwitches = resp.data.thermostatList?.size() ?: 0
+
+                    resp.data.devices.each { sw ->
+						if (sw.type == "LIGHT_SWITCH") {
+                        	def dni = (HE?'ecobee_suite-switch-':'') + ([app.id, sw.identifier].join('.'))	// HE App.ID is just too short :)
+                        	switchList[dni] = sw.name
+							log.debug sw
+						}
+                    }
+                } else {				
+                    LOG("getEcobeeSwitches() - httpGet() in else: http status: ${resp.status}", 1, null, 'trace')
+                    //refresh the auth token
+                    if (resp.status == 500 && resp.data?.status?.code == 14) {
+                        LOG("getEcobeeSwitches() - Storing the failed action to try later", 1, null, 'trace')
+                        atomicState.action = "getEcobeeSwitches"
+                        LOG("getEcobeeSwitches() - Refreshing your auth_token!", 1, null, 'trace')
+                        refreshAuthToken()
+                    } else {
+                        LOG("getEcobeeSwitches() - Other error. Status: ${resp.status}  Response data: ${resp.data} ", 1, null, 'error')
+                    }
+                    return [:]
+                }
+            }
+        } catch(Exception e) {
+            LOG("___exception getEcobeeSwitches(): ${e}", 1, null, "error")
+            atomicState.action = "getEcobeeSwitches"
+            refreshAuthToken()
+            return [:]
+        }
+
+        LOG("getEcobeeSwitches() - switchList: ${switchList}", 4, null, 'trace')
+		switchList = switchList.sort { it.value }
+		atomicState.eligibleSwitches = switchList
+		atomicState.numAvailSwitches = switchList.size() ?: 0
+        return switchList
+    }
+}
 	 
 String getThermostatDisplayName(stat) {
 	if (stat?.name)	return stat.name.toString()
@@ -1440,6 +1535,7 @@ def initialize() {
 	boolean aOK = true
 	if (settings.thermostats?.size() > 0) 				{ aOK = aOK && createChildrenThermostats() }
 	if (aOK && (settings.ecobeesensors?.size() > 0)) 	{ aOK = aOK && createChildrenSensors() }
+	if (aOK && (settings.ecobeeswitches?.size() > 0)) 	{ aOK = aOK && createChildrenSwitches() }
     // Don't delete if either create operation fails
 	if (aOK) deleteUnusedChildren()
    
@@ -1591,6 +1687,32 @@ def createChildrenSensors() {
 	return true
 }
 
+def createChildrenSwitches() {
+	LOG("createChildrenSwitches() entered: ecobeeswitches=${settings.ecobeeswitches}", 5, null, 'trace')
+	// Create the child Ecobee Switch Devices
+	def switches = settings.ecobeeswitches.collect { dni ->
+		def d = getChildDevice(dni)
+		if(!d) {			
+			try {
+				d = addChildDevice(myNamespace, getChildSwitchName(), dni, location.hubs[0]?.id, ["label":"EcobeeSwitch: ${atomicState.eligibleSwitches[dni]}", completedSetup:true])
+			} catch (Exception e) { //(physicalgraph.app.exception.UnknownDeviceTypeException e) {
+				if ("${e}".startsWith("${ST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) {
+					LOG("You MUST add the ${getChildSwitchName()} Device ${ST?'Handler':'Driver'} to the ${getHubPlatform} IDE BEFORE running the setup.", 1, null, "error")
+					return false
+				} else if ("${e}".contains("unique.error")) {
+                	LOG("Duplicate DNI Exception while creating ${getChildSwitchName()} - another process already owns ${dni}",1,null,warn)
+                } else LOG("Exception while creating ${getChildSwitchName()}: ${e}",1,null,warn)
+			}
+			LOG("created ${d.displayName} with id $dni", 4, null, 'trace')
+		} else {
+			LOG("found ${d.displayName} with id $dni already exists", 4, null, 'trace')
+		}
+		// return d
+	}
+	LOG("Created/Updated ${switches.size()} switches.", 4, null, 'trace')
+	return true
+}
+
 // somebody pushed my button - do a force poll
 def appHandler(evt) {
 	if (evt.value == 'touch') {
@@ -1683,7 +1805,7 @@ void deleteUnusedChildren() {
 	// Always make sure that the dummy devices were deleted
 	removeChildDevices(getAllChildDevices(), true)		// Delete dummy devices
 	
-	if (settings.thermostats?.size() == 0) {
+	if (settings.thermostats?.size() == 0 && settings.ecobeeswitches.size() == 0) {
 		// No thermostats, need to delete all children
 		LOG("Deleting All My Children!", 2, null, "warn")
 		removeChildDevices(getAllChildDevices(), false)			
@@ -1694,7 +1816,7 @@ void deleteUnusedChildren() {
 		LOG("These are currently all of my children: ${allMyChildren}", 4, null, "debug")
 		
 		// Don't delete any devices that are configured in settings (thermostats or ecobeesensors)	  
-		def childrenToKeep = (settings?.thermostats ?: []) + (settings?.ecobeesensors ?: []) // (atomicState.eligibleSensors?.keySet() ?: [])
+		def childrenToKeep = (settings?.thermostats ?: []) + (settings?.ecobeesensors ?: []) + (settings?.ecobeeswitches ?: []) // (atomicState.eligibleSensors?.keySet() ?: [])
 		LOG("These are the children to keep around: ${childrenToKeep}", 4, null, "trace")
 		
 		def childrenToDelete = allMyChildren.findAll { !childrenToKeep.contains(it.deviceNetworkId) }		 
@@ -2097,8 +2219,8 @@ void pollChildren(String deviceId="",force=false) {
 	// Run a watchdog checker here
 	scheduleWatchdog(null, true)	
 	
-	if (settings.thermostats?.size() < 1) {
-		LOG("pollChildren() - Nothing to poll as there are no thermostats currently selected", 1, null, "warn")
+	if (settings.thermostats?.size() < 1 && settings.ecobeeswitches?.size() < 1) {
+		LOG("pollChildren() - Nothing to poll as there are no thermostats or switches currently selected", 1, null, "warn")
 		atomicState.inPollChildren = false
 		return
 	}	 
@@ -2106,8 +2228,8 @@ void pollChildren(String deviceId="",force=false) {
 	// Check if anything has changed in the thermostatSummary (really don't need to call EcobeeAPI if it hasn't).
 	boolean somethingChanged = forcePoll ?: checkThermostatSummary(thermostatsToPoll)
 	if (!forcePoll) thermostatsToPoll = atomicState.changedThermostatIds
-	
-	if (somethingChanged) { //  || atomicState.needPrograms) {
+
+	if (somethingChanged && settings.thermostats?.size() > 0) { //  || atomicState.needPrograms) {
 		//List tids = []
 		//tids = thermostatsToPoll.split(",")
 		//String names = ""
@@ -2115,6 +2237,8 @@ void pollChildren(String deviceId="",force=false) {
 		//LOG("Polling thermostat${thermostatsToPoll.contains(',')?'s':''} ${names} (${thermostatsToPoll})${forcePoll?' (forced)':''}", 2, null, 'info')
         LOG("Polling ${thermostatsToPoll} ${forcePoll?'(forced)':''}",2,null,'info')
 		pollEcobeeAPI(thermostatsToPoll)		// This will queue the async request, and values will be generated and sent from pollEcobeeAPICallback
+	} else if (settings.ecobeeswitches?.size() > 0) {
+		pollEcobeeSwitchAPI()
 	} else {	 
 		LOG('No updates', 2, null, 'trace')
         atomicState.inPollChildren = false
@@ -2510,6 +2634,181 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	return result
 }
 
+boolean pollEcobeeSwitchAPI() {
+	boolean debugLevelFour = debugLevel(4)
+	boolean debugLevelThree = debugLevel(3)
+	if (debugLevelFour) LOG("=====> pollEcobeeSwitchAPI() entered", 1, null, "info")
+
+	def pollParams = [
+		uri: apiEndpoint,
+		path: "/ea/devices",
+		headers: ["Content-Type": "${ST?'application':'text'}/json", "Authorization": "Bearer ${atomicState.authToken}"],
+        timeout: 30
+	]
+
+	boolean result = true
+	try {
+		if (ST) {
+			include 'asynchttp_v1'
+			asynchttp_v1.get( pollEcobeeSwitchAPICallback, pollParams, null )
+		} else {
+			asynchttpGet( pollEcobeeSwitchAPICallback, pollParams, null )
+		}
+		//atomicState.waitingForCallback = true
+		// return true
+	} catch (Exception e) {
+		LOG("pollEcobeeSwitchAPI() - General Exception: ${e}", 1, null, "error")
+        atomicState.inPollChildren = false
+		result = false
+	}
+	return result
+}
+
+boolean pollEcobeeSwitchAPICallback( resp, pollState ) {
+	def switchStatuses = [:]
+	def result = true
+	if (resp && resp.status && (resp.status == 200)) {
+		try {
+			if (!resp.json) {
+				// FAIL - no data
+				LOG("pollEcobeeSwitchAPICallback() - poll - no JSON: ${resp.data}", 1, null, 'error')
+				result = false
+			}
+		} catch (Exception e) {
+			LOG("pollEcobeeSwitchAPICallback() - General Exception: ${e}", 1, null, "error")
+			atomicState.reAttemptPoll = atomicState.reAttemptPoll + 1
+			if (atomicState.reAttemptPoll > 3) {		
+				apiLost("pollEcobeeSwitchAPICallback() - Too many retries (${atomicState.reAttemptPoll - 1}) for polling.")
+			} else {
+				LOG('pollEcobeeSwitchAPICallback() - Setting up retryPolling',1,null,'debug')
+				runIn(watchdogInterval, pollChildren, [overwrite: true]) 
+			}
+			result = false
+		} 
+		
+		if (result && (atomicState.reAttemptPoll > 0)) apiRestored()
+			
+
+		// collect the returned data into the primary local caches
+		if (result && resp?.json?.devices) { 
+			resp.json.devices.each { sw ->
+				String switchid = sw.identifier.toString()
+
+				switchStatuses[switchid] = sw.state.on
+				if (debugLevelThree) LOG("pollEcobeeSwitchAPICallback() - Parsing data for switch (${switchid})", 3, null, 'info')
+				
+			} // stat ->
+		} else {
+			LOG("pollEcobeeSwitchAPICallback() - poll: no devices: ${resp.json}", 1, null, 'error')
+			result = false
+		}
+	} else if (resp && resp.hasError()) {
+		result = false
+		if (debugLevelFour) LOG("pollEcobeeSwitchAPICallback() - Poll http status ${resp.status}, ${resp.errorMessage}", 1, null, "error")
+		def iStatus = resp.status ? resp.status?.toInteger() : null
+		// Handle recoverable / retryable errors
+		if (iStatus && (iStatus == 500)) {
+			if (debugLevelFour) LOG("pollEcobeeSwitchAPICallback() - Poll exception: 500, ${resp.errorMessage}, ${resp.errorData}", 2, null, "warn")
+			// Ecobee server error
+			def statusCode
+			if (resp.errorData) {
+				def errorJson = new JsonSlurper().parseText(resp.errorData)
+				statusCode = errorJson?.status?.code
+			}
+			if (statusCode?.toInteger() == 14) {
+				// Auth_token expired
+				if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "trace")
+				atomicState.action = "pollChildren"
+				atomicState.inPollChildren = false
+				if ( refreshAuthToken() ) { 
+					// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
+					LOG( 'Polling: Auth_token refreshed', 2, null, 'info')
+				} else {
+					LOG( 'Polling: Auth_token refresh failed', 1, null, 'warn')
+				}
+				if (atomicState.inTimeoutRetry) atomicState.inTimeoutRetry = 0
+				//return result
+			} else { 
+				// All other Ecobee Server (500) errors here
+				LOG("pollEcobeeSwitchAPICallback() - Poll exception: 500, statusCode: ${statusCode} (${resp.errorMessage}: ${resp.errorData}) - won't retry", 1, null, 'error')
+				// Don't retry for now...may change in the future
+				//return result
+			}
+		} else if (((iStatus == null) && (resp.errorMessage?.contains('connection timed out') || resp.errorMessage?.contains('Read timeout'))) || 
+				   (iStatus && ((iStatus == 200) || ((iStatus > 400) && (iStatus < 405)) || (iStatus == 408) || (iStatus > 500)))) { //((iStatus > 500) && (iStatus < 505))) {
+			// Retry on transient, recoverable error codes (timeouts, server temporarily unavailable, parsing errors, etc.) see https://en.wikipedia.org/wiki/List_of_HTTP_status_codes 
+			if (iStatus && (iStatus != 525)) {
+            	LOG("pollEcobeeSwitchAPICallback() - Poll exception: ${iStatus}, ${resp.errorMessage}, ${resp.errorData}, - will retry", 1, null, 'warn')	// Just log it, and hope for better next time...
+            } else {
+            	LOG("pollEcobeeSwitchAPICallback() - Poll timeout - will retry", 1, null, 'warn')
+            }
+			if (apiConnected() != 'warn') {
+				atomicState.connected = 'warn'
+				updateMyLabel()
+				atomicState.lastPoll = now()
+				atomicState.lastPollDate = getTimestamp()
+				generateEventLocalParams()
+			}
+			def inTimeoutRetry = atomicState.inTimeoutRetry
+			if (inTimeoutRetry == null) inTimeoutRetry = 0
+			if (inTimeoutRetry < 3) runIn(watchdogInterval, pollChildren, [overwrite: true])
+			atomicState.inTimeoutRetry = inTimeoutRetry + 1
+			//return result
+		} else /* can we handle any other errors??? */ {
+			LOG("pollEcobeeSwitchAPICallback() - Poll exception: ${iStatus}, ${resp.errorMessage}, ${resp.errorJson?.status?.message}, ${resp.errorJson?.status?.code} - won't retry", 1, null, "error")
+		}
+		// For now, the code here just logs the error and assumes that checkThermostatSummary() will recover from the unhandled errors on the next call.
+		//return result
+	} else {
+		result = false
+		if (!resp) {
+			LOG("pollEcobeeSwitchAPICallback() - no response data - skipping...",1,null,'error')
+		} else if (resp.status?.toInteger() != 200) {
+			LOG("pollEcobeeSwitchAPICallback() - unexpected response status: ${resp.status}",1,null,'error')
+		} else {
+			LOG("pollEcobeeSwitchAPICallback() - UNKNOWN EXCEPTION!!!, ${resp}",1,null,'error')	// Can't get here!!!
+		}
+	}
+
+	if (result) {
+		// OK, Everything is safely stored, let's get to parsing the objects and finding the actual changed data
+		updateLastPoll()
+		if (debugLevelThree) LOG('pollEcobeeSwitchAPICallback() - Parsing complete', 3, null, 'info')      
+		
+		// Tell the children that we are once again connected to the Ecobee API Cloud
+		if (apiConnected() != "full") {
+			apiRestored()
+			generateEventLocalParams() // Update the connection status
+		}
+
+        LOG("Polling switches completed", 2, null, 'info')
+		if (atomicState.inTimeoutRetry) atomicState.inTimeoutRetry = 0	// Not in Timeout Recovery any longer
+	
+		/*// Now we have to actually send the updates
+		def polledMS = now()
+		def prepTime = (polledMS-startMS)			// if prep takes too long, we will do the updates asynchronously too
+		if (debugLevelThree) LOG("Prep complete (${prepTime}ms)",3,null,'trace')      
+
+		if (ST && (prepTime > 11000)) { runIn(2, generateTheEvents, [overwrite: true]) } else { generateTheEvents() }
+		*/
+		for (sw in switchStatuses) {
+			def dni = (HE?'ecobee_suite-switch-':'') + ([app.id, sw.key].join('.'))
+			def status = switchStatuses[sw.key]
+			def switchStatus = (status ? "on" : "off")
+			def dev = getChildDevice(dni)
+			if (dev) {
+				if (dev.currentValue("switch") != switchStatus)
+					dev.sendEvent(name: "switch", value: switchStatus)
+			}
+		}
+	} 	
+	
+	if (debugLevelFour) LOG("<===== Leaving pollEcobeeSwitchAPICallback() results: ${result}", 1, null, 'trace')
+
+    atomicState.inPollChildren = false
+	return result
+}
+
 boolean pollEcobeeAPICallback( resp, pollState ) {
 	def startMS = now()
 	//atomicState.waitingForCallback = false
@@ -2896,7 +3195,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 
 	if (result) {
 		// OK, Everything is safely stored, let's get to parsing the objects and finding the actual changed data
-		updateLastPoll()
+		if (settings.ecobeeswitches?.size() < 1)
+			updateLastPoll()
 		if (debugLevelThree) LOG('pollEcobeeAPICallback() - Parsing complete', 3, null, 'info')
 		//if (TIMERS) log.debug "TIMER: Parsing complete @ (${now() - pollEcobeeAPIStart}ms)
 		updatesLog = [thermostatUpdated:thermostatUpdated, runtimeUpdated:runtimeUpdated, alertsUpdated:alertsUpdated, forcePoll:forcePoll, extendRTUpdated:extendRTUpdated, 
@@ -2985,7 +3285,10 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	} 	
 	
 	if (debugLevelFour) LOG("<===== Leaving pollEcobeeAPICallback() results: ${result}", 1, null, 'trace')
-    atomicState.inPollChildren = false
+	if (settings.ecobeeswitches?.size() > 0)
+		pollEcobeeSwitchAPI()
+	else
+    	atomicState.inPollChildren = false
 	return result
 }
 
@@ -5104,7 +5407,7 @@ boolean resumeProgram(child, String deviceId, resumeAll=true) {
 	def jsonRequestBody = '{"functions":[{"type":"resumeProgram","params":{"resumeAll":"' + allStr + '"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 1, child, 'trace')
 	
-	result = sendJson(child, jsonRequestBody)
+	result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("resumeProgram(${statName}, ${resumeAll}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,result?'info':'warn')
 	if (result) {
 		//def program = atomicState.program[deviceId]
@@ -5159,7 +5462,7 @@ boolean setMode(child, mode, deviceId) {
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"hvacMode":"'+"${mode}"+'"}}}'  
 	if (debugLevelFour) LOG("Mode Request Body = ${jsonRequestBody}", 1, child, 'trace')
 	
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setMode(${mode}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,  result?'info':'warn')
 	if (result) {
 		// LOG("setMode(${mode}) for ${child.device.displayName} (${deviceId}) - Succeeded", 1, child, 'info')
@@ -5188,7 +5491,7 @@ boolean setHumidifierMode(child, mode, deviceId) {
 	if (debugLevelFour) LOG ("setHumidifierMode(${mode}) for ${child.device.displayName} (${deviceId})", 1, child, 'trace')
 	
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"humidifierMode":"'+"${mode}"+'"}}}'	
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setHumidifierMode(${mode}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,  result?'info':'warn')
 	if (result) {
 		// LOG("setHumidifierMode(${mode}) for ${child.device.displayName} (${deviceId}) - Succeeded", 2, child, 'info')
@@ -5219,7 +5522,7 @@ boolean setHumiditySetpoint(child, value, deviceId) {
 						
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"humidity":"'+"${value}"+'"}}}'  
 	if (debugLevelFour) LOG("setHumiditySetpoint Request Body = ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setHumiditySetpoint(${value}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	if (result) {
 		//LOG("setHumiditySetpoint(${value}) for ${child.device.displayName} (${deviceId}) - Succeeded", 2, child, 'info')
@@ -5250,7 +5553,7 @@ boolean setDehumidifierMode(child, mode, deviceId) {
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"dehumidifierMode":"'+"${mode}"+'"}}}'  
 
 	if (debugLevelFour) LOG("dehumidifierMode Request Body = ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setDehumidifierMode(${mode}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,  result?'info':'warn')
 	if (result) {
 		//LOG("setDehumidifierMode(${mode}) for ${child.device.displayName} (${deviceId}) - Succeeded", 2, child, 'info')
@@ -5280,7 +5583,7 @@ boolean setDehumiditySetpoint(child, value, deviceId) {
 						
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"dehumidifierLevel":"'+"${value}"+'"}}}'	
 	if (debugLevelFour) LOG("setDehumiditySetpoint Request Body = ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
     LOG("setDehumiditySetpoint(${value}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')	
 	if (result) {
 		runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
@@ -5316,7 +5619,7 @@ boolean setFanMinOnTime(child, deviceId, howLong) {
 	def thermostatFunctions = ''
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setFanMinOnTime(${howLong}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')	 
 	if (result) {
 		runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
@@ -5369,7 +5672,7 @@ boolean setVacationFanMinOnTime(child, deviceId, howLong) {
 
 		if (debugLevelFour) LOG("setVacationFanMinOnTime() for ${child.device.displayName} (${deviceId}) - before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, "info")
 
-		def result = sendJson(child, jsonRequestBody)
+		def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 		LOG("setVacationFanMinOnTime(${howLong}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn') 
 		if (result) {
 			runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
@@ -5405,7 +5708,7 @@ boolean createVacationTemplate(child, deviceId) {
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 
 	if (debugLevelFour) LOG("before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("createVacationTemplate(${vacationName}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	// if (!result) queue failed request
 	
@@ -5432,7 +5735,7 @@ boolean deleteVacation(child, deviceId, vacationName=null ) {
 	def thermostatFunctions = '{"type":"deleteVacation","params":{"name":"' + vacaName + '"}}'
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
-	boolean result = sendJson(child, jsonRequestBody)
+	boolean result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("deleteVacation() for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,result?'info':'warn')
 	
 	if (vacationName == null) {
@@ -5462,9 +5765,20 @@ boolean cancelDemandResponse(child, String deviceId) {
 	def jsonRequestBody = '{"functions":[{"type":"resumeProgram","params":{"resumeAll":"false"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 1, child, 'debug')
 	
-	boolean result = sendJson(child, jsonRequestBody)
+	boolean result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("cancelDemandResponse() for ${child.device?.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	return result
+}
+
+boolean controlSwitch(child, desiredState) {
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API is not fully connected, queueing call to setHold(${child.device.displayName}, ${heating}, ${cooling}, ${deviceId}, ${sendHoldType} ${sendHoldHours}", 2, child, 'warn')
+		queueFailedCall('controlSwitch', child.device.deviceNetworkId, 1, desiredState)
+		return false
+	}
+	String path = "/ea/devices/ls/${getDeviceId(child.device.deviceNetworkId)}/state"
+	String jsonRequest = "{ \"on\": ${desiredState} }"
+	return sendJson(child, "Put", path, jsonRequest)
 }
 
 // Should only be called by child devices, and they MUST provide sendHoldType and sendHoldHours as of version 1.2.0
@@ -5516,7 +5830,7 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 
 	if (debugLevelFour) LOG("setHold() for thermostat ${child.device.displayName} - about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
 	
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setHold() for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,result?'info':'warn')
 	if (result) { 
 		// send the new heat/cool setpoints and ProgramId to the DTH - it will update the rest of the related displayed values itself
@@ -5616,7 +5930,7 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"'+deviceId+'"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	if (debugLevel(4)) LOG("setFanMode() for ${child.device.displayName} (${deviceId}) - about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child, 'trace')
 	
-	boolean result = sendJson(child, jsonRequestBody)
+	boolean result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setFanMode(${fanMode}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
 	if (!result) {
@@ -5669,7 +5983,7 @@ boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', s
 	def jsonRequestBody = '{"functions":[{"type":"setHold","params":{"holdClimateRef":"'+climateRef+'","holdType":"'+theHoldType+'"}}],"selection":{"selectionType":"thermostats","selectionMatch":"'+deviceId+'"}}'
 
 	if (debugLevelFour) LOG("setProgram() for thermostat ${child.device.displayName}: about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child, 'trace')	
-	boolean result = sendJson(child, jsonRequestBody)	
+	boolean result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)	
 	LOG("setProgram(${climateRef}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	
 	if (result) { 
@@ -5980,7 +6294,7 @@ boolean updateProgramDirect(child, deviceId, program) {
 		def thermostatSettings = ',"thermostat":{"program":' + programJson +'}'
 		def thermostatFunctions = ''
 		def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
-		result = sendJson(child, jsonRequestBody)
+		result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 		LOG("updateProgramDirect(): Updating Program settings for ${statName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 		if (result) {
         	atomicState.programUpdatedByAPI = true	// force next poll to assert that the program map was updated
@@ -6049,7 +6363,7 @@ boolean setEcobeeSetting(child, String deviceId, String name, String value) {
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"'+deviceId+'"},"thermostat":{"'+(audioSetting?'audio':'settings')+
     					  '":{"'+name+'":"'+"${sendValue}"+'"}}}'
 	LOG("setEcobeeSetting() - Request Body: ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendJson(child, jsonRequestBody)
+	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setEcobeeSetting(name: '${name}', value: '${value}' ${value!=sendValue?'('+sendValue.toString()+')':''}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, 'trace')
 	if (result) {
 		//if (value == sendValue) {
@@ -6069,8 +6383,10 @@ boolean setEcobeeSetting(child, String deviceId, String name, String value) {
 	return false
 }
 
+
+
 // API Helper Functions
-boolean sendJson(child=null, String jsonBody) {
+boolean sendJson(child=null, String method, String url, String jsonBody) {
 	def debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("sendJson() - ${jsonBody}",1,child,'debug')
 	def returnStatus
@@ -6078,24 +6394,27 @@ boolean sendJson(child=null, String jsonBody) {
 	
 	def cmdParams = [
 		uri: apiEndpoint,
-		path: "/1/thermostat",
+		path: url,
 		headers: ["Content-Type": "application/json", "Authorization": "Bearer ${atomicState.authToken}"],
+		requestContentType: "application/json",
 		body: jsonBody,
         timeout: 30
 	]
 	
 	// Just in case something goes wrong...
 	atomicState.savedActionJsonBody = jsonBody
+	atomicState.savedActionUrl = url
 	atomicState.savedActionChild = child?.deviceNetworkId
+	atomicState.savedActionMethod = method
 	atomicState.action = "sendJsonRetry"
 			
 	try{
-		httpPost(cmdParams) { resp ->
+		"http${method}"(cmdParams) { resp ->
         	if (!resp || !resp.isSuccess()) {
  	        	if (!atomicState.sendJsonRetry) {
                     atomicState.sendJsonRetry = true		// retry only once
                     LOG( "sendJson() - invalid response - retrying once...", 2, null, 'info')
-                    result = sendJson( child, jsonBody )	// recursively re-attempt now that the token was refreshed
+                    result = sendJson( child, method, url, jsonBody )	// recursively re-attempt now that the token was refreshed
                     LOG( "sendJson() - Retry ${result ? 'succeeded!' : 'failed.'}", 2, null, "${result ? 'info' : 'warn'}")
                     atomicState.sendJsonRetry = false
                     if (result) {
@@ -6108,29 +6427,42 @@ boolean sendJson(child=null, String jsonBody) {
                 	LOG("sendJson() - invalid response (${resp})", 1, null, 'error')
                 }
             } else if (resp.status && (resp.status == 200)) {
-            	returnStatus = resp.data?.status?.code
-				if (debugLevelFour) LOG("sendJson() resp.status ${resp.status}, resp.data: ${resp.data}, returnStatus: ${returnStatus}", 1, child, 'trace')
-				//if (debugLevelFour) LOG("Updated ${resp.data}", 1, child, 'trace')
-				//returnStatus = resp.data?.status?.code
-				if (returnStatus == 0) {
-					if (debugLevelFour) LOG("Successful call to ecobee API.", 1, child, 'trace')
+            	if (method == "Post") {
+					returnStatus = resp.data?.status?.code
+					if (debugLevelFour) LOG("sendJson() resp.status ${resp.status}, resp.data: ${resp.data}, returnStatus: ${returnStatus}", 1, child, 'trace')
+					//if (debugLevelFour) LOG("Updated ${resp.data}", 1, child, 'trace')
+					//returnStatus = resp.data?.status?.code
+					if (returnStatus == 0) {
+						if (debugLevelFour) LOG("Successful call to ecobee API.", 1, child, 'trace')
+						result = true
+						// Tell the children that we are once again connected to the Ecobee API Cloud
+						if (apiConnected() != "full") {
+							apiRestored()
+							generateEventLocalParams() // Update the connection status
+						}
+					} else {
+						LOG("sendJson() - API status = ${returnStatus}", 1, child, "error")
+					}
+				}
+				else if (method == "Put") {
+					if (debugLevelFour) LOG("sendJson() resp.status ${resp.status}", 1, child, 'trace')
 					result = true
 					// Tell the children that we are once again connected to the Ecobee API Cloud
 					if (apiConnected() != "full") {
 						apiRestored()
 						generateEventLocalParams() // Update the connection status
 					}
-				} else {
-					LOG("sendJson() - API status = ${returnStatus}", 1, child, "error")
 				}
 				// Reset saved state
 				atomicState.savedActionJsonBody = null
+				atomicState.savedActionUrl = null
+				atomicState.savedActionMethod = null
 				atomicState.savedActionChild = null
 			} else {
 				// Should never get here as a non-200 response is supposed to trigger an Exception
 				LOG("sendJson() - http status ${resp.status} - ${resp.status.code}", 2, child, "warn")
 			} // resp.status if/else
-		} // HttpPost
+		} // Http$Method
         // if (resp) resp = [:]
 	} catch (groovyx.net.http.HttpResponseException e) {
 		result = false // this thread failed...hopefully we can succeed after we refresh the auth_token
@@ -6148,7 +6480,7 @@ boolean sendJson(child=null, String jsonBody) {
 				if (!atomicState.sendJsonRetry) {
 					atomicState.sendJsonRetry = true		// retry only once
 					LOG( "sendJson() - Retrying once...", 2, null, 'info')
-					result = sendJson( child, jsonBody )	// recursively re-attempt now that the token was refreshed
+					result = sendJson( child, method, url, jsonBody )	// recursively re-attempt now that the token was refreshed
 					LOG( "sendJson() - Retry ${result ? 'succeeded!' : 'failed.'}", 2, null, "${result ? 'info' : 'warn'}")
 					atomicState.sendJsonRetry = false
 				}
@@ -6171,7 +6503,7 @@ boolean sendJson(child=null, String jsonBody) {
             if (!atomicState.sendJsonRetry) {
 				atomicState.sendJsonRetry = true		// retry only once
 				LOG( "sendJson() - Retrying once...", 2, null, 'info')
-				result = sendJson( child, jsonBody )	// recursively re-attempt now that the token was refreshed
+				result = sendJson( child, method, url, jsonBody )	// recursively re-attempt now that the token was refreshed
 				LOG( "sendJson() - Retry ${result ? 'succeeded!' : 'failed.'}", 2, null, "${result ? 'info' : 'warn'}")
 				atomicState.sendJsonRetry = false
                 if (result) {
@@ -6232,11 +6564,12 @@ boolean sendJsonRetry() {
 		LOG("sendJsonRetry() - no saved JSON Body to send!", 2, child, "warn")
 		return false
 	}	   
-	return sendJson(child, atomicState.savedActionJsonBody)
+	return sendJson(child, atomicState.savedActionMethod, atomicState.savedActionUrl, atomicState.savedActionJsonBody)
 }
 
 String getChildThermostatName() { return "Ecobee Suite Thermostat" }
 String getChildSensorName()		{ return "Ecobee Suite Sensor" }
+String getChildSwitchName()		{ return "Ecobee Suite Switch" }
 String getServerUrl()			{ return (ST) ? "https://graph.api.smartthings.com" : getFullApiServerUrl()}	// hubitat: /oauth/authorize}
 String getShardUrl()			{ return (ST) ? getApiServerUrl() : getFullApiServerUrl()+"?access_token=${atomicState.accessToken}" }
 String getCallbackUrl()			{ return (ST) ? "${serverUrl}/oauth/callback" : "https://cloud.hubitat.com/oauth/stateredirect" } // : */ "${serverUrl}/callback" } // &" + URLEncoder.encode("access_token", "UTF-8") + "=" + URLEncoder.encode(atomicState.accessToken, "UTF-8") } // #access_token=${atomicState.accessToken}" }
