@@ -5781,7 +5781,12 @@ boolean controlSwitch(child, desiredState) {
 	}
 	String path = "/ea/devices/ls/${getDeviceId(child.device.deviceNetworkId)}/state"
 	String jsonRequest = "{ \"on\": ${desiredState} }"
-	return sendJson(child, "Put", path, jsonRequest)
+	if  (sendJson(child, "Put", path, jsonRequest)) {
+		child.sendEvent(name: "switch", value: desiredState == true ? "on": "off")
+		return true
+	}
+	else
+		return false
 }
 
 // Should only be called by child devices, and they MUST provide sendHoldType and sendHoldHours as of version 1.2.0

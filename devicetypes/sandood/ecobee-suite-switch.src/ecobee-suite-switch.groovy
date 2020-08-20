@@ -125,6 +125,51 @@ void debugEvent(message, displayEvent = false) {
 	if ( debugLevel(4) ) { log.debug "Generating AppDebug Event: ${results}" }
 	sendEvent (results)
 }
+
+//generate custom mobile activity feeds event
+def generateActivityFeedsEvent(notificationMessage) {
+	sendEvent(name: "notificationMessage", value: "$device.displayName $notificationMessage", descriptionText: "$device.displayName $notificationMessage", displayed: true)
+}
+
+def generateEvent(Map results) {
+	if (debugLevel(3)) LOG("generateEvent(): parsing data ${results}",1,null,'trace')
+    String myVersion = getDataValue("myVersion")
+    //if (!state.version || (state.version != getVersionLabel())) updated()
+	if (!myVersion || (myVersion != getVersionLabel())) updated()
+	
+	def startMS = now()
+	
+	Integer objectsUpdated = 0
+
+
+	if(results) {
+		results.each { name, value ->
+			// objectsUpdated++
+			def linkText = getLinkText(device)
+			def isChange = false
+			def isDisplayed = true
+			def event = [:]  // [name: name, linkText: linkText, handlerName: name]
+           
+			String sendValue = value as String
+			switch(name) {
+
+
+            case 'debugEventFromParent':
+                    event = [name: name, value: sendValue, descriptionText: "DEBUG: "+sendValue, isStateChange: true, displayed: false]
+                    updateDataValue( name, sendValue )
+                    break;
+            case 'debugLevel':
+                    //String sendText = (sendValue != 'null') ? sendValue : ''
+                    updateDataValue('debugLevel', sendValue)
+                    event = [name: name, value: sendValue, descriptionText: "debugLevel is ${sendValue}", displayed: false]
+                    break;
+            }			
+			if (event != [:]) sendEvent(event)
+		}
+	}
+	def elapsed = now() - startMS
+    LOG("Updated ${objectsUpdated} object${objectsUpdated!=1?'s':''} (${elapsed}ms)",2,this,'info')
+}
 	
 
 // SmartThings/Hubitat Portability Library (SHPL)
