@@ -920,7 +920,7 @@ void acknowledgeEcobeeAlert( String deviceId, String ackRef ) {
 	def jsonRequestBody = '{"functions":[{"type":"acknowledge","params":{"thermostatIdentifier":"' + deviceId + '","ackRef":"' + ackRef + '","ackType":"accept"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	if (debugLevel(4)) LOG("acknowledgeEcobeeAlert(${deviceId},${ackRef}): jsonRequestBody = ${jsonRequestBody}", 4, null, 'trace')
 	// need to get child from the deviceId
-	result = sendjson(null, "Post", "/1/thermostat", jsonRequestBody)
+	result = sendJson(null, "Post", "/1/thermostat", jsonRequestBody)
 	if (result) LOG("Acknowledged Ecobee Alert ${ackRef} for thermostat ${deviceId})",2,null,'info')
 }
 // End of Ask Alexa Helpers
@@ -5410,7 +5410,7 @@ boolean resumeProgram(child, String deviceId, resumeAll=true) {
 	def jsonRequestBody = '{"functions":[{"type":"resumeProgram","params":{"resumeAll":"' + allStr + '"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 1, child, 'trace')
 	
-	result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("resumeProgram(${statName}, ${resumeAll}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,result?'info':'warn')
 	if (result) {
 		//def program = atomicState.program[deviceId]
@@ -5465,7 +5465,7 @@ boolean setMode(child, mode, deviceId) {
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"hvacMode":"'+"${mode}"+'"}}}'  
 	if (debugLevelFour) LOG("Mode Request Body = ${jsonRequestBody}", 1, child, 'trace')
 	
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setMode(${mode}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,  result?'info':'warn')
 	if (result) {
 		// LOG("setMode(${mode}) for ${child.device.displayName} (${deviceId}) - Succeeded", 1, child, 'info')
@@ -5494,7 +5494,7 @@ boolean setHumidifierMode(child, mode, deviceId) {
 	if (debugLevelFour) LOG ("setHumidifierMode(${mode}) for ${child.device.displayName} (${deviceId})", 1, child, 'trace')
 	
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"humidifierMode":"'+"${mode}"+'"}}}'	
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setHumidifierMode(${mode}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,  result?'info':'warn')
 	if (result) {
 		// LOG("setHumidifierMode(${mode}) for ${child.device.displayName} (${deviceId}) - Succeeded", 2, child, 'info')
@@ -5525,7 +5525,7 @@ boolean setHumiditySetpoint(child, value, deviceId) {
 						
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"humidity":"'+"${value}"+'"}}}'  
 	if (debugLevelFour) LOG("setHumiditySetpoint Request Body = ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setHumiditySetpoint(${value}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	if (result) {
 		//LOG("setHumiditySetpoint(${value}) for ${child.device.displayName} (${deviceId}) - Succeeded", 2, child, 'info')
@@ -5556,7 +5556,7 @@ boolean setDehumidifierMode(child, mode, deviceId) {
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"dehumidifierMode":"'+"${mode}"+'"}}}'  
 
 	if (debugLevelFour) LOG("dehumidifierMode Request Body = ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setDehumidifierMode(${mode}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,  result?'info':'warn')
 	if (result) {
 		//LOG("setDehumidifierMode(${mode}) for ${child.device.displayName} (${deviceId}) - Succeeded", 2, child, 'info')
@@ -5586,7 +5586,7 @@ boolean setDehumiditySetpoint(child, value, deviceId) {
 						
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"thermostat":{"settings":{"dehumidifierLevel":"'+"${value}"+'"}}}'	
 	if (debugLevelFour) LOG("setDehumiditySetpoint Request Body = ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
     LOG("setDehumiditySetpoint(${value}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')	
 	if (result) {
 		runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
@@ -5622,7 +5622,7 @@ boolean setFanMinOnTime(child, deviceId, howLong) {
 	def thermostatFunctions = ''
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setFanMinOnTime(${howLong}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')	 
 	if (result) {
 		runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
@@ -5675,7 +5675,7 @@ boolean setVacationFanMinOnTime(child, deviceId, howLong) {
 
 		if (debugLevelFour) LOG("setVacationFanMinOnTime() for ${child.device.displayName} (${deviceId}) - before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, "info")
 
-		def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+		def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 		LOG("setVacationFanMinOnTime(${howLong}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn') 
 		if (result) {
 			runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
@@ -5711,7 +5711,7 @@ boolean createVacationTemplate(child, deviceId) {
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 
 	if (debugLevelFour) LOG("before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("createVacationTemplate(${vacationName}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	// if (!result) queue failed request
 	
@@ -5738,7 +5738,7 @@ boolean deleteVacation(child, deviceId, vacationName=null ) {
 	def thermostatFunctions = '{"type":"deleteVacation","params":{"name":"' + vacaName + '"}}'
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
-	boolean result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	boolean result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("deleteVacation() for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,result?'info':'warn')
 	
 	if (vacationName == null) {
@@ -5768,7 +5768,7 @@ boolean cancelDemandResponse(child, String deviceId) {
 	def jsonRequestBody = '{"functions":[{"type":"resumeProgram","params":{"resumeAll":"false"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
 	if (debugLevelFour) LOG("jsonRequestBody = ${jsonRequestBody}", 1, child, 'debug')
 	
-	boolean result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	boolean result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("cancelDemandResponse() for ${child.device?.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	return result
 }
@@ -5838,7 +5838,7 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 
 	if (debugLevelFour) LOG("setHold() for thermostat ${child.device.displayName} - about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
 	
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setHold() for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child,result?'info':'warn')
 	if (result) { 
 		// send the new heat/cool setpoints and ProgramId to the DTH - it will update the rest of the related displayed values itself
@@ -5938,7 +5938,7 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"'+deviceId+'"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	if (debugLevel(4)) LOG("setFanMode() for ${child.device.displayName} (${deviceId}) - about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child, 'trace')
 	
-	boolean result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	boolean result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setFanMode(${fanMode}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
 	if (!result) {
@@ -5991,7 +5991,7 @@ boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', s
 	def jsonRequestBody = '{"functions":[{"type":"setHold","params":{"holdClimateRef":"'+climateRef+'","holdType":"'+theHoldType+'"}}],"selection":{"selectionType":"thermostats","selectionMatch":"'+deviceId+'"}}'
 
 	if (debugLevelFour) LOG("setProgram() for thermostat ${child.device.displayName}: about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child, 'trace')	
-	boolean result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)	
+	boolean result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)	
 	LOG("setProgram(${climateRef}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 	
 	if (result) { 
@@ -6302,7 +6302,7 @@ boolean updateProgramDirect(child, deviceId, program) {
 		def thermostatSettings = ',"thermostat":{"program":' + programJson +'}'
 		def thermostatFunctions = ''
 		def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
-		result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+		result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 		LOG("updateProgramDirect(): Updating Program settings for ${statName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
 		if (result) {
         	atomicState.programUpdatedByAPI = true	// force next poll to assert that the program map was updated
@@ -6371,7 +6371,7 @@ boolean setEcobeeSetting(child, String deviceId, String name, String value) {
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"'+deviceId+'"},"thermostat":{"'+(audioSetting?'audio':'settings')+
     					  '":{"'+name+'":"'+"${sendValue}"+'"}}}'
 	LOG("setEcobeeSetting() - Request Body: ${jsonRequestBody}", 4, child, 'trace')
-	def result = sendjson(child, "Post", "/1/thermostat", jsonRequestBody)
+	def result = sendJson(child, "Post", "/1/thermostat", jsonRequestBody)
 	LOG("setEcobeeSetting(name: '${name}', value: '${value}' ${value!=sendValue?'('+sendValue.toString()+')':''}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, 'trace')
 	if (result) {
 		//if (value == sendValue) {
@@ -6390,8 +6390,6 @@ boolean setEcobeeSetting(child, String deviceId, String name, String value) {
 	}
 	return false
 }
-
-
 
 // API Helper Functions
 boolean sendJson(child=null, String method, String url, String jsonBody) {
