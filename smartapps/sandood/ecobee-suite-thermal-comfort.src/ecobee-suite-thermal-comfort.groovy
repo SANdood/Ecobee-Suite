@@ -206,7 +206,7 @@ def mainPage() {
 							  required: true, multiple: false, defaultValue: 'average', submitOnChange: true, width: 4)
 					}
 					if (configuredRadistats) {
-						paragraph "The ${multiRadiant ? (settings.multiRadiantType + ' ') : 'current '}radiant temperature is ${atomicState.radiantTemperature}°${unit}. Radiant temperature offset is ${multiRadiantOffsets}°${unit}"
+						paragraph "The ${multiRadiant ? (settings.multiRadiantType + ' ') : 'current '}radiant temperature offset is ${atomicState.radiantOffset}°${unit}"
 					}
 					settings.radistats.each { com.hubitat.app.DeviceWrapper radistat ->
 						input(name: "thermometer.${sanitizedDeviceNetworkId(radistat)}", type: 'capability.temperatureMeasurement', title: "Select Thermometer for ${radistat.displayName}",
