@@ -556,7 +556,7 @@ def initialize() {
     if (settings.debugOff) log.info "log.debug() logging disabled"
 
 	if (settings?.humidistat) {
-		subscribe(settings?.humidistat, 'humidity', humidityChangeHandler)
+		subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
 	} else {
 		settings.humidistats.each{ subscribe(it, 'humidity', humidityChangeHandler) }
 	}
