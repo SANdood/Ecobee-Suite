@@ -35,11 +35,13 @@
  *	1.8.19 - Miscellaneous updates & fixes
  *	1.8.20 - Fix label display for " (Cool"
  *	1.8.21 - Fix for multi-word Climate names
+ *	1.8.22 - Fix getThermostatPrograms()
+ *	1.8.23 - Fix getThermostatModes()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.21" }
+String getVersionNum()		{ return "1.8.23" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -62,7 +64,7 @@ preferences {
 	page(name: "customNotifications")
 }
 def mainPage() {
-	//boolean ST = isST
+	boolean foo = getIsST()
 	//boolean HE = !ST
 	boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
 	String defaultName = "Smart Mode, Programs & Setpoints"
@@ -1407,42 +1409,51 @@ def roundIt( BigDecimal value, decimals=0) {
 }
 // return all the modes that ALL thermostats support
 List getThermostatModes() {
-	def statModes = []
+	List statModes = []
 	settings.thermostats?.each { stat ->
-		def tm = stat.currentValue('supportedThermostatModes')
-		if (statModes == []) {	
-			if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
-		} else {
-			def nm = (tm && (tm != '[]')) ? statModes = tm[1..-2].tokenize(", ") : []
-			if (nm) statModes = statModes.intersect(nm)
-		}	
+        if (HE) {
+            def tm = stat.currentValue('supportedThermostatModes')
+            if (statModes == []) {	
+                if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+            } else {
+                def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
+                if (nm) statModes = statModes.intersect(nm)
+            }
+        } else {
+            def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+            if (statModes == []) {	
+                if (tm) statModes = tm
+            } else {
+                if (tm) statModes = statModes.intersect(tm)
+            }
+        }
 	}
 	return statModes.sort(false)
 }
+
 // get the combined set of Ecobee Programs applicable for these thermostats
 List getThermostatPrograms() {
-	def programs = []
-	if (thermostats?.size() > 0) {
-		thermostats.each { stat ->
-			def progs = []
-			def cl = stat.currentValue('climatesList')
-			if (cl && (cl != '[]')) {
-				progs = cl[1..-2].split(', ')
-			} else {
-				def pl = stat.currentValue('programsList')
-				tp = pl ? new JsonSlurper().parseText(pl) : []
-				if (tp) progs = tp
-			}
+	List programs = []
+	if (settings.thermostats?.size() > 0) {
+		settings.thermostats.each { stat ->
+        	List progs = []
+        	String cl = stat.currentValue('climatesList')
+    		if (cl && (cl != '[]')) {
+        		progs = cl[1..-2].split(', ')
+        	} else {
+    			String pl = stat.currentValue('programsList')
+        		progs = pl ? new JsonSlurper().parseText(pl) : []
+        	}
 			if (!programs) {
 				if (progs) programs = progs
 			} else {
 				if (progs) programs = programs.intersect(progs)
 			}
-		}
+        }
 	} 
 	if (!programs) programs =  ['Away', 'Home', 'Sleep']
-	LOG("getThermostatPrograms: returning ${programs}", 4, null, 'info')
-	return programs.sort(false)
+    LOG("getThermostatPrograms: returning ${programs}", 4, null, 'info')
+    return programs.sort(false)
 }
 // return the external temperature range
 def getThermostatRange() {
