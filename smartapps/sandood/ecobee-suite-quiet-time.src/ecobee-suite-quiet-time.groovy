@@ -34,10 +34,12 @@
  *	1.8.06 - Updated formatting
  *	1.8.07 - Miscellaneous updates & fixes
  *	1.8.08 - Fix for multi-word Climate names
+ *  1.8.09 - Fix getThermostatModes()
  */
+import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.08" }
+String getVersionNum()		{ return "1.8.09" }
 String getVersionLabel() 	{ return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -736,18 +738,27 @@ String getDeviceId(networkId) {
 
 // return all the modes that ALL thermostats support
 List getThermostatModes() {
-	//log.debug "${app.name}, ${app.label}"
-	def theModes = []
-    
-    settings.theThermostats.each { stat ->
-    	if (theModes == []) {
-        	theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", ")
+	def statModes = []
+	settings.thermostats?.each { stat ->
+        if (HE) {
+            def tm = stat.currentValue('supportedThermostatModes')
+            if (statModes == []) {	
+                if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+            } else {
+                def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
+                if (nm) statModes = statModes.intersect(nm)
+            }
         } else {
-        	theModes = theModes.intersect(stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", "))
-        }   
-    }
-    theModes = theModes - ['off']
-    return theModes.sort(false)
+            def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+            if (statModes == []) {	
+                if (tm) statModes = tm
+            } else {
+                if (tm) statModes = statModes.intersect(tm)
+            }
+        }
+	}
+    statModes = statModes - ['off']
+	return statModes.sort(false)
 }
 
 /* NOTIFICATIONS NOT YET IMPLEMENTED
