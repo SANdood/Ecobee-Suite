@@ -23,11 +23,12 @@
  *	1.8.07 - Better handling of null thermostatHold
  *	1.8.08 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.09 - Miscellaneous updates & fixes
+ *  1.8.10 - Fix getThermostatModes() & getThermostatFanModes()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.09" }
+String getVersionNum()		{ return "1.8.10" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -795,21 +796,26 @@ def pauseOff(global = false) {
 	atomicState.globalPause = global
 }
 // Thermostat Programs & Modes
-def getProgramsList() {
-	def programs = ["Away","Home","Sleep"]
-	if (theThermostat) {
-    	def pl = theThermostat.currentValue('programsList')
-        if (pl) programs = new JsonSlurper().parseText(pl)
-    }
-    return programs.sort(false)
-}
-def getThermostatModes() {
+List getThermostatModes() {
 	def statModes = []
-    if (settings?.theThermostats) {
-    	settings.theThermostats.each { stat ->
-    		def tempModes = stat.currentValue('supportedThermostatModes')
-        	def modeTemp = (tempModes) ? tempModes[1..-2].tokenize(", ") : []
-            if (modeTemp != []) statModes = (statModes == []) ? modeTemp : statModes.intersect(modeTemp)
+    if (settings.theThermostats) {
+        settings.theThermostats?.each { stat ->
+            if (HE) {
+                def tm = stat.currentValue('supportedThermostatModes')
+                if (statModes == []) {	
+                    if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+                } else {
+                    def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
+                    if (nm) statModes = statModes.intersect(nm)
+                }
+            } else {
+                def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+                if (statModes == []) {	
+                    if (tm) statModes = tm
+                } else {
+                    if (tm) statModes = statModes.intersect(tm)
+                }
+            }
         }
     }
     if (statModes == []) statModes = ["off","heat","cool","auto","auxHeatOnly"]
@@ -819,14 +825,20 @@ List getThermostatFanModes() {
 	def fanModes = []
     if (settings?.theThermostats) {
     	settings.theThermostats.each { stat ->
-        	def tempModes = stat.currentValue('supportedThermostatFanModes')
-        	def fanTemp = tempModes ? tempModes[1..-2].tokenize(", ") : []
-            if (fanTemp != []) fanModes = (fanModes == []) ? fanTemp : fanModes.intersect(fanTemp)
+            if (HE) {
+                def tfm = stat.currentValue('supportedThermostatFanModes')
+                def fanTemp = tfm ? tfm[1..-2].tokenize(", ") : []
+                if (fanTemp != []) fanModes = (fanModes == []) ? fanTemp : fanModes.intersect(fanTemp)
+            } else {
+                def tfm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes'))
+                if (tfm) fanModes = (fanModes == []) ? tfm : fanModes.intersect(tfm)
+            }
         }
     }
     if (fanModes == []) fanModes = ["off", "auto", "circulate", "on"]
     return ["Prior State"] + fanModes*.capitalize().sort(false)
 }
+
 String getDeviceId(networkId) {
     return networkId.split(/\./).last()
 }
