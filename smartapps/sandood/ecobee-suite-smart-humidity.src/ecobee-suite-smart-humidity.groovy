@@ -23,7 +23,7 @@
  *	1.8.07 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.08 - Miscellaneous updates & fixes
  *	1.8.09 - Fix for multi-word Climate names
- *  1.8.10 - Fix for getThermostatModes()
+ *	1.8.10 - Fix for getThermostatModes()
  */
 import groovy.json.*
 import groovy.transform.Field
