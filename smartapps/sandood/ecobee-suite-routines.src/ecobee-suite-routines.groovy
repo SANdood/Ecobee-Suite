@@ -37,11 +37,12 @@
  *	1.8.19 - Fix switch on()/off()
  *	1.8.20 - Fix runIn() typo
  *	1.8.21 - Don't require doneSwitches, even if no Mode/Routine (could be notify only, I guess)
+ *  1.8.22 - Fix getThermostatModes()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.21" }
+String getVersionNum()		{ return "1.8.22" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -897,16 +898,26 @@ List getThermostatPrograms() {
 
 // return all the modes that ALL thermostats support
 List getThermostatModes() {
-	def theModes = []
-    
-    settings.myThermostats.each { stat ->
-    	if (theModes == []) {
-        	theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", ")
+	def statModes = []
+	settings.thermostats?.each { stat ->
+        if (HE) {
+            def tm = stat.currentValue('supportedThermostatModes')
+            if (statModes == []) {	
+                if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+            } else {
+                def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
+                if (nm) statModes = statModes.intersect(nm)
+            }
         } else {
-        	theModes = theModes.intersect(stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", "))
-        }   
-    }
-    return theModes.sort(false)
+            def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+            if (statModes == []) {	
+                if (tm) statModes = tm
+            } else {
+                if (tm) statModes = statModes.intersect(tm)
+            }
+        }
+	}
+	return statModes.sort(false)
 }
 boolean notifyNowOK() {
 	// If both provided, both must be true; else only the provided one needs to be true
