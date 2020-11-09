@@ -27,11 +27,12 @@
  *	1.8.11 - Tweaks for minimumVentLevel type conversions
  *	1.8.12 - Fix getThermostatPrograms()
  *	1.8.13 - Added "Hold" as a selectable program
+ *  1.8.14 - Fix getThermostatModes()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.13" }
+String getVersionNum()		{ return "1.8.14" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 
@@ -1175,11 +1176,17 @@ List getThermostatPrograms() {
     }
     return programs.sort(false)
 }
-def getThermostatModes() {
-    String tm = settings?.theThermostat?.currentValue('supportedThermostatModes')
-	log.debug "thermostatModes: ${tm}"
-    return (tm ? ((tm == '[]') ? [] : tm[1..-2].tokenize(', ').sort(false)) : [])
-    //return theModes.sort(false)
+List getThermostatModes() {
+	List statModes = ["off","heat","cool","auto","auxHeatOnly"]
+    if (settings.theThermostat) {
+        if (HE) {
+    	    def tm = theThermostat.currentValue('supportedThermostatModes')
+            if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+        } else {
+            statModes = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes'))
+        }
+    }
+    return statModes.sort(false)
 }
 
 // Reservation Management Functions - Now implemented in Ecobee Suite Manager
