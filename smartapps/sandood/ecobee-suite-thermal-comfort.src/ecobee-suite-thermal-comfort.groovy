@@ -31,11 +31,12 @@
  *	1.8.15 - Add missing functions for DND 
  *	1.8.16 - HOTFIX: Custom Notifications page name
  *	1.8.17 - Fix getThermostatPrograms()
+ *  1.8.18 - Fix getThermostatModes()
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.17" }
+String getVersionNum()		{ return "1.8.18" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -515,10 +516,14 @@ List getThermostatPrograms() {
     return programs.sort(false)
 }
 List getThermostatModes() {
-	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
+	List statModes = ["off","heat","cool","auto","auxHeatOnly"]
     if (settings.theThermostat) {
-    	def tempModes = theThermostat.currentValue('supportedThermostatModes')
-        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
+        if (HE) {
+    	    def tm = theThermostat.currentValue('supportedThermostatModes')
+            if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+        } else {
+            statModes = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes'))
+        }
     }
     return statModes.sort(false)
 }
