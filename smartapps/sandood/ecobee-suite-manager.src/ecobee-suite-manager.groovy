@@ -70,12 +70,13 @@
  *	1.8.44 - Fixed hourly setHold
  *	1.8.45 - Handle events overriding program.currentClimateRef
  *	1.8.46 - Get thermostat.programs at x:03 and x:33 (when programs change)
- *	1.8.47 - Handle demandResponsePrecool events
+ *	1.8.47 - Handle demandResponsePrecool/Preheat Eco+ events
+ *	1.8.48 - Handle heatPump-only heat/cool installation (no aux heat)
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.47" }
+String getVersionNum()		{ return "1.8.48" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -3766,7 +3767,7 @@ void updateThermostatData() {
 				dehumidifyOvercoolOffset	= statSettings[tid].dehumidifyOvercoolOffset
             	hasHumidifier				= statSettings[tid].hasHumidifier
             	hasDehumidifier				= statSettings[tid].hasDehumidifier || (statSettings[tid].dehumidifyWithAC && (dehumidifyOvercoolOffset != 0)) // fortunately, we can hide the details from the device handler
-                heatStages					= statSettings[tid].heatStages
+                heatStages					= (statSettings[tid].heatStages != 0) ? statSettings[tid].heatStages : (statSettings[tid].hasHeatPump ? 1 : 0)
             	coolStages					= statSettings[tid].coolStages
                 disablePreHeating			= statSettings[tid].disablePreHeating
                 disablePreCooling			= statSettings[tid].disablePreCooling
@@ -3983,6 +3984,7 @@ void updateThermostatData() {
                         currentClimateType = holdClimateRef?.type
                         break;
                     case 'demandResponsePrecool':
+                    case 'demandResponsePreheat':
                     	currentClimateName = 'Hold: Eco Prep'
                         currentClimateOwner = 'demandResponse'
                         currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco' : 'Eco!'		// Tag mandatory DR events
