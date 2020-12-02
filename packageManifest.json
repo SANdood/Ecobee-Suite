@@ -2,8 +2,8 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.1.8",
-  "dateReleased": "2020-11-09",
-  "releaseNotes": "Fixes configuration & run-time issues with Quiet Time, Routines, Smart Circulation, SmartHumidity, Smart Mode, Smart Vents, Smart Zones, Thermal Comfort and Working From Home",
+  "dateReleased": "2020-12-02",
+  "releaseNotes": "Now handles heatPump-only systems (no auxHeat)\nNow handles Eco+ preCool/preHeat Time of Use (tou) events",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.47"
+      "version": "1.8.49"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.8.17"
+      "version": "1.8.18"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
