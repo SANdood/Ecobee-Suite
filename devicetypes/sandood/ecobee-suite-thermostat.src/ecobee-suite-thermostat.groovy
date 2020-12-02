@@ -44,8 +44,9 @@
  *	1.8.15 - Fix Hold programs check
  *	1.8.16 - Remove whitespace from thermostatMode & fanMode (Hubitat Dashboard adds extra " " to fanMode)
  *	1.8.17 - Remove debugging "log.error" in generateEvent()
+ *  1.8.18 - Added Eco+ event handling
  */
-String getVersionNum() 		{ return "1.8.17" }
+String getVersionNum() 		{ return "1.8.18" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -616,7 +617,9 @@ metadata {
 			state "Hold: Circulate",	action: "noOp", nextState: 'Hold: Circulate',	label: "Hold: Circulate",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on-1_blue..png"
             state "Hold: Eco Prep",		action: "noOp", nextState: 'Hold: Eco Prep',	label: "Hold: Eco Prep",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response_bg.png"
             state "Hold: Eco",			action: "noOp", nextState: 'Hold: Eco',			label: "Hold: Eco",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response.png"
-			state "Hold: Home",			action: "noOp", nextState: 'Hold: Home',		label: 'Hold: Home',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue_solid.png"
+            state "Hold: Eco+ Prep",	action: "noOp", nextState: 'Hold: Eco+ Prep',	label: "Hold: Eco+ Prep",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response_bg.png"
+            state "Hold: Eco+",			action: "noOp", nextState: 'Hold: Eco+',		label: "Hold: Eco+",		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response.png"
+            state "Hold: Home",			action: "noOp", nextState: 'Hold: Home',		label: 'Hold: Home',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue_solid.png"
 			state "Hold: Away",			action: "noOp", nextState: 'Hold: Away',		label: 'Hold: Away',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue_solid.png"
 			state "Hold: Sleep",		action: "noOp", nextState: 'Hold: Sleep',		label: 'Hold: Sleep',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue_solid.png"
 			state "Vacation",			action: "noOp", nextState: 'Vacation',			label: 'Vacation',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_vacation_blue_solid.png"
@@ -1336,7 +1339,7 @@ def generateEvent(List updates) {
 							// Handle the cancel button, but only if on ST
 							if (ST) {
 								def currentProg = device.currentValue('currentProgram')
-								if (currentProg != 'Eco!') {
+								if ((currentProg != 'Eco!') && (currentProg != 'Eco+!')) {
 									// Not a mandatory DR event - we CAN cancel it
 									if (sendValue.endsWith('ep')) {
 										sendEvent(name: 'resumeProgram', value: 'cancel ecoPrep', displayed: false, isStateChange: true)	// change the button to Cancel Eco Prep (leaf)
@@ -1385,11 +1388,13 @@ def generateEvent(List updates) {
 									disableSleepButton()
 									break;
 								case 'Eco':
+                                case 'Eco+':
 									enableAllProgramButtons()	// Yes, you can change programs and set Holds while in Demand Response
 									// But we will let the 'currentProgramName' code above handle which version of 'cancel eco/eco prep' is displayed
 									// (It should be the next attribute updated)
 									break;
 								case 'Eco!':
+                                case 'Eco+!':
 									// Mandatory Demand Response Event - can't cancel it...
 									sendEvent(name: 'resumeProgram', value: 'resume dis', displayed: false, isStateChange: true)
 									break;
@@ -3356,12 +3361,12 @@ void cancelDemandResponse() {
 	def result = false
     def currentProgram = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
     if (currentProgram) {
-    	if (currentProgram == 'Eco!') {
+    	if ((currentProgram == 'Eco!') || (currentProgram == 'Eco+!')) {
         	// Mandatory DR, can't cancel it
             LOG('Invalid request to Cancel Demand Response - current DR Event is MANDATORY', 1, null, 'warn')
             return
         }
-    	if (currentProgram == 'Eco') result = parent.cancelDemandResponse(this, getDeviceId())
+    	if ((currentProgram == 'Eco') || (currentProgram == 'Eco+')) result = parent.cancelDemandResponse(this, getDeviceId())
     }
     if (result) {
     	if (ST)  {
@@ -3370,7 +3375,7 @@ void cancelDemandResponse() {
         }
         LOG('Cancel Demand Response Event succeeded.', 3, null, 'info')
     } else {
-    	LOG("Cancel Demand Response Event FAILED${(currentProgram != 'Eco') ? ' - not currently in a Demand Response Event' : ''}.", 1, null, 'warn')
+    	LOG("Cancel Demand Response Event FAILED${(currentProgram != 'Eco/Eco+') ? ' - not currently in a Demand Response Event' : ''}.", 1, null, 'warn')
     }
     return
 }
