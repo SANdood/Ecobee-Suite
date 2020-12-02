@@ -71,11 +71,13 @@
  *	1.8.45 - Handle events overriding program.currentClimateRef
  *	1.8.46 - Get thermostat.programs at x:03 and x:33 (when programs change)
  *	1.8.47 - Handle demandResponsePrecool/Preheat Eco+ events
+ *	1.8.48 - Handle heatPump-only heat/cool installation (no aux heat)
+ *  1.8.49 - Handle Eco+ preCool/preHeat events
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.47" }
+String getVersionNum()		{ return "1.8.49" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -3766,7 +3768,7 @@ void updateThermostatData() {
 				dehumidifyOvercoolOffset	= statSettings[tid].dehumidifyOvercoolOffset
             	hasHumidifier				= statSettings[tid].hasHumidifier
             	hasDehumidifier				= statSettings[tid].hasDehumidifier || (statSettings[tid].dehumidifyWithAC && (dehumidifyOvercoolOffset != 0)) // fortunately, we can hide the details from the device handler
-                heatStages					= statSettings[tid].heatStages
+                heatStages					= (statSettings[tid].heatStages != 0) ? statSettings[tid].heatStages : (statSettings[tid].hasHeatPump ? 1 : 0)
             	coolStages					= statSettings[tid].coolStages
                 disablePreHeating			= statSettings[tid].disablePreHeating
                 disablePreCooling			= statSettings[tid].disablePreCooling
@@ -4000,10 +4002,21 @@ void updateThermostatData() {
                         currentClimateId = runningEvent.name as String
                         currentClimateType = 'program'
                         break;
+                    case 'touPrecool':
+                    case 'touPreheat':
+                    	currentClimateName = 'Hold: Eco+ Prep'
+                        currentClimateOwner = 'ecoPlus'
+                        currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco' : 'Eco!'		// Tag mandatory DR events
+                        currentClimateId = runningEvent.name as String
+                        currentClimateType = 'program'
+                        break;
                     case 'touSetback':
                     	// Time of Use setback - pre-cooling/heating when the power is (supposedly) less expensive
-                    	currentClimateName = 'touSetback'
+                        currentClimateName = ((runningEvent.coolRelativeTemp < 0) || (runningEvent.heatRelativeTemp < 0)) ? 'Hold: Eco+ Prep' : 'Hold: Eco+'
                         currentClimateOwner = 'ecoPlus'
+                        currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco+' : 'Eco+!'		// Tag mandatory DR events
+                        currentClimateId = runningEvent.name as String
+                        currentClimateType = 'program'
                         //log.debug "PLEASE SEND THIS TO BARRY: touSetback event: ${runningEvent}"
                         break;
                     default:		
