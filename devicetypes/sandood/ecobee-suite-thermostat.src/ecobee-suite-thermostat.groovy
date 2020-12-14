@@ -43,8 +43,11 @@
  *	1.8.14 - Avoid double resumeProgram() when changing programs
  *	1.8.15 - Fix Hold programs check
  *	1.8.16 - Remove whitespace from thermostatMode & fanMode (Hubitat Dashboard adds extra " " to fanMode)
+ *	1.8.17 - Remove debugging "log.error" in generateEvent()
+ *  1.8.18 - Added Eco+ event handling
+ *	1.8.19 - Added setThermostatHoldHours() entry point
  */
-String getVersionNum() 		{ return "1.8.16" }
+String getVersionNum() 		{ return "1.8.19" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -367,9 +370,11 @@ metadata {
 		// command "setThermostatFanMode"	['STRING']
 		// command "setThermostatMode"		['STRING']
         if (isST) {
+            command "setThermostatHoldHours",   ['NUMBER']
 			command "setThermostatProgram", 	['STRING', 'STRING', 'NUMBER']
 			command "setVacationFanMinOnTime",	['NUMBER']
         } else {
+            command "setThermostatHoldHours",   [[name:'Hold Hours', type:'NUMBER', description:'Default Hours for an Hold Type == Hold Hours (use zero to default to ES Manager setting)']]
 			command "setThermostatProgram", [[name:'Program Name*', type:'STRING', description:'Desired Program'],
 											 [name:'Hold Type*', type:'ENUM', description:'Delect and option',
 											  constraints: ['indefinite', 'nextTransition', 'holdHours']],
@@ -386,7 +391,7 @@ metadata {
 			  "When changing temperature or program, use Permanent, Temporary, Hourly, Parent setting or Thermostat setting hold type? (Default: Ecobee Suite Manager's setting)",
 			  required: false, options: ["Permanent", "Temporary", "Hourly", "Parent", "Thermostat"])
         input(name: "myHoldHours", type: "enum", title: "Hourly Hold Time", description: "If Hourly hold, how many hours do you want to hold? (Default: Ecobee Suite Manager's setting)", 
-			  required: false, options: ['2', '4', '6', '8', '12', '16', '24'])
+			  required: false, options: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','28','32','36','40','44','48','56','64','72'])
         input(name: "smartAuto", type: "bool", title: "Smart Auto Temp Adjust", description: "This flag allows the temperature to be adjusted manually when the thermostat " +
 			  "is in Auto mode. An attempt to determine if the heat or cool setting should be changed is made automatically.", required: false)
 		input(name: "dummy", type: "text", title: "${getVersionLabel()}", description: " ", required: false)
@@ -615,7 +620,9 @@ metadata {
 			state "Hold: Circulate",	action: "noOp", nextState: 'Hold: Circulate',	label: "Hold: Circulate",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on-1_blue..png"
             state "Hold: Eco Prep",		action: "noOp", nextState: 'Hold: Eco Prep',	label: "Hold: Eco Prep",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response_bg.png"
             state "Hold: Eco",			action: "noOp", nextState: 'Hold: Eco',			label: "Hold: Eco",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response.png"
-			state "Hold: Home",			action: "noOp", nextState: 'Hold: Home',		label: 'Hold: Home',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue_solid.png"
+            state "Hold: Eco+ Prep",	action: "noOp", nextState: 'Hold: Eco+ Prep',	label: "Hold: Eco+ Prep",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response_bg.png"
+            state "Hold: Eco+",			action: "noOp", nextState: 'Hold: Eco+',		label: "Hold: Eco+",		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response.png"
+            state "Hold: Home",			action: "noOp", nextState: 'Hold: Home',		label: 'Hold: Home',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue_solid.png"
 			state "Hold: Away",			action: "noOp", nextState: 'Hold: Away',		label: 'Hold: Away',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue_solid.png"
 			state "Hold: Sleep",		action: "noOp", nextState: 'Hold: Sleep',		label: 'Hold: Sleep',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue_solid.png"
 			state "Vacation",			action: "noOp", nextState: 'Vacation',			label: 'Vacation',			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_vacation_blue_solid.png"
@@ -918,6 +925,7 @@ def updated() {
 	
 	resetUISetpoints()
 	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
+	state.defaultHoldHours = settings.myHoldHours
 	state.version = getVersionLabel()
     updateDataValue("myVersion", getVersionLabel())
 	runIn(2, 'forceRefresh', [overwrite: true])
@@ -940,7 +948,7 @@ def ping() {
 	parent.pollChildren(getDeviceId(),true)		// forcePoll just me
 }
 def generateEvent(Map updates) {
-	log.error "generateEvent(Map): ${updates}"
+	//log.error "generateEvent(Map): ${updates}"
 	generateEvent([updates])
 }
 def generateEvent(List updates) {
@@ -1335,7 +1343,7 @@ def generateEvent(List updates) {
 							// Handle the cancel button, but only if on ST
 							if (ST) {
 								def currentProg = device.currentValue('currentProgram')
-								if (currentProg != 'Eco!') {
+								if ((currentProg != 'Eco!') && (currentProg != 'Eco+!')) {
 									// Not a mandatory DR event - we CAN cancel it
 									if (sendValue.endsWith('ep')) {
 										sendEvent(name: 'resumeProgram', value: 'cancel ecoPrep', displayed: false, isStateChange: true)	// change the button to Cancel Eco Prep (leaf)
@@ -1384,11 +1392,13 @@ def generateEvent(List updates) {
 									disableSleepButton()
 									break;
 								case 'Eco':
+                                case 'Eco+':
 									enableAllProgramButtons()	// Yes, you can change programs and set Holds while in Demand Response
 									// But we will let the 'currentProgramName' code above handle which version of 'cancel eco/eco prep' is displayed
 									// (It should be the next attribute updated)
 									break;
 								case 'Eco!':
+                                case 'Eco+!':
 									// Mandatory Demand Response Event - can't cancel it...
 									sendEvent(name: 'resumeProgram', value: 'resume dis', displayed: false, isStateChange: true)
 									break;
@@ -2639,6 +2649,18 @@ void auto() {
 // Thermostat Program (aka Climates) Commands
 // Program/Climates CANNOT be changed while in Vacation mode
 // ***************************************************************************
+void setThermostatHoldHours(holdHours=0) {
+    String hours = holdHours.toInteger().toString()
+	
+    if (!hours || (hours == '0')) {
+		device.updateSetting('myHoldHours', ""); settings.myHoldHours = null; state.defaultHoldHours = null
+		LOG("setThermostatHoldHours(${holdHours}): setting default hold hours to ES Manager setting",2,null,'trace')
+	} else {
+		device.updateSetting('myHoldHours', hours); settings.myHoldHours = hours; state.defaultHoldHours = hours
+		LOG("setThermostatHoldHours(${holdHours}): setting default hold hours to ${hours}",2,null,'trace')
+	}   
+	//log.debug "MyHoldHours = ${settings.myHoldHours}"
+}
 void setThermostatProgram(String program, String holdType="", Integer holdHours=2) {
 	// N.B. if holdType is provided, it must be one of the valid parameters for the Ecobee setHold call (indefinite, nextTransition, holdHours). dateTime not currently supported
 	refresh()
@@ -3355,12 +3377,12 @@ void cancelDemandResponse() {
 	def result = false
     def currentProgram = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
     if (currentProgram) {
-    	if (currentProgram == 'Eco!') {
+    	if ((currentProgram == 'Eco!') || (currentProgram == 'Eco+!')) {
         	// Mandatory DR, can't cancel it
             LOG('Invalid request to Cancel Demand Response - current DR Event is MANDATORY', 1, null, 'warn')
             return
         }
-    	if (currentProgram == 'Eco') result = parent.cancelDemandResponse(this, getDeviceId())
+    	if ((currentProgram == 'Eco') || (currentProgram == 'Eco+')) result = parent.cancelDemandResponse(this, getDeviceId())
     }
     if (result) {
     	if (ST)  {
@@ -3369,7 +3391,7 @@ void cancelDemandResponse() {
         }
         LOG('Cancel Demand Response Event succeeded.', 3, null, 'info')
     } else {
-    	LOG("Cancel Demand Response Event FAILED${(currentProgram != 'Eco') ? ' - not currently in a Demand Response Event' : ''}.", 1, null, 'warn')
+    	LOG("Cancel Demand Response Event FAILED${(currentProgram != 'Eco/Eco+') ? ' - not currently in a Demand Response Event' : ''}.", 1, null, 'warn')
     }
     return
 }
