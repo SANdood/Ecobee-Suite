@@ -36,12 +36,13 @@
  *	1.8.04 - New SHPL, using Global Fields instead of State
  *	1.8.05 - Fixed icon for Samsung Smart Things mobile app (the new one)
  *	1.8.06 - Clean up null vs. 'null' attributes - HE doesn't overwrite existing attrs with null
-  *	1.8.07 - HOTFIX: DeviceWatch fix for hubless ST locations 
+ *	1.8.07 - HOTFIX: DeviceWatch fix for hubless ST locations 
+ *	1.8.08 - Display temperature as default for the new Samsung app
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum() 		{ return "1.8.07" }
+String getVersionNum() 		{ return "1.8.08" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 
@@ -51,9 +52,13 @@ metadata {
         name:         	"Ecobee Suite Sensor", 
         namespace:    	"sandood", 
         author:       	"Barry A. Burke (storageanarchy@gmail.com)",
-        mnmn:         	"SmartThings",          // for the new Samsung (Connect) app
-        vid:          	"generic-motion",        // for the new Samsung (Connect) app
-        ocfDeviceType:	"x.com.st.d.sensor.motion",  // "x.com.st.d.sensor.multifunction", //["oic.r.humidity", "x.com.st.d.sensor.moisture", "x.com.st.d.sensor.temperature", "x.com.st.d.sensor.motion"],
+        //mnmn:         "SmartThings",          		// for the new Samsung (Connect) app
+        //vid:          "generic-motion",        		// for the new Samsung (Connect) app
+        //ocfDeviceType:"x.com.st.d.sensor.motion",  	// "x.com.st.d.sensor.multifunction", //["oic.r.humidity", "x.com.st.d.sensor.moisture", "x.com.st.d.sensor.temperature", "x.com.st.d.sensor.motion"],
+		mnmn: 			"SmartThingsCommunity", 				// for the new Samsung (Connect) app 
+		vid: 			"4a31c6b1-57cf-3591-bc17-dfb07e1d9641", // for the new Samsung (Connect) app 
+		ocfDeviceType: 	"x.com.st.d.sensor.temperature", 
+		cstHandler: 	true,
         importUrl:    	"https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy"
     ) 
     {	
