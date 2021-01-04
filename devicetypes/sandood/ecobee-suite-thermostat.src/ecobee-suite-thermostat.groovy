@@ -45,8 +45,10 @@
  *	1.8.16 - Remove whitespace from thermostatMode & fanMode (Hubitat Dashboard adds extra " " to fanMode)
  *	1.8.17 - Remove debugging "log.error" in generateEvent()
  *  1.8.18 - Added Eco+ event handling
+ *	1.8.19 - Added setThermostatHoldHours() entry point
+ *	1.8.20 - Allow multiple programs to be adjusted in setProgramSetpoints()
  */
-String getVersionNum() 		{ return "1.8.18" }
+String getVersionNum() 		{ return "1.8.20" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -369,9 +371,11 @@ metadata {
 		// command "setThermostatFanMode"	['STRING']
 		// command "setThermostatMode"		['STRING']
         if (isST) {
+            command "setThermostatHoldHours",   ['NUMBER']
 			command "setThermostatProgram", 	['STRING', 'STRING', 'NUMBER']
 			command "setVacationFanMinOnTime",	['NUMBER']
         } else {
+            command "setThermostatHoldHours",   [[name:'Hold Hours', type:'NUMBER', description:'Default Hours for an Hold Type == Hold Hours (use zero to default to ES Manager setting)']]
 			command "setThermostatProgram", [[name:'Program Name*', type:'STRING', description:'Desired Program'],
 											 [name:'Hold Type*', type:'ENUM', description:'Delect and option',
 											  constraints: ['indefinite', 'nextTransition', 'holdHours']],
@@ -388,7 +392,7 @@ metadata {
 			  "When changing temperature or program, use Permanent, Temporary, Hourly, Parent setting or Thermostat setting hold type? (Default: Ecobee Suite Manager's setting)",
 			  required: false, options: ["Permanent", "Temporary", "Hourly", "Parent", "Thermostat"])
         input(name: "myHoldHours", type: "enum", title: "Hourly Hold Time", description: "If Hourly hold, how many hours do you want to hold? (Default: Ecobee Suite Manager's setting)", 
-			  required: false, options: ['2', '4', '6', '8', '12', '16', '24'])
+			  required: false, options: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','28','32','36','40','44','48','56','64','72'])
         input(name: "smartAuto", type: "bool", title: "Smart Auto Temp Adjust", description: "This flag allows the temperature to be adjusted manually when the thermostat " +
 			  "is in Auto mode. An attempt to determine if the heat or cool setting should be changed is made automatically.", required: false)
 		input(name: "dummy", type: "text", title: "${getVersionLabel()}", description: " ", required: false)
@@ -922,6 +926,7 @@ def updated() {
 	
 	resetUISetpoints()
 	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
+	state.defaultHoldHours = settings.myHoldHours
 	state.version = getVersionLabel()
     updateDataValue("myVersion", getVersionLabel())
 	runIn(2, 'forceRefresh', [overwrite: true])
@@ -2645,6 +2650,18 @@ void auto() {
 // Thermostat Program (aka Climates) Commands
 // Program/Climates CANNOT be changed while in Vacation mode
 // ***************************************************************************
+void setThermostatHoldHours(holdHours=0) {
+    String hours = holdHours.toInteger().toString()
+	
+    if (!hours || (hours == '0')) {
+		device.updateSetting('myHoldHours', ""); settings.myHoldHours = null; state.defaultHoldHours = null
+		LOG("setThermostatHoldHours(${holdHours}): setting default hold hours to ES Manager setting",2,null,'trace')
+	} else {
+		device.updateSetting('myHoldHours', hours); settings.myHoldHours = hours; state.defaultHoldHours = hours
+		LOG("setThermostatHoldHours(${holdHours}): setting default hold hours to ${hours}",2,null,'trace')
+	}   
+	//log.debug "MyHoldHours = ${settings.myHoldHours}"
+}
 void setThermostatProgram(String program, String holdType="", Integer holdHours=2) {
 	// N.B. if holdType is provided, it must be one of the valid parameters for the Ecobee setHold call (indefinite, nextTransition, holdHours). dateTime not currently supported
 	refresh()
@@ -3381,25 +3398,28 @@ void cancelDemandResponse() {
 }
 
 // Climate change commands
-void setProgramSetpoints(String programName, heatingSetpoint, coolingSetpoint) {
+void setProgramSetpoints(Object... programData) {
 	def scale = temperatureScale
-	LOG("setProgramSetpoints( ${programName}, heatSP: ${heatingSetpoint}°${scale}, coolSP: ${coolingSetpoint}°${scale} )",2,null,'info')
+	LOG("setProgramSetpoints( ${programData} )",2,null,'info')
 	String deviceId = getDeviceId()
-    String heatSP = heatingSetpoint ? heatingSetpoint.toString() : ""
-    String coolSP = coolingSetpoint ? coolingSetpoint.toString() : ""
-	if (parent.setProgramSetpoints( this, deviceId, programName, heatSP, coolSP)) {
+	if (parent.setProgramSetpoints( this, deviceId, programData)) {
     	LOG("setProgramSetpoints() SUCCEEDED!!!",2,null,'trace')
-    	String currentProgram = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
-		if ( currentProgram == programName) { 
-			def updates = []
-			if (coolSP) updates << [coolingSetpoint: coolSP]
-			if (heatSP) updates << [heatingSetpoint: heatSP]
-			if (updates != []) generateEvent(updates)
+        String currentProgram = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
+		for (int i = 0; i < programData.length; i += 3) {
+            String programName = programData[i].toString()
+			if ( currentProgram == programName) { 
+                String heatSP = programData[i+1].toString()
+                String coolSP = programData[i+2].toString()
+				def updates = []
+				if (coolSP) updates << [coolingSetpoint: coolSP]
+				if (heatSP) updates << [heatingSetpoint: heatSP]
+				if (updates != []) generateEvent(updates)
+                break
+			}
 		}
 		LOG("setProgramSetpoints() - completed",3,null,'trace')
 	} else LOG("setProgramSetpoints() - failed",1,null,'warn')
 }
-
 void setEcobeeSetting( String name, value ) {
 	def result
 	def dItem = EcobeeDirectSettings.find{ it.name == name }
