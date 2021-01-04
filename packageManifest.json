@@ -3,7 +3,7 @@
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.1.8",
   "dateReleased": "2020-12-02",
-  "releaseNotes": "Now handles heatPump-only systems (no auxHeat)\nNow handles Eco+ preCool/preHeat Time of Use (tou) events",
+  "releaseNotes": "New `setTHermostatHoldHours` function to change default `holdHours`\nUpdated `setProgramSetpoints()` allows for changing multiple programs at once\nSensor devices now show temperature value instead of motion in the new SmartThings app",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.49"
+      "version": "1.8.51"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.8.18"
+      "version": "1.8.20"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
@@ -139,7 +139,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
       "required": true,
-      "version": "1.8.07"
+      "version": "1.8.08"
     },
     {
       "id": "71a545f8-bfe1-4cff-aeb3-59f5bde16e6d",
