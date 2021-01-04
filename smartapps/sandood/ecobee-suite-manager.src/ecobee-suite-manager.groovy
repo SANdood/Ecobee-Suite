@@ -73,6 +73,8 @@
  *	1.8.47 - Handle demandResponsePrecool/Preheat Eco+ events
  *	1.8.48 - Handle heatPump-only heat/cool installation (no aux heat)
  *  1.8.49 - Handle Eco+ preCool/preHeat events
+ *	1.8.50 - Fix Debug Dashboard error
+ *	1.8.51 - Allow changing multiple programs' setpoints in setProgramSetpoints()
  */
 import groovy.json.*
 import groovy.transform.Field
@@ -656,7 +658,7 @@ def debugDashboardPage() {
 	LOG("=====> debugDashboardPage() entered.", 5)	  
 	
 	dynamicPage(name: "debugDashboardPage", title: "") {
-		section(getVersionLabel())
+		section(getVersionLabel()) {}
 		section(sectionTitle("Commands")) {
 			href(name: "pollChildrenPage", title: "", required: false, page: "pollChildrenPage", description: "Tap to execute: pollChildren()")
 			href(name: "refreshAuthTokenPage", title: "", required: false, page: "refreshAuthTokenPage", description: "Tap to execute: refreshAuthToken()")
@@ -5903,7 +5905,7 @@ boolean updateSensorPrograms(child, deviceId, sensorId, List activeList, List in
     }
 }
 
-boolean setProgramSetpoints(child, String deviceId, String programName, String heatingSetpoint, String coolingSetpoint) {
+boolean setProgramSetpoints(child, String deviceId, Object... programData) {
 	// boolean debugLevelFour = debugLevel(4)
     
 	if (child == null) child = getChildDevice(getThermostatDNI(deviceId))
@@ -5915,63 +5917,79 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
 		queueFailedCall('setProgramSetpoints', child.device.deviceNetworkId, 4, deviceId, programName, heatingSetpoint, coolingSetpoint)
 		return false
 	}
-	
-	LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName}, heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})", 2, child, 'info')
-	
+    
     def program = [currentClimateRef:atomicState.currentClimateRef[deviceId],
-    			   climates:atomicState.climates[deviceId],
-        		   schedule:atomicState.schedule[deviceId]] as HashMap
+					   climates:atomicState.climates[deviceId],
+					   schedule:atomicState.schedule[deviceId]] as HashMap
 	if (!program) {
 		return false
 	}
-	
-	// convert C temps to F
-	def isMetric = (temperatureScale == "C")
-	def ht = (heatingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(heatingSetpoint as BigDecimal) * 10.0) : ((heatingSetpoint as BigDecimal) * 10.0)), 0)) : null )		// better precision using BigDecimal round-half-up
-	def ct = (coolingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(coolingSetpoint as BigDecimal) * 10.0) : ((coolingSetpoint as BigDecimal) * 10.0)), 0)) : null )
-	
-	// IFF autoHeatCoolFeatureEnabled, then enforce the minimum delta
-    def hasAutoMode = atomicState.settings ? atomicState.settings[deviceId].autoHeatCoolFeatureEnabled : false
-	def delta = !hasAutoMode ? 0.0 : (atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null)
-	if (hasAutoMode && (delta != null) && (ht != null) && (ct != null) && (ht <= ct) && ((ct - ht) < delta)) {
-		LOG("setProgramSetpoints() - Error: Auto Mode is enabled on ${statName}, heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
-		return false
-	}
+    
+    Set found = new HashSet()
+    Set notFound = new HashSet()
+    for (int paramIdx = 0; paramIdx < programData.length; paramIdx += 3) {
+        String programName = programData[paramIdx].toString()
+        String heatingSetpoint = programData[paramIdx + 1].toString()
+        String coolingSetpoint = programData[paramIdx + 2].toString()
+        notFound.add(programName)
+		LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName}, heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})", 2, child, 'info')
 		
-	int c = 0
-	while ( program.climates[c] ) {	
-		if ((program.climates[c].name == programName) || (program.climates[c].climateRef == programName)) { 	// Allow search by programName or programIc
-        	// found the program we want to change
-			def heatTemp = program.climates[c]?.heatTemp
-			def coolTemp = program.climates[c]?.coolTemp
-			def adjusted = ''
-			// If we have both ht & ct and we support Auto Mode, we already know the delta is good
-			// but if we only have 1, we need to determine the valid value for the other
-            // if no Auto mode, we just copy the current value over, otherwise we adjust it
-			if (!ct) {
-				ct = (!hasAutoMode && coolTemp) ? coolTemp : ((!coolTemp || ((coolTemp - ht) < delta)) ? (ht + delta) : coolTemp)
-				if (hasAutoMode && (!coolingSetpoint || (ct != cooltemp))) adjusted = 'cool'
-			} else if (!ht) {
-				ht = (!hasAutoMode && heatTemp) ? heatTemp : ((!heatTemp || ((ct - heatTemp) < delta)) ? (ct - delta) : heatTemp)
-				if (hasAutoMode && (!heatingSetpoint || (ht != heatTemp))) adjusted = 'heat'
-			}
-			LOG("setProgramSetpoints(${programName}) - heatingSetpoint: ${ht/10}°F ${adjusted=='heat'?'(adjusted)':''}, coolingSetpoint: ${ct/10}°F ${adjusted=='cool'?'(adjusted)':''}${adjusted?', minDelta: '+(delta/10).toString()+'°F':''}",2,child,'info')
-			program.climates[c].heatTemp = ht
-			program.climates[c].coolTemp = ct
-
-			if (updateProgramDirect( child, deviceId, program )) {
-				LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName} setpoints change - Succeeded", 2, child, 'info')
-				return true
-			} else {
-				LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName} setpoints change - Failed", 1, child, 'warn')
-				// updateProgramDirect() will queue failed requests
-				return false
-			}
+		// convert C temps to F
+		def isMetric = (temperatureScale == "C")
+		def ht = (heatingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(heatingSetpoint as BigDecimal) * 10.0) : ((heatingSetpoint as BigDecimal) * 10.0)), 0)) : null )		// better precision using BigDecimal round-half-up
+		def ct = (coolingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(coolingSetpoint as BigDecimal) * 10.0) : ((coolingSetpoint as BigDecimal) * 10.0)), 0)) : null )
+		
+		// IFF autoHeatCoolFeatureEnabled, then enforce the minimum delta
+		def hasAutoMode = atomicState.settings ? atomicState.settings[deviceId].autoHeatCoolFeatureEnabled : false
+		def delta = !hasAutoMode ? 0.0 : (atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null)
+		if (hasAutoMode && (delta != null) && (ht != null) && (ct != null) && (ht <= ct) && ((ct - ht) < delta)) {
+			LOG("setProgramSetpoints() - Error: Auto Mode is enabled on ${statName}, heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
+			return false
 		}
-		c++
+			
+		int c = 0
+		while ( program.climates[c] ) {	
+			if ((program.climates[c].name == programName) || (program.climates[c].climateRef == programName)) { 	// Allow search by programName or programIc
+				// found the program we want to change
+                found.add(programName)
+                notFound.remove(programName)
+				def heatTemp = program.climates[c]?.heatTemp
+				def coolTemp = program.climates[c]?.coolTemp
+				def adjusted = ''
+				// If we have both ht & ct and we support Auto Mode, we already know the delta is good
+				// but if we only have 1, we need to determine the valid value for the other
+				// if no Auto mode, we just copy the current value over, otherwise we adjust it
+				if (!ct) {
+					ct = (!hasAutoMode && coolTemp) ? coolTemp : ((!coolTemp || ((coolTemp - ht) < delta)) ? (ht + delta) : coolTemp)
+					if (hasAutoMode && (!coolingSetpoint || (ct != cooltemp))) adjusted = 'cool'
+				} else if (!ht) {
+					ht = (!hasAutoMode && heatTemp) ? heatTemp : ((!heatTemp || ((ct - heatTemp) < delta)) ? (ct - delta) : heatTemp)
+					if (hasAutoMode && (!heatingSetpoint || (ht != heatTemp))) adjusted = 'heat'
+				}
+				LOG("setProgramSetpoints(${programName}) - heatingSetpoint: ${ht/10}°F ${adjusted=='heat'?'(adjusted)':''}, coolingSetpoint: ${ct/10}°F ${adjusted=='cool'?'(adjusted)':''}${adjusted?', minDelta: '+(delta/10).toString()+'°F':''}",2,child,'info')
+				program.climates[c].heatTemp = ht
+				program.climates[c].coolTemp = ct
+			}
+			c++
+		}
 	}
-	// didn't find the specified climate
-	LOG("setProgramSetpoints(): ${programName} not found for ${statName} (${deviceId})", 1, child, 'warn')
+    
+    if (!found.isEmpty()) {
+        if (updateProgramDirect( child, deviceId, program )) {
+			LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${found} setpoints change - Succeeded", 2, child, 'info')
+			return true
+		} else {
+			LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${found} setpoints change - Failed", 1, child, 'warn')
+			// updateProgramDirect() will queue failed requests
+			return false
+		}
+    }
+    
+    if (!notFound.isEmpty()) {
+	    // didn't find the specified climate
+	    LOG("setProgramSetpoints(): ${notFound} not found for ${statName} (${deviceId})", 1, child, 'warn')
+    }
+    
 	return false
 }
 
