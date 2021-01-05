@@ -79,7 +79,7 @@
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.49" }
+String getVersionNum()		{ return "1.8.51" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
