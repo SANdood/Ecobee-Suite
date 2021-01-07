@@ -2,7 +2,7 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.1.8",
-  "dateReleased": "2020-12-02",
+  "dateReleased": "2021-01-07",
   "releaseNotes": "New `setTHermostatHoldHours` function to change default `holdHours`\nUpdated `setProgramSetpoints()` allows for changing multiple programs at once\nSensor devices now show temperature value instead of motion in the new SmartThings app",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
   "apps": [
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.51"
+      "version": "1.8.52"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -22,7 +22,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.23"
+      "version": "1.8.24"
     },
     {
       "id": "74d41ded-9a35-4916-98e3-2309364b477b",
@@ -40,7 +40,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.22"
+      "version": "1.8.23"
     },
     {
       "id": "cc05b8d1-01b7-449e-b12b-9f56ccbdf23c",
@@ -67,7 +67,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.23"
+      "version": "1.8.24"
     },
     {
       "id": "8d9d8751-6679-4581-b594-41549106c789",
@@ -76,7 +76,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.18"
+      "version": "1.8.19"
     },
     {
       "id": "a07da3bd-6638-4d9a-a739-4efc37273095",
@@ -112,7 +112,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.18"
+      "version": "1.8.19"
     },
     {
       "id": "1438882b-2411-406d-a831-997c4b569c31",
@@ -121,7 +121,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.18"
+      "version": "1.8.19"
     }
   ],
   "drivers": [
