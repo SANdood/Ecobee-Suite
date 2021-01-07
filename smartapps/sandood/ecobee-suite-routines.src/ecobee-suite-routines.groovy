@@ -2,7 +2,7 @@
  *  ecobee Suite Routines
  *
  *  Copyright 2015 Sean Kendall Schneyer
- *	Copyright 2017-2020 Barry A. Burke
+ *	Copyright 2017-2021 Barry A. Burke
  *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
@@ -37,12 +37,13 @@
  *	1.8.19 - Fix switch on()/off()
  *	1.8.20 - Fix runIn() typo
  *	1.8.21 - Don't require doneSwitches, even if no Mode/Routine (could be notify only, I guess)
- *  1.8.22 - Fix getThermostatModes()
+ *	1.8.22 - Fix getThermostatModes()
+ *	1.8.23 - Fix sendMessage() for new Samsung SmartThings app
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.22" }
+String getVersionNum()		{ return "1.8.23" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -975,7 +976,7 @@ void sendMessage(notificationMessage) {
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPush(msg)								// Push to everyone
 			}
 			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
