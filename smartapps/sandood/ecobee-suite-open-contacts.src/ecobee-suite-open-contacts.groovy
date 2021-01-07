@@ -2,7 +2,7 @@
  *  ecobee Suite Open Contacts
  *
  *  Copyright 2016 Sean Kendall Schneyer
- *	Copyright 2017-2020 Barry A. Burke
+ *	Copyright 2017-2021 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License")
  *
@@ -38,10 +38,11 @@
  *	1.8.21 - Miscellaneous updates & fixes
  *	1.8.22 - Expanded label display to include actual thermostatMode
  *	1.8.23 - Fixed label initialization
+ *	1.8.24 - Fixed sendMessage() for new Samsung SmartThings app
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.23" }
+String getVersionNum()		{ return "1.8.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1421,7 +1422,7 @@ void sendMessage(notificationMessage) {
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPush(msg)								// Push to everyone
 			}
 			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
