@@ -38,7 +38,7 @@
  *	1.8.21 - Miscellaneous updates & fixes
  *	1.8.22 - Expanded label display to include actual thermostatMode
  *	1.8.23 - Fixed label initialization
- *	1.8.24 - Fixed sendMessage() for new Samsung SmartThings app
+ *	1.8.24 - Fix sendMessage() for new Samsung SmartThings app
  */
 import groovy.transform.Field
 
