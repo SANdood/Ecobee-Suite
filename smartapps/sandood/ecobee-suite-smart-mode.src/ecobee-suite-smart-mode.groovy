@@ -1,7 +1,7 @@
 /**
  *	Ecobee Suite Smart Mode
  *
- *	Copyright 2018-2020 Justin Leonard, Barry A. Burke
+ *	Copyright 2018-2021 Justin Leonard, Barry A. Burke
  * 
  *	Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *	in compliance with the License. You may obtain a copy of the License at:
@@ -37,11 +37,12 @@
  *	1.8.21 - Fix for multi-word Climate names
  *	1.8.22 - Fix getThermostatPrograms()
  *	1.8.23 - Fix getThermostatModes()
+ *	1.8.24 - Fix sendMessage() for new Samsung SmartThings app
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.23" }
+String getVersionNum()		{ return "1.8.24" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1870,7 +1871,7 @@ void sendMessage(notificationMessage) {
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPush(msg)								// Push to everyone, and always send to Hello Home / Location Event log
 			}
 			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
@@ -1905,7 +1906,7 @@ void sendMessage(notificationMessage) {
 		}
     }
     // Always send to Hello Home / Location Event log
-	if (ST) { 
+	if (ST && (!settings.notify || !settings.pushNotify)) { // (sendPush already logged it, above)
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
