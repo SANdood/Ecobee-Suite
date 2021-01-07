@@ -1,7 +1,7 @@
 /**
  *  ecobee Suite Smart Room
  *
- *  Copyright 2017-2020 Barry A. Burke
+ *  Copyright 2017-2021 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -32,11 +32,12 @@
  *	1.8.16 - Better active/inactive determinations
  *	1.8.17 - Even better active/inactive checks
  *	1.8.18 - Added "Hold" and "Vacation" as valid programs
+ *	1.8.19 - Fix sendMessage() for new Samsung SmartThings app
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.18" }
+String getVersionNum()		{ return "1.8.19" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1074,7 +1075,7 @@ void sendMessage(notificationMessage) {
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPush(msg)								// Push to everyone
 			}
 			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
