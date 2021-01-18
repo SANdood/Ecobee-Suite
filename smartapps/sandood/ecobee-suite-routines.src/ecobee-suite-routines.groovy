@@ -2,7 +2,7 @@
  *  ecobee Suite Routines
  *
  *  Copyright 2015 Sean Kendall Schneyer
- *	Copyright 2017-2020 Barry A. Burke
+ *	Copyright 2017-2021 Barry A. Burke
  *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
@@ -32,11 +32,19 @@
  *	1.8.14 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
  *	1.8.15 - Miscellaneous updates & fixes
  *	1.8.16 - Fix for multi-word Climate names
+ *	1.8.17 - Fix getThermostatPrograms()
+ *	1.8.18 - Allow for no more Routines on SmartThings, don't require runAction or runMode
+ *	1.8.19 - Fix switch on()/off()
+ *	1.8.20 - Fix runIn() typo
+ *	1.8.21 - Don't require doneSwitches, even if no Mode/Routine (could be notify only, I guess)
+ *	1.8.22 - Fix getThermostatModes()
+ *	1.8.23 - Fix sendMessage() for new Samsung SmartThings app
+ *	1.8.24 - Handle Holds for current program that aren't "until next program"
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.16" }
+String getVersionNum()		{ return "1.8.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -233,7 +241,7 @@ def mainPage() {
 						settings?.runModeOrRoutine = 'Mode'
 					}
 					if ((settings.runModeOrRoutine == null) || (settings.runModeOrRoutine == "Mode")) {
-						input(name: "runMode", type: "mode", title: inputTitle("Change Location Mode to: "), required: true, multiple: false, width: 4)
+						input(name: "runMode", type: "mode", title: inputTitle("Change Location Mode to: "), required: false, multiple: false, width: 4, submitOnChange: true)
 					} else if (HE) {
 						paragraph("", width: 6)
 					} else if (ST && settings.runModeOrRoutine == "Routine") {
@@ -241,13 +249,14 @@ def mainPage() {
 						def actions = location.helloHome?.getPhrases()*.label
 						if (actions) {
 							actions.sort()
-							input(name:"runAction", type:"enum", title: inputTitle("Execute this Routine: "), options: actions, required: true, multiple: false)
+							input(name:"runAction", type:"enum", title: inputTitle("Execute this Routine: "), options: actions, required: false, multiple: false, submitOnChange: true)
 						} // End if (actions)
 					} // End if (Routine)
 				} // End else Program --> Mode/Routine
 				// switches
-
-				input(name: 'doneSwitches', type: 'capability.switch', title: inputTitle("Also change these switches (optional)"), required: false, multiple: true, submitOnChange: true)
+				String also = (settings.runMode || settings.runAction) ? "Also c" : "C"
+                //boolean reqd = !settings.runMode && !settings.runAction
+				input(name: 'doneSwitches', type: 'capability.switch', title: inputTitle("${also}hange these switches (optional)"), required: false, multiple: true, submitOnChange: true)
 				if (settings.doneSwitches) {
 					def s = (settings.doneSwitches.size() > 1)
 					input(name: "doneOn", type: "enum", title: inputTitle("Turn the Switch${s?'es':''}:"), required: true, multiple: false, defaultValue: 'off', options: ["on","off"], 
@@ -500,10 +509,10 @@ def changeSwitchHandler(evt) {
 	if (settings.modeOrRoutine && (settings.modeOrRoutine != 'Ecobee Program')) {
 		changeProgramHandler( evt )
 	} else {
-		if ((settings.runModeOrRoutine == null) || (settings.runModeOrRoutine == "Mode")) {
+		if (!settings.runModeOrRoutine || ((settings.runModeOrRoutine == "Mode") && settings.runMode)) {
 			LOG("Changing Mode to ${settings.runMode} because ${evt.device.displayName} was turned ${settings.startOn}",2,null,'info')
 			changeMode(true) 
-		} else {
+		} else if (settings.runModeOrRoutine && (settings.runModeOrRoutine == "Routine") && settings.runAction) {
 			LOG("Executing Routine ${settings.runAction} because ${evt.device.displayName} was turned ${settings.startOn}",2,null,'info')
 			runRoutine(true) 
 		}
@@ -550,7 +559,7 @@ def changeSTHandler(evt) {
         	atomicState.ecobeeThatChanged = evt.displayName
             atomicState.ecobeeNewProgram = evt.value
         }
-    	if (settings.runModeOrRoutine == "Mode") {
+        if (!settings.runModeOrRoutine || ((settings.runModeOrRoutine == "Mode") && settings.runMode)) {
         	LOG("Changing Mode to ${settings.runMode} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}",2,null,'info')
         	if (settings.myThermostats.size() == 1) { 
             	changeMode() 
@@ -560,7 +569,7 @@ def changeSTHandler(evt) {
                 parent.poll()
             	runIn(5, changeMode, [overwrite: true]) 
             }	
-        } else {
+        } else if (settings.runModeOrRoutine && (settings.runModeOrRoutine == "Routine") && settings.runAction) {
         	LOG("Executing Routine ${settings.runAction} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}",2,null,'info')
         	if (settings.myThermostats.size() == 1) { 
             	runRoutine() 
@@ -569,55 +578,61 @@ def changeSTHandler(evt) {
             	runIn(10, runRoutine, [overwrite: true]) 
             }
         }
-		if (settings.doneSwitches) runin(15, changeSwitches, [overwrite: true])
+		if (settings.doneSwitches) runIn(15, changeSwitches, [overwrite: true])
     }
 }
 
 void changeMode(aSwitch = null) {
-	if (aSwitch != null) {
-		if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
-			if (location.modes?.find {it.name == settings.runMode}) {
-				sendMessage("Changing Mode to ${settings.runMode} because ${aSwitch} was turned ${settings.startOn}")
-				location.setMode(settings.runMode)
-			} else {
-				sendMessage("${aSwitch} was turned ${settings.startOn}, but the requested Mode change (${settings.runMode}) is no longer supported by this location")
-			}
-		} else {
-			sendMessage("${aSwitch} was turned ${settings.startOn}, and your location is already in the requested ${settings.runMode} mode")
-		}
-	} else {
-		if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
-			if (atomicState.ecobeeThatChanged) {
-				if (location.modes?.find {it.name == settings.runMode}) {
-					sendMessage("Changing Mode to ${settings.runMode} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}")
-					location.setMode(settings.runMode)
-				} else {
-					sendMessage("${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}, but the requested Mode change (${settings.runMode}) is no longer supported by this location")
-				}
-			}
-		} else {
-			sendMessage("${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}, and your location is already in the requested ${settings.runMode} mode")
-		}
-		atomicState.ecobeeThatChanged = null
-	}
+	if (settings.runMode) {
+        if (aSwitch != null) {
+            if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
+                if (location.modes?.find {it.name == settings.runMode}) {
+                    sendMessage("Changing Mode to ${settings.runMode} because ${aSwitch} was turned ${settings.startOn}")
+                    location.setMode(settings.runMode)
+                } else {
+                    sendMessage("${aSwitch} was turned ${settings.startOn}, but the requested Mode change (${settings.runMode}) is no longer supported by this location")
+                }
+            } else {
+                sendMessage("${aSwitch} was turned ${settings.startOn}, and your location is already in the requested ${settings.runMode} mode")
+            }
+        } else {
+            if (settings.runMode != location.mode) { 	// only if we aren't already in the specified Mode
+                if (atomicState.ecobeeThatChanged) {
+                    if (location.modes?.find {it.name == settings.runMode}) {
+                        sendMessage("Changing Mode to ${settings.runMode} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}")
+                        location.setMode(settings.runMode)
+                    } else {
+                        sendMessage("${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}, but the requested Mode change (${settings.runMode}) is no longer supported by this location")
+                    }
+                }
+            } else {
+                sendMessage("${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}, and your location is already in the requested ${settings.runMode} mode")
+            }
+            atomicState.ecobeeThatChanged = null
+        }
+    }
 }
 
 void runRoutine(aSwitch = null) {
-	if (aSwitch != null) {
-		sendMessage("Executing Routine ${settings.runAction} because ${aSwitch} was turned ${settings.startOn}")
-	} else {
-		if (atomicState.ecobeeThatChanged) {
-			sendMessage("Executing Routine ${settings.runAction} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}")
-    		atomicState.ecobeeThatChanged = null
-		}
-	}
-	location.helloHome?.execute(settings.runAction)
+    if (settings.runAction) {
+        if (aSwitch != null) {
+            sendMessage("Executing Routine ${settings.runAction} because ${aSwitch} was turned ${settings.startOn}")
+        } else {
+            if (atomicState.ecobeeThatChanged) {
+                sendMessage("Executing Routine ${settings.runAction} because ${atomicState.ecobeeThatChanged} changed to ${atomicState.ecobeeNewProgram}")
+                atomicState.ecobeeThatChanged = null
+            }
+        }
+        location.helloHome?.execute(settings.runAction)
+    }
 }
 
 void changeSwitches() {
 	if (settings.doneSwitches) {
 		settings.doneSwitches.each() {
-			it."${doneOn}()"
+			//it."${settings.doneOn}"()
+            if (settings.doneOn == 'on') it.on()
+            else it.off()
 		}
 		def s = settings.doneSwitches.size() > 1
 		sendMessage("Plus, I made sure that the ${s?'switches':'switch'} ${settings.doneSwitches.toString()[1..-2]} ${s?'are all':'is'} ${settings.doneOn}")
@@ -681,7 +696,7 @@ def changeProgramHandler(evt) {
         			boolean done = false
         			// def currentProgram = stat.currentValue('currentProgram')
         			String currentProgramName = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)	// cancelProgram() will reset the currentProgramName to the scheduledProgramName
-        			if (((thermostatHold == null) || (thermostatHold == '') || (thermostatHold == 'null')) && (currentProgramName == atomicState.programParam)) {
+        			if (((thermostatHold == null) || (thermostatHold == '') || (thermostatHold == 'null')) && (currentProgramName == atomicState.programParam) && (settings.holdType == "Until Next Program")) {
                     	// not in a hold, currentProgram is the desiredProgram
                 		boolean fanSet = false
                 		if (atomicState.fanMinutes != null) {
@@ -860,10 +875,10 @@ String whatHoldType(statDevice) {
 // Helper Functions
 // get the combined set of Ecobee Programs applicable for these thermostats
 List getThermostatPrograms() {
-	def programs
+	List programs = []
 	if (settings.myThermostats?.size() > 0) {
 		settings.myThermostats.each { stat ->
-        	def progs = []
+        	List progs = []
         	String cl = stat.currentValue('climatesList')
     			if (cl && (cl != '[]')) {
         		progs = cl[1..-2].split(', ')
@@ -885,16 +900,26 @@ List getThermostatPrograms() {
 
 // return all the modes that ALL thermostats support
 List getThermostatModes() {
-	def theModes = []
-    
-    settings.myThermostats.each { stat ->
-    	if (theModes == []) {
-        	theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", ")
+	def statModes = []
+	settings.thermostats?.each { stat ->
+        if (HE) {
+            def tm = stat.currentValue('supportedThermostatModes')
+            if (statModes == []) {	
+                if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+            } else {
+                def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
+                if (nm) statModes = statModes.intersect(nm)
+            }
         } else {
-        	theModes = theModes.intersect(stat.currentValue('supportedThermostatModes')[1..-2].tokenize(", "))
-        }   
-    }
-    return theModes.sort(false)
+            def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+            if (statModes == []) {	
+                if (tm) statModes = tm
+            } else {
+                if (tm) statModes = statModes.intersect(tm)
+            }
+        }
+	}
+	return statModes.sort(false)
 }
 boolean notifyNowOK() {
 	// If both provided, both must be true; else only the provided one needs to be true
@@ -952,7 +977,7 @@ void sendMessage(notificationMessage) {
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPush(msg)								// Push to everyone
 			}
 			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
