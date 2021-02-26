@@ -46,8 +46,10 @@
  *	1.8.17 - Remove debugging "log.error" in generateEvent()
  *  1.8.18 - Added Eco+ event handling
  *	1.8.19 - Added setThermostatHoldHours() entry point
+ *	1.8.20 - Allow multiple programs to be adjusted in setProgramSetpoints()
+ *	1.8.21 - Fix 1.8.20 changes to work on SmartThings (different version of Groovy from Hubitat)
  */
-String getVersionNum() 		{ return "1.8.19" }
+String getVersionNum() 		{ return "1.8.21" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -3397,25 +3399,29 @@ void cancelDemandResponse() {
 }
 
 // Climate change commands
-void setProgramSetpoints(String programName, heatingSetpoint, coolingSetpoint) {
+void setProgramSetpoints(Object... programData) {
 	def scale = temperatureScale
-	LOG("setProgramSetpoints( ${programName}, heatSP: ${heatingSetpoint}°${scale}, coolSP: ${coolingSetpoint}°${scale} )",2,null,'info')
+	LOG("setProgramSetpoints( ${programData} )",2,null,'info')
 	String deviceId = getDeviceId()
-    String heatSP = heatingSetpoint ? heatingSetpoint.toString() : ""
-    String coolSP = coolingSetpoint ? coolingSetpoint.toString() : ""
-	if (parent.setProgramSetpoints( this, deviceId, programName, heatSP, coolSP)) {
+	List<String> programDataList = programData as List<String>
+	if (parent.setProgramSetpoints( this, deviceId, programDataList)) {
     	LOG("setProgramSetpoints() SUCCEEDED!!!",2,null,'trace')
-    	String currentProgram = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
-		if ( currentProgram == programName) { 
-			def updates = []
-			if (coolSP) updates << [coolingSetpoint: coolSP]
-			if (heatSP) updates << [heatingSetpoint: heatSP]
-			if (updates != []) generateEvent(updates)
+        String currentProgram = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
+		for (int i = 0; i < programDataList.size(); i += 3) {
+            String programName = programDataList[i].toString()
+			if ( currentProgram == programName) { 
+                String heatSP = programDataList[i+1].toString()
+                String coolSP = programDataList[i+2].toString()
+				def updates = []
+				if (coolSP) updates << [coolingSetpoint: coolSP]
+				if (heatSP) updates << [heatingSetpoint: heatSP]
+				if (updates != []) generateEvent(updates)
+                break
+			}
 		}
 		LOG("setProgramSetpoints() - completed",3,null,'trace')
 	} else LOG("setProgramSetpoints() - failed",1,null,'warn')
 }
-
 void setEcobeeSetting( String name, value ) {
 	def result
 	def dItem = EcobeeDirectSettings.find{ it.name == name }
