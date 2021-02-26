@@ -1,7 +1,7 @@
 /**
  *	Based on original code Copyright 2015 SmartThings 
  *	Additional changes Copyright 2016 Sean Kendall Schneyer
- *	Additional changes Copyright 2017, 2018, 2019 Barry A. Burke
+ *	Additional changes Copyright 2017, 2018, 2019, 2020, 2021 Barry A. Burke
  *
  *	Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *	in compliance with the License. You may obtain a copy of the License at:
@@ -17,53 +17,10 @@
  *	Original Author: scott
  *	Date: 2013
  *
- *	Updates by Barry A. Burke (storageanarchy@gmail.com) 2016 - 2020
+ *	Updates by Barry A. Burke (storageanarchy@gmail.com) 2016 - 2021
  *
  *	See Github Changelog for complete change history
  *	<snip>
- *	1.8.00 - Version synchronization, new Smart Humidity Helper, updated settings look & feel
- *	1.8.01 - General Release
- *	1.8.02 - Fixed smartAuto settings bug
- *	1.8.03 - Updated WARNING & NOTE: formatting
- *	1.8.04 - Fix holdEndDate during transitions; supportedThermostatModes initialization loophole 
- *	1.8.05 - Fix attribute initialization logic
- *	1.8.06 - Fix thermostatAsSensor selection page
- *	1.8.07 - Improve http error handling
- *	1.8.08 - More busy bees
- *	1.8.09 - Reworked stat.generateEvent()
- *	1.8.10 - Optimized & hardened initialize()
- *	1.8.11 - More optimizations
- *	1.1.12 - Even more optimizations
- *	1.8.13 - Send simultaneous notification Announcements to multiple Echo Speaks devices
- *	1.8.14 - Notification devices are no longer required (but still highly recommended)
- *	1.8.15 - New SHPL, using Global Fields instead of atomicState
- *	1.8.16 - Tightened up httpGet/httpPost response handling
- *	1.8.17 - Fixed latent installation error (a=again)
- *	1.8.18 - Fixed mixed Notification devices in sendMessage
- *	1.8.19 - Turn off extraneous debug logging
- *	1.8.20 - Misc optimizations and tweaks
- *	1.8.21 - Hotfix to fix skipTime during initialization
- *	1.8.22 - Optimize setProgram & resumeProgram
- *	1.8.23 - Refactored sendMessage / sendNotifications
- *	1.8.24 - Refactored response handling
- *	1.8.25 - Fixed weather not updating
- *	1.8.26 - Added global vs. helper pause (helpers can override global wasAlreadyPaused)
- *	1.8.27 - Refactored update collection and queueing, schedule/schedText now sent independently from ESM, clear callQueue when ESM is re-initialized
- *	1.8.28 - HOTFIX: fix to show thermostat names in live logging
- *	1.8.29 - HOTFIX: setHold JSON error
- *	1.8.30 - HOTFIX: for auth error on SmartThings
- *	1.8.31 - Updated formatting; added Do Not Disturb Modes & Time window
- *	1.8.32 - Fixed attribute updates (typo && (null == false))
- *	1.8.33 - Optimized sensorStates into a single Map
- *	1.8.34 - HOTFIX: typo causing extraneous updates to statInfo attributes
- *	1.8.35 - HOTFIX: fixed disconnected notification message
- *	1.8.36 - HOTFIX: updated sendNotifications() for latest Echo Speaks Device version 3.6.2.0
- *	1.8.37 - HOTFIX: log new "touSetback" event
- *	1.8.38 - Miscellaneous updates & fixes
- *	1.8.38a- HOTFIX: Data type error (rare)
- *	1.8.38b- HOTFIX: Tag thermostatHolds sooner
- *	1.8.39 - Optimized stat.settings change detection
- *	1.8.40 - Better error handling for new installations
  *	1.8.41 - Rename Smart Switch/Dimmer/Vent to Switch/Dimmer/Fan
  *	1.8.42 - Fix conversion error in setProgramSetpoints()
  *	1.8.43 - Optimize zipCode, timeZone, sunRise/sunSet and weatherStation handling
@@ -72,11 +29,16 @@
  *	1.8.46 - Get thermostat.programs at x:03 and x:33 (when programs change)
  *	1.8.47 - Handle demandResponsePrecool/Preheat Eco+ events
  *	1.8.48 - Handle heatPump-only heat/cool installation (no aux heat)
+ *	1.8.49 - Handle Eco+ preCool/preHeat events
+ *	1.8.50 - Fix Debug Dashboard error
+ *	1.8.51 - Allow changing multiple programs' setpoints in setProgramSetpoints()
+ *	1.8.52 - Fix sendMessage() for new Samsung SmartThings app
+ *	1.8.53 - Fix 1.8.51 changes to work on SmartThings (different version of Groovy from Hubitat)
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.48" }
+String getVersionNum()		{ return "1.8.53" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -655,7 +617,7 @@ def debugDashboardPage() {
 	LOG("=====> debugDashboardPage() entered.", 5)	  
 	
 	dynamicPage(name: "debugDashboardPage", title: "") {
-		section(getVersionLabel())
+		section(getVersionLabel()) {}
 		section(sectionTitle("Commands")) {
 			href(name: "pollChildrenPage", title: "", required: false, page: "pollChildrenPage", description: "Tap to execute: pollChildren()")
 			href(name: "refreshAuthTokenPage", title: "", required: false, page: "refreshAuthTokenPage", description: "Tap to execute: refreshAuthToken()")
@@ -4001,10 +3963,21 @@ void updateThermostatData() {
                         currentClimateId = runningEvent.name as String
                         currentClimateType = 'program'
                         break;
+                    case 'touPrecool':
+                    case 'touPreheat':
+                    	currentClimateName = 'Hold: Eco+ Prep'
+                        currentClimateOwner = 'ecoPlus'
+                        currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco' : 'Eco!'		// Tag mandatory DR events
+                        currentClimateId = runningEvent.name as String
+                        currentClimateType = 'program'
+                        break;
                     case 'touSetback':
                     	// Time of Use setback - pre-cooling/heating when the power is (supposedly) less expensive
-                    	currentClimateName = 'touSetback'
+                        currentClimateName = ((runningEvent.coolRelativeTemp < 0) || (runningEvent.heatRelativeTemp < 0)) ? 'Hold: Eco+ Prep' : 'Hold: Eco+'
                         currentClimateOwner = 'ecoPlus'
+                        currentClimate = ((runningEvent.isOptional != null) && ((runningEvent.isOptional == true) || (runningEvent.isOptional == 'true'))) ? 'Eco+' : 'Eco+!'		// Tag mandatory DR events
+                        currentClimateId = runningEvent.name as String
+                        currentClimateType = 'program'
                         //log.debug "PLEASE SEND THIS TO BARRY: touSetback event: ${runningEvent}"
                         break;
                     default:		
@@ -5891,8 +5864,10 @@ boolean updateSensorPrograms(child, deviceId, sensorId, List activeList, List in
     }
 }
 
-boolean setProgramSetpoints(child, String deviceId, String programName, String heatingSetpoint, String coolingSetpoint) {
+//boolean setProgramSetpoints(child, String deviceId, Object... programData) {
+boolean setProgramSetpoints(child, String deviceId, List programData) {
 	// boolean debugLevelFour = debugLevel(4)
+	// log.debug "setProgramCheckPoints( ${child}, ${deviceId}, ${programData} ) - ${programData[0]}, ${programData[1]}, ${programData[2]}"
     
 	if (child == null) child = getChildDevice(getThermostatDNI(deviceId))
     String statName = child.device.displayName
@@ -5903,63 +5878,80 @@ boolean setProgramSetpoints(child, String deviceId, String programName, String h
 		queueFailedCall('setProgramSetpoints', child.device.deviceNetworkId, 4, deviceId, programName, heatingSetpoint, coolingSetpoint)
 		return false
 	}
-	
-	LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName}, heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})", 2, child, 'info')
-	
+    
     def program = [currentClimateRef:atomicState.currentClimateRef[deviceId],
-    			   climates:atomicState.climates[deviceId],
-        		   schedule:atomicState.schedule[deviceId]] as HashMap
+					   climates:atomicState.climates[deviceId],
+					   schedule:atomicState.schedule[deviceId]] as HashMap
 	if (!program) {
 		return false
 	}
-	
-	// convert C temps to F
-	def isMetric = (temperatureScale == "C")
-	def ht = (heatingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(heatingSetpoint as BigDecimal) * 10.0) : ((heatingSetpoint as BigDecimal) * 10.0)), 0)) : null )		// better precision using BigDecimal round-half-up
-	def ct = (coolingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(coolingSetpoint as BigDecimal) * 10.0) : ((coolingSetpoint as BigDecimal) * 10.0)), 0)) : null )
-	
-	// IFF autoHeatCoolFeatureEnabled, then enforce the minimum delta
-    def hasAutoMode = atomicState.settings ? atomicState.settings[deviceId].autoHeatCoolFeatureEnabled : false
-	def delta = !hasAutoMode ? 0.0 : (atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null)
-	if (hasAutoMode && (delta != null) && (ht != null) && (ct != null) && (ht <= ct) && ((ct - ht) < delta)) {
-		LOG("setProgramSetpoints() - Error: Auto Mode is enabled on ${statName}, heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
-		return false
-	}
+    
+    Set found = new HashSet()
+    Set notFound = new HashSet()
+    for (int paramIdx = 0; paramIdx < programData.size(); paramIdx += 3) {
+	//for (int paramIdx = 0; (programData[paramIdx] && (programData[paramIdx].toString() != "")); paramIdx += 3) {
+        String programName = programData[paramIdx].toString()
+        String heatingSetpoint = programData[paramIdx + 1].toString()
+        String coolingSetpoint = programData[paramIdx + 2].toString()
+        notFound.add(programName)
+		LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName}, heatSP: ${heatingSetpoint}, coolSP: ${coolingSetpoint})", 2, child, 'info')
 		
-	int c = 0
-	while ( program.climates[c] ) {	
-		if ((program.climates[c].name == programName) || (program.climates[c].climateRef == programName)) { 	// Allow search by programName or programIc
-        	// found the program we want to change
-			def heatTemp = program.climates[c]?.heatTemp
-			def coolTemp = program.climates[c]?.coolTemp
-			def adjusted = ''
-			// If we have both ht & ct and we support Auto Mode, we already know the delta is good
-			// but if we only have 1, we need to determine the valid value for the other
-            // if no Auto mode, we just copy the current value over, otherwise we adjust it
-			if (!ct) {
-				ct = (!hasAutoMode && coolTemp) ? coolTemp : ((!coolTemp || ((coolTemp - ht) < delta)) ? (ht + delta) : coolTemp)
-				if (hasAutoMode && (!coolingSetpoint || (ct != cooltemp))) adjusted = 'cool'
-			} else if (!ht) {
-				ht = (!hasAutoMode && heatTemp) ? heatTemp : ((!heatTemp || ((ct - heatTemp) < delta)) ? (ct - delta) : heatTemp)
-				if (hasAutoMode && (!heatingSetpoint || (ht != heatTemp))) adjusted = 'heat'
-			}
-			LOG("setProgramSetpoints(${programName}) - heatingSetpoint: ${ht/10}°F ${adjusted=='heat'?'(adjusted)':''}, coolingSetpoint: ${ct/10}°F ${adjusted=='cool'?'(adjusted)':''}${adjusted?', minDelta: '+(delta/10).toString()+'°F':''}",2,child,'info')
-			program.climates[c].heatTemp = ht
-			program.climates[c].coolTemp = ct
-
-			if (updateProgramDirect( child, deviceId, program )) {
-				LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName} setpoints change - Succeeded", 2, child, 'info')
-				return true
-			} else {
-				LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${programName} setpoints change - Failed", 1, child, 'warn')
-				// updateProgramDirect() will queue failed requests
-				return false
-			}
+		// convert C temps to F
+		def isMetric = (temperatureScale == "C")
+		def ht = (heatingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(heatingSetpoint as BigDecimal) * 10.0) : ((heatingSetpoint as BigDecimal) * 10.0)), 0)) : null )		// better precision using BigDecimal round-half-up
+		def ct = (coolingSetpoint?.isBigDecimal() ? (roundIt((isMetric ? (cToF(coolingSetpoint as BigDecimal) * 10.0) : ((coolingSetpoint as BigDecimal) * 10.0)), 0)) : null )
+		
+		// IFF autoHeatCoolFeatureEnabled, then enforce the minimum delta
+		def hasAutoMode = atomicState.settings ? atomicState.settings[deviceId].autoHeatCoolFeatureEnabled : false
+		def delta = !hasAutoMode ? 0.0 : (atomicState.settings ? atomicState.settings[deviceId]?.heatCoolMinDelta : null)
+		if (hasAutoMode && (delta != null) && (ht != null) && (ct != null) && (ht <= ct) && ((ct - ht) < delta)) {
+			LOG("setProgramSetpoints() - Error: Auto Mode is enabled on ${statName}, heating/cooling setpoints must be at least ${delta/10}°F apart.",1,child,'error')
+			return false
 		}
-		c++
+			
+		int c = 0
+		while ( program.climates[c] ) {	
+			if ((program.climates[c].name == programName) || (program.climates[c].climateRef == programName)) { 	// Allow search by programName or programIc
+				// found the program we want to change
+                found.add(programName)
+                notFound.remove(programName)
+				def heatTemp = program.climates[c]?.heatTemp
+				def coolTemp = program.climates[c]?.coolTemp
+				def adjusted = ''
+				// If we have both ht & ct and we support Auto Mode, we already know the delta is good
+				// but if we only have 1, we need to determine the valid value for the other
+				// if no Auto mode, we just copy the current value over, otherwise we adjust it
+				if (!ct) {
+					ct = (!hasAutoMode && coolTemp) ? coolTemp : ((!coolTemp || ((coolTemp - ht) < delta)) ? (ht + delta) : coolTemp)
+					if (hasAutoMode && (!coolingSetpoint || (ct != cooltemp))) adjusted = 'cool'
+				} else if (!ht) {
+					ht = (!hasAutoMode && heatTemp) ? heatTemp : ((!heatTemp || ((ct - heatTemp) < delta)) ? (ct - delta) : heatTemp)
+					if (hasAutoMode && (!heatingSetpoint || (ht != heatTemp))) adjusted = 'heat'
+				}
+				LOG("setProgramSetpoints(${programName}) - heatingSetpoint: ${ht/10}°F ${adjusted=='heat'?'(adjusted)':''}, coolingSetpoint: ${ct/10}°F ${adjusted=='cool'?'(adjusted)':''}${adjusted?', minDelta: '+(delta/10).toString()+'°F':''}",2,child,'info')
+				program.climates[c].heatTemp = ht
+				program.climates[c].coolTemp = ct
+			}
+			c++
+		}
 	}
-	// didn't find the specified climate
-	LOG("setProgramSetpoints(): ${programName} not found for ${statName} (${deviceId})", 1, child, 'warn')
+    
+    if (!found.isEmpty()) {
+        if (updateProgramDirect( child, deviceId, program )) {
+			LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${found} setpoints change - Succeeded", 2, child, 'info')
+			return true
+		} else {
+			LOG("setProgramSetpoints() for ${statName} (${deviceId}): ${found} setpoints change - Failed", 1, child, 'warn')
+			// updateProgramDirect() will queue failed requests
+			return false
+		}
+    }
+    
+    if (!notFound.isEmpty()) {
+	    // didn't find the specified climate
+	    LOG("setProgramSetpoints(): ${notFound} not found for ${statName} (${deviceId})", 1, child, 'warn')
+    }
+    
 	return false
 }
 
@@ -6386,7 +6378,7 @@ void sendMessage(String notificationMessage) {
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPushMessage(msg)								// Push to everyone
+				sendPush(msg)								// Push to everyone (and log it, else the new SmartThings app won't push it)
 			}
 			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
@@ -6402,7 +6394,7 @@ void sendMessage(String notificationMessage) {
 				}
 			}
 			// Always send to Hello Home / Location Event log
-			sendNotificationEvent( notificationMessage )
+			if (msg != notificationMessage) sendNotificationEvent( notificationMessage )
 		} else {		// HE
 			if (settings.notifiers) {
                 sendNotifications(msgPrefix, notificationMessage)               
