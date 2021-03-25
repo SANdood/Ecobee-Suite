@@ -1,9 +1,9 @@
 {
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
-  "minimumHEVersion": "2.1.8",
-  "dateReleased": "2021-01-07",
-  "releaseNotes": "New `setTHermostatHoldHours` function to change default `holdHours`\nUpdated `setProgramSetpoints()` allows for changing multiple programs at once\nSensor devices now show temperature value instead of motion in the new SmartThings app",
+  "minimumHEVersion": "2.2.6",
+  "dateReleased": "2021-03-25",
+  "releaseNotes": "Fix setProgramSetpoints(), setSchedule(), & schedule attribute",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.52"
+      "version": "1.8.54"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.8.20"
+      "version": "1.8.22"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
