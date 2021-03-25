@@ -44,11 +44,13 @@
  *	1.8.15 - Fix Hold programs check
  *	1.8.16 - Remove whitespace from thermostatMode & fanMode (Hubitat Dashboard adds extra " " to fanMode)
  *	1.8.17 - Remove debugging "log.error" in generateEvent()
- *  1.8.18 - Added Eco+ event handling
+ *	1.8.18 - Added Eco+ event handling
  *	1.8.19 - Added setThermostatHoldHours() entry point
  *	1.8.20 - Allow multiple programs to be adjusted in setProgramSetpoints()
+ *	1.8.21 - Fix 1.8.20 changes to work on SmartThings (different version of Groovy from Hubitat)
+ *	1.8.22 - Added setSchedule() and schedule attributes for HE 2.2.6.***
  */
-String getVersionNum() 		{ return "1.8.20" }
+String getVersionNum() 		{ return "1.8.22" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -234,7 +236,7 @@ metadata {
 		attribute 'randomStartDelayHeat', 					'STRING'
 		attribute 'remindMeDate', 							'STRING'
 		attribute 'schedText', 								'STRING'
-		//attribute 'schedule', 							'STRING'		// 'currentProgramName' + 'until XXXX' if is a Hold
+		if (HE) attribute 'schedule', 						'STRING'		// 'currentProgramName' + 'until XXXX' if is a Hold
 		attribute 'scheduledProgram',						'STRING'
 		attribute 'scheduledProgramId',						'STRING'
 		attribute 'scheduledProgramName', 					'STRING'
@@ -367,7 +369,9 @@ metadata {
 											 [name:'Cooling Setpoint*', type:'NUMBER', description:'Cooling setpoint temperature']]
 		}
 		
-		// command "setSchedule"			['JSON_OBJECT']
+		if (!isST) {
+			command "setSchedule",			[[name:'Schedule JSON', type:'JSON_OBJECT', description:'Enter desired schedule (JSON)']]
+		}
 		// command "setThermostatFanMode"	['STRING']
 		// command "setThermostatMode"		['STRING']
         if (isST) {
@@ -3402,14 +3406,15 @@ void setProgramSetpoints(Object... programData) {
 	def scale = temperatureScale
 	LOG("setProgramSetpoints( ${programData} )",2,null,'info')
 	String deviceId = getDeviceId()
-	if (parent.setProgramSetpoints( this, deviceId, programData)) {
+	List<String> programDataList = programData as List<String>
+	if (parent.setProgramSetpoints( this, deviceId, programDataList)) {
     	LOG("setProgramSetpoints() SUCCEEDED!!!",2,null,'trace')
         String currentProgram = ST ? device.currentValue('currentProgram') : device.currentValue('currentProgram', true)
-		for (int i = 0; i < programData.length; i += 3) {
-            String programName = programData[i].toString()
+		for (int i = 0; i < programDataList.size(); i += 3) {
+            String programName = programDataList[i].toString()
 			if ( currentProgram == programName) { 
-                String heatSP = programData[i+1].toString()
-                String coolSP = programData[i+2].toString()
+                String heatSP = programDataList[i+1].toString()
+                String coolSP = programDataList[i+2].toString()
 				def updates = []
 				if (coolSP) updates << [coolingSetpoint: coolSP]
 				if (heatSP) updates << [heatingSetpoint: heatSP]
