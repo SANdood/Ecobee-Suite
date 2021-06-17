@@ -145,7 +145,7 @@
       "id": "6f2a5735-8312-4aef-a7f9-637c6279fd83",
       "name": "Ecobee Suite Switch",
 	  "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/devicetypes/dcmeglio/ecobee-suite-switch.src/ecobee-suite-switchr.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/devicetypes/dcmeglio/ecobee-suite-switch.src/ecobee-suite-switch.groovy",
       "required": true,
       "version": "1.8.01"
     }
