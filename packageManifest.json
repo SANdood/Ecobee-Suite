@@ -148,7 +148,7 @@
       "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/devicetypes/dcmeglio/ecobee-suite-switch.src/ecobee-suite-switch.groovy",
       "required": true,
       "version": "1.8.01"
-    }
+    },
     {
       "id": "71a545f8-bfe1-4cff-aeb3-59f5bde16e6d",
       "name": "EcoNet Vent",
