@@ -33,11 +33,12 @@
  *	1.8.50 - Fix Debug Dashboard error
  *	1.8.51 - Allow changing multiple programs' setpoints in setProgramSetpoints()
  *	1.8.52 - Fix sendMessage() for new Samsung SmartThings app
+ *	1.8.53 - Fix 1.8.51 changes to work on SmartThings (different version of Groovy from Hubitat)
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.52" }
+String getVersionNum()		{ return "1.8.53" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -6185,8 +6186,10 @@ boolean updateSensorPrograms(child, deviceId, sensorId, List activeList, List in
     }
 }
 
-boolean setProgramSetpoints(child, String deviceId, Object... programData) {
+//boolean setProgramSetpoints(child, String deviceId, Object... programData) {
+boolean setProgramSetpoints(child, String deviceId, List programData) {
 	// boolean debugLevelFour = debugLevel(4)
+	// log.debug "setProgramCheckPoints( ${child}, ${deviceId}, ${programData} ) - ${programData[0]}, ${programData[1]}, ${programData[2]}"
     
 	if (child == null) child = getChildDevice(getThermostatDNI(deviceId))
     String statName = child.device.displayName
@@ -6207,7 +6210,8 @@ boolean setProgramSetpoints(child, String deviceId, Object... programData) {
     
     Set found = new HashSet()
     Set notFound = new HashSet()
-    for (int paramIdx = 0; paramIdx < programData.length; paramIdx += 3) {
+    for (int paramIdx = 0; paramIdx < programData.size(); paramIdx += 3) {
+	//for (int paramIdx = 0; (programData[paramIdx] && (programData[paramIdx].toString() != "")); paramIdx += 3) {
         String programName = programData[paramIdx].toString()
         String heatingSetpoint = programData[paramIdx + 1].toString()
         String coolingSetpoint = programData[paramIdx + 2].toString()
