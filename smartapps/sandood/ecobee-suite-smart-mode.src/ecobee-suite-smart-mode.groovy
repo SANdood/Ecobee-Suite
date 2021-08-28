@@ -38,12 +38,12 @@
  *	1.8.22 - Fix getThermostatPrograms()
  *	1.8.23 - Fix getThermostatModes()
  *	1.8.24 - Fix sendMessage() for new Samsung SmartThings app
- *  1.8.25 - Attempt to fix NP error at line 1286
+ *  	1.8.25a - Attempt to fix NP error at line 1286 (fixed Typo)
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.25" }
+String getVersionNum()		{ return "1.8.25a" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1289,7 +1289,7 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
 			// somebody else has a reservation - we have to wait
 			// def pendedUpdates = atomicState.pendedUpdates as Map
             Map pendedUpdates = [:].withDefault {[]}
-            if (atomicSate.pendedUpdates) pendedUpdates = atomicState.pendedUpdates as Map
+            if (atomicState.pendedUpdates) pendedUpdates = atomicState.pendedUpdates as Map
 			pendedUpdates[tid] = [program: program, heat: heatTemp, cool: coolTemp]
 			atomicStates.pendedUpdates = pendedUpdates
 			subscribe(stat, 'climatesUpdated', programWaitHandler)
