@@ -2,8 +2,8 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.2.6",
-  "dateReleased": "2021-03-25",
-  "releaseNotes": "Fix setProgramSetpoints(), setSchedule(), & schedule attribute",
+  "dateReleased": "2021-09-01",
+  "releaseNotes": "Fixed issue with Smart Mode not changing setpoints",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
   "apps": [
     {
@@ -67,7 +67,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.24"
+      "version": "1.8.25"
     },
     {
       "id": "8d9d8751-6679-4581-b594-41549106c789",
