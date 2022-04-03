@@ -38,7 +38,7 @@
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.19" }
+String getVersionNum()		{ return "1.8.20" }
 String getVersionLabel() 	{ return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
