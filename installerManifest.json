@@ -1,4 +1,4 @@
-{
+ {
 	"namespace":	"sandood",
 	"repoOwner": 	"SANdood",
 	"repoName": 	"Ecobee-Suite",
@@ -16,14 +16,14 @@
 		"thermostat", 
 		"hvac"
 	],
-	"notes": 	"Fixed issues with Smart Mode changing setpoints",
+	"notes": 	"Fixed issues with using HoldHours, reconfiguration, and dehumidifier status updates",
 	"smartApps": {
 		"parent": {
 			"name": 	"Ecobee Suite Manager",
 			"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 			"published": 	true,
 			"oAuth":	true,
-			"version": 	"1.8.54",
+			"version": 	"1.8.55",
 			"appSettings": 	{ },
 			"appUrl": 	"smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
 			"optional": 	false
@@ -42,7 +42,7 @@
 				"name": 	"ecobee Suite Quiet Time",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.09",
+				"version": 	"1.8.10",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
 				"optional": 	false
@@ -51,7 +51,7 @@
 				"name": 	"ecobee Suite Routines",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.23",
+				"version": 	"1.8.24",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
 				"optional": 	false
@@ -78,7 +78,7 @@
 				"name": 	"ecobee Suite Smart Mode",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.25",
+				"version": 	"1.8.26",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-mode.groovy",
 				"optional": 	false
@@ -132,7 +132,7 @@
 				"name": 	"ecobee Suite Working From Home",
 				"iconUrl": 	"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 				"published": 	true,
-				"version": 	"1.8.19",
+				"version": 	"1.8.20",
 				"appSettings": 	{ },
 				"appUrl": 	"smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
 				"optional": 	false
