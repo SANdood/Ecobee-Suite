@@ -39,11 +39,12 @@
  *	1.8.23 - Fix getThermostatModes()
  *	1.8.24 - Fix sendMessage() for new Samsung SmartThings app
  * 	1.8.25 - Fixed setpoint adjustments for "middle" tange
+ *	1.8.26 - Fix whatHoldType for 'holdHours'
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.25" }
+String getVersionNum()		{ return "1.8.26" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1503,19 +1504,19 @@ String whatHoldType(statDevice) {
 			break;
 		case '4 Hours':
 			sendHoldType = 4
-		case 'Specified Hours':
-			if (settings.holdHours && settings.holdHours.isInteger()) {
-				sendHoldType = settings.holdHours
-			} else if ((parentHoldType == 'Specified Hours') && (parentHoldHours != null)) {
-				sendHoldType = parentHoldHours
-			} else if ( parentHoldType == '2 Hours') {
-				sendHoldType = 2
-			} else if ( parentHoldType == '4 Hours') {
-				sendHoldType = 4			
-			} else {
-				sendHoldType = 2
-			}
-			break;
+        case 'Specified Hours':
+            if ( /*settings.holdHours && */ settings.holdHours?.toString().isInteger()) {
+            	sendHoldType = settings.holdHours
+            } else if ((parentHoldType == 'Specified Hours') && (parentHoldHours?.toString().isInteger())) {
+            	sendHoldType = parentHoldHours
+            } else if ( parentHoldType == '2 Hours') {
+            	sendHoldType = 2
+            } else if ( parentHoldType == '4 Hours') {
+            	sendHoldType = 4            
+            } else {
+            	sendHoldType = 2
+            }
+            break;
 		case 'Thermostat Setting':
 			String statHoldType = ST ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
 			switch(statHoldType) {
