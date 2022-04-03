@@ -34,12 +34,13 @@
  *	1.8.51 - Allow changing multiple programs' setpoints in setProgramSetpoints()
  *	1.8.52 - Fix sendMessage() for new Samsung SmartThings app
  *	1.8.53 - Fix 1.8.51 changes to work on SmartThings (different version of Groovy from Hubitat)
- *	1.8.54 - Fix dehumidifier status display and unsupported subscriptions on HE
+ *	1.8.54 - (wrong version number)
+ *	1.8.55 - Fix dehumidifier status display and unsupported subscriptions on HE
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.54" }
+String getVersionNum()		{ return "1.8.55" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
