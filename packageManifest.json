@@ -3,7 +3,7 @@
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.2.6",
   "dateReleased": "2021-09-01",
-  "releaseNotes": "Fixed issue with Smart Mode not changing setpoints",
+  "releaseNotes": "Fixed holdType = HoldHours, reconfiguration failure, dehumidifier status updates",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.54"
+      "version": "1.8.55"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -31,7 +31,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.09"
+      "version": "1.8.10"
     },
     {
       "id": "c630b027-9cdf-49ff-bff6-28ced385a9e2",
@@ -40,7 +40,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.23"
+      "version": "1.8.24"
     },
     {
       "id": "cc05b8d1-01b7-449e-b12b-9f56ccbdf23c",
@@ -67,7 +67,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.25"
+      "version": "1.8.26"
     },
     {
       "id": "8d9d8751-6679-4581-b594-41549106c789",
@@ -121,7 +121,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.19"
+      "version": "1.8.20"
     }
   ],
   "drivers": [
