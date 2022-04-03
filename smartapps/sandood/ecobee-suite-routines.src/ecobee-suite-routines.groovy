@@ -39,11 +39,12 @@
  *	1.8.21 - Don't require doneSwitches, even if no Mode/Routine (could be notify only, I guess)
  *	1.8.22 - Fix getThermostatModes()
  *	1.8.23 - Fix sendMessage() for new Samsung SmartThings app
+ *	1.8.24 - Fix whatHoldType for 'holdHours'
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.23" }
+String getVersionNum()		{ return "1.8.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -828,9 +829,9 @@ String whatHoldType(statDevice) {
         case '4 Hours':
         	sendHoldType = 4
         case 'Specified Hours':
-            if (settings.holdHours && settings.holdHours.isInteger()) {
+            if ( /*settings.holdHours && */ settings.holdHours?.toString().isInteger()) {
             	sendHoldType = settings.holdHours
-            } else if ((parentHoldType == 'Specified Hours') && (parentHoldHours != null)) {
+            } else if ((parentHoldType == 'Specified Hours') && (parentHoldHours?.toString().isInteger())) {
             	sendHoldType = parentHoldHours
             } else if ( parentHoldType == '2 Hours') {
             	sendHoldType = 2
@@ -863,8 +864,9 @@ String whatHoldType(statDevice) {
            }
     }
     if (sendHoldType) {
-    	LOG("Using holdType ${sendHoldType.isNumber()?'holdHours ('+sendHoldType.toString()+')':sendHoldType}",2,null,'info')
-        return sendHoldType as String
+		String sht = sendHoldType as String
+    	LOG("Using holdType ${sht.isNumber()?'holdHours ('+sht+')':sht}",2,null,'info')
+        return sht
     } else {
     	LOG("Couldn't determine holdType, returning indefinite",1,null,'error')
         return 'indefinite'
