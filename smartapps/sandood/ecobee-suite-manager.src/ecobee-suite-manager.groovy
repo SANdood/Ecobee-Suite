@@ -34,11 +34,12 @@
  *	1.8.51 - Allow changing multiple programs' setpoints in setProgramSetpoints()
  *	1.8.52 - Fix sendMessage() for new Samsung SmartThings app
  *	1.8.53 - Fix 1.8.51 changes to work on SmartThings (different version of Groovy from Hubitat)
+ *	1.8.54 - Fix dehumidifier status display and unsupported subscriptions on HE
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.53" }
+String getVersionNum()		{ return "1.8.54" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1338,7 +1339,7 @@ def initialize() {
 	atomicState.reAttempt = 0
 	atomicState.reAttemptPoll = 0
     
-	subscribe(app, appHandler)
+	if (ST) subscribe(app, appHandler)
 	if (ST) subscribe(location, "AskAlexaMQ", askAlexaMQHandler) // HE version doesn't support Ask Alexa yet
 	// if (!askAlexa) atomicState.askAlexaAlerts = null
 	if (settings.pauseSwitch) {
@@ -1484,7 +1485,7 @@ def initialize() {
 	atomicState.weather 			= [:]
 	
 	// Add subscriptions as little "daemons" that will check on our health	  
-	subscribe(location, scheduleWatchdog)
+	if (ST) subscribe(location, scheduleWatchdog)
 	if (ST) subscribe(location, "routineExecuted", scheduleWatchdog)		// HE doesn't support Routines
 	subscribe(location, "sunset", sunsetEvent)
 	subscribe(location, "sunrise", sunriseEvent)
@@ -4149,7 +4150,7 @@ void updateThermostatData() {
 
                 } else if (equipStatus.contains('de')) { // These can also run independent of heat/cool
                     equipOpStat = 'dehumidifier' 
-                    thermOpStat = equipStats.contains('fan') ? 'fan only (dehumidifier)' : 'idle (dehumidifier)'
+                    thermOpStat = equipStatus.contains('fan') ? 'fan only (dehumidifier)' : 'idle (dehumidifier)'
                     // SHOULD thermOpStat BE FAN ONLY? --> yes, this is fixed in ES Thermostat
                 } else if (equipStatus.contains('hu')) { 
                     equipOpStat = 'humidifier' 
