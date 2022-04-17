@@ -38,11 +38,13 @@
  *	1.8.22 - Fix getThermostatPrograms()
  *	1.8.23 - Fix getThermostatModes()
  *	1.8.24 - Fix sendMessage() for new Samsung SmartThings app
+ * 	1.8.25 - Fixed setpoint adjustments for "middle" tange
+ *	1.8.26 - Fix whatHoldType for 'holdHours'
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.24" }
+String getVersionNum()		{ return "1.8.26" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -964,7 +966,11 @@ def thermostatModeHandler(evt) {
 		atomicState.aboveChanged = false
 		atomicState.belowChanged = false
 	}
-	if (evt.value != 'off') cancelReservation( getDeviceId(evt.device.deviceNetworkId), 'modeOff' ) // we're not off anymore, give up the reservation
+	if (evt.value != 'off') {
+		cancelReservation( getDeviceId(evt.device.deviceNetworkId), 'modeOff' ) // we're not off anymore, give up the reservation
+		runIn(5, atomicTempUpdater, [overwrite: true])		// someone else turned the HVAC back on, let's make make sure it is set to the correct mode	
+		LOG("Thermostat ${evt.device.displayName}'s Mode was changed to ${evt.value} - revalidating in 5 seconds...",2,null,'info')	
+	}
 	updateMyLabel()
 }
 def tempChangeHandler(evt) {
@@ -1282,9 +1288,11 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
 			if (needSetpointChange(stat, program, heatTemp, coolTemp)) makeSetpointChange(stat, program, heatTemp, coolTemp)
 		} else {
 			// somebody else has a reservation - we have to wait
-			def pendedUpdates = atomicState.pendedUpdates as Map
+			// def pendedUpdates = atomicState.pendedUpdates as Map
+            Map pendedUpdates = [:].withDefault {[]}
+            if (atomicState.pendedUpdates) pendedUpdates = atomicState.pendedUpdates as Map
 			pendedUpdates[tid] = [program: program, heat: heatTemp, cool: coolTemp]
-			atomicStates.pendedUpdates = pendedUpdates
+			atomicState.pendedUpdates = pendedUpdates
 			subscribe(stat, 'climatesUpdated', programWaitHandler)
 			//LOG("Delayed: Sensor ${sensor.displayName} will be added to ${settings.theClimates.toString()[1..-2]} and removed from ${notPrograms.toString()[1..-2]} when pending changes complete",2,null,'info')
 		}
@@ -1496,19 +1504,19 @@ String whatHoldType(statDevice) {
 			break;
 		case '4 Hours':
 			sendHoldType = 4
-		case 'Specified Hours':
-			if (settings.holdHours && settings.holdHours.isInteger()) {
-				sendHoldType = settings.holdHours
-			} else if ((parentHoldType == 'Specified Hours') && (parentHoldHours != null)) {
-				sendHoldType = parentHoldHours
-			} else if ( parentHoldType == '2 Hours') {
-				sendHoldType = 2
-			} else if ( parentHoldType == '4 Hours') {
-				sendHoldType = 4			
-			} else {
-				sendHoldType = 2
-			}
-			break;
+        case 'Specified Hours':
+            if ( /*settings.holdHours && */ settings.holdHours?.toString().isInteger()) {
+            	sendHoldType = settings.holdHours
+            } else if ((parentHoldType == 'Specified Hours') && (parentHoldHours?.toString().isInteger())) {
+            	sendHoldType = parentHoldHours
+            } else if ( parentHoldType == '2 Hours') {
+            	sendHoldType = 2
+            } else if ( parentHoldType == '4 Hours') {
+            	sendHoldType = 4            
+            } else {
+            	sendHoldType = 2
+            }
+            break;
 		case 'Thermostat Setting':
 			String statHoldType = ST ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
 			switch(statHoldType) {
@@ -1871,7 +1879,7 @@ void sendMessage(notificationMessage) {
 			} 
 			if (settings.pushNotify) {
 				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPush(msg)								// Push to everyone, and always send to Hello Home / Location Event log
+				sendPushMessage(msg)								// Push to everyone, and always send to Hello Home / Location Event log
 			}
 			if (settings.speak && notifyNowOK()) {
 				if (settings.speechDevices != null) {
@@ -1906,7 +1914,7 @@ void sendMessage(notificationMessage) {
 		}
     }
     // Always send to Hello Home / Location Event log
-	if (ST && (!settings.notify || !settings.pushNotify)) { // (sendPush already logged it, above)
+    if (ST) { // && (!settings.notify || !settings.pushNotify)) { // (sendPush already logged it, above)
 		sendNotificationEvent( notificationMessage )					
 	} else {
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')

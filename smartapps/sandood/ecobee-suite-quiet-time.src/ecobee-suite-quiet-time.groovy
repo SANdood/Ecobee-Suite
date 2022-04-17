@@ -35,11 +35,12 @@
  *	1.8.07 - Miscellaneous updates & fixes
  *	1.8.08 - Fix for multi-word Climate names
  *  1.8.09 - Fix getThermostatModes()
+ *	1.8.10 - heating/coolingSetpointDisplay not used on Hubitat version
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.09" }
+String getVersionNum()		{ return "1.8.10" }
 String getVersionLabel() 	{ return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -509,8 +510,8 @@ void turnOnQuietTime() {
         }
         if ( !settings.hvacOff && !settings.hvacMode && settings.adjustSetpoints) {
         	statState[tid].holdType = 			ST ? stat.currentValue('lastHoldType') 				: stat.currentValue('lastHoldType', true)
-        	statState[tid].heatingSetpoint = 	ST ? stat.currentValue('heatingSetpointDisplay') 	: stat.currentValue('heatingSetpointDisplay', true)
-            statState[tid].coolingSetpoint = 	ST ? stat.currentValue('coolingSetpointDisplay') 	: stat.currentValue('coolingSetpointDisplay', true)
+        	statState[tid].heatingSetpoint = 	ST ? stat.currentValue('heatingSetpointDisplay') 	: stat.currentValue('heatingSetpoint', true)
+            statState[tid].coolingSetpoint = 	ST ? stat.currentValue('coolingSetpointDisplay') 	: stat.currentValue('coolingSetpoint', true)
             def h = statState[tid].heatingSetpoint + settings.heatAdjust
             def c = statState[tid].coolingSetpoint + settings.coolAdjust
             stat.setHeatingSetpoint(h, 'indefinite')
