@@ -24,11 +24,12 @@
  *	1.8.08 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.09 - Miscellaneous updates & fixes
  *  1.8.10 - Fix getThermostatModes() & getThermostatFanModes()
+ *	1.8.11 - Fix for Hubitat 'supportedThermostatModes', etc.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -798,41 +799,35 @@ def pauseOff(global = false) {
 // Thermostat Programs & Modes
 List getThermostatModes() {
 	def statModes = []
+	def tm = []
     if (settings.theThermostats) {
         settings.theThermostats?.each { stat ->
             if (HE) {
-                def tm = stat.currentValue('supportedThermostatModes')
-                if (statModes == []) {	
-                    if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
-                } else {
-                    def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
-                    if (nm) statModes = statModes.intersect(nm)
-                }
+                tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
             } else {
-                def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
-                if (statModes == []) {	
-                    if (tm) statModes = tm
-                } else {
-                    if (tm) statModes = statModes.intersect(tm)
-                }
-            }
-        }
+				tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+			}
+			if (statModes == []) {	
+				if (tm) statModes = tm
+			} else {
+				if (tm) statModes = statModes.intersect(tm)
+			}
+		}
     }
     if (statModes == []) statModes = ["off","heat","cool","auto","auxHeatOnly"]
     return ["Prior State"] + statModes*.capitalize().sort(false)
 }
 List getThermostatFanModes() {
 	def fanModes = []
+	def tfm = []
     if (settings?.theThermostats) {
     	settings.theThermostats.each { stat ->
             if (HE) {
-                def tfm = stat.currentValue('supportedThermostatFanModes')
-                def fanTemp = tfm ? tfm[1..-2].tokenize(", ") : []
-                if (fanTemp != []) fanModes = (fanModes == []) ? fanTemp : fanModes.intersect(fanTemp)
+                tfm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes', true))
             } else {
-                def tfm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes'))
-                if (tfm) fanModes = (fanModes == []) ? tfm : fanModes.intersect(tfm)
-            }
+				tfm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes'))
+			}
+            if (tfm) fanModes = (fanModes == []) ? tfm : fanModes.intersect(tfm)
         }
     }
     if (fanModes == []) fanModes = ["off", "auto", "circulate", "on"]
