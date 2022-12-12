@@ -13,18 +13,6 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  * <snip>
- *	1.7.00 - Initial Release of Universal Ecobee Suite
- *	1.7.01 - Use nonCached currentValue() for stat attributes on Hubitat
- *	1.7.02 - Fixing private method issue caused by grails
- *	1.7.03 - On HE, changed (paused) banner to match Hubitat Simple Lighting's (pause)
- *	1.7.04 - Optimized isST/isHE, added Global Pause
- *	1.7.05 - Added option to disable local display of log.debug() logs
- *	1.7.06 - Fixes for the auto-disable logic
- *	1.7.07 - More fixes for autoOff
- *	1.7.08 - Fix hasHumidifier
- *	1.7.09 - Fixed Helper labelling
- *  1.7.10 - Fixed labels (again), added infoOff, cleaned up preferences setup ***
- *	1.7.11 - Added minimize UI
  *	1.8.00 - Version synchronization, updated settings look & feel
  *	1.8.01 - General Release
  *	1.8.02 - More busy bees
@@ -34,13 +22,14 @@
  *	1.8.06 - Updated formatting
  *	1.8.07 - Miscellaneous updates & fixes
  *	1.8.08 - Fix for multi-word Climate names
- *  1.8.09 - Fix getThermostatModes()
+ *	1.8.09 - Fix getThermostatModes()
  *	1.8.10 - heating/coolingSetpointDisplay not used on Hubitat version
+ *	1.8.11 - Fix for Hubitat 'supportedThermostatModes', etc.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -739,27 +728,22 @@ String getDeviceId(networkId) {
 
 // return all the modes that ALL thermostats support
 List getThermostatModes() {
-	def statModes = []
-	settings.thermostats?.each { stat ->
+    def statModes = []
+    settings.thermostats?.each { stat ->
+        def tm = []
         if (HE) {
-            def tm = stat.currentValue('supportedThermostatModes')
-            if (statModes == []) {	
-                if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
-            } else {
-                def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
-                if (nm) statModes = statModes.intersect(nm)
-            }
+            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
         } else {
-            def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
-            if (statModes == []) {	
-                if (tm) statModes = tm
-            } else {
-                if (tm) statModes = statModes.intersect(tm)
-            }
+            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
         }
-	}
+        if (statModes == []) {
+            if (tm) statModes = tm
+        } else {
+            if (tm) statModes = statModes.intersect(tm)
+        }
+    }
     statModes = statModes - ['off']
-	return statModes.sort(false)
+    return statModes.sort(false)
 }
 
 /* NOTIFICATIONS NOT YET IMPLEMENTED
