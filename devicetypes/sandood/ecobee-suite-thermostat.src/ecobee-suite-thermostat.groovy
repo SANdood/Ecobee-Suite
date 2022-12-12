@@ -49,8 +49,10 @@
  *	1.8.20 - Allow multiple programs to be adjusted in setProgramSetpoints()
  *	1.8.21 - Fix 1.8.20 changes to work on SmartThings (different version of Groovy from Hubitat)
  *	1.8.22 - Added setSchedule() and schedule attributes for HE 2.2.6.***
+ *	1.8.23 - Added (rudimentary) fanSpeed/setFanSpeed() support
+ *	1.8.24 - Fixed 'supportedThermostatModes', 'supportedThermostatFanModes', & 'supportedVentModes' for Hubitat 2.3.3 and later
  */
-String getVersionNum() 		{ return "1.8.22" }
+String getVersionNum() 		{ return "1.8.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -157,6 +159,7 @@ metadata {
 		attribute 'equipmentStatus', 						'STRING'
 		attribute 'fanControlRequired', 					'STRING'
 		attribute 'fanMinOnTime', 							'NUMBER'
+		attribute 'fanSpeed',								'STRING'		// One of 'low', 'medium', 'high', and 'optimized'
 		attribute 'features',								'STRING'
 		attribute 'followMeComfort', 						'STRING'
 		attribute 'groupName', 								'STRING'
@@ -253,9 +256,9 @@ metadata {
 		attribute 'stage1HeatingDifferentialTemp', 			'NUMBER'
 		attribute 'stage1HeatingDissipationTime', 			'NUMBER'
 		attribute 'statHoldAction', 						'STRING'
-		attribute 'supportedThermostatFanModes', 			'JSON_OBJECT' 	// USAGE: List theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].tokenize(', ')
-		attribute 'supportedThermostatModes', 				'JSON_OBJECT' 	// USAGE: List theModes = stat.currentValue('supportedThermostatModes')[1..-2].tokenize(', ')
-		attribute 'supportedVentModes', 					'JSON_OBJECT' 	// USAGE: List theModes = stat.currentValue('supportedVentModes')[1..-2].tokenize(', ')
+		attribute 'supportedThermostatFanModes', 			'JSON_OBJECT' 	// USAGE: List theFanModes = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes'))
+		attribute 'supportedThermostatModes', 				'JSON_OBJECT' 	// USAGE: List theModes = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+		attribute 'supportedVentModes', 					'JSON_OBJECT' 	// USAGE: List theVentModes = new JsonSlurper().parseText(stat.currentValue('supportedVentModes'))
 		attribute 'tempAlertNotify', 						'STRING'
 		attribute 'tempAlertNotifyTechnician', 				'STRING'
 		attribute 'tempCorrection', 						'NUMBER'
@@ -355,6 +358,8 @@ metadata {
 			command "setFanMinOnTime", 		[[name:'Fan Min On Time*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
         }
 		command "setFanMinOnTimeDelay", 	[]
+		command "setFanSpeed",				[[name:'Fan Speed', type:'ENUM', description:'Select desired fan speed', 
+											  constraints: ['low', 'medium', 'high', 'optimized']]]
 		command "setHeatingSetpointDelay",	[]
 		if (isST) {
         	command	"setHumidifierMode", 	['STRING']
@@ -381,7 +386,7 @@ metadata {
         } else {
             command "setThermostatHoldHours",   [[name:'Hold Hours', type:'NUMBER', description:'Default Hours for an Hold Type == Hold Hours (use zero to default to ES Manager setting)']]
 			command "setThermostatProgram", [[name:'Program Name*', type:'STRING', description:'Desired Program'],
-											 [name:'Hold Type*', type:'ENUM', description:'Delect and option',
+											 [name:'Hold Type*', type:'ENUM', description:'Select an option',
 											  constraints: ['indefinite', 'nextTransition', 'holdHours']],
 											 [name:'Hold Hours', type:'NUMBER', description:'Hours to Hold (if Hold Type == Hold Hours]']]
             command "setVacationFanMinOnTime",[[name:'Fan Min On Time for Vacation Hold*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
@@ -910,6 +915,8 @@ def uninstalled() {
 def updated() {
 	//getHubPlatform()
 	LOG("${getVersionLabel()} updated",1,null,'trace')
+	state.supportedThermostatModes = []
+	state.supportedVentModes = []
 	
 	if (!device.displayName.contains('TestingForInstall')) {
 	// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
@@ -934,6 +941,7 @@ def updated() {
 	state.version = getVersionLabel()
     updateDataValue("myVersion", getVersionLabel())
 	runIn(2, 'forceRefresh', [overwrite: true])
+	
 }
 
 def poll() {
@@ -982,7 +990,7 @@ def generateEvent(List updates) {
 	if (precision == null) precision = isMetric ? 1 : 0
 	int objectsUpdated = 0
 	def supportedThermostatModes = []
-	if (state.supportedThermostatModes == null) {				// attribute updates will continuously update this if config changes
+	if (state.supportedThermostatModes == []) {				// attribute updates will continuously update this if config changes
 		// Initialize for those that are updating the DTH with this version
 		supportedThermostatModes = ['off']
 		if (ST) {
@@ -991,28 +999,29 @@ def generateEvent(List updates) {
 			if (device.currentValue('autoMode') == 'true') supportedThermostatModes << 'auto'
 			if (device.currentValue('auxHeatMode') == 'true') supportedThermostatModes += ['auxHeatOnly', 'emergency heat']
 		} else {
-			if (device.currentValue('heatMode', true) == 'true') supportedThermostatModes << 'heat'
-			if (device.currentValue('coolMode', true) == 'true') supportedThermostatModes << 'cool'
-			if (device.currentValue('autoMode', true) == 'true') supportedThermostatModes << 'auto'
+			if (device.currentValue('heatMode', true) == 'true') supportedThermostatModes += ['heat']
+			if (device.currentValue('coolMode', true) == 'true') supportedThermostatModes += ['cool']
+			if (device.currentValue('autoMode', true) == 'true') supportedThermostatModes += ['auto']
 			if (device.currentValue('auxHeatMode', true) == 'true') supportedThermostatModes += ['auxHeatOnly', 'emergency heat']
 		}
-		sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
-		sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
 		state.supportedThermostatModes = supportedThermostatModes.sort(false)
-	} else {
-		supportedThermostatModes = state.supportedThermostatModes.sort(false)
+		String stmJSON = new groovy.json.JsonBuilder(state.supportedThermostatModes).toString()
+		sendEvent(name: "supportedThermostatModes", value: stmJSON, displayed: false, isStateChange: true)
+		sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
 	}
+	supportedThermostatModes = state.supportedThermostatModes
+
 	if (device.currentValue('autoHeatCoolFeatureEnabled') == null) sendEvent(name: 'autoHeatCoolFeatureEnabled', value: device.currentValue('autoMode'), isStateChange: true, displayed: false)
 	def vType = device.currentValue('ventilatorType')
 	if ((vType != null) && (vType != 'none')) {
-		if ((state.supportedVentModes == null) || (state.supportedVentModes.size() == 1)){
-			state.supportedVentModes = ventModes()
-			sendEvent(name: 'supportedVentModes', value: ventModes(), displayed: false, isStateChange: true)
+		if ((state.supportedVentModes == []) || (state.supportedVentModes.size() == 1)){
+			state.supportedVentModes = groovy.json.JsonSlurper().parseText(ventModes()).sort(false)
+			sendEvent(name: 'supportedVentModes', value: state.supportedVentModes, displayed: false, isStateChange: true)
 		}
 	} else {
-		if (state.supportedVentModes == null) {
+		if (state.supportedVentModes == []) {
 			state.supportedVentModes = ['off']
-			sendEvent(name: 'supportedVentModes', value: ['off'], displayed: false, isStateChange: true)
+			sendEvent(name: 'supportedVentModes', value: "[\"off\"]", displayed: false, isStateChange: true)
 		}
 	}
 
@@ -1052,7 +1061,13 @@ def generateEvent(List updates) {
 								sendEvent(name: 'thermostatSetpoint', value: avg.toString(), unit: tu, descriptionText: "Thermostat setpoint average is ${avg}°${tu}", displayed: true)
 								objectsUpdated++
 							}
-							def heatDiff = ST ? device.currentValue('heatDifferential') : device.currentValue('heatDifferential', true)
+							def heatDiff 
+                            if ((device.currentValue("currentProgram") == "Vacation") && (device.currentValue("currentProgramId") == 'null')) {
+                                // Thermostat defaults to 1.5F when in Vacation mode
+                                heatDiff = 1.5
+                            } else {
+                                heatDiff = ST ? device.currentValue('heatDifferential') : device.currentValue('heatDifferential', true)
+                            }
 							if (!heatDiff || (heatDiff == 'null') || (heatDiff == "")) heatDiff = 0.0
 							String heatAt = roundIt((value.toBigDecimal() - heatDiff.toBigDecimal()), precision.toInteger()).toString()
 							sendEvent(name: 'heatAtSetpoint', value: heatAt, unit: tu, displayed: false)
@@ -1095,7 +1110,13 @@ def generateEvent(List updates) {
 								sendEvent(name: 'thermostatSetpoint', value: avg.toString(), unit: tu, descriptionText: "Thermostat setpoint average is ${avg}°${tu}", displayed: true)
 								objectsUpdated++
 							}
-							def coolDiff = ST ? device.currentValue('coolDifferential') : device.currentValue('coolDifferential', true)
+							def coolDiff
+                            if ((device.currentValue("currentProgram") == "Vacation") && (device.currentValue("currentProgramId") == "null")) {
+                                // Thermostat defaults to 1.5F when in Vacation mode
+                                coolDiff = 1.5
+                            } else {
+                                coolDiff = ST ? device.currentValue('coolDifferential') : device.currentValue('coolDifferential', true)
+                            }
 							if (!coolDiff || (coolDiff == 'null') || (coolDiff == "")) coolDiff = 0.0
 							String coolAt = roundIt((value.toBigDecimal() + coolDiff.toBigDecimal()), precision.toInteger()).toString()
 							sendEvent(name: 'coolAtSetpoint', value: coolAt, unit: tu,displayed: false)
@@ -1407,6 +1428,8 @@ def generateEvent(List updates) {
 									// Mandatory Demand Response Event - can't cancel it...
 									sendEvent(name: 'resumeProgram', value: 'resume dis', displayed: false, isStateChange: true)
 									break;
+                                case 'Vacation':
+                                    break;
 								default:
 									if ((device.currentValue('currentProgramName') != 'Vacation') && (device.currentValue('thermostatHold') != 'vacation')) {
 										enableAllProgramButtons()
@@ -1488,7 +1511,7 @@ def generateEvent(List updates) {
 						tMode = sendValue 
 						if (isChange || forceChange) {
 							//log.debug "sendEvent thermostatMode"
-							event = eventFront + [value: sendValue, descriptionText: "Thermostat Mode is ${sendValue}", data:[supportedThermostatModes: supportedThermostatModes], displayed: true]
+							event = eventFront + [value: sendValue, descriptionText: "Thermostat Mode is ${sendValue}", data:[ggstatModes: supportedThermostatModes], displayed: true]
 						}
 						switch (sendValue) {
 							case 'off':
@@ -1910,14 +1933,20 @@ def generateEvent(List updates) {
 					case 'auxHeatMode':
 						String modeValue = (name == "auxHeatMode") ? "auxHeatOnly" : name - "Mode"
 						if (sendValue == 'true') {
-							if (!supportedThermostatModes.contains(modeValue)) supportedThermostatModes += modeValue
+							if (!supportedThermostatModes.contains(modeValue)) {
+								supportedThermostatModes += [modeValue]
+							}
 						} else {
-							if (supportedThermostatModes.contains(modeValue))  supportedThermostatModes -= modeValue
+							if (supportedThermostatModes.contains(modeValue)) {
+								supportedThermostatModes -= [modeValue]
+							}
 						}
 						if (state.supportedThermostatModes != supportedThermostatModes) {
 							state.supportedThermostatModes = supportedThermostatModes.sort(false)
-							sendEvent(name: "supportedThermostatModes", value: supportedThermostatModes, displayed: false, isStateChange: true)
+							String modesJSON = new groovy.json.JsonBuilder(state.supportedThermostatModes).toString()
+							sendEvent(name: "supportedThermostatModes", value: modesJSON, displayed: false, isStateChange: true)
 							sendEvent(name: "supportedThermostatFanModes", value: fanModes(), displayed: false, isStateChange: true)
+							supportedThermostatModes = state.supportedThermostatModes
 							updateModeButtons()
 						}
 					// Removed all the miscellaneous settings - they will thus appear in the device event list via 'default:' (May 10, 2019 - BAB)
@@ -2579,7 +2608,7 @@ void setThermostatMode(String value) {
 	LOG("setThermostatMode(${value})", 5)
 
 	def validModes = statModes()		// device.currentValue('supportedThermostatModes')
-	if (!validModes.contains(value)) {
+	if (!validModes.contains("\"${value}\"")) {
 		LOG("Requested Thermostat Mode (${value}) is not supported by ${device.displayName}", 2, null, 'warn')
         if (value == 'auto') {
         	
@@ -3109,11 +3138,11 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 	}
 }
 
-def ventModes() {
-	return ["auto", "minontime", "off", "on"]
+String ventModes() {
+	return new groovy.json.JsonBuilder(["auto", "minontime", "off", "on"]).toString()
 }
-def fanModes() {
-	return ["auto", "circulate", "off", "on"]
+String fanModes() {
+	return new groovy.json.JsonBuilder(['auto','circulate','off','on']).toString() 
 }
 void fanOn() {
 	LOG('fanOn()', 5, null, 'trace')
@@ -3179,7 +3208,14 @@ void setFanMinOnTime(minutes=20) {
 		LOG("setFanMinOnTime(${minutes}) - invalid argument",1,null, 'error')
 	}
 }
-
+void setFanSpeed(String speed) {
+	List fanSpeeds = ['low','medium','high','optimized']
+	if (fanSpeeds.contains(speed)) {
+		setEcobeeSetting('fanSpeed', speed)
+	} else {
+		LOG("setFanSpeed(): '${speed}' is not a supported fan speed",1,null,'warn')
+	}
+}
 // Humidifier/Dehumidifier Commands
 void setHumidifierMode(String value) {
 	// verify thermostat hasHumidifier first
