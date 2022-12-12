@@ -1,9 +1,9 @@
 {
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
-  "minimumHEVersion": "2.2.6",
-  "dateReleased": "2021-09-01",
-  "releaseNotes": "Fixed holdType = HoldHours, reconfiguration failure, dehumidifier status updates",
+  "minimumHEVersion": "2.3.3",
+  "dateReleased": "2022-12-12",
+  "releaseNotes": "Fix thermostatModes integration with HE 2.3.3 dashboards and 2.4.4 Homekit support",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.8.55"
+      "version": "1.8.56"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -31,7 +31,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.10"
+      "version": "1.8.11"
     },
     {
       "id": "c630b027-9cdf-49ff-bff6-28ced385a9e2",
@@ -40,7 +40,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.24"
+      "version": "1.8.25"
     },
     {
       "id": "cc05b8d1-01b7-449e-b12b-9f56ccbdf23c",
@@ -49,7 +49,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.12"
+      "version": "1.8.13"
     },
     {
       "id": "d14d22cf-bdb4-4d12-8c89-ac849a5e0e53",
@@ -58,7 +58,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.10"
+      "version": "1.8.11"
     },
     {
       "id": "7d7849d3-333f-4782-b52b-4f910bf5380f",
@@ -94,7 +94,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.14"
+      "version": "1.8.15"
     },
     {
       "id": "329710ed-0ee3-41a6-9e47-f04b7a6174a6",
@@ -103,7 +103,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.10"
+      "version": "1.8.11"
     },
     {
       "id": "487d8dde-077c-4ae3-b17b-180039b3e59d",
@@ -112,7 +112,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.19"
+      "version": "1.8.20"
     },
     {
       "id": "1438882b-2411-406d-a831-997c4b569c31",
@@ -121,7 +121,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.20"
+      "version": "1.8.21"
     }
   ],
   "drivers": [
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.8.22"
+      "version": "1.8.24"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
