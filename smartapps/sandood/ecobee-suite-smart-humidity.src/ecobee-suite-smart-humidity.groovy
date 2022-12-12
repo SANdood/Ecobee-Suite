@@ -24,11 +24,12 @@
  *	1.8.08 - Miscellaneous updates & fixes
  *	1.8.09 - Fix for multi-word Climate names
  *	1.8.10 - Fix for getThermostatModes()
+ *	1.8.11 - Fix for Hubitat 'supportedThermostatModes', etc.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.10" }
+String getVersionNum()		{ return "1.8.11" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Humidity Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -667,14 +668,15 @@ List getThermostatPrograms() {
 }
 List getThermostatModes() {
 	List statModes = ["off","heat","cool","auto","auxHeatOnly"]
+	List tm = []
     if (settings.theThermostat) {
         if (HE) {
-    	    def tm = theThermostat.currentValue('supportedThermostatModes')
-            if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+    	    tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes', true))
         } else {
-            statModes = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes'))
+            tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes'))
         }
     }
+	if (tm != []) statModes = tm
     return statModes.sort(false)
 }
 def mCTIN(scaledSensorValue, cmdScale, precision) {
