@@ -4,7 +4,7 @@
   "minimumHEVersion": "2.3.3",
   "dateReleased": "2022-12-12",
   "releaseNotes": "Fix thermostatModes integration with HE 2.3.3 dashboards and 2.4.4 Homekit support",
-  "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/176",
+  "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/796",
   "apps": [
     {
       "id": "70b3ec47-c06f-4570-b4ae-5ee76da59db8",
