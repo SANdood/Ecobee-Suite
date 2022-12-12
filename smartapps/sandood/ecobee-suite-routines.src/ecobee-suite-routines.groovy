@@ -40,11 +40,12 @@
  *	1.8.22 - Fix getThermostatModes()
  *	1.8.23 - Fix sendMessage() for new Samsung SmartThings app
  *	1.8.24 - Fix whatHoldType for 'holdHours'
+ *	1.8.25 - Fix for Hubitat 'supportedThermostatModes', etc.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.24" }
+String getVersionNum()		{ return "1.8.25" }
 String getVersionLabel() 	{ return "Ecobee Suite Mode${isST?'/Routine':''}/Switches/Program Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -902,23 +903,18 @@ List getThermostatPrograms() {
 // return all the modes that ALL thermostats support
 List getThermostatModes() {
 	def statModes = []
-	settings.thermostats?.each { stat ->
+	settings.myThermostats?.each { stat ->
+		def tm
         if (HE) {
-            def tm = stat.currentValue('supportedThermostatModes')
-            if (statModes == []) {	
-                if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
-            } else {
-                def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
-                if (nm) statModes = statModes.intersect(nm)
-            }
+			tm = new JsonSlurper().parseText(stat.currentValue('ThermostatModes', true))
         } else {
-            def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
-            if (statModes == []) {	
-                if (tm) statModes = tm
-            } else {
-                if (tm) statModes = statModes.intersect(tm)
-            }
-        }
+            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+		}
+		if (statModes == []) {	
+			if (tm) statModes = tm
+		} else {
+			if (tm) statModes = statModes.intersect(tm)
+		}
 	}
 	return statModes.sort(false)
 }
@@ -1108,14 +1104,19 @@ def pauseOff(global = false) {
 // return all the fan modes that ALL thermostats support
 def getThermostatFanModes() {
 	def theFanModes = []
-    
     settings.myThermostats.each { stat ->
-    	if (theFanModes == []) {
-        	theFanModes = stat.currentValue('supportedThermostatFanModes')[1..-2].split(", ")
+		def tm
+        if (HE) {
+			tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes', true))
         } else {
-        	theFanModes = theFanModes.intersect(stat.currentValue('supportedThermostatFanModes')[1..-2].split(", "))
-        }   
-    }
+            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes'))
+		}
+		if (theFanModes == []) {	
+			if (tm) theFanModes = tm
+		} else {
+			if (tm) theFanModes = theFanModes.intersect(tm)
+		}
+	}
     theFanModes = (theFanModes - ['off']) + ['default']		// off isn't fully implemented yet
     return theFanModes*.capitalize().sort(false)
 }
