@@ -34,11 +34,12 @@
  *	1.8.18 - Fix getThermostatModes()
  *	1.8.19 - Fix sendMessage() for new Samsung SmartThings app
  *	1.8.20 - Fix whatHoldType for 'holdHours'
+ *	1.8.21 - Fix for Hubitat 'supportedThermostatModes', etc.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.20" }
+String getVersionNum()		{ return "1.8.21" }
 String getVersionLabel() 	{ return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -600,23 +601,18 @@ List getThermostatPrograms() {
 // return all the modes that ALL thermostats support
 List getThermostatModes() {
 	def statModes = []
+	def tm = []
 	settings.myThermostats?.each { stat ->
         if (HE) {
-            def tm = stat.currentValue('supportedThermostatModes')
-            if (statModes == []) {	
-                if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
-            } else {
-                def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
-                if (nm) statModes = statModes.intersect(nm)
-            }
+            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
         } else {
-            def tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
-            if (statModes == []) {	
-                if (tm) statModes = tm
-            } else {
-                if (tm) statModes = statModes.intersect(tm)
-            }
-        }
+            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
+		}
+		if (statModes == []) {	
+			if (tm) statModes = tm
+		} else {
+			if (tm) statModes = statModes.intersect(tm)
+		}
 	}
 	return statModes.sort(false)
 }
