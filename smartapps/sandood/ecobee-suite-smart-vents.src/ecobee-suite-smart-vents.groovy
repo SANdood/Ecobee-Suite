@@ -28,11 +28,12 @@
  *	1.8.12 - Fix getThermostatPrograms()
  *	1.8.13 - Added "Hold" as a selectable program
  *  1.8.14 - Fix getThermostatModes()
+ *	1.8.15 - Fix for Hubitat 'supportedThermostatModes', etc.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.14" }
+String getVersionNum()		{ return "1.8.15" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Vents & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 
@@ -1178,14 +1179,15 @@ List getThermostatPrograms() {
 }
 List getThermostatModes() {
 	List statModes = ["off","heat","cool","auto","auxHeatOnly"]
+	List tm = []
     if (settings.theThermostat) {
         if (HE) {
-    	    def tm = theThermostat.currentValue('supportedThermostatModes')
-            if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+    	    tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes', true))
         } else {
-            statModes = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes'))
+            tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes'))
         }
     }
+	if (tm != []) statModes = tm
     return statModes.sort(false)
 }
 
