@@ -35,11 +35,12 @@
  *	1.8.19 - Fix sendMessage() for new Samsung SmartThings app
  *	1.8.20 - Fix whatHoldType for 'holdHours'
  *	1.8.21 - Fix for Hubitat 'supportedThermostatModes', etc.
+ *	1.8.21a- Fix typo on line 194
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.21" }
+String getVersionNum()		{ return "1.8.21a" }
 String getVersionLabel() 	{ return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -191,7 +192,7 @@ def mainPage() {
 						if (maximize) paragraph("Ecobee Manager Setting at the time of the '${settings?.homeProgram}' hold request will be applied", width: 8)
 					} else if (settings?.holdType == '2 Hours') {
 						//if (HE) paragraph("",width: 4)
-						if (maximize) aragraph("The '${settings?.homeProgram}' hold request will be for 2 hours", width: 8)
+						if (maximize) paragraph("The '${settings?.homeProgram}' hold request will be for 2 hours", width: 8)
 					} else if (settings?.holdType == '4 Hours') {
 						//if (HE) paragraph("",width: 4)
 						if (maximize) paragraph("The '${settings?.homeProgram}' hold request will be for 4 hours", width: 8)
