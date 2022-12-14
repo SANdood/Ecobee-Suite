@@ -2609,7 +2609,7 @@ void setThermostatMode(String value) {
 	LOG("setThermostatMode(${value})", 5)
 
 	List validModes = statModes()		// device.currentValue('supportedThermostatModes')
-	if (!validModes.contains(value) {
+	if (!validModes.contains(value)) {
 		LOG("Requested Thermostat Mode (${value}) is not supported by ${device.displayName}", 2, null, 'warn')
         if (value == 'auto') {
         	
