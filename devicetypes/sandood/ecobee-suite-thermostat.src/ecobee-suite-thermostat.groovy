@@ -51,6 +51,7 @@
  *	1.8.22 - Added setSchedule() and schedule attributes for HE 2.2.6.***
  *	1.8.23 - Added (rudimentary) fanSpeed/setFanSpeed() support
  *	1.8.24 - Fixed 'supportedThermostatModes', 'supportedThermostatFanModes', & 'supportedVentModes' for Hubitat 2.3.3 and later
+ *	1.8.25 - Fixed 'setThermostatModes'
  */
 String getVersionNum() 		{ return "1.8.24" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
@@ -2607,8 +2608,8 @@ void setThermostatMode(String value) {
 	if (value.startsWith('emergency')) { value = 'auxHeatOnly' }
 	LOG("setThermostatMode(${value})", 5)
 
-	def validModes = statModes()		// device.currentValue('supportedThermostatModes')
-	if (!validModes.contains("\"${value}\"")) {
+	List validModes = statModes()		// device.currentValue('supportedThermostatModes')
+	if (!validModes.contains(value) {
 		LOG("Requested Thermostat Mode (${value}) is not supported by ${device.displayName}", 2, null, 'warn')
         if (value == 'auto') {
         	
@@ -2646,8 +2647,8 @@ void setThermostatMode(String value) {
 	}
 	if (changed) LOG("Thermostat Mode changed to ${value}",2,null,'info')
 }
-def statModes() {
-	return state.supportedThermostatModes
+List statModes() {
+	return state.supportedThermostatModes as List
 }
 void off() {
 	LOG('off()', 4, null, 'trace')
