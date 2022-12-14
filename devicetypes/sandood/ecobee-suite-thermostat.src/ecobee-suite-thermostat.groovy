@@ -53,7 +53,7 @@
  *	1.8.24 - Fixed 'supportedThermostatModes', 'supportedThermostatFanModes', & 'supportedVentModes' for Hubitat 2.3.3 and later
  *	1.8.25 - Fixed 'setThermostatModes'
  */
-String getVersionNum() 		{ return "1.8.24" }
+String getVersionNum() 		{ return "1.8.25" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
