@@ -121,7 +121,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.8.21"
+      "version": "1.8.21a"
     }
   ],
   "drivers": [
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.8.24"
+      "version": "1.8.25"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
