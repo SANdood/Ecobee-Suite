@@ -53,8 +53,9 @@
  *	1.8.24 - Fixed 'supportedThermostatModes', 'supportedThermostatFanModes', & 'supportedVentModes' for Hubitat 2.3.3 and later
  *	1.9.00 - Removed all ST code
  *	1.9.01 - Added 'fanSpeedOptions' support (new thermostat Capability)
+ *	1.9.02 - Hack around Ecobee medium/high idiosyncrasy
  */
-String getVersionNum() 		{ return "1.9.01" }
+String getVersionNum() 		{ return "1.9.02" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -2295,8 +2296,14 @@ void setFanMinOnTime(minutes=20) {
 void setFanSpeed(String fanSpeed) {
 	// List fanSpeedOptions = ['low','medium','high','optimized']
 	List fanSpeedOptions = new JsonSlurper().parseText(device.currentValue('fanSpeedOptions',true))
-	if (fanSpeedOptions.contains(fanSpeed)) {
+	if (fanSpeedOptions.contains(fanSpeed) && (fanSpeed != "high")) {
 		setEcobeeSetting('fanSpeed', fanSpeed)
+	} else if (fanSpeed == 'high') {				// work around for Ecobee idiosyncracy
+		if (fanSpeedOptions.contains('medium')) {	
+			setEcobeeSetting('fanSpeed', 'high')	 
+		} else {
+			setEcobeeSetting('fanSpeed', 'medium')	// medium turns on high if only 2 speeds exist
+		}
 	} else {
 		LOG("setFanSpeed(): '${fanSpeed}' is not a valid option for this thermostat ${fanSpeedOptions}",1,null,'warn')
 	}
