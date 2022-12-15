@@ -2395,7 +2395,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				}
 				if (thermostatUpdated || forcePoll ) {
 					if (stat.capabilities) {
-						log.debug "stat capabilities: ${stat.capabilities}"
+						// log.debug "stat capabilities: ${stat.capabilities}"
 						if (!tempCapabilities && (atomicState.capabilities != "")) tempCapabilities = atomicState.capabilities as HashMap
 						if (!tempCapabilities[tid] || (tempCapabilities[tid] != stat.capabilities)) {
 							capabilitiesUpdated = true
