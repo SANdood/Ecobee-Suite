@@ -34,18 +34,23 @@
  *	1.8.51 - Allow changing multiple programs' setpoints in setProgramSetpoints()
  *	1.8.52 - Fix sendMessage() for new Samsung SmartThings app
  *	1.8.53 - Fix 1.8.51 changes to work on SmartThings (different version of Groovy from Hubitat)
+ *	1.8.54 - (wrong version number)
+ *	1.8.55 - Fix dehumidifier status display and unsupported subscriptions on HE
+ *	1.8.56 - Added fanSpeed attribute support (use 'setFanSpeed' or 'setEcobeeSetting' on thermostat to change)
+ *	1.9.00 - Removed all ST code
+ *	1.9.01 - Added new Capabilities support (fanSpeedOptions only, for now)
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.53" }
+String getVersionNum()		{ return "1.9.01" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
 @Field final boolean TIMERS = false
 
 def getHelperSmartApps() {
-	String mrpTitle = ST ? 'New Mode/Routine/Switches/Program Helper...' : 'New Mode/Switches/Program Helper...'
+	String mrpTitle = 'New Mode/Switches/Program Helper...'
 	return [ 
 		[name: "ecobeeContactsChild", appName: "ecobee Suite Open Contacts",  
 			namespace: myNamespace, multiple: true, 
@@ -90,7 +95,7 @@ definition(
 	name:				"Ecobee Suite Manager",
 	namespace:			myNamespace,
 	author:				"Barry A. Burke (storageanarchy@gmail.com)",
-	description:		"Connect your Ecobee thermostats and sensors to ${isST?'SmartThings':'Hubitat'}, along with a Suite of Helper ${isST?'Smart':''}Apps.",
+	description:		"Connect your Ecobee thermostats and sensors to Hubitat, along with a Suite of Helper Apps.",
 	category:			"My Apps",
 	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
 	iconX2Url:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-2x.jpg",
@@ -110,7 +115,6 @@ preferences {
 	page(name: "thermsPage")
 	page(name: "sensorsPage")
 	page(name: "preferencesPage")
-	page(name: "askAlexaPage")
 	page(name: "helperSmartAppsPage")	 
 	// Parts of debug Dashboard
 	page(name: "debugDashboardPage")
@@ -133,12 +137,6 @@ def mainPage() {
 	def readyToInstall
 	atomicState.appsArePaused = settings.pauseHelpers?:false
 	
-	// Request the Ask Alexa Message Queue list as early as possible (isn't a problem if Ask Alexa isn't installed)
-	if (ST) {
-		subscribe(location, "AskAlexaMQ", askAlexaMQHandler)
-		sendLocationEvent(name: "AskAlexaMQRefresh", value: "refresh", isStateChange: true)
-	}
-		
 	// Only create the dummy devices if we aren't initialized yet
 	if (!atomicState.initialized) {
 		deviceHandlersInstalled = testForDeviceHandlers()
@@ -168,7 +166,7 @@ def mainPage() {
 
 		if(atomicState.authToken != null && atomicState.initialized != true) {
 			section() {
-				paragraph "Please ${HE?'click \'Done\'':'tap \'Save\''} to save your credentials. Then re-open the Ecobee Suite Manager to continue the setup."
+				paragraph "Please click 'Done' to save your credentials. Then re-open the Ecobee Suite Manager to continue the setup."
 			}
 		}
 
@@ -176,7 +174,7 @@ def mainPage() {
 		if(atomicState.authToken != null && atomicState.initialized) {
 			if (settings.thermostats?.size() > 0 && atomicState.initialized) {
 				section(sectionTitle("Helpers")) {
-					href ("helperSmartAppsPage", title: inputTitle("Helper ${ST?'SmartApps':'Applications'}"), description: "${HE?'Click':'Tap'} to manage Helper ${ST?'SmartApps':'Applications'}")
+					href ("helperSmartAppsPage", title: inputTitle("Helper Applications"), description: "Click to manage Helper Applications")
 				}			 
 			}
 			section(sectionTitle("Ecobee Devices")) {
@@ -186,36 +184,33 @@ def mainPage() {
 				
 				// Thermostats
 				atomicState.settingsCurrentTherms = settings.thermostats ?: []
-				href ("thermsPage", title: inputTitle("Thermostats"), description: "${HE?'Click':'Tap'} to select Ecobee Thermostats [${howManyThermsSel}/${howManyTherms}]")				  
+				href ("thermsPage", title: inputTitle("Thermostats"), description: "Click to select Ecobee Thermostats [${howManyThermsSel}/${howManyTherms}]")				  
 				
 				// Sensors
 				if (settings.thermostats?.size() > 0) {
 					atomicState.settingsCurrentSensors = settings.ecobeesensors ?: []
 					def howManySensorsSel = settings?.ecobeesensors?.size() ?: 0
 					if ((howManySensors != "?") && (howManySensorsSel > howManySensors)) { howManySensorsSel = howManySensors } // This is due to the fact that you can remove already selected hidden items
-					href ("sensorsPage", title: inputTitle("Sensors"), description: "${HE?'Click':'Tap'} to select Ecobee Sensors [${howManySensorsSel}/${howManySensors}]")
+					href ("sensorsPage", title: inputTitle("Sensors"), description: "Click to select Ecobee Sensors [${howManySensorsSel}/${howManySensors}]")
 				}
 			}		 
 			section(sectionTitle("Preferences")) {
-				href ("preferencesPage", title: inputTitle("Ecobee Suite Preferences"), description: "${HE?'Click':'Tap'} to manage global Preferences")
-				if (ST) {
-					href ("askAlexaPage", title: "Ask Alexa Preferences", description: "Tap to review Ask Alexa settings")
-				} // askAlexa not (yet) supported on Hubitat
+				href ("preferencesPage", title: inputTitle("Ecobee Suite Preferences"), description: "Click to manage global Preferences")
 			}
 		   
 		} // End if(atomicState.authToken)
 		
 		// Setup our API Tokens		  
 		section(sectionTitle("Authentication")) {
-			href ("authPage", title: inputTitle("Ecobee API Authorization"), description: "${ecoAuthDesc}${HE?'Click':'Tap'} for Ecobee Authentication")
+			href ("authPage", title: inputTitle("Ecobee API Authorization"), description: "${ecoAuthDesc} Click for Ecobee Authentication")
 		}	   
 		if ( debugLevel(5) ) {
 			section (sectionTitle("Debug Dashboard")) {
-				href ("debugDashboardPage", description: "${HE?'Click':'Tap'} to enter the Debug Dashboard", title: inputTitle("Debug Dashboard"))
+				href ("debugDashboardPage", description: "Click to enter the Debug Dashboard", title: inputTitle("Debug Dashboard"))
 			}
 		}
 		section(sectionTitle( "Removal")) {
-			href ("removePage", description: "${HE?'Click':'Tap'} to remove ${cleanAppName(app.label?:app.name)}", title: inputTitle("Remove Ecobee Suite Manager"))
+			href ("removePage", description: "Click to remove ${cleanAppName(app.label?:app.name)}", title: inputTitle("Remove Ecobee Suite Manager"))
 		}			 
 		
 		section (sectionTitle("Naming")) {
@@ -235,32 +230,22 @@ def mainPage() {
 			} else {
             	atomicState.appDisplayName = app.label
             }
-			if (HE) {
-				if (app.label.contains('<span')) {
-                    if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span'))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(atomicState.appDisplayName)
-					}
+			if (app.label.contains('<span')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
+				} else {
+					String myLabel = app.label.substring(0, app.label.indexOf('<span'))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(atomicState.appDisplayName)
 				}
 			}
 		}
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+       	section() {
+       		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
 	}
 }
@@ -285,13 +270,13 @@ def authPage() {
 			atomicState.accessToken = createAccessToken()
 		} catch(Exception e) {
 			LOG("authPage() --> OAuth Exception: ${e}", 1, null, "error")
-			LOG("authPage() --> Probable Cause: OAuth not enabled in ${HE?'Hubitat':'SmartThings'} IDE for the 'Ecobee Suite Manager' ${HE?'App':'SmartApp'}", 1, null, 'warn')
+			LOG("authPage() --> Probable Cause: OAuth not enabled in Hubitat IDE for the 'Ecobee Suite Manager App", 1, null, 'warn')
 			if (!atomicState.accessToken) {
 				LOG("authPage() --> No OAuth Access token", 3, null, 'error')
 				return dynamicPage(name: "authPage", title: pageTitle("Ecobee Suite Manager\nOAuth Initialization Failure"), nextPage: "", uninstall: true) {
 					section() {
 						paragraph "Error initializing Ecobee Authentication: could not get the OAuth access token.\n\nPlease verify that OAuth has been enabled in " +
-							"the ${HE?'Hubitat':'SmartThings'} IDE for the 'Ecobee Suite Manager' ${HE?'App':'SmartApp'}, and then try again.\n\nIf this error persists, view Live Logging in the IDE for " +
+							"the Hubitat IDE for the 'Ecobee Suite Manager App, and then try again.\n\nIf this error persists, view Live Logging in the IDE for " +
 							"additional error information."
 					}
 				}
@@ -304,19 +289,19 @@ def authPage() {
 	def oauthTokenProvided = false
 
 	if (atomicState.authToken) {
-		description = "You are connected. ${ST?'Tap Done/Next above':'Click Next/Done below'}."
+		description = "You are connected. Click Next/Done below."
 		uninstallAllowed = true
 		oauthTokenProvided = true
 		apiRestored()
 	} else {
-		description = "${HE?'Click':'Tap'} to enter ecobee Credentials"
+		description = "Click to enter ecobee Credentials"
 	}
 	// HE OAuth process is slightly different than SmartThings OAuth process
-	def redirectUrl = ST ? buildRedirectUrl : oauthInitUrl()
+	def redirectUrl = oauthInitUrl()
 
 	// get rid of next button until the user is actually auth'd
 	if (!oauthTokenProvided) {
-		LOG("authPage() --> Valid ${ST?'ST':'HE'} OAuth Access token (${atomicState.accessToken}), need Ecobee OAuth token", 3, null, 'trace')
+		LOG("authPage() --> Valid HE OAuth Access token (${atomicState.accessToken}), need Ecobee OAuth token", 3, null, 'trace')
 		LOG("authPage() --> RedirectUrl = ${redirectUrl}", 3, null, 'info')
 		return dynamicPage(name: "authPage", title: pageTitle("Ecobee Suite Manager\nEcobee API Authentication"), nextPage: "", uninstall: uninstallAllowed) {
             section(sectionTitle(" ")) {
@@ -329,8 +314,8 @@ def authPage() {
                 	if (settings?.managementSet == null) { app.updateSetting('managementSet', '/'); settings.managementSet = '/' }
             	}
                 
-				paragraph "${HE?'Click':'Tap'} below to log in to the Ecobee service and authorize Ecobee Suite for ${ST?'SmartThings':'Hubitat'} access. Be sure to ${HE?'Click':'Tap'} the 'Allow' button on the 2nd page."
-				href url: redirectUrl, style: "${ST?'embedded':'external'}", required: true, title: inputTitle("Ecobee Account Authorization"), description: description
+				paragraph "Click below to log in to the Ecobee service and authorize Ecobee Suite for Hubitat access. Be sure to Click the 'Allow' button on the 2nd page."
+				href url: redirectUrl, style: "external", required: true, title: inputTitle("Ecobee Account Authorization"), description: description
 			}
 		}
 	} else {		
@@ -364,7 +349,7 @@ def thermsPage(params) {
                 	if (settings?.managementSet == null) { app.updateSetting('managementSet', '/'); settings.managementSet = '/' }
             	}
             
-        	paragraph("${HE?'Click':'Tap'} below to see the list of Ecobee thermostats available in your Ecobee account and select the ones you want to connect to ${ST?'SmartThings':'Hubitat'}.")
+        	paragraph("Click below to see the list of Ecobee thermostats available in your Ecobee account and select the ones you want to connect to Hubitat")
 			LOG("thermsPage(): atomicState.settingsCurrentTherms=${atomicState.settingsCurrentTherms}	thermostats=${settings.thermostats}", 1, null, "trace")
 			if (atomicState.settingsCurrentTherms != settings.thermostats) {
 				LOG("atomicState.settingsCurrentTherms != thermostats: changes detected!", 1, null, "warn")		
@@ -376,7 +361,7 @@ def thermsPage(params) {
 		}
 		section(sectionTitle("Temperature Scale")) {
         	paragraph(getFormat("note","The temperature scale (Fahrenheit or Celsius) is determined by your ${getHubPlatform()} Location settings automatically. Please update your Hub settings " + 
-			"(under ${ST?'My Locations':'Settings/Location and Modes'}) to change the units used.\n\nThe current scale is °${temperatureScale}."))
+			"(under Settings/Location and Modes) to change the units used.\n\nThe current scale is °${temperatureScale}."))
 		}
 	}	   
 }
@@ -395,70 +380,28 @@ def sensorsPage() {
 	dynamicPage(name: "sensorsPage", title: pageTitle("Ecobee Suite Manager\nSensors"), nextPage: "") {
 		if (numFound > 0)  {
 			section(title: sectionTitle('Sensor Selection')) {
-            	paragraph("${HE?'Click':'Tap'} below to see the list of ecobee sensors available for the selected thermostat(s) and choose the ones you want to connect to ${ST?'SmartThings':'Hubitat'}.")
+            	paragraph("Click below to see the list of ecobee sensors available for the selected thermostat(s) and choose the ones you want to connect to Hubitat.")
 				LOG("sensorsPage(): atomicState.settingsCurrentSensors=${atomicState.settingsCurrentSensors} / ecobeesensors=${settings.ecobeesensors}", 1, null, "trace")
 				if (atomicState.settingsCurrentSensors != settings.ecobeesensors) {
 					LOG("atomicState.settingsCurrentSensors != ecobeesensors: changes detected!", 1, null, "warn")					
 				} else { 
                 	LOG("atomicState.settingsCurrentSensors == ecobeesensors: No changes detected!", 1, null, "trace")
                 }
-				input(name: "ecobeesensors", title:inputTitle("Select Ecobee Sensors (${numFound} found)"), type: "enum", required:false, description: "${HE?'Click':'Tap'} to choose", multiple:true, 
+				input(name: "ecobeesensors", title:inputTitle("Select Ecobee Sensors (${numFound} found)"), type: "enum", required:false, description: "Click to choose", multiple:true, 
 					  options: options, width: 8, height: 1)
 			}
 			if (settings?.showThermsAsSensor) { 
 				section() {
-					paragraph(getFormat("note", "Thermostats are included as an available sensor selection to allow for actual temperature & motion states on the thermostat to be utilized within ${HE?'Hubitat':'SmartThings'}"))
+					paragraph(getFormat("note", "Thermostats are included as an available sensor selection to allow for actual temperature & motion states on the thermostat to be utilized within Hubitat"))
 				}
 			}
 		} else {
 			// No sensors associated with this set of Thermostats was found
 		    LOG("sensorsPage(): No sensors found.", 4)
 			section() { 
-				paragraph("No associated sensors were found. ${HE?'Click':'Tap'} Done${settings.thermostats?'':' and select one or more Thermostats'}")
+				paragraph("No associated sensors were found. Click Done${settings.thermostats?'':' and select one or more Thermostats'}")
 			}
 		}		 
-	}
-}
-
-def askAlexaPage() {
-	
-	dynamicPage(name: "askAlexaPage", title: pageTitle("Ecobee Suite Manager\nAsk Alexa Integration"), nextPage: "") {
-	
-		if (HE) {
-			section('Ask Alexa integration is not supported on Hubitat (yet)') {
-				paragraph(image: 'https://raw.githubusercontent.com/MichaelStruck/SmartThingsPublic/master/smartapps/michaelstruck/ask-alexa.src/AskAlexa@2x.png', 
-					title: 'Ask Alexa Integration', '')
-			}
-		} else if (atomicState.askAlexaMQ == null) {
-			section('Ask Alexa either isn\'t installed, or no Message Queues are defined (sending to the deprecated Primary Message Queue is not supported).\n\n' +
-					'Please verify your Ask Alexa settings and then return here to complete the integration.') {
-				paragraph(image: 'https://raw.githubusercontent.com/MichaelStruck/SmartThingsPublic/master/smartapps/michaelstruck/ask-alexa.src/AskAlexa@2x.png', 
-					title: 'Ask Alexa Integration', '')
-			}
-		} else {
-			section("${cleanAppName(app.label?:app.name)} can send Ecobee Alerts and Reminders to one or more Ask Alexa, where Alexa can deliver them as messages and/or notificaitons.") {
-				paragraph(image: 'https://raw.githubusercontent.com/MichaelStruck/SmartThingsPublic/master/smartapps/michaelstruck/ask-alexa.src/AskAlexa@2x.png', 
-					title: 'Ask Alexa Integration', '')
-				input(name: 'askAlexa', type: 'bool', title: 'Send Ecobee Alerts & Reminders to Ask Alexa?', required: false, submitOnChange: true, defaultValue: false)
-			}
-			if (askAlexa) {
-				section("${cleanAppName(app.label?:app.name)} can send Ecobee Alerts and Reminders to one or more Ask Alexa Message Queues.") {
-					input(name: 'listOfMQs', type: 'enum', title: 'Send to these Ask Alexa Message Queues', description: 'Tap to select', options: atomicState.askAlexaMQ, submitOnChange: true, 
-						multiple: true, required: true)
-				}
-				section("${cleanAppName(app.label?:app.name)} can automatically acknowledge Ecobee Alerts and Reminders when they are deleted from the Ask Alexa Message Queue${(listOfMQs&&(listOfMQs.size()>1))?'s':''}?") {
-					input(name: 'ackOnDelete', type: 'bool', title: 'Acknowledge on delete?', required: false, submitOnChange: false, defaultValue: false)
-				}
-				section('Ask Alexa can automatically expire Ecobee Alerts and Reminders if they are not acknowledged within a specified time limit.') {
-					input(name: 'expire', type: 'number', title: 'Automatically expire Alerts & Reminders after how many hours (optional)?', description: 'Tap to set', submitOnChange: true, required: false, range: "0..*", defaultValue: '')
-				}
-				if (expire) {
-					section("Do you want to automatically acknowledge Ecobee Alerts and Reminders when they are expired from the Ask Alexa Message Queue${(listOfMQs&&(listOfMQs.size()>1))?'s':''}?") {
-						input(name: 'ackOnExpire', type: 'bool', title: 'Acknowledge on expiry?', required: false, defaultValue: false)
-					}
-				} 
-			}
-		}
 	}
 }
 
@@ -466,95 +409,46 @@ def preferencesPage() {
 	LOG("=====> preferencesPage() entered. settings: ${settings}", 5)
 	
 	dynamicPage(name: "preferencesPage", title: pageTitle("Ecobee Suite Manager\nPreferences"), nextPage: "") {
-		if (ST) {
-        	List echo = []
-        	section(title: "Notifications") {
-				paragraph "Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most once per hour."
-            }
-            section(title: "Notification Devices") {
-                input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, 
-                      required: false /*((settings?.phone == null) && !settings.notifiers && !settings.speak)*/, submitOnChange: true)
-                input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
-                      required: false /*((settings.phone == null) && !settings.speak && !settings.pushNotify)*/, multiple: true, submitOnChange: true)
-                if (settings?.notifiers) {
-                    echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                    if (echo) {
-                        input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
-                              defaultValue: false, submitOnChange: true)
-                    }
-                }
-                input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
-                      required: false /*(!settings.pushNotify && !settings.notifiers && !settings.speak)*/, submitOnChange: true)
-            }
-			section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "Speech Devices") {
-                input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
-                if (settings.speak) {
-                    input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", 
-                          multiple: true, hideWhenEmpty: true, submitOnChange: true)
-                    input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", 
-                          multiple: true, hideWhenEmpty: true, submitOnChange: true)
-                    if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
-                }
-            }
-            if (echo || settings.speak){
-                section("Do Not Disturb") {
-                    input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true)
-                    input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications from:'), required: (settings.speakTimeEnd != null))
-                    input(name: "speakTimeEnd", type: "time", title: inputTitle("Only speak notifications until:"), required: (settings.speakTimeStart != null))
-                    String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
-                        (" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
-                    paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
-                }
-            }
-			section() {
-				paragraph ( "A notification is always sent to the Hello Home log")
+		List echo = []
+		section(title: sectionTitle("Notifications")) {
+			paragraph("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour.", width: 8)
+		}
+		section(title: smallerTitle("Notification Devices")) {
+			input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true, width: 6,
+				  required: false /*(!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))*/)
+			if (settings?.notifiers) {
+				echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+				if (echo) {
+					input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
+						  defaultValue: false, submitOnChange: true)
+				}
 			}
-		} else {		// HE
-        	List echo = []
-			section(title: sectionTitle("Notifications")) {
-				paragraph("Notifications are only sent when the Ecobee API connection is lost and unrecoverable, at most 1 per hour.", width: 8)
-            }
-            section(title: smallerTitle("Notification Devices")) {
-				input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification Devices"), submitOnChange: true, width: 6,
-					  required: false /*(!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null)))*/)
-                if (settings?.notifiers) {
-                    echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                    if (echo) {
-                        input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the Echo Speaks device${echo.size()>1?'s':''}?", 
-                              defaultValue: false, submitOnChange: true)
-                    }
-                }
+		}
+		section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
+			input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
+			if (settings.speak) {
+				input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select speech devices"), 
+					  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+				input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select music devices"), 
+					  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+				input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
 			}
-            section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
-                input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
-                if (settings.speak) {
-                    input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select speech devices"), 
-                          multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-                    input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select music devices"), 
-                          multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-                    input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
-                }
+		}
+		if (echo || settings.speak) {
+			section(smallerTitle("Do Not Disturb")) {
+				input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
+				input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
+				input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
+				String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
+								(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
+				paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
 			}
-            if (echo || settings.speak) {
-                	section(smallerTitle("Do Not Disturb")) {
-                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
-                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
-                        input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
-						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
-										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
-						paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
-                    }
-                }
-            section() {
-            	paragraph "A 'HelloHome' notification is always sent to the Location Event log"
-            }
+		}
+		section() {
+			paragraph "A 'HelloHome' notification is always sent to the Location Event log"
 		}
         section(title: sectionTitle("Configuration")) {}
-		if (ST) {
-			section("Mobile Device") {
-				input(name: 'mobile', type: 'enum', options: ["Android", "iOS"], title: 'Select your primary mobile device type', defaultValue: 'iOS', submitOnChange: true, required: true, multiple: false)
-			}
-		}
+
 		section(title: smallerTitle("Hold Actions")) {
 			input(name: "holdType", title:inputTitle("Select default Hold Type"), type: "enum", required:false, multiple:false, defaultValue: "Until I Change", width: 4, 
 				  submitOnChange: true, description: "Until I Change", options: ["Until I Change", "Until Next Program", "2 Hours", "4 Hours", "Specified Hours", "Thermostat Setting"])
@@ -568,13 +462,13 @@ def preferencesPage() {
 		}	
 		section(title: smallerTitle("Smart Auto")) {
         	paragraph("The 'Smart Auto Temperature Adjust' feature determines if you want to allow the thermostat setpoint to be changed using the arrow buttons in the Tile when the thermostat is in 'auto' mode.", width: 8)
-			if (HE) paragraph("", width: 4)
+			paragraph("", width: 4)
 			input(name: "smartAuto", title:inputTitle("Use Smart Auto Temperature Adjust?"), type: "bool", required:false, defaultValue: false, description: "", width: 4)
             if (settings?.smartAuto == null) { app.updateSetting('smartAuto', false); settings?.smartAuto = false; }
 		}	 
 		section(title: smallerTitle("Polling Interval")) {
         	paragraph("How frequently do you want to poll the Ecobee cloud for changes? For maximum responsiveness to commands, it is recommended to set this to 1 minute.", width: 8)
-			if (HE) paragraph("", width: 4)
+			paragraph("", width: 4)
 			input(name: "pollingInterval", title:inputTitle("Select Polling Interval")+" (minutes)", type: "enum", required:false, multiple:false, defaultValue:3, description: "3", width: 4,
             	  options:["1", "2", "3", "5", "10", "15", "30"])
             if (settings?.pollingInterval == null) { app.updateSetting('pollingInterval', "3"); settings?.pollingInterval = "3"; }
@@ -582,21 +476,21 @@ def preferencesPage() {
 		section(title: smallerTitle("Thermostat as Sensor")) {
         	paragraph("Showing Thermostats as separate Sensors is useful if you need to access the actual temperature in the room where the Thermostat is located and not just the (average) "+
             		  "temperature displayed on the Thermostat.", width: 8)
-			if (HE) paragraph("", width: 4)
+			paragraph("", width: 4)
 			input(name: "showThermsAsSensor", title:inputTitle("Include Thermostats as a separate Ecobee Sensor?"), type: "bool", required:false, defaultValue: false, description: "", width: 6)
             if (settings?.showThermsAsSensor == null) { app.updateSetting('showThermsAsSensor', false); settings?.showThermsAsSensor = false; }
 		}
 		section(title: smallerTitle("Button Delay")) {
         	paragraph("Set the pause between pressing the setpoint arrows and initiating the API calls. The pause needs to be long enough to allow you to click the arrow again for changing by "+
             		  "more than one degree.", width: 8)
-			if (HE) paragraph("", width: 4)
+			paragraph("", width: 4)
 			input(name: "arrowPause", title:inputTitle("Select Button Delay")+" (seconds)", type: "enum", required:false, multiple:false, description: "4", defaultValue:4, 
 				  options:["1", "2", "3", "4", "5"], width: 4)
             if (settings?.arrowPause == null) { app.updateSetting('arrowPause', 4); settings?.arrowPause = 4; }
 		}
 		section(title: smallerTitle("Decimal Precision")) {
         	paragraph("Select the desired number of decimal places to display for all temperatures (default 1 for C, 0 for F).", width: 8)
-			if (HE) paragraph("", width: 4)
+			paragraph("", width: 4)
 			String digits = wantMetric() ? "1" : "0"
 			input(name: "tempDecimals", title:inputTitle("Select Decimal display precision"), type: "enum", required:false, multiple:false, defaultValue:digits, description: digits, 
 				  options:["0", "1", "2"], submitOnChange: true, width: 4)
@@ -605,7 +499,7 @@ def preferencesPage() {
         section(title: sectionTitle("Operations")) {}
 		section(title: smallerTitle("Debug Log Level")) {
         	paragraph("Select the debug logging level. Higher levels send more information to IDE Live Logging. A setting of 2 is recommended for normal operations.", width: 8)
-			if (HE) paragraph("", width: 4)
+			paragraph("", width: 4)
 			input(name: "debugLevel", title:inputTitle("Select Debug Log Level"), type: "enum", required:false, multiple:false, defaultValue:2, description: "2", 
 				  options:["5", "4", "3", "2", "1", "0"], width: 4)
             if (settings?.debugLevel == null) { app.updateSetting('debugLevel', 2); settings?.debugLevel = 2; }
@@ -634,7 +528,6 @@ def debugDashboardPage() {
 			paragraph "Selected Thermostats: ${settings.thermostats}"
 			paragraph "Selected Sensors: ${settings.ecobeesensors}"
 			paragraph "Decimal Precision: ${getTempDecimals()}"
-			if (askAlexa) paragraph 'Ask Alexa support is enabled'
 		}
 		section(sectionTitle("Dump of Debug Variables")) {
 			def debugParamList = getDebugDump()
@@ -694,10 +587,10 @@ def refreshAuthTokenPage() {
 
 def helperSmartAppsPage() {
 	//LOG("helperSmartAppsPage() entered", 5)
-	LOG("The available Helper ${ST?'Smart':''}Apps are ${getHelperSmartApps()}", 5, null, "info")
+	LOG("The available Helper Apps are ${getHelperSmartApps()}", 5, null, "info")
 	
-	dynamicPage(name: "helperSmartAppsPage", title: pageTitle("Ecobee Suite Manager\nHelper ${ST?'SmartApps':'Applications'}"), nextPage: "", install: false, uninstall: false, submitOnChange: true) { 
-		section(sectionTitle("Global Pause: ${HE?'<span style=color:red;font-weight: bold>':''}${settings.pauseHelpers?'ON':'OFF'}${HE?'</span>':''}")) {
+	dynamicPage(name: "helperSmartAppsPage", title: pageTitle("Ecobee Suite Manager\nHelper Applications"), nextPage: "", install: false, uninstall: false, submitOnChange: true) { 
+		section(sectionTitle("Global Pause: <span style=color:red;font-weight: bold>${settings.pauseHelpers?'ON':'OFF'}</span>")) {
 			// paragraph "Global Pause will pause all Helpers that are not already paused; un-pausing will restore only the Helpers that weren't already paused. "
 			input(name: "pauseHelpers", type: "bool", title: inputTitle("Global Pause all Helpers?"), width: 6, 
             	  defaultValue: ((atomicState.appsArePaused == null) ? false : atomicState.appsArePaused), submitOnChange: true)
@@ -714,15 +607,14 @@ def helperSmartAppsPage() {
 					atomicState.appsArePaused = false
 				}
 			}
-			if (HE)	 paragraph(getFormat("note", "The '(paused)' status for the installed Helpers displayed below may not change until you refresh this page."))
+			paragraph(getFormat("note", "The '(paused)' status for the installed Helpers displayed below may not change until you refresh this page."))
 		}
-		// if (ST) section("Installed Helper SmartApps") {}
-		section(sectionTitle("Avalable Helper ${ST?'SmartApps':'Applications'}")) {
+		section(sectionTitle("Avalable Helper Applications")) {
 			getHelperSmartApps().each { oneApp ->
 				LOG("Processing the app: ${oneApp}", 4, null, "trace")			  
-				def allowMultiple = ST ? oneApp.multiple.value : oneApp.multiple
-				app(name:"${ST?oneApp.name.value:oneApp.name}", appName:"${ST?oneApp.appName.value:oneApp.appName}", namespace:"${ST?oneApp.namespace.value:oneApp.namespace}", 
-					title: inputTitle("${ST?oneApp.title.value:oneApp.title}"), multiple:allowMultiple)
+				def allowMultiple = oneApp.multiple
+				app(name: oneApp.name, appName: oneApp.appName, namespace: oneApp.namespace, 
+					title: inputTitle(oneApp.title), multiple:allowMultiple)
 			}
 		}
 	}
@@ -755,7 +647,7 @@ boolean testForDeviceHandlers() {
 		if ((d1 != null) && (d2 != null)) success = true
 	} catch (Exception e) {
 		log.debug "Exception ${e}"
-		if ("${e}".startsWith("${ST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) { 
+		if ("${e}".startsWith("com.hubitat.app.exception.UnknownDeviceTypeException")) { 
 			LOG("You MUST add the ${getChildThermostatName()} and ${getChildSensorName()} Device Handlers to the IDE BEFORE running the setup.", 1, null, "error")
 			success = false
 		}
@@ -804,96 +696,13 @@ void removeChildDevices(devices, dummyOnly = false) {
 
 // End Preference Pages Helpers
 
-// Ask Alexa Helpers
-String getMQListNames() {
-	if (!listOfMQs || (listOfMQs?.size() == 0)) return ''
-	def temp = []
-	listOfMQs?.each { 
-		temp << atomicState.askAlexaMQ?.getAt(it).value
-	}
-	return ((temp.size() > 1) ? ('(' + temp.join(", ") + ')') : (temp.toString()))?.replaceAll("\\[",'').replaceAll("\\]",'')
-}
-
-void askAlexaMQHandler(evt) {
-	LOG("askAlexaMQHandler ${evt?.name} ${evt?.value}",4,null,'trace')
-	
-	// Ignore null events
-	if (!evt || !settings.askAlexa) return
-	
-	// Always collect the List of Message Queues when refreshed, even if not currently integrating with Ask Alexa
-	if (evt.value == 'refresh') {
-		atomicState.askAlexaMQ = evt.jsonData && evt.jsonData?.queues ? evt.jsonData.queues : []
-		return
-	}
- 
-	if (!askAlexa) return								// Not integrated with Ask Alexa
-	if (!ackOnExpire && !ackOnDelete) return	// Doesn't want these automatically acknowledged
-	
-	// Handle our messages that were deleted or expired (evt.value == 'Ecobee Status.msgID')
-	if (evt.value.startsWith('Ecobee Status.')) {
-		def askAlexaAlerts = atomicState.askAlexaAlerts				// Get the lists of alerts we have sent to Ask Alexa
-		def askAlexaAppAlerts = atomicState.askAlexaAppAlerts
-		if (!askAlexaAlerts && !askAlexaAppAlerts) return			// Looks like we haven't any outstanding alerts at the moment
-		
-		def messageID = evt.value.drop(14)
-		if (askAlexaAlerts) {
-			askAlexaAlerts.each { tid ->
-				if (askAlexaAlerts[tid]?.contains(messageID)) {
-					def deleteType = (evt.jsonData && evt.jsonData?.deleteType) ? evt.jsonData.deleteType : ''	// deleteType: "delete", "delete all" or "expire"
-					if (ackOnExpire && (deleteType == 'expire')) {
-						// Acknowledge this expired message
-						//log.debug "askAlexaMQHandler(): request to acknowledge expired ${messageID}"
-						acknowledgeEcobeeAlert( tid.toString(), messageID )
-					} else if (ackOnDelete && (deleteType.startsWith('delete'))) {
-						// Acknowledge this deleted message
-						//log.debug "askAlexaMQHandler(): request to acknowledge deleted ${messageID}"
-						acknowledgeEcobeeAlert( tid.toString(), messageID )
-					}
-					askAlexaAlerts[tid].removeAll{ it == messageID }
-					if (!askAlexaAlerts[tid]) askAlexaAlerts[tid] = []
-					atomicState.askAlexaAlerts = askAlexaAlerts
-				}
-			}
-		}
-		// AppAlerts are generated locally, so no need to acknowledge back to Ecobee
-		if (askAlexaAppAlerts) {
-			askAlexaAppAlerts.each { tid ->
-				if (askAlexaAppAlerts[tid]?.contains(messageID)) {
-					askAlexaAppAlerts[tid].removeAll{ it == messageID }
-					if (!askAlexaAppAlerts[tid]) askAlexaAppAlerts[tid] = []
-					atomicState.askAlexaAppAlerts = askAlexaAppAlerts
-				}
-			}
-		}
-	}
-}
-
-void deleteAskAlexaAlert( String type, String msgID ) {
-	LOG("Deleting ${type} Ask Alexa message ID ${msgID}",2,null,'info')
-	sendLocationEvent( name: 'AskAlexaMsgQueueDelete', value: type, unit: msgID, isStateChange: true, data: [ queues: listOfMQs ])
-}
-
-void acknowledgeEcobeeAlert( String deviceId, String ackRef ) {
-	//					   {"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
-	// def jsonRequestBody = '{"functions":[{"type":"acknowledge"}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","ackRef":"' + ackRef + '","ackType":"accept"}}'
-	
-	//					   {"functions":[{"type":"resumeProgram","params":{"resumeAll":"'+allStr+'"}}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
-	def jsonRequestBody = '{"functions":[{"type":"acknowledge","params":{"thermostatIdentifier":"' + deviceId + '","ackRef":"' + ackRef + '","ackType":"accept"}}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
-	if (debugLevel(4)) LOG("acknowledgeEcobeeAlert(${deviceId},${ackRef}): jsonRequestBody = ${jsonRequestBody}", 4, null, 'trace')
-	// need to get child from the deviceId
-	result = sendJson(null, jsonRequestBody)
-	if (result) LOG("Acknowledged Ecobee Alert ${ackRef} for thermostat ${deviceId})",2,null,'info')
-}
-// End of Ask Alexa Helpers
-
 // OAuth Init URL
 def oauthInitUrl() {
 	LOG("oauthInitUrl with callback: ${callbackUrl}", 2)
-	atomicState.oauthInitState = ST ? UUID.randomUUID().toString() : stateUrl // HE does redirect a little differently
+	atomicState.oauthInitState = stateUrl // HE does redirect a little differently
 	//log.debug "oauthInitState: ${atomicState.oauthInitState}"
 	
 	boolean chg = false
-	if (ST && atomicState?.initialized && (atomicState?.apiKey == null)) chg = true; atomicState.initialized = false;	 // Force changing over the the new ST key
 	def oauthParams = [
 		response_type:	"code",
 		client_id:		ecobeeApiKey,					// actually, the Ecobee Suite app's client ID
@@ -901,14 +710,9 @@ def oauthInitUrl() {
 		redirect_uri:	callbackUrl,
 		state:			atomicState.oauthInitState
 	]
-	if (ST && chg) atomicState.initialized = true
 		
-	LOG("oauthInitUrl - ${ST?'Before redirect:':''} location: ${apiEndpoint}/authorize?${toQueryString(oauthParams)}", 2, null, 'debug')
-	if (ST) {
-		redirect(location: "${apiEndpoint}/authorize?${toQueryString(oauthParams)}")
-	} else {
-		return "${apiEndpoint}/authorize?${toQueryString(oauthParams)}"
-	}
+	LOG("oauthInitUrl - location: ${apiEndpoint}/authorize?${toQueryString(oauthParams)}", 2, null, 'debug')
+	return "${apiEndpoint}/authorize?${toQueryString(oauthParams)}"
 }
 void parseAuthResponse(resp) {
 
@@ -941,7 +745,7 @@ def callback() {
 			client_id : ecobeeApiKey,
 			state	  : oauthState,
 			redirect_uri: callbackUrl,
-            timeout: (ST?20:30)
+            timeout: 30
 		]
 
 		def tokenUrl = "${apiEndpoint}/token?${toQueryString(tokenParams)}"
@@ -971,8 +775,8 @@ def callback() {
 }
 def success() {
 	def message = """
-	<p>Your ecobee Account is now connected to ${ST?'SmartThings':'Hubitat'}!</p>
-	<p>${HE?'Close this window and c':'C'}lick 'Done' to finish setup.</p>
+	<p>Your ecobee Account is now connected to Hubitat!</p>
+	<p>Close this window and click 'Done' to finish setup.</p>
 	"""
 	connectionStatus(message)
 }
@@ -980,7 +784,7 @@ def success() {
 def fail() {
 	def message = """
 		<p>The connection could not be established!</p>
-		<p>${HE?'Close this window and c':'C'}lick 'Done' to return to the menu.</p>
+		<p>Close this window and click 'Done' to return to the menu.</p>
 	"""
 	connectionStatus(message)
 }
@@ -991,14 +795,14 @@ def connectionStatus(message, redirectUrl = null) {
 			<meta http-equiv="refresh" content="3; url=${redirectUrl}" />
 		"""
 	}
-	String hubIcon = ST ? 'https://s3.amazonaws.com/smartapp-icons/Partner/support/st-logo%402x.png' : 'https://raw.githubusercontent.com/SANdood/Icons/master/Hubitat/HubitatLogo.png'
+	String hubIcon = 'https://raw.githubusercontent.com/SANdood/Icons/master/Hubitat/HubitatLogo.png'
 
 	def html = """
 <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=640">
-<title>Ecobee & ${ST?'SmartThings':'Hubitat'} connection</title>
+<title>Ecobee & Hubitat connection</title>
 <style type="text/css">
 		@font-face {
 				font-family: 'Swiss 721 W01 Thin';
@@ -1046,7 +850,7 @@ def connectionStatus(message, redirectUrl = null) {
 		<div class="container">
 				<img src="https://s3.amazonaws.com/smartapp-icons/Partner/ecobee%402x.png" alt="ecobee icon" />
 				<img src="https://s3.amazonaws.com/smartapp-icons/Partner/support/connected-device-icn%402x.png" alt="connected device icon" />
-				<img src="${hubIcon}" alt="${ST?'SmartThings':'Hubitat'} logo" />
+				<img src="${hubIcon}" alt="Hubitat logo" />
 				${message}
 		</div>
 </body>
@@ -1091,7 +895,7 @@ def getEcobeeThermostats() {
                     atomicState.numAvailTherms = resp.data.thermostatList?.size() ?: 0
 
                     resp.data.thermostatList.each { stat ->
-                        def dni = (HE?'ecobee_suite-thermostat-':'') + ([app.id, stat.identifier].join('.'))	// HE App.ID is just too short :)
+                        def dni = 'ecobee_suite-thermostat-' + ([app.id, stat.identifier].join('.'))	// HE App.ID is just too short :)
                         stats[dni] = getThermostatDisplayName(stat)
                         statLocation[stat.identifier] = stat.location
                     }
@@ -1316,7 +1120,7 @@ def initialize() {
     
     if (atomicState.inPollChildren && atomicState.initialized) {
     	// let the current poll cycle complete first, so we don't yank the rug out from under its feet
-        def seconds = ST ? 21 : 26
+        def seconds = 26
         def skipTime = atomicState.skipTime?:now()
         if (skipTime) {
         	seconds = seconds - (((now() - skipTime)/1000).toInteger())	// mow much longer do we need to wait
@@ -1338,9 +1142,6 @@ def initialize() {
 	atomicState.reAttempt = 0
 	atomicState.reAttemptPoll = 0
     
-	subscribe(app, appHandler)
-	if (ST) subscribe(location, "AskAlexaMQ", askAlexaMQHandler) // HE version doesn't support Ask Alexa yet
-	// if (!askAlexa) atomicState.askAlexaAlerts = null
 	if (settings.pauseSwitch) {
 		subscribe(settings.pauseSwitch, 'switch', pauseSwitchHandler)
 	}
@@ -1406,7 +1207,7 @@ def initialize() {
 	} 
 	if (!sunriseAndSunset || (!(sunriseAndSunset.sunrise instanceof Date) || !(sunriseAndSunset.sunset instanceof Date))) {
 		LOG("Can't get valid sunrise/set times, using generic defaults (05:00-->18:00)",1,null,'warn')
-		LOG("PLEASE SET THE ZIPCODE AND THE LATITUDE/LONGITUDE FOR LOCATION ${location.name}${ST?'IN YOUR MOBILE APP':'IN YOUR HUB\'S SETTINGS/LOCATION'}",1,null,'error')
+		LOG("PLEASE SET THE ZIPCODE AND THE LATITUDE/LONGITUDE FOR LOCATION ${location.name} IN YOUR HUB\'S SETTINGS/LOCATION",1,null,'error')
 	} else {
 		isOk = true
 		LOG("Got valid sunrise/set data: ${sunriseAndSunset}",1,null,'info')
@@ -1447,9 +1248,8 @@ def initialize() {
 	// Clear out all atomicState object collections (in case a thermostat was deleted or replaced, so we don't slog around useless old data)
 	// also has the effect of forcing ALL the data bits to be sent down to the thermostats/sensors again
 	atomicState.alerts				 = [:]
-	atomicState.askAlexaAlerts 		= [:]
-	atomicState.askAlexaAppAlerts 	= [:]
 	atomicState.audio 				= [:]
+	atomicState.capabilities		= [:]
 	atomicState.changeAlerts 		= [:]
 	atomicState.changeAttrs 		= [:]
 	atomicState.changeAudio 		= [:]
@@ -1484,8 +1284,6 @@ def initialize() {
 	atomicState.weather 			= [:]
 	
 	// Add subscriptions as little "daemons" that will check on our health	  
-	subscribe(location, scheduleWatchdog)
-	if (ST) subscribe(location, "routineExecuted", scheduleWatchdog)		// HE doesn't support Routines
 	subscribe(location, "sunset", sunsetEvent)
 	subscribe(location, "sunrise", sunriseEvent)
 	//subscribe(location, "position", scheduleWatchdog)
@@ -1509,7 +1307,7 @@ def initialize() {
 	spawnDaemon("watchdog", false)
 	
 	//send activity feeds to tell that device is connected
-	def notificationMessage = aOK ? "is connected to ${ST?'SmartThings':'Hubitat'}" : "had an error during setup of devices"
+	def notificationMessage = aOK ? "is connected to Hubitat" : "had an error during setup of devices"
 	sendActivityFeeds(notificationMessage)
 	atomicState.timeSendPush = null
 	if (!atomicState.initialized) {
@@ -1551,7 +1349,7 @@ def createChildrenThermostats() {
 			try {
 				d = addChildDevice(myNamespace, getChildThermostatName(), dni, location.hubs[0]?.id, ["label":"EcobeeTherm: ${atomicState.thermostatsWithNames[dni]}", completedSetup:true])			
 			} catch (Exception e) {
-				if ("${e}".startsWith("${ST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) {
+				if ("${e}".startsWith("com.hubitat.app.exception.UnknownDeviceTypeException")) {
 					LOG("You MUST add the ${getChildThermostatName()} Device Handler to the IDE BEFORE running the setup.", 1, null, "error")
 					return false
 				}
@@ -1575,8 +1373,8 @@ def createChildrenSensors() {
 			try {
 				d = addChildDevice(myNamespace, getChildSensorName(), dni, location.hubs[0]?.id, ["label":"EcobeeSensor: ${atomicState.eligibleSensors[dni]}", completedSetup:true])
 			} catch (Exception e) { //(physicalgraph.app.exception.UnknownDeviceTypeException e) {
-				if ("${e}".startsWith("${ST?'physicalgraph':'com.hubitat'}.app.exception.UnknownDeviceTypeException")) {
-					LOG("You MUST add the ${getChildSensorName()} Device ${ST?'Handler':'Driver'} to the ${getHubPlatform} IDE BEFORE running the setup.", 1, null, "error")
+				if ("${e}".startsWith("com.hubitat.app.exception.UnknownDeviceTypeException")) {
+					LOG("You MUST add the ${getChildSensorName()} Device Driver to the Hubitat IDE BEFORE running the setup.", 1, null, "error")
 					return false
 				} else if ("${e}".contains("unique.error")) {
                 	LOG("Duplicate DNI Exception while creating ${getChildSensorName()} - another process already owns ${dni}",1,null,warn)
@@ -1640,20 +1438,8 @@ def pauseChildApp(String appId, pause) {
 }
 String cleanAppName(String name) {
 	if (name != "") {
-        String cleanName
-        if (ST) {
-            def flags = [' (paused', ' (open', ' (closed', ' (active', ' (inactive', ' (Cool', ' (Heat', ' (Aux', ' (Off', ' (Auto', ' (Emer', ' (HVAC', ' (Hold', ' (min' ]
-            flags.each { flag ->
-                if (!cleanName) {
-                	int idx = name.indexOf(flag) 			// returns -1 if not found, and we know the name can't start with the above substrings
-                    if (idx > 0) cleanName = name.substring(0, idx)
-                }
-            }
-            return (cleanName ?: name).trim()
-        } else {
-        	int idx = name.indexOf('<span')
-            return ((idx > 0) ? name.substring(0, idx) : name).trim()
-        }
+        int idx = name.indexOf('<span')
+		return ((idx > 0) ? name.substring(0, idx) : name).trim()
     }
 }
 def getMyChildren(String name="") {
@@ -1663,11 +1449,7 @@ def getMyChildren(String name="") {
 	if (name == "") {
     	apps = getChildApps()
     } else {
-		if (ST) {
-    		apps = findAllChildAppsByName(name)
-		} else {
-			apps = getChildApps().findAll { (it.name == name) }
-		}
+		apps = getChildApps().findAll { (it.name == name) }
     }
     apps.each {
        	if (it.installationState == 'COMPLETE') {
@@ -1893,7 +1675,7 @@ boolean spawnDaemon(daemon="all", unsched=true) {
 		// Reschedule the daemon
 		try {
 			if ( unsched ) { unschedule(pollScheduled) }
-			if ( HE || canSchedule() ) { 
+			if ( true || canSchedule() ) { 
 				//LOG("Using runEvery to setup polling with pollingInterval: ${pollingInterval}", 1, null, 'trace')
 				"runEvery${pollingInterval}Minute${pollingInterval!=1?'s':''}"(pollScheduled)
 				// Only poll now if we were recovering - if not asked to unschedule, then whoever called us will handle the first poll (as in initialize())
@@ -1913,7 +1695,7 @@ boolean spawnDaemon(daemon="all", unsched=true) {
 		// Reschedule the daemon
 		try {
 			if ( unsched ) { unschedule("scheduleWatchdog") }
-			if ( HE || canSchedule() ) { 
+			if ( true || canSchedule() ) { 
 				"runEvery${watchdogInterval}Minutes"("scheduleWatchdog")
 				result = result && true
 			} else {
@@ -2013,7 +1795,7 @@ void pollChildren(String deviceId="",force=false) {
 	if (atomicState.inPollChildren) {
 		def skipTime = atomicState.skipTime ?: now()
 		// Give the already running poll 20/25 seconds to complete
-		if ((now() - skipTime) < (ST ? 20000 : 25000)) {
+		if ((now() - skipTime) < 25000) {
 			// Already/still polling, capture the arguments and skip this poll request
 			if (atomicState.skipTime != skipTime) atomicState.skipTime = skipTime
             if (force) {
@@ -2124,12 +1906,6 @@ void pollChildren(String deviceId="",force=false) {
 
 void generateAlertsAndEvents() {
 	generateTheEvents()
-	if (askAlexa) {
-		def startMS = now()
-		sendAlertEvents()
-		def allDone = now()
-		LOG("Alerts sent (${allDone - startMS} / ${allDone - atomicState.pollEcobeeAPIStart}ms)",2,null,'trace')
-	}
 }
 
 void generateTheEvents() {
@@ -2236,13 +2012,11 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 						boolean ttu = false
 						if (lastDetails) {			// if we have prior revision details
 							if (lastDetails[2] != latestDetails[2]) tru = true	// runtime
-							//if (settings.askAlexa && (lastDetails[1] != latestDetails[1])) tau = true	// alerts
 							if (lastDetails[1] != latestDetails[1]) tau = true	// alerts
 							// log.debug "alertsChanged? ${tau}"
 							if (needPrograms || (lastDetails[0] != latestDetails[0])) ttu = true	// thermostat 
 						} else {					// no priors, assume all have been updated
 							tru = true 
-							if (settings.askAlexa) tau = true
 							ttu = true
 						}
 						//log.debug "${tstat}: thermostat: ${ttu}, runtime: ${tru}, alerts: ${tau}"
@@ -2262,7 +2036,6 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 					
 					atomicState.latestRevisions = latestRevisions		// let pollEcobeeAPI update last with latest after it finishes the poll
 					updatesLog.thermostatUpdated = thermostatUpdated	// Revised: settings, program, event, device
-					//atomicState.alertsUpdated = askAlexa ? alertsUpdated : false // Revised: alerts (no need to get them if we're not doing AskAlexa)
 					updatesLog.alertsUpdated = alertsUpdated			// Revised: alerts (no need to get them if we're not doing AskAlexa)
 					updatesLog.runtimeUpdated = runtimeUpdated			// Revised: runtime, equip status, remote sensors, weather?
 					atomicState.changedThermostatIds = tstatsStr		// only these thermostats need to be requested in pollEcobeeAPI
@@ -2441,8 +2214,8 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 
 	if (thermostatUpdated || forcePoll) {
         if (debugLevelFour) LOG("thermostatUpdated: ${thermostatUpdated}, forcePoll: ${forcePoll}, a.needPrograms: ${needPrograms}, checking: ${checkTherms}", 1, null, 'trace')
-		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true","includeAudio":"true"'
-		gw += ' settings program events audio'
+		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true","includeAudio":"true","includeCapabilities":"true"'
+		gw += ' settings program events audio capabilities'
 	}
 	if (forcePoll) {
 		// oemCfg needed only for Carrier Cor, to determine if useSchedule is enabled - but if it isn't, we aren't of much use anyway
@@ -2482,8 +2255,8 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	def pollParams = [
 		uri: apiEndpoint,
 		path: "/1/thermostat",
-		headers: ["Content-Type": "${ST?'application':'text'}/json", "Authorization": "Bearer ${atomicState.authToken}"],
-		query: [format: 'json', body: jsonRequestBody, 'contenttype': "${ST?'application':'text'}/json" ],
+		headers: ["Content-Type": "text/json", "Authorization": "Bearer ${atomicState.authToken}"],
+		query: [format: 'json', body: jsonRequestBody, 'contenttype': "text/json" ],
         timeout: 30
 	]
 	def pollState = [
@@ -2495,12 +2268,8 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	//if (TIMERS) { def tNow = now(); log.debug "TIMER: asyncPollPrep done (${tNow - atomicState.pollEcobeeAPIStart}ms)"; atomicState.asyncPollStart = tNow; }
 	boolean result = true
 	try {
-		if (ST) {
-			include 'asynchttp_v1'
-			asynchttp_v1.get( pollEcobeeAPICallback, pollParams, pollState )
-		} else {
-			asynchttpGet( pollEcobeeAPICallback, pollParams, pollState )
-		}
+
+		asynchttpGet( pollEcobeeAPICallback, pollParams, pollState )
 		//atomicState.waitingForCallback = true
 		// return true
 	} catch (Exception e) {
@@ -2553,6 +2322,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
     Map tempSensors 			= [:]
 	Map tempWeather 			= [:]
 	Map tempAlerts 				= [:]
+	Map tempCapabilities		= [:]
 	Map statUpdates 			= [:].withDefault {[]}
 	Map tempStatTime 			= atomicState.statTime
 	Map latestRevisions 		= atomicState.latestRevisions
@@ -2573,6 +2343,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	boolean scheduleUpdated 	= false		// means both atomicState.schedule AND atomicState.timeSchedule were updated
 	boolean climatesUpdated 	= false
 	boolean curClimRefUpdated 	= false
+	boolean capabilitiesUpdated = false
 	
 	if (resp && resp.status && (resp.status == 200)) {
 		try {
@@ -2623,6 +2394,16 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 					}
 				}
 				if (thermostatUpdated || forcePoll ) {
+					if (stat.capabilities) {
+						log.debug "stat capabilities: ${stat.capabilities}"
+						if (!tempCapabilities && (atomicState.capabilities != "")) tempCapabilities = atomicState.capabilities as HashMap
+						if (!tempCapabilities[tid] || (tempCapabilities[tid] != stat.capabilities)) {
+							capabilitiesUpdated = true
+							statUpdates[tid].add('capabilities')
+							tempCapabilities[tid] = stat.capabilities as HashMap
+						}
+						//log.debug "${tid} capabilitiesUpdated: ${capabilitiesUpdated}"
+					}
                     if (stat.settings) {
 						if (!tempSettings) tempSettings = atomicState.settings as HashMap
 						if (!tempSettings || !tempSettings[tid] || (tempSettings[tid].fanMinOnTime != stat.settings.fanMinOnTime) || 				// fanMinOnTime, humidity(Level), hvacMode & dehumidityLevel
@@ -2920,6 +2701,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
         if (sensorsUpdated) 	atomicState.remoteSensors 		= tempSensors
         if (weatherUpdated) 	atomicState.weather 			= tempWeather
         if (alertsUpdated) 		atomicState.alerts 				= tempAlerts
+		if (capabilitiesUpdated) atomicState.capabilities		= tempCapabilities
 								atomicState.statUpdates 		= statUpdates
 		//statUpdates = null
 
@@ -2979,9 +2761,9 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
         
         // Work-around SmartThings CPU time limit of 20 seconds...
 		if (alertsUpdated) {
-			if (ST && (prepTime > 11000)) { runIn(2, generateAlertsAndEvents, [overwrite: true]) } else { generateAlertsAndEvents() }
+			generateAlertsAndEvents()
 		} else {
-			if (ST && (prepTime > 11000)) { runIn(2, generateTheEvents, [overwrite: true]) } else { generateTheEvents() }
+			generateTheEvents()
 		}
 	} 	
 	
@@ -3061,137 +2843,7 @@ def convertTimeScheduleToSchedule(timeSchedule) {
 void sendAlertEvents() {
 	if (atomicState.alerts == null) return				// silently return until we get the alerts environment initialized
 	boolean debugLevelFour = debugLevel(4)
-	// log.debug "askAlexa: ${askAlexa}"
-	if (!settings.askAlexa) {
-		if (debugLevelFour) LOG("Ask Alexa support not configured, nothing to do, returning",4, null, 'trace')
-		return							// Nothing to do (at least for now)
-	}
-	if (debugLevelFour) LOG("Entered sendAlertEvents() ${atomicState.alerts}", 1, null, 'trace')
-   
-	Map askAlexaAlerts = atomicState.askAlexaAlerts			// list of alerts we have sent to Ask Alexa
-	if (!askAlexaAlerts) askAlexaAlerts = [:]				// make it a map if it doesn't exist yet
-	Map alerts = atomicState.alerts							// the latest alerts from Ecobee (all thermostats, by tid)
-	int totalAlexaAlerts = 0		// including any duplicates we send
-	int totalNewAlerts = 0
-	int removedAlerts = 0
-	Map updatesLog = atomicState.updatesLog
-	List changedTids = updatesLog.changedTids
-    Map statUpdates = atomicState.statUpdates
-	Map statTime = atomicState.statTime
-	
-	// Initialize some Ask Alexa items
-	String queues = getMQListNames()
-	def exHours = expire ? expire as int : 0
-	def exSec=exHours * 3600
-	
-	// Walk through the list of thermostats
-	changedTids.each { tid ->
-	//atomicState.thermostatData.thermostatList.each { stat ->
-		// String tid = stat.identifier
-        
-		String tstatName = getThermostatName(tid)
-		
-		if (statUpdates[tid]?.contains('alerts') && alerts.containsKey(tid) && (alerts[tid] != [])) {	// we have alerts to process!
-			// Avoid saying "Your Downstairs Thermostat thermostat" or even "Your Downstairs Ecobee Thermostat"
-			String append = ' thermostat'
-			String tName = tstatName.toLowerCase().trim()
-			if (tName.endsWith('thermostat') || tName.endsWith('ecobee')) append = ''
-			tstatName = tstatName + append
-			// Process the alerts for this thermostat
-			def newAlerts = []
-			def newAlexaAlerts = [:]
-			def allAlerts = []
-			alerts[tid]?.each { alert ->
-				if (alert.acknowledgeRef.toString().contains(tid)) {		// only process alerts that match this thermostat ID
-					// reformat the alert type (header)
-					String alertTypeMsg = alertTranslation( alert.alertType, alert.notificationType )
-
-					// remove "Contact your service contractor..."
-					def idx = alert.text.indexOf('Contact your s')
-					
-					// Build the components of the translated message 
-					String messageID = alert.acknowledgeRef.toString()				// Use acknowledgeRef as the messageID - it is supposed to be unique
-					
-					def expireTimeMS = (exSec==0) ? 0 : new Date().parse('yyyy-MM-dd HH:mm:ss',"${alert.date} ${alert.time}").getTime() + (exSec * 1000)
-					def tstatTimeMS = new Date().parse('yyyy-MM-dd HH:mm:ss',statTime[tid]).getTime()
-					if ((tstatTimeMS - expireTimeMS) < 0) {	
-						// hasn't expired yet, so send it/refresh it to Ask Alexa
-						String dateTimeStr = fixDateTimeString( alert.date, alert.time, statTime[tid]) // gets us "today" or "yesterday"
-						String translatedMessage = "Your ${tstatName} reported ${alertTypeMsg} ${dateTimeStr}: ${idx>0?alert.text.take(idx).trim():alert.text}"
-						// Now send the message to Ask Alexa
-						LOG("Sending '${messageID}' to Ask Alexa ${queues?.size()>0?queues:'Primary Message'} queue${listOfMQs?.size()>1?'s':''}: ${translatedMessage}",3,null,'info')
-						sendLocationEvent(name: 'AskAlexaMsgQueue', value: 'Ecobee Status', unit: messageID, isStateChange: true, 
-							descriptionText: translatedMessage, data: [ queues: listOfMQs, overwrite: true, expires: exSec, suppressTimeDate: true, trackDelete: true ])
-						totalAlexaAlerts++			// total that we sent to Ask Alexa for all thermostats
-						allAlerts << messageID		// all the alerts that we found for THIS thermostat
-						// Create the list of new alerts we sent to Ask Alexa
-						if (!askAlexaAlerts || !askAlexaAlerts.containsKey(tid) || !askAlexaAlerts[tid]?.contains(messageID)) {
-							if (!newAlerts || !newAlerts.contains(messageID)) {
-								newAlerts << messageID
-							}
-						}
-					} else {
-						// This messageID has expired, don't send it, delete it from Ask Alexa, remove it from outstanding Ask Alexa Alerts
-						deleteAskAlexaAlert( 'Ecobee Status', messageID )
-						if (askAlexaAlerts && askAlexaAlerts.containsKey(tid) && (askAlexaAlerts[tid] != [])) {
-							if (askAlexaAlerts[tid]?.contains(messageID)) {
-								askAlexaAlerts[tid].removeAll{ it == messageID }
-								if (!askAlexaAlerts[tid]) askAlexaAlerts[tid] = []
-								atomicState.askAlexaAlerts = askAlexaAlerts
-							}
-						}
-					}
-				}
-			} // end of all the alerts for this thermostat
-			// Collect all the new alerts that we found for this thermostat
-			if (newAlerts != []) {
-				totalNewAlerts += newAlerts.size()
-				newAlexaAlerts[tid] = newAlerts
-				askAlexaAlerts = askAlexaAlerts ? (askAlexaAlerts + newAlexaAlerts) : newAlexaAlerts
-			}
-
-			// Now, check if any of the saved alerts have been acknowledged (are no longer in thermostat.alerts)
-			if (askAlexaAlerts && askAlexaAlerts.containsKey(tid) && (askAlexaAlerts[tid] != [])) {
-				def closedAlerts = askAlexaAlerts[tid]
-				if (allAlerts) {
-					askAlexaAlerts[tid] = askAlexaAlerts[tid] + allAlerts
-					closedAlerts = askAlexaAlerts[tid] - askAlexaAlerts[tid].intersect(allAlerts)
-				}
-				// def closedAlerts = allAlerts ? (askAlexaAlerts[tid] + allAlerts) - askAlexaAlerts[tid].intersect(allAlerts) : askAlexaAlerts[tid]
-				// log.debug "Closed Alerts: ${closedAlerts}"
-				if (closedAlerts) {
-					closedAlerts.each { msgID ->
-						deleteAskAlexaAlert( 'Ecobee Status', msgID.toString() )
-						askAlexaAlerts[tid].removeAll{ it == msgID }
-					}
-					// Remove the deleted alerts from the list of outstanding alerts
-					// askAlexaAlerts[tid] = askAlexaAlerts[tid] - closedAlerts
-					removedAlerts += closedAlerts.size()
-				}
-			}
-		} else {
-			// There are no alerts for this tid... check if we need to delete any from Ask Alexa's queues
-			if (debugLevelFour) LOG('No active Ecobee alerts',4,null,'trace')
-			if (askAlexaAlerts && askAlexaAlerts.containsKey(tid) && (askAlexaAlerts[tid] != [])) {
-				// we have some previously queued messages to delete
-				LOG("Ecobee Alerts cleared for ${tstatName}, deleting outstanding notices from Ask Alexa",2,null,'info')
-				askAlexaAlerts[tid].each { msgID ->
-					deleteAskAlexaAlert ('Ecobee Status', msgID.toString())
-				}
-				removedAlerts += askAlexaAlerts[tid].size()
-				askAlexaAlerts[tid] = []	// clear out the list
-			}
-		}
-	} // end of { stat ->
-	if (totalAlexaAlerts > 0) {
-		def updated = totalAlexaAlerts - totalNewAlerts
-		LOG("Sent ${totalNewAlerts} new ${updated?'and '+updated.toString()+' updated ':''}Alert${(totalNewAlerts+updated)>1?'s':''} to Ask Alexa",2,null,'info')
-	}
-	if (removedAlerts > 0) {
-		LOG("Removed ${removedAlerts} Alert${removedAlerts>1?'s':''} from Ask Alexa",2,null,'info')
-	}
-//	  if ((askAlexaAlerts != [:]) || (newAlexaAlerts != [:])) askAlexaAlerts = askAlexaAlerts + newAlexaAlerts
-	atomicState.askAlexaAlerts = askAlexaAlerts
+	return												// Nothing to do (old AskAlexa support)
 }
 
 String alertTranslation( alertType, notificationType ){
@@ -3519,13 +3171,6 @@ void updateSensorData() {
                         myStatsClimatesChanged = true
                     }
 
-                    // For Health Check, update the sensor's checkInterval	any time we get forcePolled - which should happen a MINIMUM of once per hour
-                    // This because sensors don't necessarily update frequently, so this simple event should be enough to let the ST Health Checker know
-                    // we are still alive!
-                    if (ST && forcePoll) { 
-                        sensorData << [checkInterval: 3900] // 5 minutes longer than an hour
-                    }
-
                     // Let the sensor know what's going on... (This could be the only reason we were called upon)
                     if (programUpdated)		sensorData << [programUpdated: 		timeNow]
                     if (curClimRefUpdated) 	sensorData << [curClimRefUpdated: 	timeNow]	// Want them all to have "Updated" in the name
@@ -3583,8 +3228,6 @@ void updateThermostatData() {
 	int apiPrecision 			= usingMetric ? 2 : 1	// highest precision available from the API
 	int userPrecision 			= getTempDecimals()		// user's requested display precision
 	def tstatNames 				= []
-	def askAlexaAppAlerts 
-    if (settings.askAlexa) askAlexaAppAlerts = (atomicState.askAlexaAppAlerts?: [:])
 
 	int totalUpdates = 0
 	Map statTime = atomicState.statTime
@@ -3597,6 +3240,7 @@ void updateThermostatData() {
     HashMap tempLocation			// ditto
     HashMap tempAudio				// ditto
     HashMap tempStatInfo			// ditto
+	HashMap tempCapabilities		// ditto
     
     // We ALWAYS need these, so grab them all at once (more efficient than grabbing them tid by tid)....
     HashMap statSettings 			= atomicState.settings as HashMap
@@ -3632,7 +3276,7 @@ void updateThermostatData() {
     boolean needPrograms 	= false	// Global flag - will be set true if ANY thermostat needs thermostat.programs
     
 	def statData = changedTids.inject([:]) { collector, tid ->
-        String DNI = (HE?'ecobee_suite-thermostat-':'') + ([ app.id, tid ].join('.'))
+        String DNI = 'ecobee_suite-thermostat-' + ([ app.id, tid ].join('.'))
         String tstatName = getThermostatName(tid)
         
         if (statUpdates[tid] || forcePoll) { 
@@ -3662,6 +3306,7 @@ void updateThermostatData() {
             boolean sensorsUpdated 		= statUpdates[tid]?.contains('sensors')
             boolean equipUpdated 		= statUpdates[tid]?.contains('equip')
             boolean statInfoUpdated 	= statUpdates[tid]?.contains('statInfo')
+			boolean capabilitiesUpdated = statUpdates[tid]?.contains('capabilities')
 
         // Handle things that only change when runtime object is updated)
         // OCCUPANCY
@@ -3829,54 +3474,6 @@ void updateThermostatData() {
                 }
                 // In this case, holdEndsAt is actually the date & time of the last valid update from the thermostat...
                 holdEndsAt = fixDateTimeString( disconnectedAt.take(10), disconnectedAt.drop(11), statTime[tid] )
-                if (forcePoll && settings.askAlexa) {
-                    // Let's send an Ask Alexa Alert for this as well - (Only on hourly/forcePolls, though, to minimize update overhead)
-                    String messageID = tid.toString()+'*disconnected'
-                    def exHours = expire ? expire as int : 0
-                    def exSec=exHours * 3600
-                    // If expiration is set, then stop sending alerts to Ask Alexa after disconnectTime + exHours
-                    def expireTimeMS = (exSec==0) ? 0 : disconnectedMS + (exSec * 1000)
-                    def currentTimeMS = now()
-                    if ((currentTimeMS - expireTimeMS) < 0) {	
-                        // Not time to expire the message, so send it	
-                        // Avoid saying "Your Downstairs Thermostat thermostat" or even "Your Downstairs Ecobee Thermostat"
-                        String append = ' thermostat'
-                        String tName = tstatName.toLowerCase().trim()
-                        if (tName.endsWith('thermostat') || tName.endsWith('ecobee')) append = ''
-                        tName = tstatName + append
-
-                        String translatedMessage = "Your ${tName} reported a Connectivity Alert: Ecobee Cloud connection lost ${holdEndsAt}. Please check HVAC power, wifi, and network connection."
-                        if (debugLevelFour) LOG("Sending ${translatedMessage} to Ask Alexa",4,null,'trace')
-                        sendLocationEvent(name: "AskAlexaMsgQueue", value: "Ecobee Status", unit: messageID, isStateChange: true, 
-                            descriptionText: translatedMessage, data: [ queues: listOfMQs, overwrite: true, expires: exSec, suppressTimeDate: true, trackDelete: true ])
-                        def newAlexaAppAlerts = [:]
-                        newAlexaAppAlerts[tid] = [messageID]
-                        if (askAlexaAppAlerts != [:]) newAlexaAppAlerts = askAlexaAppAlerts + newAlexaAppAlerts
-                        atomicState.askAlexaAppAlerts = newAlexaAppAlerts
-                        askAlexaAppAlerts = newAlexaAppAlerts
-                    } else {
-                        // It is past the expiry time, delete the message from the Ask Alexa queue(s)
-                        if (askAlexaAppAlerts && askAlexaAppAlerts[tid] && (askAlexaAppAlerts[tid] != [])) { 
-                            if (askAlexaAppAlerts[tid]?.toString().contains(messageID)) {
-                                deleteAskAlexaAlert('Ecobee Status', messageID)
-                                askAlexaAppAlerts[tid].removeAll{ it == messageID }
-                                if (!askAlexaAppAlerts[tid]) askAlexaAppAlerts[tid] = []
-                                atomicState.askAlexaAppAlerts = askAlexaAppAlerts
-                            }
-                        }
-                    }
-                }
-            } else if (settings.askAlexa) {
-                // We are connected, and Ask Alexa is enabled - check if we need to delete a prior Ask Alexa Alert
-                if (askAlexaAppAlerts && askAlexaAppAlerts[tid] && (askAlexaAppAlerts[tid] != [])) { 
-                    String msgID = tid.toString()+'*disconnected'
-                    if (askAlexaAppAlerts[tid]?.toString().contains(msgID)) {
-                        deleteAskAlexaAlert('Ecobee Status', msgID)
-                        askAlexaAppAlerts[tid].removeAll{ it == msgID }
-                        if (!askAlexaAppAlerts[tid]) askAlexaAppAlerts[tid] = []
-                        atomicState.askAlexaAppAlerts = askAlexaAppAlerts
-                    }
-                }
             }
             //if (TIMERS) log.debug "TIMER: Finished updating Alerts for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
             if (runningEvent && isConnected) {
@@ -4149,7 +3746,7 @@ void updateThermostatData() {
 
                 } else if (equipStatus.contains('de')) { // These can also run independent of heat/cool
                     equipOpStat = 'dehumidifier' 
-                    thermOpStat = equipStats.contains('fan') ? 'fan only (dehumidifier)' : 'idle (dehumidifier)'
+                    thermOpStat = equipStatus.contains('fan') ? 'fan only (dehumidifier)' : 'idle (dehumidifier)'
                     // SHOULD thermOpStat BE FAN ONLY? --> yes, this is fixed in ES Thermostat
                 } else if (equipStatus.contains('hu')) { 
                     equipOpStat = 'humidifier' 
@@ -4256,14 +3853,6 @@ void updateThermostatData() {
         // CLOUD: API link to Ecobee's Cloud status - doesn't change unless things get broken
             def checkInterval = 3600
             boolean cldChanged = false
-            if (ST) {
-                Integer pollingInterval = getPollingInterval() // if this changes, we recalculate checkInterval for Health Check
-                if (pollingInterval != atomicState.lastPI) {
-                    atomicState.lastPI = pollingInterval
-                    checkInterval = (pollingInterval <= 5) ? (16*60) : (((pollingInterval+1)*2)*60)
-                    if (checkInterval > 3600) checkInterval = 3900	// 5 minutes longer than an hour
-                }
-            }
             if (!changeCloud) changeCloud = atomicState.changeCloud as HashMap
             if (!changeCloud || !changeCloud[tid]) { 
             	changeCloud[tid] = ["x"]*4 as List 	// [lastPoll, apiConnection,isConnected,checkInterval]
@@ -4273,12 +3862,10 @@ void updateThermostatData() {
             	data << [lastPoll: lastPoll]
             	data << [apiConnected: apiConnection]
                 data << [ecobeeConnected: isConnected]
-          		if (ST) data << [checkInterval: checkInterval]
             } else {
                 if (changeCloud[tid][0] != lastPoll)				{ data << [lastPoll: lastPoll];				changeCloud[tid][0] = lastPoll; 		cldChanged = true; }
                 if (changeCloud[tid][1] != apiConnection)			{ data << [apiConnected: apiConnection];	changeCloud[tid][1] = apiConnection; 	cldChanged = true; }
                 if (changeCloud[tid][2] != isConnected)				{ data << [ecobeeConnected: isConnected];	changeCloud[tid][2] = isConnected; 		cldChanged = true; }
-                if (ST && (changeCloud[tid][3] != checkInterval))	{ data << [checkInterval: checkInterval];	changeCloud[tid][3] = checkInterval; 	cldChanged = true; }
             }
             if (cldChanged) cloudChanged = true
             ////if (TIMERS) log.debug "TIMER: Finished queueing Equip & Cloud for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
@@ -4296,7 +3883,7 @@ void updateThermostatData() {
                     if (changeAlerts[tid][i] != alertVal) {
                         data << [ (alert.toString()): alertVal ]
                         alrtChanged = true
-                        if (HE && (alert == 'wifiOfflineAlert')) {
+                        if (alert == 'wifiOfflineAlert') {
                             atomicState.wifiAlert = ((alertVal == true) || (alertValue == 'true'))
                             updateMyLabel()
                         }
@@ -4440,10 +4027,10 @@ void updateThermostatData() {
             boolean nvrChanged = false
             // Thermostat configuration stuff that almost never changes - if any one changes, send them all
             if (!changeNever) changeNever = atomicState.changeNever as HashMap
-            if (settingsUpdated || climatesUpdated || forcePoll || !changeNever || !changeNever[tid]) {				// || (changeNever[tid] != neverList)) {
+            if (forcePoll || settingsUpdated || climatesUpdated || capabilitiesUpdated || !changeNever || !changeNever[tid]) {				// || (changeNever[tid] != neverList)) {
             	boolean needAll = false
                 if (!changeNever || !changeNever[tid]) {
-                	changeNever[tid] = ["x"]*15 as List 		// ['x','x','x','x','x','x','x','x','x','x','x','x','x','x','x']
+                	changeNever[tid] = ["x"]*16 as List 		// ['x','x','x','x','x','x','x','x','x','x','x','x','x','x','x','x']
                     neverChanged = true
                     needAll = true
                 }
@@ -4533,6 +4120,18 @@ void updateThermostatData() {
                     // climatesList is ['Away','Home','Sleep']
                     if (climatesList && (changeNever[tid][14] != climatesList))	{ data << [climatesList: climatesList]; changeNever[tid][14] = climatesList; 	nvrChanged = true; }
                 }
+				// Handle new "capabilities" - for now, this will only include fanCapabilities/speedOptions (BAB, 12.14.2022)
+				if (forcePoll || capabilitiesUpdated || needAll) {
+					tempCapabilities = atomicState.capabilities as HashMap
+					List fso = tempCapabilities[tid]?.fanCapabilities?.speedOptions
+					String fanSpeedOptions 
+					if (fso && fso != []) {
+						fanSpeedOptions = new groovy.json.JsonBuilder(fso.collect{it.toLowerCase()}).toString() 
+					} else {
+						fanSpeedOptions = "[]"
+					}
+					if (changeNever[tid][15] != fanSpeedOptions) { data << [fanSpeedOptions: fanSpeedOptions]; changeNever[tid][15] = fanSpeedOptions; nvrChanged = true; }
+				}
                 if (nvrChanged) {
                     neverChanged = true
                 }
@@ -4912,7 +4511,7 @@ boolean refreshAuthToken(child=null) {
 					result = false
 				} else {
 					if (debugLevelFour) LOG("Setting up runIn for refreshAuthToken", 1, child, 'trace') // 4
-					if ( HE || canSchedule() ) {						
+					if ( true || canSchedule() ) {						
 						runIn(watchdogInterval, refreshAuthToken, [overwrite: true]) 
 					} else { 
 						if (debugLevelFour) LOG("Unable to schedule refreshAuthToken, running directly", 1, child, 'trace')			 // 4			
@@ -4926,7 +4525,7 @@ boolean refreshAuthToken(child=null) {
 		} catch (java.util.concurrent.TimeoutException e) {
 			LOG("refreshAuthToken(), TimeoutException: ${e}.", 1, child, "warn")
 			// Likely bad luck and network overload, move on and let it try again
-			if ( HE || canSchedule() ) { runIn(watchdogInterval, refreshAuthToken, [overwrite: true]) } else { refreshAuthToken(child) }		
+			if ( true || canSchedule() ) { runIn(watchdogInterval, refreshAuthToken, [overwrite: true]) } else { refreshAuthToken(child) }		
             if (resp) resp = [:]
 			return false
 		} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | 
@@ -5479,7 +5078,7 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 		return false
 	}
 	
-	def currentThermostatHold = ST ? child.device.currentValue('thermostatHold') : child.device.currentValue('thermostatHold', true)
+	def currentThermostatHold = child.device.currentValue('thermostatHold', true)
 	if (currentThermostatHold == 'vacation') {
 		LOG("setHold(): Can't set a new hold for ${child.device.displayName} (${deviceId}) while in a vacation hold",2,null,'warn')
 		// can't change fan mode while in vacation hold, so silently fail
@@ -5498,8 +5097,8 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 	if (theHoldType == 'nextTransition') {
 		// Check if setpoints are the same as currentClimateRef, if so, don't set a new hold
 		// ResumeProgram above already sent the setpoint display values for the currentClimate to the DTH
-		def ncHsp = (ST ? child.device.currentValue('heatingSetpoint') : child.device.currentValue('heatingSetpoint', true)) as BigDecimal
-		def ncCsp = (ST ? child.device.currentValue('coolingSetpoint') : child.device.currentValue('coolingSetpoint', true)) as BigDecimal
+		def ncHsp = (child.device.currentValue('heatingSetpoint', true)) as BigDecimal
+		def ncCsp = (child.device.currentValue('coolingSetpoint', true)) as BigDecimal
 		def currHeatAt = roundIt((isMetric ? (cToF(ncHsp) * 10.0) : (ncHsp * 10.0)), 0)		// better precision using BigDecimal round-half-up
 		def currCoolAt = roundIt((isMetric ? (cToF(ncCsp) * 10.0) : (ncCsp * 10.0)), 0)
 		LOG("setHold() - currHeat: ${currHeatAt}, currCool: ${currCoolAt}",2, child, 'trace')
@@ -5558,7 +5157,7 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
 	if (debugLevelFour) LOG("setFanMode(${fanMode}) for ${child.device.displayName} (${deviceId})", 4, null, 'trace') 
 	boolean isMetric = (temperatureScale == "C")
 	
-	def currentThermostatHold = ST ? child.device.currentValue('thermostatHold') : child.device.currentValue('thermostatHold', true)
+	def currentThermostatHold = child.device.currentValue('thermostatHold', true)
 	if (currentThermostatHold == 'vacation') {
 		LOG("setFanMode() for ${child.device.displayName} (${deviceId}): Can't change Fan Mode while in a vacation hold",2,null,'warn')
 		return false
@@ -5572,8 +5171,8 @@ boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefin
 	// And then these values are ignored when setting only the fan
 	// use the device's values, not the ones from our last API refresh
 	// BUT- IF changing Fan Mode while in a Hold, maybe we should be overloading the hold instead of cancelling it?
-	def ncHsp = (ST ? child.device.currentValue('heatingSetpoint') : child.device.currentValue('heatingSetpoint', true)) as BigDecimal
-	def ncCsp = (ST ? child.device.currentValue('coolingSetpoint') : child.device.currentValue('coolingSetpoint', true)) as BigDecimal
+	def ncHsp = (child.device.currentValue('heatingSetpoint', true)) as BigDecimal
+	def ncCsp = (child.device.currentValue('coolingSetpoint', true)) as BigDecimal
 	def h = roundIt((isMetric ? (cToF(ncHsp) * 10.0) : (ncHsp * 10.0)), 0)		// better precision using BigDecimal round-half-up
 	def c = roundIt((isMetric ? (cToF(ncCsp) * 10.0) : (ncCsp * 10.0)), 0)
 	
@@ -5642,7 +5241,7 @@ boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', s
 	// NOTE: Will use only the first program if there are two with the same exact name
 	LOG("setProgram(${program}) for ${child.device.displayName} (${deviceId}) - holdType: ${sendHoldType}${sendHoldHours?', holdHours: '+sendHoldHours.toString():''}", 2, child, 'info')		
 	
-	String currentThermostatHold = ST ? child.device.currentValue('thermostatHold') : child.device.currentValue('thermostatHold', true)
+	String currentThermostatHold = child.device.currentValue('thermostatHold', true)
 	if (currentThermostatHold == 'vacation') {									// shouldn't happen, child device should have already verified this
 		LOG("setProgram(${program}) for ${child.device.displayName} (${deviceId}): Can't change Program while in a vacation hold",2,child,'warn')
 		return false
@@ -6241,11 +5840,10 @@ boolean sendJsonRetry() {
 
 String getChildThermostatName() { return "Ecobee Suite Thermostat" }
 String getChildSensorName()		{ return "Ecobee Suite Sensor" }
-String getServerUrl()			{ return (ST) ? "https://graph.api.smartthings.com" : getFullApiServerUrl()}	// hubitat: /oauth/authorize}
-String getShardUrl()			{ return (ST) ? getApiServerUrl() : getFullApiServerUrl()+"?access_token=${atomicState.accessToken}" }
-String getCallbackUrl()			{ return (ST) ? "${serverUrl}/oauth/callback" : "https://cloud.hubitat.com/oauth/stateredirect" } // : */ "${serverUrl}/callback" } // &" + URLEncoder.encode("access_token", "UTF-8") + "=" + URLEncoder.encode(atomicState.accessToken, "UTF-8") } // #access_token=${atomicState.accessToken}" }
-String getBuildRedirectUrl()	{ return (ST) ? "${serverUrl}/oauth/initialize?appId=${app.id}&access_token=${atomicState.accessToken}&apiServerUrl=${shardUrl}" : 
-													   "${serverUrl}/oauth/stateredirect?access_token=${atomicState.accessToken}" }
+String getServerUrl()			{ return getFullApiServerUrl()}	// hubitat: /oauth/authorize}
+String getShardUrl()			{ return getFullApiServerUrl()+"?access_token=${atomicState.accessToken}" }
+String getCallbackUrl()			{ return "https://cloud.hubitat.com/oauth/stateredirect" } // : */ "${serverUrl}/callback" } // &" + URLEncoder.encode("access_token", "UTF-8") + "=" + URLEncoder.encode(atomicState.accessToken, "UTF-8") } // #access_token=${atomicState.accessToken}" }
+String getBuildRedirectUrl()	{ return "${serverUrl}/oauth/stateredirect?access_token=${atomicState.accessToken}" }
 String getStateUrl()			 { return "${getHubUID()}/apps/${app?.id}/callback?access_token=${atomicState?.accessToken}" }
 String getApiEndpoint()			 { return "https://api.ecobee.com" }
 String getInfo()				 { return 'info' }
@@ -6256,24 +5854,13 @@ String getError()				 { return 'error' }
 
 // This is the API Key from the Ecobee developer page. Can be provided by the app provider or use the appSettings
 String getEcobeeApiKey() { 
-	if (HE) {
-		if (atomicState.apiKey == null) atomicState.apiKey = "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"		// Ecobee key for Ecobee Suite 1.7.** on Hubitat
-		return "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"
-	} else if (!appSettings.clientId) {
-		if (atomicState.initialized) { 
-        	return atomicState.apiKey ?: "obvlTjUuuR2zKpHR6nZMxHWugoi5eVtS"	// Original Ecobee key for Ecobee Connect && Ecobee Suite v1.0.0 -->1.6.**
-		} else {
-			atomicState.apiKey =	"EnJClRbJeT7DqPnlc29goR1hQvnV33tE"	// NEW Ecobee key for Ecobee Suite 1.7.** on SmartThings
-			return					"EnJClRbJeT7DqPnlc29goR1hQvnV33tE"
-		}
-	} else {
-		return appSettings.clientId 
-	}
+	if (atomicState.apiKey == null) atomicState.apiKey = "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"		// Ecobee key for Ecobee Suite 1.7.** on Hubitat
+	return "NOpc6i5ooiLLi1VPtVlJ0uv9Nh5cCfcc"
 }
 
 String getThermostatName(String tid) {
 	// Get the name for this thermostat
-	String DNI = (HE?'ecobee_suite-thermostat-':'') + ([ app.id, tid ].join('.'))
+	String DNI = 'ecobee_suite-thermostat-' + ([ app.id, tid ].join('.'))
 	def thermostatsWithNames = atomicState.thermostatsWithNames
 	String tstatName = (thermostatsWithNames?.containsKey(DNI)) ? thermostatsWithNames[DNI] : ''
 	if (tstatName == '') {
@@ -6283,7 +5870,7 @@ String getThermostatName(String tid) {
 }
 
 String getThermostatDNI(String tid) {
-	return (HE?'ecobee_suite-thermostat-':'') + ([app.id, tid].join('.'))
+	return 'ecobee_suite-thermostat-' + ([app.id, tid].join('.'))
 }
 
 void LOG(message, level=3, child=null, String logType='debug', event=false, displayEvent=true) {
@@ -6360,60 +5947,24 @@ void sendMessage(String notificationMessage) {
     	String msgPrefix = atomicState.appDisplayName + " at ${location.name}: "
         String msg = msgPrefix + notificationMessage
         boolean addFrom = true // (msgPrefix && !msgPrefix.startsWith("From "))
-		if (ST) {
-			if (settings.notifiers) {
-				sendNotifications(msgPrefix, notificationMessage)               
-            }
-			if (settings.phone) { // check that the user did select a phone number
-				if ( settings.phone.indexOf(";") > 0){
-					def phones = settings.phone.split(";")
-					for ( def i = 0; i < phones.size(); i++) {
-						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-					}
-				} else {
-					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
-				}
-			} 
-			if (settings.pushNotify) {
-				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPush(msg)								// Push to everyone (and log it, else the new SmartThings app won't push it)
-			}
-			if (settings.speak && notifyNowOK()) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak( (addFrom?"From ":"") + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText( (addFrom?"From ":"") + msg )
-					}
-				}
-			}
-			// Always send to Hello Home / Location Event log
-			if (msg != notificationMessage) sendNotificationEvent( notificationMessage )
-		} else {		// HE
-			if (settings.notifiers) {
-                sendNotifications(msgPrefix, notificationMessage)               
-            }
-			if (settings.speak && notifyNowOK()) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak((addFrom?"From ":"") + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText((addFrom?"From ":"") + msg )
-					}
-				}
-			}
-			
+
+		if (settings.notifiers) {
+			sendNotifications(msgPrefix, notificationMessage)               
 		}
+		if (settings.speak && notifyNowOK()) {
+			if (settings.speechDevices != null) {
+				settings.speechDevices.each {
+					it.speak((addFrom?"From ":"") + msg )
+				}
+			}
+			if (settings.musicDevices != null) {
+				settings.musicDevices.each {
+					it.setLevel( settings.volume )
+					it.playText((addFrom?"From ":"") + msg )
+				}
+			}
+		}
+
 		// Always send to Hello Home / Location Event log
 		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
     }
@@ -6644,7 +6195,7 @@ def getDebugDump() {
 
 void apiLost(where = "[where not specified]") {
 	
-	LOG("apiLost() - ${where}: Lost connection with APIs. unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running Ecobee Suite Manager ${ST?'Smart':''}App and logging in again", 1, null, "error")
+	LOG("apiLost() - ${where}: Lost connection with APIs. unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running Ecobee Suite Manager App and logging in again", 1, null, "error")
 	atomicState.apiLostDump = getDebugDump()
 	if (apiConnected() == "lost") {
 		LOG("apiLost() - already in lost atomicState. Nothing else to do. (where= ${where})", 5, null, "trace")
@@ -6652,7 +6203,7 @@ void apiLost(where = "[where not specified]") {
 	}
    
 	// provide cleanup steps when API Connection is lost
-	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager ${ST?'Smart':''}App and re-enter your account login credentials."
+	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from Ecobee, because the access credential changed or was lost. Please go to the Ecobee Suite Manager App and re-enter your account login credentials."
 	atomicState.connected = "lost"
 	updateMyLabel()
 	atomicState.authToken = null
@@ -6660,7 +6211,7 @@ void apiLost(where = "[where not specified]") {
 	sendMessage(notificationMessage)
 	generateEventLocalParams()
 
-	LOG("Unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running the Ecobee Suite Manager ${ST?'Smart':''}App and logging in again", 0, null, "error")
+	LOG("Unscheduling Polling and refreshAuthToken. User MUST reintialize the connection with Ecobee by running the Ecobee Suite Manager App and logging in again", 0, null, "error")
 	
 	// Notify each child that we lost so it gets logged
 	if ( debugLevel(3) ) {
@@ -6676,11 +6227,11 @@ void apiLost(where = "[where not specified]") {
 
 void notifyApiLost() {
 
-	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from ${ST?'SmartThings':'Hubitat'}/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
+	def notificationMessage = "Your Ecobee Suite thermostat${settings.thermostats.size()>1?'s are':' is'} disconnected from Hubitat/Ecobee. Please go to the Ecobee Suite Manager and re-enter your Ecobee account login credentials."
 	if ( atomicState.connected == "lost" ) {
 		generateEventLocalParams()
 		sendMessage(notificationMessage)
-		LOG("notifyApiLost() - API Connection Previously Lost. User MUST reintialize the connection with Ecobee by running the Ecobee Suite Manager ${ST?'Smart':''}App and logging in again", 0, null, "error")
+		LOG("notifyApiLost() - API Connection Previously Lost. User MUST reintialize the connection with Ecobee by running the Ecobee Suite Manager App and logging in again", 0, null, "error")
 	} else {
 		// Must have restored connection
 		unschedule("notifyApiLost")
@@ -6871,7 +6422,7 @@ void runEvery3Minutes(handler) {
 										 'humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired','isRentalProperty','isVentilatorTimerOn','lastServiceDate','locale','monthlyElectricityBillLimit',
 										 'monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician','smartCirculation',/*'soundAlertVolume','soundTickVolume',*/'stage1CoolingDissipationTime',
 										 'stage1HeatingDissipationTime','tempAlertNotifyTechnician','userAccessCode','userAccessSetting','ventilatorDehumidify','ventilatorFreeCooling','ventilatorMinOnTimeAway',
-										 'ventilatorMinOnTimeHome','ventilatorOffDateTime','ventilatorType'
+										 'ventilatorMinOnTimeHome','ventilatorOffDateTime','ventilatorType', 'fanSpeed'
 										]
 // Temperature Settings
 @Field final List tempSettingsList =	['auxMaxOutdoorTemp','auxOutdoorTempAlert','coldTempAlert','compressorProtectionMinTemp','compressorProtectionMinTemp','coolMaxTemp','coolMinTemp',
@@ -6891,7 +6442,7 @@ void runEvery3Minutes(handler) {
 										 'heatPumpReversalOnCool','holdAction','hotTempAlertEnabled','humidityAlertNotify','humidityAlertNotifyTechnician','humidityHighAlert','humidityLowAlert','installerCodeRequired',
 										 'isRentalProperty','isVentilatorTimerOn','lastServiceDate','locale','monthlyElectricityBillLimit','monthsBetweenService','remindMeDate','serviceRemindMe','serviceRemindTechnician',
 										 'smartCirculation'/*,'soundAlertVolume','soundTickVolume'*/,'stage1CoolingDissipationTime','stage1HeatingDissipationTime','tempAlertNotifyTechnician','ventilatorDehumidify','ventilatorFreeCooling',
-										 'ventilatorMinOnTimeAway','ventilatorMinOnTimeHome','ventilatorOffDateTime', 'ventilatorType'
+										 'ventilatorMinOnTimeAway','ventilatorMinOnTimeHome','ventilatorOffDateTime', 'ventilatorType', 'fanSpeed'
 										]
 @Field final List EcobeeeAudioSettings =['microphoneEnabled','playbackVolume','soundAlertVolume','soundTickVolume'
 										]
@@ -6920,8 +6471,6 @@ void runEvery3Minutes(handler) {
 @Field final List DOW = 				['Mon','Tue','Wed','Thu','Fri','Sat','Sun']	// Ecobee's order for program.schedule[day][climateIds...
 
 void updateMyLabel() {
-	if (ST) return								// ST doesn't support the colored label approach
-	
 	// Display Ecobee connection status as part of the label...
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
@@ -6960,13 +6509,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>')}
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')}
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>')	: txt} // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>'}
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>'}
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -6976,16 +6525,16 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE: ${myText}"
+			return"<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
@@ -6995,36 +6544,26 @@ String getFormat(type, myText=""){
 
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
+//String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
+    return false    
 }
 boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
+    return true
 }
 
 String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+    return "Hubitat"
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
