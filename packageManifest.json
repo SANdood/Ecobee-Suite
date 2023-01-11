@@ -10,7 +10,7 @@
       "id": "70b3ec47-c06f-4570-b4ae-5ee76da59db8",
       "name": "Ecobee Suite Manager",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
       "version": "1.8.56"
@@ -19,7 +19,7 @@
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
       "name": "ecobee Suite Open Contacts",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.24"
@@ -28,7 +28,7 @@
       "id": "74d41ded-9a35-4916-98e3-2309364b477b",
       "name": "ecobee Suite Quiet Time",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.11"
@@ -37,7 +37,7 @@
       "id": "c630b027-9cdf-49ff-bff6-28ced385a9e2",
       "name": "ecobee Suite Routines",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.25"
@@ -46,7 +46,7 @@
       "id": "cc05b8d1-01b7-449e-b12b-9f56ccbdf23c",
       "name": "ecobee Suite Smart Circulation",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.13"
@@ -55,7 +55,7 @@
       "id": "d14d22cf-bdb4-4d12-8c89-ac849a5e0e53",
       "name": "ecobee Suite Smart Humidity",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.11"
@@ -64,7 +64,7 @@
       "id": "7d7849d3-333f-4782-b52b-4f910bf5380f",
       "name": "ecobee Suite Smart Mode",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.26"
@@ -73,7 +73,7 @@
       "id": "8d9d8751-6679-4581-b594-41549106c789",
       "name": "ecobee Suite Smart Room",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.19"
@@ -82,7 +82,7 @@
       "id": "a07da3bd-6638-4d9a-a739-4efc37273095",
       "name": "ecobee Suite Smart Switches",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.13"
@@ -91,7 +91,7 @@
       "id": "e60053c8-a397-4231-ba7f-59ef23505740",
       "name": "ecobee Suite Smart Vents",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.15"
@@ -100,7 +100,7 @@
       "id": "329710ed-0ee3-41a6-9e47-f04b7a6174a6",
       "name": "ecobee Suite Smart Zones",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.11"
@@ -109,7 +109,7 @@
       "id": "487d8dde-077c-4ae3-b17b-180039b3e59d",
       "name": "ecobee Suite Thermal Comfort",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.20"
@@ -118,7 +118,7 @@
       "id": "1438882b-2411-406d-a831-997c4b569c31",
       "name": "ecobee Suite Working From Home",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy",
       "required": true,
       "oauth": false,
       "version": "1.8.21a"
@@ -129,7 +129,7 @@
       "id": "78e479a2-7fe8-4b92-94b2-5784b66e6086",
       "name": "Ecobee Suite Thermostat",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
       "version": "1.8.25"
     },
@@ -137,15 +137,23 @@
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
       "name": "Ecobee Suite Sensor",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
       "required": true,
       "version": "1.8.08"
+    },
+    {
+      "id": "6f2a5735-8312-4aef-a7f9-637c6279fd83",
+      "name": "Ecobee Suite Switch",
+	  "namespace": "sandood",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-switch.src/ecobee-suite-switch.groovy",
+      "required": true,
+      "version": "1.8.01"
     },
     {
       "id": "71a545f8-bfe1-4cff-aeb3-59f5bde16e6d",
       "name": "EcoNet Vent",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/EcoNet%20Vent.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/EcoNet%20Vent.groovy",
       "required": false,
       "version": "1.8.01"
     },
@@ -153,7 +161,7 @@
       "id": "c4cadeb4-91e1-48f6-85a4-fb963fd57559",
       "name": "HubConnect EcoVent",
       "namespace": "shackrat",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect%20%20EcoVent.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect%20%20EcoVent.groovy",
       "required": false,
       "version": "1.8.01"
     },
@@ -161,7 +169,7 @@
       "id": "abe02ac0-14e1-43ce-a867-502f470be79c",
       "name": "Keen Home Smart Vent",
       "namespace": "sandood",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/Keen%20Home%20Smart%20Vent.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/Keen%20Home%20Smart%20Vent.groovy",
       "required": false,
       "version": "1.8.01"
     },
@@ -169,7 +177,7 @@
       "id": "71ea8020-77d5-4776-b8ae-6d491ea724b5",
       "name": "HubConnect Keen Home Smart Vent",
       "namespace": "shackrat",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect%20Keen%20Home%20Smart%20Vent.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect%20Keen%20Home%20Smart%20Vent.groovy",
       "required": false,
       "version": "1.8.01"
     },
@@ -177,7 +185,7 @@
       "id": "1ca88f35-538e-462e-aa51-cad12f8e83d1",
       "name": "HubConnect Ecobee Suite Thermostat",
       "namespace": "shackrat",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect-Ecobee-Suite-Thermostat.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect-Ecobee-Suite-Thermostat.groovy",
       "required": false,
       "version": "1.8.01"
     },
@@ -185,7 +193,7 @@
       "id": "26a62a35-374b-494b-9337-069fd324f441",
       "name": "HubConnect Ecobee Suite Sensor",
       "namespace": "shackrat",
-      "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect-Ecobee-Suite-Sensor.groovy",
+      "location": "https://raw.githubusercontent.com/dcmeglio/Ecobee-Suite/master/HubConnect/Universal/Custom-Drivers/HubConnect-Ecobee-Suite-Sensor.groovy",
       "required": false,
       "version": "1.8.01"
     }
