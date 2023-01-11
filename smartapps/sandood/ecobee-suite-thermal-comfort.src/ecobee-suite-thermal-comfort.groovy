@@ -198,6 +198,28 @@ def mainPage() {
 					}
 					if (atomicState.humidity != null) paragraph "The current temperature at ${theThermostat.displayName} is ${theThermostat.currentTemperature}°${unit} and the ${multiHumid?(settings.multiHumidType+' '):''}relative humidity reading is ${atomicState.humidity}%" 
 				}
+				input(name: 'radistats', type: 'capability.temperatureMeasurement', title: "Select Radiant Heat Sensors",
+					  required: false, multiple: true, submitOnChange: true, width: 4)
+				if (settings.radistats) {
+					boolean multiRadiant = false
+
+					if (settings.radistats.size() > 1) {
+						multiRadiant = true
+						input(name: 'multiRadiantType', type: 'enum', options: ['average', 'highest', 'lowest'], title: 'Multiple Radiant Heat Sensors, use:',
+							  required: true, multiple: false, defaultValue: 'average', submitOnChange: true, width: 4)
+					}
+					if (configuredRadistats) {
+						paragraph "The ${multiRadiant ? (settings.multiRadiantType + ' ') : 'current '}radiant temperature offset is ${atomicState.radiantOffset}°${unit}"
+					}
+					settings.radistats.each { com.hubitat.app.DeviceWrapper radistat ->
+						input(name: "thermometer.${sanitizedDeviceNetworkId(radistat)}", type: 'capability.temperatureMeasurement', title: "Select Thermometer for ${radistat.displayName}",
+							  required: true, submitOnChange: true, width: 4)
+						thermometer = radistatThermometer(radistat)
+						if (thermometer) paragraph "<table width='100%'><tr><td style='width: 33%'>Radiant Temp: ${radistat.currentTemperature}°${unit}</td><td style='width: 33%'>Thermometer: ${thermometer.currentTemperature}°${unit}</td><td style='width: 33%'>Offset: ${radistat.currentTemperature - thermometer.currentTemperature}°${unit}</td></tr></table>"
+					}
+					atomicState.radiantTemperature = getMultiRadistats()
+					atomicState.radiantOffset = getMultiRadiantOffsets()
+				}
             }
 			
 			section(title: smallerTitle("Cool Comfort Settings")) {
@@ -541,7 +563,14 @@ def initialize() {
     }
     if (settings.debugOff) log.info "log.debug() logging disabled"
 
-    subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
+	if (settings?.humidistat) {
+		subscribe(settings.humidistat, 'humidity', humidityChangeHandler)
+	} else {
+		settings.humidistats.each{ subscribe(it, 'humidity', humidityChangeHandler) }
+	}
+	configuredRadistats.each{
+		subscribe(it, 'temperature', radiantTemperatureChangeHandler)
+	}
     subscribe(settings.theThermostat, 'currentProgram', programChangeHandler)
     // if (thePrograms) subscribe(settings.theThermostat, "currentProgram", modeOrProgramHandler)
     if (statModes) subscribe(settings.theThermostat, "thermostatMode", modeChangeHandler)
@@ -549,7 +578,11 @@ def initialize() {
     //def h = ST ? settings.humidistat.currentValue('humidity') : settings.humidistat.currentValue('humidity', true)
     def h = getMultiHumidistats()
     atomicState.humidity = h
-	
+    def rt = getMultiRadistats()
+    atomicState.radiantTemperature = rt
+    def ro = getMultiRadiantOffsets()
+    atomicState.radiantOffset = ro
+
     atomicState.lastHeatRequest = -999
     atomicState.lastCoolRequest = 999
     atomicState.fixed = null
@@ -558,10 +591,11 @@ def initialize() {
     atomicState.lastHeatSetpoint = -999
     atomicState.lastCoolSetpoint = 999
     
-    runIn(2, atomicHumidityUpdater, [overwrite: true])
+    runIn(2, atomicSensorUpdater, [overwrite: true])
 	
     if ((h != null) && (h >= 0) && (h <= 100)) {
-    	LOG("Initialization complete...current humidity is ${h}%",2,null,'info')
+    	def unit = getTemperatureScale()
+    	LOG("Initialization complete...current humidity is ${h}%...current radiant temperature is ${rt}°${unit}...current radiant offset is ${ro}°${unit}", 2, null, 'info')
     } else {
     	LOG("Initialization error...invalid humidity: (${h}) - please check settings and retry", 2, null, 'error')
     }
@@ -592,7 +626,7 @@ def programChangeHandler(evt) {
     // Don't schedule the update if the new thermostat program isn't one that we're supposed to adjust!
     if (!settings.thePrograms || settings.thePrograms?.contains(evt.value)) {
         atomicState.because = " because the thermostat's program changed to ${evt.value}"
-    	runIn(10, atomicHumidityUpdater, [overwrite: true])				// Wait a bit longer for all the setpoints to update after the program change
+    	runIn(10, atomicSensorUpdater, [overwrite: true])				// Wait a bit longer for all the setpoints to update after the program change
     }
 }
 
@@ -602,7 +636,7 @@ def modeChangeHandler(evt) {
     // Don't schedule the update if the new thermostat mode isn't one that we're supposed to adjust!
     if (!settings.statModes || settings.statModes?.contains(evt.value)) {
 		atomicState.because = " because the thermostat's mode changed to ${evt.value}"
-    	runIn(5, atomicHumidityUpdater, [overwrite: true])				// Mode changes don't directly impact setpoints, but give it time just in case
+    	runIn(5, atomicSensorUpdater, [overwrite: true])				// Mode changes don't directly impact setpoints, but give it time just in case
     }
 }
 
@@ -615,12 +649,48 @@ def humidityChangeHandler(evt) {
     }
 }
 
+def radiantTemperatureChangeHandler(evt) {
+	if (evt.numberValue != null) {
+		def unit = getTemperatureScale()
+		// atomicState.radiantTemperature = evt.numberValue
+		atomicState.radiantTemperature = getMultiRadistats()
+		atomicState.radiantOffset = getMultiRadiantOffsets()
+		atomicState.because = " because the ${settings.multiRadistats ? (settings.multiRadistats + ' ') : ''}radiant temperature changed to ${atomicState.radiantTemperature}°${unit}"
+		runIn(2, atomicRadiantTemperatureUpdater, [overwrite: true])
+		// Radiant thermostat changes are independent of thermostat temperature, no need to wait long
+	}
+}
+
+void atomicSensorUpdater() {
+	atomicHumidityUpdater(false)
+	atomicRadiantTemperatureUpdater(false)
+	checkAndUpdate()
+}
+
 void atomicHumidityUpdater() {
 	humidityUpdate( atomicState.humidity )
+	checkAndUpdate()
+}
+
+void atomicRadiantTemperatureUpdater() {
+	radiantTemperatureUpdate(atomicState.radiantTemperature)
+	checkAndUpdate()
+}
+
+void atomicHumidityUpdater(Boolean noUpdate) {
+	humidityUpdate(atomicState.humidity)
+}
+
+void atomicRadiantTemperatureUpdater(Boolean noUpdate) {
+	radiantTemperatureUpdate(atomicState.radiantTemperature)
 }
 
 void humidityUpdate( humidity ) {
 	if (humidity?.toString().isNumber()) humidityUpdate(humidity as Integer)
+}
+
+void radiantTemperatureUpdate(temperature) {
+	if (temperature?.toString().isNumber()) radiantTemperatureUpdate(temperature as BigDecimal)
 }
 
 void humidityUpdate( Integer humidity ) {
@@ -637,6 +707,28 @@ void humidityUpdate( Integer humidity ) {
     
     atomicState.humidity = humidity
     LOG("Humidity is: ${humidity}%",3,null,'info')
+}
+
+void radiantTemperatureUpdate(BigDecimal temperature) {
+	def unit = getTemperatureScale()
+	if (atomicState.version != getVersionLabel()) {
+		LOG("Code version updated, re-initializing...", 1, null, 'warn')
+		updated()
+		return
+		// just ignore the original call, because updated/initalize will call us again
+	}
+	if (temperature == null) {
+		LOG("ignoring invalid temperature: ${temperature}°${unit}", 2, null, 'warn')
+		return
+	}
+	//boolean ST = isST
+
+	atomicState.radiantTemperature = getMultiRadistats()
+	atomicState.radiantOffset = getMultiRadiantOffsets()
+	LOG("Radiant temperature is: ${atomicState.radiantTemperature}°${unit} (offset: ${atomicState.radiantOffset}°${unit})", 3, null, 'info')
+}
+
+void checkAndUpdate() {
 	String statHold = ST ? settings.theThermostat.currentValue('thermostatHold') : settings.theThermostat.currentValue('thermostatHold', true)
 	if (statHold == 'vacation') {
 		LOG("${settings.theThermostat.displayName} is in Vacation Mode, not adjusting setpoints", 3, null, 'warn')
@@ -690,7 +782,7 @@ void humidityUpdate( Integer humidity ) {
         }
     } else {
     	// Last request was adjusted - let's see if it was for the same setpoints we just calculated
-        if ((atomicState.lastProgram == program) && (atomicState.lastHeatRequest == heatSetpoint) && (atomicState.lastCoolRequest == coolSetpoint)) {
+        if ((atomicState.lastProgram == currentProgram) && (atomicState.lastHeatRequest == heatSetpoint) && (atomicState.lastCoolRequest == coolSetpoint)) {
         	// Was the same request - let's just double check if it was for the same actual setpoints
         	if ((curHeat != atomicState.lastHeatSetpoint) || (curCool != atomicState.lastCoolSetpoint)) {
             	LOG("Before changeSetpoints(${currentProgram}) - Current (fixed) setpoints (H/C): ${curHeat}/${curCool}, calculated (unfixed) setpoints: ${heatSetpoint}/${coolSetpoint}", 2, null, 'info')
@@ -711,7 +803,7 @@ void changeSetpoints( program, heatTemp, coolTemp ) {
     	LOG("Request to change program ${program}, bit that is not the current program (${currentProgram}) - ignoring request",2,null,'warn')
         return
     }
-    def hasAutoMode = ST ? settings.theThermostat.currentValue('hasAuto') : settings.theThermostat.currentValue('hasAuto', true) 
+    def hasAutoMode = ST ? settings.theThermostat.currentValue('autoHeatCoolFeatureEnabled') : settings.theThermostat.currentValue('autoHeatCoolFeatureEnabled', true)
 	def delta = !hasAutoMode ? 0.0 : (ST ? settings.theThermostat.currentValue('heatCoolMinDelta') as BigDecimal : settings.theThermostat.currentValue('heatCoolMinDelta', true) as BigDecimal)
 	def fixed = null
     atomicState.lastHeatRequest = heatTemp
@@ -833,9 +925,11 @@ def calculatePmv(temp, units, rh, met, clo) {
 
     def vel = 0.0
 
-    def ta = ((units == 'C') ? temp : (temp-32)/1.8) as BigDecimal
+    def ta = ((units == 'C') ? temp : (temp - 32) / 1.8) as BigDecimal
+    def trad = temp + atomicState.radiantOffset
+    trad = ((units == 'C') ? trad : (trad - 32) / 1.8) as BigDecimal
 
-    def pa, icl, m, fcl, hcf, taa, tcla, p1, p2, p3, p4,
+    def pa, icl, m, fcl, hcf, taa, tra, tcla, p1, p2, p3, p4,
             p5, xn, xf, eps, hcn, hc, tcl, hl1, hl2, hl3, hl4, hl5, hl6,
             ts, pmv, n
 
@@ -849,13 +943,14 @@ def calculatePmv(temp, units, rh, met, clo) {
     //heat transf. coeff. by forced convection
     hcf = 12.1 * Math.sqrt(vel)
     taa = ta + 273
+    tra = (trad ? trad : ta) + 273
     tcla = taa + (35.5 - ta) / (3.5 * icl + 0.1)
 
     p1 = icl * fcl
     p2 = p1 * 3.96
     p3 = p1 * 100
     p4 = p1 * taa
-    p5 = 308.7 - 0.028 * m + p2 * Math.pow(taa / 100, 4)
+    p5 = 308.7 - 0.028 * m + p2 * Math.pow(tra / 100, 4)
     xn = tcla / 100
     xf = tcla / 50
     eps = 0.00015
@@ -885,7 +980,7 @@ def calculatePmv(temp, units, rh, met, clo) {
     // dry respiration heat loss
     hl4 = 0.0014 * m * (34 - ta)
     // heat loss by radiation
-    hl5 = 3.96 * fcl * (Math.pow(xn, 4) - Math.pow(taa / 100, 4))
+    hl5 = 3.96 * fcl * (Math.pow(xn, 4) - Math.pow(tra / 100, 4))
     // heat loss by convection
     hl6 = fcl * hc * (tcl - ta)
 
@@ -963,6 +1058,10 @@ def getCoolRange() {
     return [roundIt(low-0.5,0),roundIt(high-0.5,0)]
 }
 
+def getConfiguredRadistats() {
+	settings.radistats.findAll { radistatThermometer(it) }
+}
+
 def getMultiHumidistats() {
 	def humidity = atomicState.humidity
 	if (!settings.humidistats) {
@@ -1005,6 +1104,63 @@ def getMultiThermometers() {
 	}
 }
 */
+def getMultiRadistats() {
+	def temperature = atomicState.radiantTemperature
+	if (settings.radistats.size() == 1) {
+		temperature = ST ? settings.radistats[0].currentTemperature : settings.radistats[0].currentValue('temperature', true)
+	} else {
+		def tempList = configuredRadistats.collect { atomicState.isST ? it.currentTemperature : it.currentValue('temperature', true) }
+		switch (settings.multiRadiantType) {
+			case 'average':
+				temperature = tempList.sum() / tempList.size()
+				break;
+			case 'lowest':
+				temperature = tempList.min()
+				break;
+			case 'highest':
+				temperature = tempList.max()
+				break;
+		}
+	}
+	return temperature
+}
+
+def getMultiRadiantOffsets() {
+	def offset = 0
+	if (settings.radistats) {
+		if (settings.radistats.size() == 1) {
+			thermometer = radistatThermometer(settings.radistats[0])
+			if (thermometer) {
+				temperature = ST ? settings.radistats[0].currentTemperature : settings.radistats[0].currentValue('temperature', true)
+				thermometerTemperature = ST ? thermometer.currentTemperature : thermometer.currentValue('temperature', true)
+				offset = temperature - thermometerTemperature
+			}
+		} else {
+			def tempList = configuredRadistats
+					.collect {
+						thermometer = radistatThermometer(it)
+						temperature = ST ? it.currentTemperature : it.currentValue('temperature', true)
+						thermometerTemperature = ST ? thermometer.currentTemperature : thermometer.currentValue('temperature', true)
+						temperature - thermometerTemperature
+					}
+			switch (settings.multiRadiantType) {
+				case 'average':
+					offset = tempList.sum() / tempList.size()
+					break;
+				case 'lowest':
+					offset = tempList.min()
+					break;
+				case 'highest':
+					offset = tempList.max()
+					break;
+			}
+		}
+	}
+	return offset
+}
+def radistatThermometer(device) {
+	return settings."thermometer.${sanitizedDeviceNetworkId(device)}"
+}
 
 // Helper Functions
 String textListToString(list) {
@@ -1191,19 +1347,13 @@ def programUpdateHandler(evt) {
     cancelReservation(evt.device.currentValue('identifier') as String, 'programChange')
     unschedule(clearReservation)
     unsubscribe(evt.device)
-    if (!settings?.tempDisable) {
-    	subscribe(evt.device, 'temperature', insideChangeHandler)
-        subscribe(evt.device, 'thermostatMode', thermostatModeHandler)
-    }
+    if (!settings?.tempDisable) handlerResubscribe(evt)
 	LOG("programUpdateHandler(): Setpoint change operation completed",4,null,'debug')
 }
 def programWaitHandler(evt) {
 	//LOG("climatesWaitHandler(): $evt.name = $evt.value",4,null,'debug')
     unsubscribe(evt.device)
-    if (!settings?.tempDisable) {
-    	subscribe(evt.device, 'temperature', insideChangeHandler)
-        subscribe(evt.device, 'thermostatMode', thermostatModeHandler)
-    }
+    if (!settings?.tempDisable) handlerResubscribe(evt)
     String tid = evt.device.currentValue('identifier') as String
     def count = countReservations(tid, 'programChange')
     if ((count > 0) && !haveReservation( tid, 'programChange' )) {
@@ -1215,6 +1365,13 @@ def programWaitHandler(evt) {
         LOG("programWaitHandler(): 'programChange' reservation secured, sending pended updates", 3, null, 'debug')
     	doPendedUpdates(tid)
     }
+}
+def handlerResubscribe(evt) {
+	if (settings?.humidistat?.deviceId == evt.deviceId || settings.humidistats.any { it.deviceId == evt.deviceId }) {
+		subscribe(evt.device, 'humidity', humidityChangeHandler)
+	}
+	subscribe(evt.device, 'currentProgram', programChangeHandler)
+	if (statModes) subscribe(evt.device, "thermostatMode", modeChangeHandler)
 }
 void checkReservations(data) {
     def count = countReservations(data.tid, data.type)
@@ -1233,6 +1390,14 @@ void checkReservations(data) {
         doPendedUpdates()
     }
 }
+
+static String sanitizedDeviceNetworkId(com.hubitat.app.DeviceWrapper device) {
+	def key = device.deviceNetworkId
+	key = key.replaceAll("/", "_")
+	key = key.replaceAll(":", "-")
+	return key
+}
+
 void doRefresh() {
 	settings?.theThermostat?.doRefresh(true) // do a forced refresh
 }
