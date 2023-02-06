@@ -579,7 +579,7 @@ def preferencesPage() {
         	paragraph("How frequently do you want to poll the Ecobee cloud for changes? For maximum responsiveness to commands, it is recommended to set this to 1 minute.", width: 8)
 			if (HE) paragraph("", width: 4)
 			input(name: "pollingInterval", title:inputTitle("Select Polling Interval")+" (minutes)", type: "enum", required:false, multiple:false, defaultValue:3, description: "3", width: 4,
-            	  options:["1", "2", "3", "5", "10", "15", "30"])
+            	  options:[1:"1", 2:"2", 3:"3", 5:"5", 10:"10", 15:"15", 30:"30", 0:"Disabled"])
             if (settings?.pollingInterval == null) { app.updateSetting('pollingInterval', "3"); settings?.pollingInterval = "3"; }
 		}
 		section(title: smallerTitle("Thermostat as Sensor")) {
@@ -1504,12 +1504,14 @@ def initialize() {
 	}
 
 	// Schedule the various handlers
-	LOG("Spawning scheduled events from initialize()", 5, null, "trace")
-	if (settings.thermostats?.size() > 0) { 
-		LOG("Spawning the poll scheduled event. (thermostats.size(): ${settings.thermostats?.size()})", 1, null, 'trace')
-		spawnDaemon("poll", false) 
-	} 
-	spawnDaemon("watchdog", false)
+	if (pollingInterval != "0") {
+		LOG("Spawning scheduled events from initialize()", 5, null, "trace")
+		if (settings.thermostats?.size() > 0) { 
+			LOG("Spawning the poll scheduled event. (thermostats.size(): ${settings.thermostats?.size()})", 1, null, 'trace')
+			spawnDaemon("poll", false) 
+		} 
+		spawnDaemon("watchdog", false)
+	}
 	
 	//send activity feeds to tell that device is connected
 	def notificationMessage = aOK ? "is connected to ${ST?'SmartThings':'Hubitat'}" : "had an error during setup of devices"
@@ -1521,10 +1523,13 @@ def initialize() {
 		atomicState.initializedEpic = nowTime
 		atomicState.initializedDate = nowDate
 	}
-    schedule("0 3/30 * * * ?", programUpdater)
+	
+	if (pollingInterval != "0") {
+    		schedule("0 3/30 * * * ?", programUpdater)
+	}
     
 	runIn(90, forceNextPoll, [overwrite: true])		// get ALL the data (again) once things settle down
-    runIn(180, runCallQueue, [overwrite: true])
+    	runIn(180, runCallQueue, [overwrite: true])
     
 	LOG("${getVersionLabel()} - initialization complete",1,null,'debug')
 	// atomicState.versionLabel = getVersionLabel()
@@ -1734,7 +1739,9 @@ def sunriseEvent(evt) {
 	updatesLog.forcePoll = true
 	updatesLog.getWeather = true	// update the weather also
 	atomicState.updatesLog = updatesLog
-	scheduleWatchdog(evt, true)	   
+	if (pollingInterval != "0") {
+		scheduleWatchdog(evt, true)
+	}
 }
 
 def sunsetEvent(evt) {
@@ -1762,7 +1769,9 @@ def sunsetEvent(evt) {
 	updatesLog.forcePoll = true
 	updatesLog.getWeather = true	// update the weather also
 	atomicState.updatesLog = updatesLog
-	scheduleWatchdog(evt, true)
+	if (pollingInterval != "0") {
+		scheduleWatchdog(evt, true)
+	}
 }
 
 boolean scheduleWatchdog(evt=null, local=false) {
@@ -2099,7 +2108,9 @@ void pollChildren(String deviceId="",force=false) {
 	}
 
 	// Run a watchdog checker here
-	scheduleWatchdog(null, true)	
+	if (pollingInterval != "0") {
+		scheduleWatchdog(null, true)
+	}
 	
 	if (settings.thermostats?.size() < 1) {
 		LOG("pollChildren() - Nothing to poll as there are no thermostats currently selected", 1, null, "warn")
@@ -4811,9 +4822,11 @@ boolean refreshAuthToken(child=null) {
 	if (timeBeforeExpiry > 2000) {
 		LOG("refreshAuthToken() - skipping, token expires in ${timeBeforeExpiry/1000} seconds",2,null,'info')
 		// Double check that the daemons are still running
-		if (!isDaemonAlive("poll")) { LOG("refreshAuthToken - rescheduling poll daemon",1,null,'warn'); spawnDaemon("poll") }
-		if (!isDaemonAlive("watchdog")) { LOG("refreshAuthToken - rescheduling watchdog daemon",1,null,'warn'); spawnDaemon("watchdog") }
-		return true
+		if (pollingInterval != "0") {
+			if (!isDaemonAlive("poll")) { LOG("refreshAuthToken - rescheduling poll daemon",1,null,'warn'); spawnDaemon("poll") }
+			if (!isDaemonAlive("watchdog")) { LOG("refreshAuthToken - rescheduling watchdog daemon",1,null,'warn'); spawnDaemon("watchdog") }
+			return true
+		}
 	}
 	
 	atomicState.lastTokenRefresh = now()
@@ -4892,11 +4905,13 @@ boolean refreshAuthToken(child=null) {
 						LOG("No jsonMap??? ${jsonMap}", 2, child, 'trace')
 					}	
 					// scheduleWatchdog(null, false) 
-					// Reschedule polling if it has been a while since the previous poll	
-					if (!isDaemonAlive("poll")) { LOG("refreshAuthToken - rescheduling poll daemon",1,null,'warn'); spawnDaemon("poll") }
-					if (!isDaemonAlive("watchdog")) { LOG("refreshAuthToken - rescheduling watchdog daemon",1,null,'warn'); spawnDaemon("watchdog") }
-					if (atomicState.inTimeoutRetry) atomicState.inTimeoutRetry = 0
-					return true
+					// Reschedule polling if it has been a while since the previous poll
+					if (pollingInterval != "0") {
+						if (!isDaemonAlive("poll")) { LOG("refreshAuthToken - rescheduling poll daemon",1,null,'warn'); spawnDaemon("poll") }
+						if (!isDaemonAlive("watchdog")) { LOG("refreshAuthToken - rescheduling watchdog daemon",1,null,'warn'); spawnDaemon("watchdog") }
+						if (atomicState.inTimeoutRetry) atomicState.inTimeoutRetry = 0
+						return true
+					}
 				} else {
 					LOG("refreshAuthToken() - Failed ${resp.status} : ${resp.status.code}!", 1, child, 'error')
 					return false
