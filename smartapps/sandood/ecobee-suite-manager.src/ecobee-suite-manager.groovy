@@ -576,7 +576,7 @@ def preferencesPage() {
             if (settings?.smartAuto == null) { app.updateSetting('smartAuto', false); settings?.smartAuto = false; }
 		}	 
 		section(title: smallerTitle("Polling Interval")) {
-        	paragraph("How frequently do you want to poll the Ecobee cloud for changes? For maximum responsiveness to commands, it is recommended to set this to 1 minute.", width: 8)
+        	paragraph("How frequently do you want to poll the Ecobee cloud for changes? For maximum responsiveness to commands, it is recommended to set this to 1 minute. Disable should only be selected in advanced configuations. Helper Apps will not funtion if Disable is selected.", width: 8)
 			if (HE) paragraph("", width: 4)
 			input(name: "pollingInterval", title:inputTitle("Select Polling Interval")+" (minutes)", type: "enum", required:false, multiple:false, defaultValue:3, description: "3", width: 4,
             	  options:[1:"1", 2:"2", 3:"3", 5:"5", 10:"10", 15:"15", 30:"30", 0:"Disabled"])
