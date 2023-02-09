@@ -4,13 +4,13 @@
 
 <a name="overview"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Overview-1-8-00-section.png" width="50%" alt="Overview" /></a>
 
-Ecobee Suite is a collection of applications and device drivers that serve to integrate Ecobee Thermostats with the SmartThings and Hubitat Elevation home automation platforms.
+Ecobee Suite is a collection of applications and device drivers that serve to integrate Ecobee Thermostats with the Hubitat Elevation home automation platform.
 
-Offering more robust resiliency and availability than the standard Ecobee support provided by both platforms, this Ecobee Suite provides unprecedented access to the operation and settings of Ecobee 3, Ecobee 4, Ecobee Lite and even most EMS, Smart and Smart Si thermostats. And while it can be used alongside (most) other Ecobee solutions on both SmartThings and Hubitat, its comprehensive support of the Thermostat attributes, commands and APIs defined on both platforms makes it a drop-in replacement as well.
+As of release 1.9.00 in February 2023, this project no longer contains any code for the SmartThings Platform. This is because the owners of the SmartThings platform decided to deprecate and eliminate support for groovy=based cloud devices, which this project is in it entirety.
 
-On the SmartThings Classic application, Ecobee Suite users are provided with a customized user interface that is largely true to the Ecobee 3 & 4 thermostat devices, affording users the ability to view and modify a more detailed operational status of the HVAC environment than any other Ecobee integration available.
+Offering more robust resiliency and availability than the standard Ecobee support provided by both platforms, this Ecobee Suite provides unprecedented access to the operation and settings of Ecobee 3, Ecobee 4, Ecobee Lite and even most EMS, Smart and Smart Si thermostats. And while it can be used alongside (most) other Ecobee solutions on Hubitat, its comprehensive support of the Thermostat attributes, commands and APIs defined by Hubitat makes it a drop-in replacement as well.
 
-On both platforms, the Ecobee Suite offers more than a dozen curated Helper applications that provide integration and automation without requiring any programming skills. And for those who DO want to write their own code, be it in the SmartThings or Hubitat IDE, or by utilizing WebCoRE and/or Rules Engine, the Ecobee Suite provides a comprehensive set of API's capable of monitoring, managing and changing most all of the Ecobee thermostats' capabilities.
+The Ecobee Suite offers more than a dozen curated Helper applications that provide integration and automation without requiring any programming skills. And for those who DO want to write their own code in the Hubitat IDE, or by utilizing WebCoRE and/or Rules Engine, the Ecobee Suite provides a comprehensive set of API's capable of monitoring, managing and changing most all of the Ecobee thermostats' capabilities.
 
 <a name="top"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Table-of-Contents-1-8-00-section.png" width="50%" alt="Table of Contents" /></a>
 
