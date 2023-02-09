@@ -23,11 +23,14 @@
  *	1.8.07 - Updated formatting; added Do Not Disturb Modes & Time window
  *	1.8.08 - Miscellaneous updates & fixes
  *	1.8.09 - Fix for multi-word Climate names
+ *	1.8.10 - Fix for getThermostatModes()
+ *	1.8.11 - Fix for Hubitat 'supportedThermostatModes', etc.
+ *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.09" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Humidity Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -52,8 +55,6 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
 	boolean humidifierEnabled = false
 	def hasHumidifier
     def cTemp		// current indoor temperature
@@ -64,11 +65,7 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
             section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
-                if (ST) {
-                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
-                } else {
-                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
-                }
+                paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
                 paragraph("This Helper dynamically and continuously adjusts the relative humidity setpoint of your HVAC system's humidifier based on the recommended 'ideal humidity' using the ambient "+
                           "indoor temperature, the forecasted outdoor low temperatures and the humidity retention efficiency of your structure. Optionally, Smart Humidity will also raise the humidity setpoint as the inside "+
                           "temperature drops (e.g., overnight) in order to attain the desired humidity comfort when the heating setpoints increase again (e.g., in the morning).\n\n"+
@@ -95,49 +92,25 @@ def mainPage() {
 			} else {
             	atomicState.appDisplayName = app.label
             }
-			if (HE) {
-				if (app.label.contains('<span ')) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(myLabel)
-					}
+			if (app.label.contains('<span ')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
 				} else {
-                	atomicState.appDisplayName = app.label
-                }
-			} else {
-            	String flag
-    			def opts = [' (paused', ' (active', ' (inactive', '%)']
-				opts.each {
-					if (!flag && app.label.contains(it)) flag = it
+					String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(myLabel)
 				}
-				if (flag) {
-                	if ((atomicState?.appDisplayName != null) && (flag=='%)'? !atomicState?.appDisplayName.endsWith('%)') : !atomicState?.appDisplayName.contains(flag))) {
-                    	app.updateLabel(atomicState.appDisplayName)
-                    } else if (flag == '%)') {
-                    	int i = app.label.reverse().indexOf('(') + 2
-                    	String myLabel = app.label.take(app.label.size()-i)
-                    	atomicState.appDisplayName = myLabel
-                    	app.updateLabel(myLabel)
-                    } else {
-                    	String myLabel = app.label.substring(0, app.label.indexOf(flag))
-                        atomicState.appDisplayName = myLabel
-                        app.updateLabel(myLabel)
-                    }
-                } else {
-                	atomicState.appDisplayName = app.label
-                }
-            }
+			} else {
+				atomicState.appDisplayName = app.label
+			}
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")
             } else {
-        		input(name: "theThermostat", type:"${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select an Ecobee Suite Thermostat"), 
+        		input(name: "theThermostat", type: 'device.EcobeeSuiteThermostat', title: inputTitle("Select an Ecobee Suite Thermostat"), 
 					  required: true, multiple: false, submitOnChange: true)
 				if (settings?.theThermostat) {
-                	def rh = ST ? settings.theThermostat.currentValue('humidity') : settings.theThermostat.currentValue('humidity', true)
-                    cTemp = ST ? settings.theThermostat.currentValue('temperature') : settings.theThermostat.currentValue('temperature', true)
+                	def rh = settings.theThermostat.currentValue('humidity', true)
+                    cTemp = settings.theThermostat.currentValue('temperature', true)
                     def dp = calculateDewpoint(cTemp, rh, unit)
 					//paragraph "The current Relative Humidity for thermostat ${settings.theThermostat.displayName} is ${settings.theThermostat.currentValue('humidity')}%"
 					String paraString = "The relative humidity on ${settings.theThermostat.displayName} is ${rh}%, the indoor temperature is "+
@@ -149,14 +122,14 @@ def mainPage() {
 						app.updateSetting('theThermostat', null)
 						settings.theThermostat = null
 					} else {
-						String humidifierMode = ST ? settings.theThermostat.currentValue('humidifierMode') : settings.theThermostat.currentValue('humidifierMode', true)
+						String humidifierMode = settings.theThermostat.currentValue('humidifierMode', true)
 						if (humidifierMode == 'auto') {
 							paraString += ", but the humidifier is in Frost Control mode with a humidity setpoint of ${theThermostat.currentValue('humiditySetpoint')}%.\n\n" +
 											"Smart Humidity cannot adjust the humidity setpoint while the humidifier is in Frost Control mode."
 							paragraph paraString
 							humidifierEnabled = false
 						} else if ((humidifierMode == 'manual') || (humidifierMode == 'on')) {
-                        	def rhSp = ST ? theThermostat.currentValue('humiditySetpoint') : theThermostat.currentValue('humiditySetpoint', true)
+                        	def rhSp = theThermostat.currentValue('humiditySetpoint', true)
 							paraString += ". The humidifier is in Manual/On mode with a humidity setpoint of ${rhSp}%."
 							paragraph paraString
 							humidifierEnabled = true
@@ -173,7 +146,7 @@ def mainPage() {
         
         if (!settings?.tempDisable && settings?.theThermostat && hasHumidifier && humidifierEnabled) {
         	section(title: sectionTitle("Configuration")) {
-            	def forecastRaw = ST ? settings?.theThermostat?.currentValue('weatherTempLowForecast') : settings?.theThermostat?.currentValue('weatherTempLowForecast', true)
+            	def forecastRaw = settings?.theThermostat?.currentValue('weatherTempLowForecast', true)
                 def forecastLows = forecastRaw.split(',')	// [0]: todayLow, [1]: tomorrowLow, ... - provided in °F - convert when displaying
 				Calendar myDate = Calendar.getInstance(); // set this up however you need it.
 				int dow = myDate.get (Calendar.DAY_OF_WEEK);
@@ -220,7 +193,7 @@ def mainPage() {
 				} else if (thermalFactor != 'custom') {
 					tFactor = settings?.thermalFactor.toBigDecimal()
 				} else {
-                	if (HE) paragraph("", width: 8)
+                	paragraph("", width: 8)
                 	input(name: 'thermalCustom', type: 'decimal', title: inputTitle("Custom Smart Humidity setpoint adjustment")+" (-25.0 to 25.0)", defaultValue: 0.0, required: true, 
                     	  submitOnChange: true, range: '-25..25', width: 4)
                     if ((settings?.thermalCustom == null) || !settings?.thermalCustom?.toString()?.isNumber()) { app.updateSetting('thermalCustom', 0.0); settings?.thermalCustom = 0.0; }
@@ -253,33 +226,20 @@ def mainPage() {
                 paraString = maximize ? "The Smart Humidity setpoints for the next ${humSetpoint.size()} days using the current indoor temperature and the forecasted outdoor low temperatures from "+
                 			 "the ${theThermostat.displayName} thermostat, applying the Actual, Average, and Lowest strategies are:\n\n" : ""
                 String ts = "\u2009"	// thin space
-                if (ST) {
-                    paraString += "   Forecast\t  Actual\tAverage\tLowest\tSP\n" 
-                    for (int l=0; l<5; l++) {
-                        // Note that up to now, we have been working in °F, as supplied in weatherTempLowForecast...convert for the display via mCTIN (myConvertTemperatureIfNeeded)
-                        String Fo = String.format('%4.1f',mCTIN(forecastLows[l],'F',1)) + '/' + calcHumSetpoint(forecastLows[l]).toString()
-                        
-                        paraString = paraString + "${l==0?ts:''}${l+1}: ${l==0?'':''}${Fo}" +
-                                                    "\t ${actual[l]?String.format('%4.1f',mCTIN(actual[l],'F',1)):'----'}${actual[l]?'/':'/'}${actual[l]?calcHumSetpoint(actual[l])+'':' --'}" +
-                                                      " \t${average[l]?String.format('%4.1f',mCTIN(average[l],'F',1)):'----'}${average[l]?'/':'/'}${average[l]?calcHumSetpoint(average[l])+'':' --'}" +
-                                                        " \t${lowest[l]?String.format('%4.1f',mCTIN(lowest[l],'F',1)):'----'}${lowest[l]?'/':'/'}${lowest[l]?calcHumSetpoint(lowest[l])+'':' --'}" +
-                                                          " \t${humSetpoint[l]?humSetpoint[l]+'%':'----'}\n"
-                    }
-                } else {
-                    paraString += "<b>Days\tForecast \tActual\t\tAverage   \tLowest   \t\tHumidity Setpoint</b>\n" 
-                    for (int l=0; l<5; l++) {
-                        // Note that up to now, we have been working in °F, as supplied in weatherTempLowForecast...convert for the display vi mCTIN (myConvertTemperatureIfNeeded)
-                        //String.format('%02.1f',mCTIN(actual[l],'F',1)
-                        paraString = paraString + "${l+1}${l==0?ts:''}\t\t${String.format('%04.1f',mCTIN(forecastLows[l],'F',1))}°/${calcHumSetpoint(forecastLows[l])}%" +
-                                                    "\t${actual[l]?String.format('%04.1f',mCTIN(actual[l],'F',1)):' ---- '}${actual[l]?'°/':' / '}${actual[l]?calcHumSetpoint(actual[l])+'%':' ----'}" +
-                                                      "\t${average[l]?String.format('%04.1f',mCTIN(average[l],'F',1)):' ---- '}${average[l]?'°/':' / '}${average[l]?calcHumSetpoint(average[l])+'%':' ----'}" +
-                                                        "\t${lowest[l]?String.format('%04.1f',mCTIN(lowest[l],'F',1)):' ---- '}${lowest[l]?'°/':' / '}${lowest[l]?calcHumSetpoint(lowest[l])+'%':' ----'}" +
-                                                          "\t${dayNames[days[l]]} \t${humSetpoint[l]?humSetpoint[l]+'%':' ----'}\n"
-                    }
-                }
+				paraString += "<b>Days\tForecast \tActual\t\tAverage   \tLowest   \t\tHumidity Setpoint</b>\n" 
+				for (int l=0; l<5; l++) {
+					// Note that up to now, we have been working in °F, as supplied in weatherTempLowForecast...convert for the display vi mCTIN (myConvertTemperatureIfNeeded)
+					//String.format('%02.1f',mCTIN(actual[l],'F',1)
+					paraString = paraString + "${l+1}${l==0?ts:''}\t\t${String.format('%04.1f',mCTIN(forecastLows[l],'F',1))}°/${calcHumSetpoint(forecastLows[l])}%" +
+												"\t${actual[l]?String.format('%04.1f',mCTIN(actual[l],'F',1)):' ---- '}${actual[l]?'°/':' / '}${actual[l]?calcHumSetpoint(actual[l])+'%':' ----'}" +
+												  "\t${average[l]?String.format('%04.1f',mCTIN(average[l],'F',1)):' ---- '}${average[l]?'°/':' / '}${average[l]?calcHumSetpoint(average[l])+'%':' ----'}" +
+													"\t${lowest[l]?String.format('%04.1f',mCTIN(lowest[l],'F',1)):' ---- '}${lowest[l]?'°/':' / '}${lowest[l]?calcHumSetpoint(lowest[l])+'%':' ----'}" +
+													  "\t${dayNames[days[l]]} \t${humSetpoint[l]?humSetpoint[l]+'%':' ----'}\n"
+				}
+
                 paragraph paraString
 			}
-			section(title: sectionTitle("Conditions")+"${ST?': ':''}"+smallerTitle("Modes & Programs")) {
+			section(title: sectionTitle("Conditions") + smallerTitle("Modes & Programs")) {
 			//section(title: smallerTitle("Modes & Programs")) {
 				boolean multiple = false
 				if (maximize) paragraph "By default, Smart Humidity adjusts the setpoint any time that the tuning parameters, internal temperature, and/or or the low temperature forecasts change"
@@ -312,19 +272,11 @@ def mainPage() {
             input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+		section() {
+			paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
     }
 }
@@ -333,11 +285,10 @@ def getHumidityTemp() {
 	return getHumidityTempArray(settings.smartStrategy)[0]
 }
 def getHumidityTempArray(strategy){
-	//boolean ST = isST
 
 	def values = []
 	if (strategy) {
-		def forecastRaw = ST ? settings?.theThermostat?.currentValue('weatherTempLowForecast') : settings?.theThermostat?.currentValue('weatherTempLowForecast', true)
+		def forecastRaw = settings?.theThermostat?.currentValue('weatherTempLowForecast', true)
     	def forecastLows = forecastRaw ? forecastRaw.split(',')	: [] // [0]: todayLow, [1]: tomorrowLow, ... - provided in °F - convert when displaying
 		if (forecastLows.size() >= 5) {
 			int dayNumber = settings?.dayString ? settings.dayString.toInteger() : 2
@@ -420,7 +371,7 @@ def calcHumSetpoint( temp ) {
     // Second, calculate the effective dewpoint at 70°F
     def dp = calculateDewpoint( 70.0, setpoint, 'F') // dewpoint is returned in temperatureScale units
     // Third, adjust setpoint for the current temperature. Cooler air with same water content (dewpoint) will have a higher RH%.
-    def cTemp = ST ? theThermostat.currentValue('temperature') : theThermostat.currentValue('temperature', true)
+    def cTemp = theThermostat.currentValue('temperature', true)
     if (temperatureScale == 'C') {
         setpoint = calculateRelHumidity( cTemp, dp, 'C')
     } else {
@@ -446,7 +397,6 @@ def initialize() {
 	String version = getVersionLabel()
 	LOG("${version} Initializing...", 2, null, 'info')
     atomicState.versionLabel = getVersionLabel()
-	//boolean ST = isST
 	
 	updateMyLabel()
 
@@ -483,12 +433,11 @@ def initialize() {
 }
 
 boolean isOkNow() {
-	//boolean ST = isST
 	boolean isOK = true
 	if (settings?.theModes || settings?.thePrograms  || settings?.statModes) {
-		String currentProgram = settings?.thePrograms ? (ST ? settings?.theThermostat.latestValue('currentProgram') : settings?.theThermostat.latestValue('currentProgram', true)) : "null"
+		String currentProgram = settings?.thePrograms ? settings?.theThermostat.latestValue('currentProgram', true) : "null"
         if (!currentProgram) currentProgram = 'null'
-		String thermostatMode = settings?.statModes	  ? (ST	? settings?.theThermostat.latestValue('thermostatMode') : settings?.theThermostat.latestValue('thermostatMode', true)) : "null"
+		String thermostatMode = settings?.statModes	  ? settings?.theThermostat.latestValue('thermostatMode', true) : "null"
 		if (settings.needAll) {
 			isOK = 				settings?.theModes ?	settings.theModes.contains(location.mode) 		: true
 			if (isOK) isOK = 	settings?.thePrograms ?	settings.thePrograms.contains(currentProgram) 	: true
@@ -504,7 +453,6 @@ boolean isOkNow() {
 }
 
 def setSmartSetpoint( setpoint ) {
-	//boolean ST = isST
 	boolean humidifierEnabled = true
 	
 	String humidifierMode = settings.theThermostat.currentValue('humidifierMode')
@@ -516,7 +464,7 @@ def setSmartSetpoint( setpoint ) {
 		humidifierEnabled = false
 	}
 	if (humidifierEnabled) {
-		def currentSetpoint = ST ? settings.theThermostat.currentValue('humiditySetpoint') : settings.theThermostat.currentValue('humiditySetpoint', true)
+		def currentSetpoint = settings.theThermostat.currentValue('humiditySetpoint', true)
 		if (!atomicState.smartSetpoint || (atomicState.smartSetpoint != setpoint)) atomicState.smartSetpoint = setpoint
 		if (currentSetpoint != setpoint) {
 			settings.theThermostat.setHumiditySetpoint( setpoint )
@@ -578,17 +526,7 @@ def delayedUpdate() {
 // HELPER FUNCTIONS
 // Temporary/Global Pause functions
 void updateMyLabel() {
-	//boolean ST = isST
-    
-	String flag
-	if (ST) {
-    	def opts = [' (paused', ' (active ', ' (inactive', '%)']
-		opts.each {
-			if (!flag && app.label.contains(it)) flag = it
-		}
-	} else {
-		flag = '<span '
-	}
+	String flag = '<span '
     
     String myLabel = atomicState.appDisplayName	
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
@@ -606,10 +544,10 @@ void updateMyLabel() {
 	}
     def active = atomicState.isOK
 	if (settings.tempDisable) {
-		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		def newLabel = myLabel + '<span style="color:red"> (paused)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
-    	def newLabel = myLabel + (ST ? " (${active?'active ':'inactive '}${atomicState.smartSetpoint}%)" : '<span style="color:green"> (' + (active?'active ':'inactive ') + atomicState.smartSetpoint + '%)</span>')
+    	def newLabel = myLabel + '<span style="color:green"> (' + (active?'active ':'inactive ') + atomicState.smartSetpoint + '%)</span>'
         if (app.label != newLabel) app.updateLabel(newLabel)
     }// else {
 	//	if (app.label != myLabel) app.updateLabel(myLabel)
@@ -665,11 +603,10 @@ List getThermostatPrograms() {
     return programs.sort(false)
 }
 List getThermostatModes() {
-	def statModes = ["off","heat","cool","auto","auxHeatOnly"]
-    if (settings.theThermostat) {
-    	def tempModes = theThermostat.currentValue('supportedThermostatModes')
-        if (tempModes) statModes = tempModes[1..-2].tokenize(", ")
-    }
+	List statModes = ["off","heat","cool","auto","auxHeatOnly"]
+	List tm = []
+    if (settings.theThermostat) tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes', true))
+	if (tm != []) statModes = tm
     return statModes.sort(false)
 }
 def mCTIN(scaledSensorValue, cmdScale, precision) {
@@ -745,19 +682,18 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
         	break;
     }
 }
-
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>') }
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>') }
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>') : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>' }
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>' }
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -767,54 +703,41 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return "<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
 			break;
 	}
 }
+
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
-}
-boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
-}
+String getPlatform() { return 'Hubitat' }	// if (platform == 'SmartThings') ...
+boolean getIsST() { return false }
+boolean getIsHE() { return true }
 
-String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+String getHubPlatform() { 
+	return 'Hubitat'
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
