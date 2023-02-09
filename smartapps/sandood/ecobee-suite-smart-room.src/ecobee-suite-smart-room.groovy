@@ -32,7 +32,7 @@
  *	1.8.16 - Better active/inactive determinations
  *	1.8.17 - Even better active/inactive checks
  *	1.8.18 - Added "Hold" and "Vacation" as valid programs
- *	1.8.19 - Fix sendMessage() for new Samsung SmartThings app
+ *	1.8.19 - Fix sendMessage() for new Samsung SmartThings app 
  *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
