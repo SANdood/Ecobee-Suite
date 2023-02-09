@@ -26,17 +26,19 @@
  *	1.8.10 - Option to treat 'fan only' as 'idle'
  *	1.8.11 - Fix cl/dl/tl mishmash
  *	1.8.12 - Added fanControl support, changed name to Smart Switch/Dimmer/Fan
+ *	1.8.13 - Only "deactivate" during selected days and outside of "disabled" time window
+ *	1.9.00 - Removed all ST code
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.12" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Fan Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
 	name: 				"ecobee Suite Smart Switches",
 	namespace: 			"sandood",
 	author: 			"Barry A. Burke (storageanarchy at gmail dot com)",
-	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates ${isST?'SmartThings':'Hubitat'}-controlled switches, dimmers, fans and generic vents based on thermostat operating state",
+	description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nAutomates Hubitat-controlled switches, dimmers, fans and generic vents based on thermostat operating state",
 	category: 			"Convenience",
 	parent: 			"sandood:Ecobee Suite Manager",
 	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
@@ -60,12 +62,7 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
     		section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
-        	
-                if (ST) {
-                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
-                } else {
-                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
-                }
+        	    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
                 paragraph("This handy utility Helper automates changing of (real or virtual) switches, dimmers and generic vents based upon Operating State changes of one or more Ecobee Suite Thermostats. "+
                           "For example, it will turn off (or on) an attic fan while the HVAC system is cooling.")
         	}
@@ -85,41 +82,23 @@ def mainPage() {
 				atomicState.appDisplayName = defaultLabel
 			} else {
             	atomicState.appDisplayName = app.label
-            }
-			if (HE) {
-				if (app.label.contains('<span ')) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(myLabel)
-					}
-				} else {
-                	atomicState.appDisplayName = app.label
-                }
-			} else {
-                def opts = [' (paused', ' (Cool', ' (Heat', ' (Fan', ' (Idle', ' (Pend', ' (Vent']
-				String flag
-                opts.each {
-                	if (!flag && app.label.contains(it)) flag = it
-				}
-				if (flag) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(flag)) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(flag))
-                        atomicState.appDisplayName = myLabel
-                        app.updateLabel(myLabel)
-                    }
-                } else {
-                	atomicState.appDisplayName = app.label
-                }
 			}
+			if (app.label.contains('<span ')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
+				} else {
+					String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(myLabel)
+				}
+			} else {
+				atomicState.appDisplayName = app.label
+			}
+
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
-				input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
+				input(name: "theThermostats", type: 'device.EcobeeSuiteThermostat', title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
 					  multiple: true, required: true, submitOnChange: true)
             }
 		}
@@ -173,8 +152,8 @@ def mainPage() {
             section(title: sectionTitle("Conditions")) {
         		input(name: "actionDays", type: "enum", title: inputTitle("Select Days of the Week to run the above Actions"), required: true, multiple: true, submitOnChange: true, width: 4,
                 	options: ["Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday", "Saturday": "Saturday", "Sunday": "Sunday"])
-				input(name: "fromTime", type: "time", title: inputTitle("Disable Actions daily between${HE?'<br>':''}From Time (optional)"), required: false, submitOnChange: true, width: 4)
-				input(name: "toTime", type: "time", title: inputTitle("${HE?'<br>':''}...and To Time"), required: (settings.fromTime != null), submitOnChange: true, width: 4)
+				input(name: "fromTime", type: "time", title: inputTitle("Disable Actions daily between<br>'From Time (optional)"), required: false, submitOnChange: true, width: 4)
+				input(name: "toTime", type: "time", title: inputTitle("<br>...and To Time"), required: (settings.fromTime != null), submitOnChange: true, width: 4)
                 def between = (((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false)         				
                 if (maximize) paragraph "Actions ${between?'would NOT':'would'} run right now (Hint: set From & To to the same time to block Actions at any time).${settings.reverseOnIdle?' Actions will be reversed on \'idle\' at ANY time.':''}"
                 if (settings.fromTime) {
@@ -193,19 +172,11 @@ def mainPage() {
             input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}  
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+		section() {
+			paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
     }
 }
@@ -248,7 +219,6 @@ def initialize() {
 
 def opStateHandler(evt) {
 	LOG("${evt.name}: ${evt.value}",2,null,'info')
-	//boolean ST = atomicState.isST
 
 	String oldOpState = atomicState.thermostatOpState
 	String newOpState = evt.value
@@ -260,12 +230,27 @@ def opStateHandler(evt) {
 	}
     atomicState.currentAction = ' - unchanged'
     
+    // Note that this ensures that things are both "activated" AND "deactivated" only on approriate days and during the "enabled" time window
+    // Thus if the fan is turned on during the "disabled" time window, it will stay on
+    if (!dayCheck()) {
+        LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
+        updateMyLabel()
+        return
+    }
+    def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false
+
+    if (between) {
+        LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
+        updateMyLabel()
+        return
+    }
+    
 	if ((evt.value == 'idle') || (settings.fanOnly && (evt.value == 'fan only'))) {
     	if (settings.reverseOnIdle) {
         	def isReallyIdle = true
         	if (settings.theThermostats.size() > 1) {
             	settings.theThermostats.each { 
-					String ncTos = ST ? it.currentValue('thermostatOperatingState') : it.currentValue('thermostatOperatingState', true)
+					String ncTos = it.currentValue('thermostatOperatingState', true)
 					if ((ncTos != 'idle') && (!settings.fanOnly || (ncTos != 'fan only')))  isReallyIdle = false 
 				}
             }
@@ -275,20 +260,7 @@ def opStateHandler(evt) {
             updateMyLabel()
             return
         }
-    }
-	if (settings.theOpState.contains(evt.value)) {
-    	if (!dayCheck()) {
-        	LOG("Not configured to run Actions today, ignoring", 2, null, 'info')
-            updateMyLabel()
-            return
-        }
-    	def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(settings.fromTime), timeToday(settings.toTime), new Date(), location.timeZone) : false
-        
-        if (between) {
-    		LOG('Not running Actions because the current time is within the disabled time window', 2, null, 'info')
-            updateMyLabel()
-        	return
-    	}
+    } else if (settings.theOpState.contains(evt.value)) {
         HashMap priorState = atomicState.priorState as HashMap
         if (!priorState) priorState = [:] as HashMap
         
@@ -717,14 +689,7 @@ private boolean dayCheck() {
 }
 void updateMyLabel() {
     def opts = [' (paused', ' (Cool', ' (Heat', ' (Fan', ' (Idle', ' (Pend', ' (Vent']
-	String flag
-	if (ST) {
-		opts.each {
-			if (!flag && app.label.contains(it)) flag = it
-		}
-	} else {
-		flag = '<span '
-	}
+	String flag = '<span '
     String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
 		myLabel = app.label ?: app.name
@@ -736,7 +701,7 @@ void updateMyLabel() {
 	}
 	String newLabel
 	if (settings.tempDisable) {
-		newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		newLabel = myLabel + '<span style="color:red"> (paused)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		newLabel = myLabel
@@ -744,7 +709,7 @@ void updateMyLabel() {
         	String thermostatOpState = ' (' + capitalizeAll(atomicState.thermostatOpState)
 			String currentAction = atomicState.currentAction + ')'
             String color = (atomicState.thermostatOpState == 'idle') ? 'green' : 'blue'
-			newLabel = newLabel + (HE ? '<span style="color:' + color + '">' + thermostatOpState + currentAction + '</span>' : thermostatOpState + currentAction)
+			newLabel = newLabel + '<span style="color:' + color + '">' + thermostatOpState + currentAction + '</span>'
 		}
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
@@ -816,13 +781,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>') }
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>') }
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>') : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>' }
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>' }
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -832,54 +797,41 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return "<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
 			break;
 	}
 }
+
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
-}
-boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
-}
+String getPlatform() { return 'Hubitat' }	// if (platform == 'SmartThings') ...
+boolean getIsST() { return false }
+boolean getIsHE() { return true }
 
-String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+String getHubPlatform() { 
+	return 'Hubitat'
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
