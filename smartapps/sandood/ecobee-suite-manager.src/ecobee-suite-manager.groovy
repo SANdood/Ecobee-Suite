@@ -37,13 +37,13 @@
  *	1.8.54 - (wrong version number)
  *	1.8.55 - Fix dehumidifier status display and unsupported subscriptions on HE
  *	1.8.56 - Added fanSpeed attribute support (use 'setFanSpeed' or 'setEcobeeSetting' on thermostat to change)
+ *	1.9.0a - Added new Capabilities support (fanSpeedOptions only, for now)
  *	1.9.00 - Removed all ST code
- *	1.9.01 - Added new Capabilities support (fanSpeedOptions only, for now)
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.01" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -4256,6 +4256,7 @@ void updateThermostatData() {
                 def actualHumidity = runtime?.actualHumidity
                 if ((actualHumidity != null) && 	((changeOften[tid][2]  != actualHumidity) || forcePoll))	data << [humidity: runtime.actualHumidity]
                 if (humiditySetpointDisplay && 		( changeOften[tid][3] != humiditySetpointDisplay)) 			data << [humiditySetpointDisplay: humiditySetpointDisplay]
+				//log.debug "HumiditySetpoint: ${humiditySetpoint}"
                 if ((humiditySetpoint != null) &&	( changeOften[tid][4] != humiditySetpoint)) 				data << [humiditySetpoint: humiditySetpoint]
                 if ((dehumiditySetpoint != null) && ( changeOften[tid][5] != dehumiditySetpoint)) 				data << [dehumiditySetpoint: dehumiditySetpoint]
 
