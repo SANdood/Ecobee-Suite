@@ -51,11 +51,12 @@
  *	1.8.22 - Added setSchedule() and schedule attributes for HE 2.2.6.***
  *	1.8.23 - Added (rudimentary) fanSpeed/setFanSpeed() support
  *	1.8.24 - Fixed 'supportedThermostatModes', 'supportedThermostatFanModes', & 'supportedVentModes' for Hubitat 2.3.3 and later
+ *	1.9.0a - Added 'fanSpeedOptions' support (new thermostat Capability)
+ *	1.9.0b - Hack around Ecobee medium/high idiosyncrasy  (show speeds to match the physical device)
+ *	1.9.0c - Added occupancy (occupied/vacant) attribute
  *	1.9.00 - Removed all ST code
- *	1.9.01 - Added 'fanSpeedOptions' support (new thermostat Capability)
- *	1.9.02 - Hack around Ecobee medium/high idiosyncrasy  (show speeds to match the physical device)
  */
-String getVersionNum() 		{ return "1.9.02" }
+String getVersionNum() 		{ return "1.9.00" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -195,6 +196,7 @@ metadata {
 		attribute 'humidityHighAlert', 						'NUMBER'		// %
 		attribute 'humidityLowAlert', 						'NUMBER'
 		attribute 'humiditySetpoint', 						'NUMBER'
+		attribute 'humiditySetpointDisplay',				'STRING'
 		attribute 'identifier', 							'STRING'
 		attribute 'installerCodeRequired', 					'STRING'
 		attribute 'isRegistered', 							'STRING' 
@@ -222,6 +224,7 @@ metadata {
         attribute 'nextProgramName', 						'STRING'		// ""
         attribute "notificationMessage", 					'STRING'
         attribute 'playbackVolume', 						'NUMBER'		// From Audio object
+		attribute "occupancy", 								'ENUM', ['occupied', 'vacant']
 		attribute 'programsList', 							'STRING'		// USAGE: List programs = new JsonSlurper().parseText(stat.currentValue('programsList'))
 		attribute 'quickSaveSetBack', 						'NUMBER'
 		attribute 'quickSaveSetForward', 					'NUMBER'
@@ -735,7 +738,7 @@ def generateEvent(List updates) {
 
 					case 'humiditySetpoint':
 						if (isChange) {
-							//log.debug "humiditySetpoint: ${sendValue}"
+							log.debug "humiditySetpoint: ${sendValue}"
 							event = eventFront + [value: sendValue, unit: '%', descriptionText: "Humidifier setpoint is ${sendValue}%", isStateChange: true, displayed: true]
 						}
 						break;
@@ -811,12 +814,20 @@ def generateEvent(List updates) {
 						break;
 
 					case 'motion':
+
 						if (isChange) {
 							String cMotion = device.currentValue('motion', true)
 							// Once "in/active", prevent inadvertent "not supported" -
 							if (!cMotion || (cMotion == 'null') || (cMotion == "") || !sendValue.startsWith('not') || !cMotion.contains('act')) {
 								event = eventFront + [value: sendValue, descriptionText: "Motion is "+sendValue, isStateChange: true, displayed: true]
 							}
+						}
+						String occupancy = ((sendValue == 'active') ? 'occupied' : 'vacant')
+						isChange = isChange ?: isStateChange(device, 'occupancy', occupancy)
+					log.debug "Motion: ${sendValue}, Occupancy: ${occupancy}, isChange: ${isChange}"
+						if (isChange) {
+							sendEvent (name: 'occupancy', linkText: linkText, value: occupancy, descriptionText: "Occupancy is ${occupancy}", isStateChange: true, displayed: true)
+							objectsUpdated++
 						}
 						break;
 
