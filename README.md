@@ -20,22 +20,6 @@ The Ecobee Suite offers more than a dozen curated Helper applications that provi
   - [Donations](#donations)
   - [What's New](#whazzup)
 - [<b>Installation</b>](#installation)
-  - [SmartThings Installation](#install-smartthings)
-    - [Upgrading from Prior Releases](#upgrading-smartthings)
-    - [Installation Preparation](#install-prep-smartthings)
-    - [Installing Using GitHub Integration](#github-install-smartthings)
-      - [Installing Device Handlers](#github-devices-smartthings)
-      - [Installing SmartApps](#github-smartapps-smartthings)
-      - [Enabling OAuth](#github-oauth-smartthings)
-    - [Installing Manually from Code](#manual-install-smartthings)
-      - [Installing Device Handlers](#manual-devices-smartthings)
-      - [Installing Ecobee Suite Manager](#manual-manager-smartthings)
-      - [Endabling OAuth](#manual-oauth-smartthings)
-      - [Installing Helper SmartApps](#install-helpers-smartthings)
-    - [Finalizing Installation on SmartThings Mobile](#install-mobile-smartthings)
-    - [Updating the Code](#updating-smartthings)
-      - [Updating using GitHub](#github-updates-smartthings)
-      - [Updating Manually from Code](#manual-updates-smartthings)
   - [Hubitat Installation](#install-hubitat)
     - [Installation Preparation](#install-prep-hubitat)
     - [Installing Manually (via Import)](#manual-install-hubitat)
@@ -101,7 +85,7 @@ The following components are part of the Suite:
 
 - **ecobee Suite Quiet Time**:  Helper application that will turn off your selection of the fan, circulation, humidifier, dehumidifier and even the whole HVAC (if desired), whenever a specified switch (real or virtual) is turned on or off (selectable). Reverses the actions when the switch is reset.
 
-- **ecobee Suite Smart Circulation**: Helper application that adjusts hourly circulation time (fan on minimum minutes) trying to get (and keep) 2 or more rooms (temperature sensors, either Ecobee or SmartThings) to within a configurable temperature difference.
+- **ecobee Suite Smart Circulation**: Helper application that adjusts hourly circulation time (fan on minimum minutes) trying to get (and keep) 2 or more rooms (temperature sensors) to within a configurable temperature difference.
 
 - ***NEW!*** **ecobee Suite Smart Humidity**: Helper application that will dynamically adjust the target humidity for your thermostat based on the thermostat's low temperature forecasts. This helper offers far more configurable options to control the calculated setpoint than does the built-in "Frost Free" setting, with live preview of the humidity levels that will be applied over the coming days given the current configuration and forecast.
 
@@ -112,16 +96,15 @@ The following components are part of the Suite:
 
 - **ecobee Suite Smart Switch/Dimmer/Vent**: Helper application that will turn on/off one or more switches, and/or set the level on one or more dimmers (also works for vents), all based on changes to the Operating State of one or more thermostats. Intended to turn on vent booster fans when HVAC is pushing air, and (optionally) turn them off when they return to idle state. Can also be used to control lights and dimmers; dimmer control can be used to operate vents (see also Smart Vents Helper, below).
 
-- **ecobee Suite Smart Vents**: Helper application that will open and close one or more SmartThings-controlled HVAC vents based on room temperature in relation to specified heating/cooling target setpoint, or the setpoint of the specified thermostat. 
-  - **New in version 1.8.\*\*:** 
-    - can be configured to run only during specific Thermostat Modes (heat/cool/auto/off) and/or during specific programs
-    - a new 'adjustAlways' option instructs the Helper to automate vent levels at any time, not only when the HVAC is actively pushing air. This can be useful to stop HVAC heat for a room that is also heated by a fireplace, wood stove or a space heater.
-    - vent level can be individually configured for the "excluded" Modes, Programs and Fan Level. Level can be "on" or  "off" (using the configured min/max levels), "percentage" (using a specified level), or "unchanged"
-    - can now automatically subscribe an ES Sensor to the selected programs that Smart Vents is configured for
-    - can be automatically paused/unpaused by Smart Room when it disables/enables a Smart Room
-    * Optimized Smart Recovery handling - Smart Vents not only recognizes when the ES Thermostat is in Smart Recovery, it also "looks ahead" to determine the next scheduled program and is setpoints; if configured to run during the next scheduled program, Smart Vents will adjust the vents until the target setpoint is met.
-    * Now supports the use of "virtual thermostats" to set the target temperature setpoints instead of using the ES thermostat.
-    * Now supports remote "HubConnect Ecovent" and "HubConnect Keene Home Smart Vent" devices (PM me for more information)
+- **ecobee Suite Smart Vents**: Helper application that will open and close one or more Hubitat-controlled HVAC vents based on room temperature in relation to specified heating/cooling target setpoint, or the setpoint of the specified thermostat. 
+  - can be configured to run only during specific Thermostat Modes (heat/cool/auto/off) and/or during specific programs
+  - a new 'adjustAlways' option instructs the Helper to automate vent levels at any time, not only when the HVAC is actively pushing air. This can be useful to stop HVAC heat for a room that is also heated by a fireplace, wood stove or a space heater.
+  - vent level can be individually configured for the "excluded" Modes, Programs and Fan Level. Level can be "on" or  "off" (using the configured min/max levels), "percentage" (using a specified level), or "unchanged"
+  - can now automatically subscribe an ES Sensor to the selected programs that Smart Vents is configured for
+  - can be automatically paused/unpaused by Smart Room when it disables/enables a Smart Room
+  * Optimized Smart Recovery handling - Smart Vents not only recognizes when the ES Thermostat is in Smart Recovery, it also "looks ahead" to determine the next scheduled program and is setpoints; if configured to run during the next scheduled program, Smart Vents will adjust the vents until the target setpoint is met.
+  * Now supports the use of "virtual thermostats" to set the target temperature setpoints instead of using the ES thermostat.
+  * Now supports remote "HubConnect Ecovent" and "HubConnect Keene Home Smart Vent" devices (PM me for more information)
 
 - **ecobee Suite Smart Zone**: Helper application that attempts to synchronize fan on time between two zones. Intended for use on multi-zones HVAC systems; running the fan on all the zones simultaneously could help reduce electricity consumption vs. having each zone run the fan independently.
 
@@ -131,33 +114,31 @@ The following components are part of the Suite:
 
 #### Device Drivers
 
-- **Ecobee Thermostat**: The device driver for the Ecobee Thermostat functions and attributes. Presents a much more detailed view of the thermostat/HVAC system status, including heat/cool stages, humidification & dehumidification status, fan circulation control, and active/inactive icons for many modes and states. Designed using icons representative of the Ecobee web and mobile apps. Also supports a broad suite of extended attributes and commands to allow WebCoRE, Rules Engine and native SmartThings SmartApps/Hubitat Apps to monitor and control the thermostat, allowing customization and integration within a users' Smart Home. 
-  - **New in version 1.8.\*\***: Historically, the ES Thermostat would always display the *effective* target Humidity Setpoint value, which is basically the moving average setpoint over the past hour or so. With this release (and in support of the new Smart Humidity Helper), this has changed: when the humidifierMode is Manual (On) or Off, ES Thermostat now reports the actual setpoint setting. When the mode is Auto, the old moving average approach will continue to be applied (as per the Ecobee API documentation).
+- **Ecobee Thermostat**: The device driver for the Ecobee Thermostat functions and attributes. Presents a much more detailed view of the thermostat/HVAC system status, including heat/cool stages, humidification & dehumidification status, fan circulation control, and active/inactive icons for many modes and states. Designed using icons representative of the Ecobee web and mobile apps. Also supports a broad suite of extended attributes and commands to allow WebCoRE, Rules Engine and native Hubitat Apps to monitor and control the thermostat, allowing customization and integration within a users' Smart Home. 
+  - Historically, the ES Thermostat would always display the *effective* target Humidity Setpoint value, which is basically the moving average setpoint over the past hour or so. With this release (and in support of the new Smart Humidity Helper), this has changed: when the humidifierMode is Manual (On) or Off, ES Thermostat now reports the actual setpoint setting. When the mode is Auto, the old moving average approach will continue to be applied (as per the Ecobee API documentation).
  
   >**NOTE:** An Ecobee Suite user pointed out to me the fact that the humidity setpoint displayed on the Ecobee Thermostat itself (in the System menu) is limited to setting ***and displaying*** even numbered-values only (at least when not in Auto mode). Rest assured that the ES Thermostat device itself is updating the setpoint properly, and the thermostat does in fact report bback (and act on) odd-number humidity setpoints. *While I wish I could fix this, there's nothing that can be done by the API to address the misinformation.*
 
 - **Ecobee Sensor**: This implements the Device Handler for the Ecobee Sensor attributes (temperature and motion/occupancy). Includes indicators for current thermostat Program, buttons that allow adding/removing the zone from specific Programs (*aka* Comfort Setting, *aka* Schedule, *aka* Climate) and indicators that appear when Smart Room is configured for the room. This is also used to expose the internal sensors on the Thermostat to allow the actual temperature values (instead of only the average) to also be available. This is critically important for some applications such as Smart Vents.
-   - **New in version 1.8.\*\***
-     - adds a new `updateSensorPrograms(add, remove)` API command, allows you update a single sensors' participation in multiple different thermostat programs (*e.g.,* Home, Away, Sleep, etc.) in a single, atomic call.
+   - adds a new `updateSensorPrograms(add, remove)` API command, allows you update a single sensors' participation in multiple different thermostat programs (*e.g.,* Home, Away, Sleep, etc.) in a single, atomic call.
    - adds several new attributes are now updated whenever certain data structures in the Ecobee API have been updated from the Ecobee Servers (e.g., `programUpdated`, `scheduleUpdated`, `climatesUpdated`, etc.). These allow ES Helpers (and custom user applications) to coordinate updates across devices. *See the Smart Mode, Smart Rooms, Smart Vents, and thermal Thermal Comfort Helpers' code for examples of their use.*
 
 Here are links to the working version of the repository being developed and maintained:
 * [GitHub.com/SANdood](https://github.com/SANdood/Ecobee-Suite) 
 * [Hubitat Community](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839)
-* [SmartThings Community](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405).
 
 --------------------------------
 ### <a name="motivation">Motivation</a>
 
 I maintain the original intent as was previously defined by the original author Sean Stryker:
 
-The intent is to provide an Open Source integration for Ecobee thermostats that can be used by the Hubitat and SmartThings user communities ***free of charge*** and ***without fear of the device disappearing in the future***. This will help ensure accessibility for all users and provide for an easy mechanism for the community to help maintain/drive the functionality.
+The intent is to provide an Open Source integration for Ecobee thermostats that can be used by the Hubitat user community ***free of charge*** and ***without fear of the device disappearing in the future***. This will help ensure accessibility for all users and provide for an easy mechanism for the community to help maintain/drive the functionality.
 
 Let me be clear: this is not a competition. I am not trying to replace or outdo any other version, and I personally have nothing against people making money off of their efforts. I have invested a lot of my time in this as Open Source so as to meet my own wants and desires, and I offer the result back to the community with no strings attached.
 
 Please feel free to try any version you want, and pick the one that best fits your own use case and preference.
 
-If you like this version and are so inclined, post a brief message of support on the SmartThings and/or Hubitat Community links above. And if you **don't** like it, or have any problems with the installation or operation of the suite, please also post on the links above. I strive for total transparency, and your use of this Suite does not require you to post positive reviews, nor are you prohibited in any way from posting negative reviews. 
+If you like this version and are so inclined, post a brief message of support on the Hubitat Community links above. And if you **don't** like it, or have any problems with the installation or operation of the suite, please also post on the links above. I strive for total transparency, and your use of this Suite does not require you to post positive reviews, nor are you prohibited in any way from posting negative reviews. 
 
 -------------------------
 ### <a name="donations">Donations</a>
@@ -169,322 +150,22 @@ While not required, I do humbly accept donations. If you would like to make an *
 -------------------------------
 ### <a name="whazzup">What's New</a>
 
-#### Key enhancements in Version 1.8.\*\*
+#### Key enhancements in Version 1.9.\*\*
 
-The most significant changes in the latest release include:
-- ***Updated User Interface*** On both platforms, the basic configuration structure has been revamped to be consistent across Helper applications, each with Sections for **Naming**, **Configuration**, **Notifications** and **Operations**.
-
-  On the Hubitat platform, Ecobee-themed headers and section bars  (that look a lot like this document's formatting) augment the new structure, and most of the inputs have been arranged to reduce whitespace in the menus. And most helpers now update their status in a colored extension of the Helper Name, making it easy to see what's going on from the HE top-level Apps menu.
-
-  All Helpers now have the same 4 toggles at the bottom of their settings page, and *all four default to **Off***:
-  * **Minimize settings text** - makes the settings dialogs less "chatty" by hiding most of the descriptive text
-  * **Pause this Helper** 			- temporarily pauses (unsubscribes from all events & unschedules all activities)
-  * **Disable debug logging** 	- stops all "debug" log output ("warn", "error" and "trace" cannot be disabled
-  * **Disable info logging** - stops all "info" log output
-
-Also on Hubitat (only), each of the Applications now has a direct hot-link to the relevant section of this document, accessible via the Question Mark icon in the top-right corner of the application settings page (requires Hubitat version 2.1.9.* or later).
-
-- ***New inter-Helper coordination of Program (Schedule/Climate/Comfort Setting) Updates:*** Enables multiple Helper instances to safely update shared common data structures within Ecobee Suite Manager. Before this, if two different Helpers wanted to change the Setpoints of a Program (even different Programs) at the same time, the second one could overwrite changes made by the first one. This new coordination, which is based on the internal Reservations system, ensures that the second change is delayed until the first one has been fully received and effected by the Ecobee cloud *and* the Ecobee thermostat itself. 
-With this release, Smart Mode, Smart Room, Smart Vents and Thermal Comfort all utilize this mechanism; more will be added as required.
-
-- ***New & Updated Helpers***
-
-  - ***New Smart Humidity Helper:*** Dynamically and continually adjusts the humidity setpoint of your humidifier-enabled HVAC according to the general guidelines for comfort, health and the thermal efficiency (heat & humidity loss rate) of your structure, relative to the ambient outdoor and indoor temperatures.
-
-  - ***New Smart Room & Smart Vents Integration:*** When Smart Room activates a Room, it can now also unpause the specified Smart Vents Helper. Both Helpers can also enroll/unenroll associated Ecobee Suite Sensors in/from selected Ecobee Suite Thermostats' Programs.
-  
-- ***New HubConnect Custom Drivers:*** With this release I am also providing a Custom Driver for users of the HubConnect solution for integrating multiple Hubs. These Custom Drivers allow you to have a single instance of the complete Ecobee Suite that also reflects the ES Thermostat(s) and ES Sensor(s) to other HubConnected hubs.<br><br>Note that these Custom Drivers present no user interface, and they cannot be used to run ES Helpers on other hubs. They do support, however, the entire command/API interface of the devices they mirror. Thanks to the power of HubConnect, all interactions with an ES Thermostat Custom Driver-based device will be effected directly against the "master" device, and changes will be reflected on every instance of that thermostat (including the native Ecobee webApps and mobile apps, as well as the native SmartThings DTH and Hubitat drivers for Ecobee).
+The most significant changes in this release is the complete removal of ***all*** of my code that supported integration with SmartThings. As noted elsewhere, this is because SmartThings no longer supports Groovy-based apps or drivers, as of 1 January 2023.
 
 
 #### Special Thanks to Hubitat Staff
-The author extends a special thank you to the Hubitat staff for assistance in getting the code-based Ecobee authentication working, as the documented Hubitat OAuth path doesn't work for Ecobee. Read through the OAuth init code in Ecobee Suite Manager to learn the (clever) trick they helped me employ. Without this, I would have had to maintain two different versions of this code base.
+The author extends a special thank you to the Hubitat staff for assistance in getting the code-based Ecobee authentication working, as the documented Hubitat OAuth path doesn't work for Ecobee. Read through the OAuth init code in Ecobee Suite Manager to learn the (clever) trick they helped me employ. 
 
 #### A Note on Hubitat Performance
-Since all of this code runs locally on the Hubitat hub, its performance is different than in the SmartThings environment where all the code runs on Amazon's server farms around the world. This has several impacts on performance:
- - Network traffic will typically take longer to get from Ecobee's cloud servers to your local hub than it takes across the cloud (from Ecobee's cloud servers to SmartThings' cloud servers)
- - SmartThings' cloud servers provide both faster processors and more memory to run your workloads than does a single Hubitat hub.
- -  In SmartThings, most drivers and built-in apps will run on your SmartThings hubb, while all of your custom apps and drivers will be spread out across *multiple* SmartThings servers in their cloud.
+Over the years, I have invested heavily in reducing the CPU and memory overhead of the entire Ecobee Suite, especially on the Hubitat platform. With Version 1.9.\*]\* I have also removed all of the code related to SmartThings support, including the numerous conditional platform chacks that enabled specific optimizations for certain command calls. The resulting release is noticably faster in retrieving data from the Ecobee servers and deploying it to the various Helpers and device drivers. This effort, coupled with continuous improvement of the Hubitat environment itself, has helped make Ecobee Suite far more efficient than it has ever been.
 
-That said, I have invested heavily in reducing the CPU and memory overhead of the entire Ecobee Suite, and Version 1.8.\*]\* is noticably faster in retrieving data from the Ecobee servers and deploying it to the various Helpers and device drivers. This effort, coupled with continuous improvement of the Hubitat environment itself, has helped make Ecobee Suite far more efficient.
-
-#### A Note on Performance In General
-Changes made over the past year have totally revamped how changes are recognized, processed and dispatched by Ecobee Suite Manager. One of the major improvements is the extensive reduction of writes to the backing store (atomicState & state variables). Reducing the writes benefits especially Hubitat, which runs entirely off of local Flash storage which tends to wear out the more times it is written to. Reducing atomicState writes everywhere possible, in particular, significantly speeds up processing and dispatching updates from the Ecobee servers to the SmartThings/Hubitat device(s).
-
-One side-effect of the updated approach is that during the inital startup period update cycles will generally take longer, as the initial datapoints are saved for future changes comparisons. After this startup period (usually 10-20 minutes, dependent on the number of devices you have), things will stabilize and generally cycle times will shorten significantly. There will still be the occasional long cycle, but for the most part cycles are signficantly better on both platforms with the new logic.
 
 -------------------------
 <a name="installation"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Installation-1-8-00-section.png" width="50%" alt="Installation" /></a>
 
-While the installation process is different for SmartThings users and for Hubitat users, users of these platforms should be familiar with installing third-party code on their platform. The following documentation provides instructions for each platform separately:
-
-Start [here for SmartThings installation instructions](#install-smartthings)<br>
-
-Start [here for Hubitat installation instructions](#install-hubitat)
-
-
-## <a name="install-smartthings">SmartThings Installation</a>
-
-It is highly recommended that you use the GitHub Integration that SmartThings offers with their IDE. This will make it **much** easier for you to keep up to date with changes over time. For the general steps needed for setting up GitHub IDE integration, please visit <http://docs.smartthings.com/en/latest/tools-and-ide/github-integration.html> and follow the steps for performing the setup.
-
-### <a name="upgrading-smartthings">Upgrading from Prior Releases</a>
-
-#### First time users of Ecobee Suite
-Please proceed with the [installation instructions](#install-prep-smartthings) below.
-
-#### Users of version 1.4.\*\* and later
-
-If you are running my Ecobee Suite version 1.4.\*, you can simply install this version on top of your existing release, just like you would any minor release of 1.4.\*. So, you too can Proceed with the [installation instructions](#install-prep) below.
-
-#### Releases prior to 1.4.\*\*
-
-At this point, releases prior to 1.4.\*\* should just bite the bullet and remove the old code before proceeding.
-
-It is **extremely IMPORTANT** that you follow these steps to remove your old implementation - *failure to do so may require you to solicit assistance from SmartThings Support to completely remove the old support.*
-
-1. **From the SmartThings Classic app** on your mobile device, open the old Ecobee (Connect) SmartApp and remove all of the Helper SmartApps, one by one, and then exit out of Ecobee (Connect)
-2. Re-enter Ecobee (Connect) and select each of your old Sensor devices one by one, then tap the "SmartApps" tab to verify that each Sensor is not used by any existing SmartApps. If they are, remove them from these SmartApps (you'll probably want to replace them with the "new" Sensor devices after you install the latest version)
-3. Back in the old Ecobee (Connect), go to **Sensors** page, and de-select ALL of the sensors listed there. Save/Done back out of Ecobee (Connect), and all of the Sensor devices *should* be deleted automatically. Don't worry if they're not, though...it doesn't always work, but you can still proceed...
-4. Select each of your old Thermostat devices, one by one, then tap the "SmartApps" tab, and verify that these also are not used by any SmartApps.
-5. Back into Ecobee (Connect), and this time select the **Thermostats** page, de-select ALL of the thermostats listed there, and exit back out of Ecobee (Connect).
-6. Finally, back into Ecobee (Connect) one last time, scroll down and go to the **Remove this instance** page, tap the big red Remove button and confirm. 
-
-At this point, you should have totally removed all the old support.
-
-If any devices or SmartApps fail to remove ***after following the above steps***, you can try to manually go into each device/SmartApp on your mobile and remove them from within the DTH and/or SmartApp itself. You can also try to manually delete them from within your IDE. If neither of these work, you'll probably have to [email SmartThings Support](mailto://support@smartthings.com).
-
-Proceed with the [installation instructions](#install-prep-smartthings) b
-
-### <a name="install-prep-smartthings">Install Preparation</a>
-
-If you are not familiar with adding your own custom devices, then be sure to familiarize yourself with the [SmartThings IDE](https://graph.api.smartthings.com/) before you begin the installation process.
-
-You will also need to make sure that you have your Ecobee username and password handy. You should login to <http://www.ecobee.com/> now to ensure you have your credentials.
-
-Finally, please take care to note that the ***ECOBEE SUITE CAN ONLY BE INSTALLED USING THE SMARTTHINGS CLASSIC MOBILE APP***. It's not hard to miss - there is simply no way to install using the new Samsung SmartThings Connect app.
-
-### <a name="github-install-smartthings">Installing Using GitHub Integration (Recommended Method)</a>
-If this is your first time installing this new Ecobee Suite (versions 1.3.* and later) first follow these steps to link your IDE with the new Ecobee Suite repository (note: this is a new repository, different from the one used for prior versions - everyone will be required to perform these steps once to get to the new version).
-1. Login to the IDE at [ide.smartthings.com](http://ide.smartthings.com)
-2. Click on **My Locations** at the top of the page
-3. Click on the name of the location that you want to install to
-4. Click on the **`My Device Handlers`** tab
-5.  Click **`Settings`**
-6.  Click **`Add new repository`** and use the following parameters:
-    - Owner: **`SANdood`**
-    - Name: **`Ecobee-Suite`** *(note that the hyphen is required)*
-    - Branch: **`master`**
-7. Click **`Save`**
-
-#### <a name="github-devices-smartthings">Installing Ecobee Suite Device Handlers</a>
-Once the Ecobee Suite repository is connected to your IDE, use the GitHub integration to install the current version into your workspace. In the IDE:
-
-8. Click **`Update from Repo`** and select the **`Ecobee-Suite`** repository we just added
-9. Find and Select **`ecobee-suite-sensor.groovy`** and **`ecobee-suite-thermostat.groovy`**
-10. Select **`Publish`**(bottom right of screen near the **`Cancel`** button)
-11. Click **`Execute Update`**
-	- Note the response at the top of the **`My Devices Handlers`** page. It should be something like "**`Updated 0 devices and created 2 new devices, 2 published`**"
-	- Verify that the two devices show up in the list and are marked with Status **`Published`** (NOTE: You may have to reload the **`My Device Handlers`** screen for the devices to show up properly.)
-
-Once completed, you can delete any pre-1.4.\*\* device handlers if they exist in your "My Devices." To do so, you can select the Edit Properties icon next to each device and select Delete.
-
-#### <a name="github-smartapps-smartthings">Installing Ecobee Suite SmartApps</a>
-Once you have both of the Ecobee Suite Device Handlers added and published in your IDE, it is time to add the Ecobee Suite SmartApps.
-
-12. Click on the **`My SmartApps`** tab
-13. Click **`Update from Repo`** and select the **`**Ecobee-Suite**`** repository we added earlier
-14. Select the check boxes next to **`ecobee-suite-manager.groovy`**, **`ecobee-suite-open-contacts.groovy`**, **`ecobee-suite-quiet-time.groovy`**, **`ecobee-suite-routines.groovy`**,  **`ecobee-suite-smart-circulation.groovy`**,  **`ecobee-suite-smart-humidity.groovy`**, **`ecobee-suite-smart-mode.groovy`**, **`ecobee-suite-smart-room.groovy`**, **`ecobee-suite-smart-switches.groovy`**, **`ecobee-suite-smart-vents.groovy`**, **`ecobee-suite-smart-zones.groovy`**, **`ecobee-suite-thermal-comfort.groovy`**, and **`ecobee-suite-working-from-home.groovy`** (all 13 SmartApps listed)
-15. Select **`Publish`**(bottom right of screen near the `Cancel` button)
-16. Click **`Execute Update`**
-	- Again, note the response at the top of the My SmartApps page. It should be something like "**`Updated 0 and created 13 SmartApps, 13 published`**"
-	- Verify that all 13 of the SmartApps show up in the list and are marked with Status **`Published`**
-
-#### <a name="github-oauth-smartthings">Enabling OAuth for `Ecobee Suite Manager`</a>
-Finally, we must enable OAuth for the connector SmartApp as follows:
-
-**NOTE: This is the most commonly missed set of steps, but failing to enable OAuth will generate cryptic errors later when you try to use the SmartApp. *So please don't skip these steps.***
-
-17. Locate the **`Ecobee Suite Manager`** SmartApp from the list and Click on the **`Edit Properties`** button to the left of the SmartApp that we just added (looks like pencil on a paper)
-18. Click on the **`OAuth`** tab (
-19. Click **`Enable OAuth in Smart App`**
-20. Click **`Update`** (bottom left of screen)
-21. Verify that **`Updated SmartApp`** appears at the top of the screen
-
-That's it - you are now all set to skip down to [install the Ecobee Suite from your mobile device](#install-mobile-smartthings).
-
-**REMINDER:** The entire Ecobee Suite is installed using the Ecobee Suite Manager SmartApp. You should not attempt to install the individual devices or SmartApps directly - this will undoubtedly result in a failed installation, and you may require assistance from SmartThings support to recover if you don't follow these instructions.
-
-Once completed, you can delete any OLD (pre-version 1.4.\*\*) SmartApps if you prefer. To do so, you can select the Edit Properties icon next to each of the old SmartApps (the ones NOT in the "sandood" namespace) and select Delete.
-
-### <a name="manual-install-smartthings">Installing Manually from Code</a>
-For this method it is recommended that you have one browser window open on GitHub and another on the IDE. If you have used the GitHub installation method above, you can skip this section and [proceed to completing the installation on your mobile device](#install-mobile-smartthings).
-
-#### <a name="manual-devices-smartthings">Installing Ecobee Suite Device Handlers Manually</a>
-Follow these steps to install the **`Ecobee Sensor`** Device Handler:
-1. Login to the IDE at [ide.smartthings.com](http://ide.smartthings.com)
-2. [IDE] Click on **`My Locations`** at the top of the page
-3. [IDE]Click on the name of the location that you want to install to
-4. [IDE]Click on the **`My Device Handlers`** tab
-5. [IDE] Click **`New Device Type`** (top right corner)
-6. [IDE] Click **`From Code`**
-7. [GitHub] Go to the [raw source code for the Ecobee Sensor](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy) *(click the hyperlink)*
-8. [GitHub] Select all of the text in the window (use Ctrl-A if using Windows)
-9. [GitHub] Copy all of the selected text to the Clipboard (use Ctrl-C if using Windows)
-10. [IDE] Click inside the text box
-11. [IDE] Paste all of the previously copied text (use Ctrl-V if using Windows)
-12. [IDE] Click **`Create`**
-13. [IDE] Click **`Save`**
-14. [IDE] Click **`Publish`** --> **`For Me`**
-
-Follow these steps to install the **`Ecobee Thermostat`** Device Handler:<br><br>
-15. [IDE] Click on the **`My Device Handlers`** tab<br>
-16. [IDE] Click **`New Device Type`** (top right corner)<br>
-17. [IDE] Click **`From Code`**<br>
-18. [GitHub] Go to the [raw source code for the Ecobee Thermostat](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy) *(click the hyperlink)<br>
-19. [GitHub] Select all of the text in the window (use Ctrl-A if using Windows)<br>
-20. [GitHub] Copy all of the selected text to the Clipboard (use Ctrl-C if using Windows)<br>
-21. [IDE] Click inside the text box<br>
-22. [IDE] Paste all of the previously copied text (use Ctrl-V if using Windows)<br>
-23. [IDE] Click **`Create`**<br>
-24. [IDE] Click **`Save`**<br>
-25. [IDE] Click **`Publish`** --> **`For Me`**<br>
-
-Once completed, you can delete the OLD device handlers if you prefer. To do so, you can select the Edit Properties icon next to each device and select Delete.
-
-#### <a name="manual-manager-smartthings">Installing `Ecobee Suite Manager` Manually from Code</a>
-Again, it is recommended to have one browser window open on GitHub and another on the IDE.
-
-Follow these steps to add the **`Ecobee Suite Manager`** SmartApp to your IDE:
-1. [IDE] Click on the **`My SmartApps`** tab
-2. [IDE] Click **`New SmartApp`** (top right corner)
-3. [IDE] Click **`From Code`**
-4. [GitHub] Go to the [raw source code for the Ecobee Suite Manager SmartApp](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy)
-6. [GitHub] Select all of the text in the window (use Ctrl-A if using Windows)
-7. [GitHub] Copy all of the selected text to the Clipboard (use Ctrl-C if using Windows)
-8. [IDE] Click inside the text box
-9. [IDE] Paste all of the previously copied text (use Ctrl-V if using Windows)
-10. [IDE] Click **`Create`**
-11. [IDE] Click **`Save`**
-12. [IDE] Click **`Publish`** --> **`For Me`**
-
-#### <a name="manual-oauth-smartthings">Enabling oAuth for `Ecobee Suite Manager`</a>
-Finally, we must enable oAuth for the connector SmartApp as follows:
-
-**NOTE: This is the most commonly missed set of steps, but failing to enable OAuth will generate cryptic errors later when you try to use the SmartApp. *So please don't skip these steps.***
-
-13. [IDE] Click on the **`My SmartApps`** tab
-14. [IDE] Verify that the SmartApp shows up in the list and is marked with Status `Published`
-15. [IDE] Click on the **`Edit Properties`** button to the left of the SmartApp that we just added (looks like pencil on a paper)
-16. [IDE] Click on the **`oAuth`** tab
-17. [IDE] Click **`Enable oAuth in Smart App`**
-18. [IDE] Click **`Update`** (bottom left of screen)
-19. [IDE] Verify that **`Updated SmartApp`** appears at the top of the screen
-
-#### <a name="manual-helpers-smartthings">Installing the Ecobee Suite Helper SmartApps Manually from Code</a>
-Follow these steps to add the Helper SmartApps to your IDE, one at a time (links to Raw Source Code are provided below):
-
-**NOTE:** It is mandatory that you add ALL of the available Helper SmartApps, or **`Ecobee Suite Manager`** will fail with an error.<br><br>
-20. [IDE] Click on the **`My SmartApps`** tab<br>
-21. [IDE] Click **`New SmartApp`** (top right corner)<br>
-22. [IDE] Click **`From Code`**<br>
-23. [GitHub] Go to the raw source code for each of the Helper SmartApps, one at a time (links provided below)<br>
-24. [GitHub] Select all of the text in the window (use Ctrl-A if using Windows)<br>
-25. [GitHub] Copy all of the selected text to the Clipboard (use Ctrl-C if using Windows)<br>
-26. [IDE] Click inside the text box<br>
-27. [IDE] Paste all of the previously copied text (use Ctrl-V if using Windows)<br>
-28. [IDE] Click **`Create`**<br>
-29. [IDE] Click **`Save`**<br>
-30. [IDE] Click **`Publish`** --> **`For Me`** (Optional)<br>
-31. [IDE] Click on the **`My SmartApps`** tab<br>
-32. [IDE] Verify that the SmartApp shows up in the list<br>
-
-Repeat the above steps (20-32) for the each of the available Helper SmartApps (click each link for the raw source code):
-
-A. [`ecobee Suite Open Contacts`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy)<br>
-B. [`ecobee Suite Routines`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy)<br>
-C. [`ecobee Suite Routines`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy)<br> 
-D. [`ecobee Suite Smart Circulation`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy)<br> 
-E. [`ecobee Suite Smart Humidity`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy)<br> 
-F. [`ecobee Suite Smart Mode`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy)<br> 
-G. [`ecobee Suite Smart Room`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy)<br>
-H. [`ecobee Suite Smart Switches`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy)<br>
-I. [`ecobee Suite Smart Vents`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy)<br>
-J. [`ecobee Suite Smart Zones`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy)<br>
-K. [`ecobee Suite Thermal Comfort`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy)<br>
-L. [`ecobee Suite Working From Home`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy)<br>
-
-Once completed, you can delete the OLD SmartApps (the ones that appear under the `SmartThings` namespace) if you prefer. To do so, you can select the Edit Properties icon next to each of the old SmartApps (the ones NOT in the "sandood" namespace) and select Delete.
-
-### <a name="install-mobile-smartthings">Finalizing Installation on SmartThings Mobile</a>
-
-The final steps for installing the Ecobee Suite Device Handlers and SmartApps is completed entirely using the Ecobee Suite Manager SmartApp. The SmartApp will guide you through the basic installation and setup process. It includes the following aspects:
-- Authentication with Ecobee to allow API Calls for your thermostat(s) (and connected sensors)
-- Discovery, selection and creation of Thermostat devices
-- Discovery, selection and creation of Remote Sensor devices (if there are any)
-- Setup of optional features/parameters such as Smart Auto Temp Control, Polling Intervals, etc
-- Installation and configuration of Helper SmartApps (as desired)
-
-Follow these steps for the SmartApp on your mobile device:
-1. Open the SmartThings app and login to your Location
-2. Open the **`Marketplace`** tab
-3. Open the **`SmartApps`** tab
-4. Scroll down and select **`My Apps`** (at the bottom of the list)
-5. Scroll to open the **`Ecobee Suite Manager`** SmartApp.
-(**NOTE:** If you see "Ecobee (Connect)" in this list, you did not remove it from your IDE. This is not a problem - you can use both. Just remember that this new Ecobee Suite uses **`Ecobee Suite Manager`**, and not the old version.
-6. Select the Ecobee API Authorization page (as indicated on the screen) and then the ecobee Account Authorization page to enter your Ecobee Credentials
-7. Enter your Ecobee Email and Password, and then press the green LOG IN button
-8. On the next page, Click **`Accept`** to allow SmartThings to connect to your Ecobee account
-9. You should receive a message indicating **`Your ecobee Account is now connected to SmartThings!`**
-10. Click **`Done`** (or **`Next`** depending on your device OS)
-11. Click **`Done`** (or **`Next`** depending on your device OS) again to save the credentials and exit out of Ecobee Suite Manager 
-You should receive a small green popup at the top stating "**`Ecobee Suite Manager is now installed and automating`**"
-12. In the SmartThings mobile app, go to the **`Automation`** screen and select the **`SmartApps`** tab
-13. Select the **`Ecobee Suite Manager`** SmartApp that you just installed
-14. Select the Ecobee Thermostat devices you want to connect from your account
-15. Select the Ecobee Sensors you want to connect (if any)
-(NOTE: The options are dynamic and will change/appear based on other selections. For example, you won't see any Thermostats to select if your Ecobee account login failed; you won't see any sensors to choose until you select the thermostats they are connected to).
-16. You can also go into the **`Preferences`** section to set various preferences such as **`Hold Type`**, **`Smart Auto Temperature`**, **`Polling Interval`**, **`Debug Level`**, **`Decimal Precision`**, and whether to create separate sensor objects for thermostats.]  - 
-17. After making all selections, Click **`Done`** to save your preferences and exit the SmartApp
-
-At this point, the SmartApp will automatically create all of the new devices, one for each thermostat and sensor. These will show up in your regular **`Things`** list within the app. 
-
-Using the default settings is fine, but some of the more advanced features will require you to change the default settings for Ecobee Suite. My recommended settings are:
-- **Hold Type:** If not specified, this will default to the setting on the thermostat itself. Some of the helper SmartApps allow you to customize this for specific operations.
-- **Polling Interval:** 1 minute if you are using Helper SmartApps to react to thermostat conditions (like changing to heating/cooling, or running a specific Program/Climate); otherwise 2-5 minutes might be sufficient.
-- **Decimal Precision:** One of the reasons I created this in the first place is to get more precision out of the thermostat. If you set this to 1 decimal position, you'll understand better how the thermostat is reacting to your environment, and when "72°" is really "72.4°".
-- **Debug Level:** I tend to run with this set to 2 because I've optimized this level to provide the most basic of operational status in the Live Logging monitor.
-- 
-
-> **NOTE 1**: It may take a few minutes for the new devices to show up in the list and for them to populate their displays. You should try refreshing the list if they are not there (pull down on the list). In extreme cases, you may have to restart the SmartThings app on your mobile device to update the list. You should only have to do this once.<br/>
-
-> **NOTE 2**: If you uninstall the SmartApp it will automatically remove all of the thermostats and sensors that it previously installed. This is necessary (and expected) as those devices are "children" of the SmartApp.<br/>
-
-
--------------------------
-### <a name="updating-smartthings">Updating the Code</a>
-If you have enabled GitHub integration with the SmartThings IDE, then updates are a breeze. Otherwise the steps are a bit more manual but not too complicated.
-
-#### <a name="github-updates-smartthings">Updating with GitHub Integration</a>
-The IDE provides visual cues to alert you that any device types or SmartApps have been updated in their upstream repositories. See the [GitHub/IDE integration guide](http://docs.smartthings.com/en/latest/tools-and-ide/github-integration.html) for more details on the different colors.
-
-Once you have determined that an update is available, follow these steps:
-1. Login to the SmartThings IDE
-2. Go to either the **`My Device Handlers`** or **`My SmartApps`** tabs to see if there are updates (the color of the item will be purple)
-3. Click the **`Update from Repo`** button (top right)
-4. Select the **`Ecobee-Suite`** repository
-5. Select ALL of items in the **`Obsolete (updated in GitHub)`** column
-6. Select **`Publish`** (bottom right)
-7. Click **`Execute Update`** (bottom right)
-	- You should receive a confirmation message such as this example: **`Updated 1 and created 0 SmartApps, 1 published`**
-	- (Optional, but <b>HIGHLY Recommended</b>) Rerun the **`Ecobee Suite Manager`** SmartApp. This seems to alleviate any residual issues that may occur due to the update
-
-You should now be running on the updated code. Be sure that you check for both updates of the SmartApp **and** the Device Type. Updating one but not the other could cause compatibility problems.
-
-#### <a name="manual-updates-smartthings">Updating manually</a>
-
-To update manually, you will need to "cut & paste" the raw code from GitHub into the SmartThings IDE, Save and Publish the code. I will leave it to the reader to work through the full individual steps, but the links to the code are the same as those that were used during the initial install process.
-
-Note that there are THIRTEEN SmartApps and TWO Device Handlers in this suite. For proper operation, you will need to copy/paste ALL 15 of these files into your IDE, ***even if you aren't going to use them all.*** At a minimum, you should also publish the Ecobee Suite Manager SmartApp and the two Device Handlers.
-
+STOPPED HERE!!!
 --------------------------
 
 ## <a name="install-hubitat">Hubitat Installation</a>
