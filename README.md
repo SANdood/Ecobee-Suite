@@ -170,7 +170,7 @@ STOPPED HERE!!!
 
 ## <a name="install-hubitat">Hubitat Installation</a>
 
-Installing the Ecobee Suite code on Hubitat is much like the SmartThings manual installation, except that Hubitat offers an "Import" function to assist with the process of loading the source code from the GitHub repository.. 
+The EASIEST way to install Ecobee Suite on Hubitat is to use the <a href=https://github.com/HubitatCommunity/hubitatpackagemanager>Hubitat Package Manager</a>, as this will automate the installation of the 13 Applications and 2 device drivers. But if you insist on doing it manually, follow these instructions:
 
 ### <a name="install-prep-hubitat">Installation Preparation</a>
 
@@ -293,64 +293,23 @@ Congratulations! You have completed the installation of the Ecobee Suite into yo
 
 ### <a name="general">General</a>
 
-This collection of applications and device drivers has been designed for simple installation, flexibile configuration options and easy operation. It is also extensible through the use of child Helper applications that can easily be added to the configuration. **And it fully implements the related [SmartThings Capabilities](http://docs.smartthings.com/en/latest/capabilities-reference.html) and [Hubitat Capabilities](https://docs.hubitat.com/index.php?title=Driver_Capability_List).**
+This collection of applications and device drivers has been designed for simple installation, flexibile configuration options and easy operation. It is also extensible through the use of child Helper applications that can easily be added to the configuration. **And it fully implements the related [Hubitat Capabilities](https://docs.hubitat.com/index.php?title=Driver_Capability_List).**
 
 Key Highlights include:
 - **Open Source Implementation!** Free as in beer AND speech. No donations or purchase needed to use (but if you insist, see [donations](#donations).
 - Single installation application, **`Ecobee Suite Manager`** used for installing both Thermostats **and** Sensors. No need for multiple apps just for installation! In fact, the **`Ecobee Suite Manager`** application is the only interface you will use to access all available functions, including those provided by child Helper applications.
-- On SmartThings (only, at this point) you get a sophisticated User Interface that uses custom Ecobee icons throughout the design to provide a more polished look and feel.
 - Display of current weather with support for separate day and night icons (just like on the front of your Ecobee thermostat)!
 - Robust watchdog handling to minimize Ecobee connectivity issues, and now also includes an API Status Tile to quickly identify if there is an ongoing problem. On Hubitat, the connection status is displayed next to "Ecobee Suite Manager" entry in the apps list. No more guessing if you are still connected or not.
-- Included Helper application (**`ecobee Suite Routines`**) for automating thermostat settings based on Location Mode changes, and/or automating SmartThings Modes/Routines based on Ecobee Thermostat Program changes (including Vacations).
+- Included Helper application (**`ecobee Suite Routines`**) for automating thermostat settings based on Location Mode changes, and/or automating Modes based on Ecobee Thermostat Program changes (including Vacations).
 - Additional Smart Helper Apps to automate circulation time, dynamically adjust setpoints for Thermal Comfort, coordinate fan-on time between multiple zones, automate a "Smart Room," and much, much more.
 - Full support for both Fahrenheit and Celsius
 
-### <a name="features-therm-ui">Thermostat and Sensor Device User Interfaces (SmartThings only)</a>
 
-On SmartThings, the primary user interface on a day-to-day basis will be two different types of Device Handlers that are shown on the **`Things`** list under **`My Home`** in the mobile app. 
-
-#### <a name="thermostat">Thermostat UI (SmartThings)</a>
-
-  - The main MultiAttributeTile tile now reflects additional information
-    - Background colors match Ecobee3 thermostat colors for Idle (magenta), Heat (orange) & Cool (blue), and Fan Only (green) and Offline (red) are added
-    - Displays (Smart Recovery) when heating/cooling in advance of a Program change
-    - Displays the setpoint temperature that will initiate a heat/cool demand while idle, and the actual target temp while heating/cooling. 
-      - On iOS, the call-for-heat temperature will be indicated by "Heating **at** XX.X°" in the large tile (while idle), and the target temperature (while heating) "Heating **to** YY.Y°". Same for Cool and Auto modes
-      - Android mistakenly says "Heating **at** XX.X" for both modes; bug reports have been filed to get this corrected (again).
-    - All temperatures can be configured to display in 0, 1 or 2 decimal positions (with appropriate rounding)
-  - Most icons are dynamic and in full color
-    - New Operating State icons reflect current stage for multi-stage Heat or Cool, plus humidification/dehumidification (if configured)
-    - Hold: Program icons are now "filled" when in a Hold event so you can recognize the Hold at a glance
-    - Buttons that are inactive due to the current state/mode/program are greyed out
-    - Display-only buttons do not invoke any actions
-  - Dynamic "Resume" button
-    - Normally displays as Resume (Program) button, to override a current Hold: event
-    - While thermostat is in a Vacation event, the button becomes 'Cancel" to allow the cancelation of the Vacation
-  - Hold/Vacation Status display
-    - Displays when current Hold or Vacation ends
-    - If the thermostat loses its connection to the Ecobee Cloud, displays the time that the last valid update was received
-  - Default Hold handling
-    - In addition to Permanent and Temporary holds, now supports hourly holds: 2 hours, 4 hours or Custom Hours.
-    - The default hold type can be configured in Ecobee Suite Manager or for each individual thermostat in Thermostat Preferences.
-    - Also supports using the thermostat's preference setting (askMe is not currently supported)
-  - New Refresh actions
-    - If pressed once, will only request the latest updates from the Ecobee Cloud
-    - If pressed a second time within a few seconds of the first press completing, will force a full update from the Ecobee Cloud
-   
-#### <a name="sensor">Sensor UI (SmartThings)</a>
-
-  -	A new multiAttributeTile replaces the old presentation, with motion displayed at the bottom left corner
-  - Now displays the parent thermostat current Program within each Sensor device
-  - New mini-icons indicate which of the 3 default programs (Home, Away, Sleep) the sensor is included in
-    - The sensor can be added or removed from a Program by tapping these mini icons
-  - Includes 4 new blank mini-tiles that are utilized by the new Smart Room Helper App
-	
 #### <a name="smartthings">SmartThings/Hubitat Platform Integration</a>
 
-  - Messages sent to the Device notification log (found under the Recently tab of a Device) are now optimized, most with associated colored icons (icons display on SmartThings only) 
+  - Messages sent to the Device notification log (found under the Recently tab of a Device) are now optimized 
   - All current Attributes and Capabilities of Thermostat devices are supported
   - Most Ecobee Settings Object variables are are now available as Attributes of a Thermostat (so things like WebCoRE can see and use them). See the [list of Attributes](#attributes) later in this document for a complete listing. You can view the current value of any Attribute using the `<device>.currentValue('attribute-name')` API of the thermostat devices, and you can change *most* of these attributes using the `<device>.setEcobeeSetting('attribute-name', 'value')` API call.
-  - Supports the latest updated Thermostat Attributes released by SmartThings on July 7, 2017, including the recently added `schedule` Attribute and `setSchedule('name')` Command, which are equivalents to the native `currentProgram`/`setThermostatProgram()` interfaces.
   - Offers several extensions to the standard Attributes and API Commands defined by the thermostat-related capabilities (these are described in annotated lists later in this document. These include new API commands to:
     - Add a sensor to a Program
     - Delete/Remove a sensor from a Program
@@ -370,7 +329,7 @@ On SmartThings, the primary user interface on a day-to-day basis will be two dif
 
 ##### Timeout Handling
 
-The stock Ecobee support on both SmartThings and Hubitat does not handle Ecobee server connection issues very well. These implementations will often drop the connection altogether at the slightest issue. Users are often required to manually re-authenticate in order to bring their thermostats back on-line
+The stock Ecobee support on Hubitat does not consistently handle Ecobee server connection issues very well. That implementation will often drop the connection altogether at the slightest issue. Users are often required to manually re-authenticate in order to bring their thermostats back on-line
 
 Beginning with 1.3.0, this Ecobee Suite will silently retry connection timeouts without sending any notifications (it will report warnings in Live Logging). Usually such timeouts are transient, and the side effect is only a delayed update. For lengthy outages, the code *should automatically reconnect* once the Ecobee Servers come back on line.
 
@@ -382,46 +341,7 @@ Ecobee devices natively support a concept of "stacked" holds - each hold operati
 
 The Ecobee Suite implementation avoids the complexity by supporting only a single depth of Hold: events - whenever you execute a Resume you reset the thermostat to run the currently scheduled Program.
         
-##### Ask Alexa Message Queue Support (SmartThings only)
-
-For users of Michael Struck's most awesome Ask Alexa integration for SmartThings <http://thingsthataresmart.wiki/index.php?title=Ask_Alexa>
-
-- you can now configure your Ecobee Alerts and Reminders to be sent to Ask Alexa Message Queues. 
-- This is enabled in a new Ask Alexa preferences page in Ecobee Suite Manager where you can specify the target Message Queue(s). 
-- You can also specify an expiration time for Alerts so that they are removed from Ask Alexa after a specified period of time.
-
-> **NOTE 1:** You will not be able to configure Ask Alexa support until you have fully installed Ask Alexa <b>AND</b> created at least 1 custom Message Queue, as the Primary Queue has been deprecated.
-
-> **NOTE 2:** The current implementation does not support acknowledging of messages directly via the Ecobee Suite Manager application, but when the Alert/Reminder is acknowledged (on the thermostat or in the Ecobee application/web site) they are also removed from the Ask Alexa Message Queue.
-
-
-### <a name="screenshots">SmartThings Screenshots</a> 
-
-The user interface for the Ecobee Suite Thermostat and Sensor devices has been pretty constant since version 1.5.\*\*
-
-Ecobee Thermostat v1.5+.\*\* |  Ecobee Thermostat Device v1.5+.\*\* w/Annotation
-:-------------------------:|:-------------------------:
-<img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.5.0%20Tstat.png" border="1" height="1200" /> | <img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0-Tstat-annotated.png" border="1" height="1200" />
-
-Ecobee Sensor Device |  <sp> 
-:-------------------------:|:-------------------------:
-<img src="https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/images/v1.3.0-sensor.jpg" border="1" width="295" /> | 
-
-#### Annotation Notes
-
-- **Button** Executes labeled action/state when pressed (unless grey)|
-- **Cycler** Displays current state, toggles to next state when pressed|
-- **Slider** Opens SmartThings Slider control (limited to whole numbers only)|
-- **Current Temperature** Decimal value of current Temperature display on Thermostat (note: may be an average of the associated sensors)
-- **Up / Down Setpoint buttons** will be slow to respond, but will not actually change the setpoint until 5 seconds after last button pressed (configurable delay in Ecobee Suite (Control) Preferences). Operates in 1° increments in Fahrenheit, and 0.5° increments in Celsius
-- **Thermostat Operating State** describes the current activity, or the temperature at which a demand for heat/cool will be made (heating/cooling/fan only/idle/pending heat/pending cool)
-- **Refresh Button** Tap once to request a changes-only poll to the Ecobee API, tap again immeditately after the "Bee" icon reappears to force a poll of ***all*** the Ecobee API
-- **Equipment Operating State** more detailed state of operations, including heat/cool stages, humidifier/dehumidifier, Smart Recovery, emergency/aux heat, etc.
-- **Hold/Vacation Status** displays when current hold or vacation is scheduled to end. Occaisionally reports other status of interest
-- **Thermostat Date & Time** date and time as of the last completed poll of the Ecobee API
-- **Command Center** Most every tile below this is active, unless the tile is greyed out. Tiles are greyed if the action is not currently allowed because of some state (e.g., cannot change the Program when the thermostat is in Vacation mode).
-
-
+	
 ### <a name="features-manager-sa">Ecobee Suite Manager Helper</a>
 
 The **`Ecobee Suite Manager`** application provides a single interface for accessing installation, updates, Child Helpers and even debugging tools. The interface uses dynamic pages to guide the user through the installation process in order simplify the steps as much as possible.
@@ -442,7 +362,7 @@ The SmartApp provides the following capabilities:
 - Set Ask Alexa Message Queue integration preferences
 - Debug Dashboard (if Debug Level is set to 5)
 
-
+	
 ### <a name="features-opencontact-sa">Contacts & Switches Helper</a>
 
 The `ecobee Suite Open Contacts` Helper can detect when one (or more) contact sensors (such as doors and windows) are left open or a configurable amount of time and can automatically turn off the HVAC and/or send a notification when it is detected. 
@@ -457,7 +377,6 @@ Beginning with Ecobee Suite release 1.5.*, this Helper now also integrates with 
 - Trigger based on one or multiple contact sensors and/or switches
 - Configurable delay timers (for trigger and reset)
 - Configurable actions: Notify Only, HVAC Only or Both
-- Support for SMS for notifications (SmartThings only)
 - Supports "Notification Devices" on both platforms
 - Integrates with the Quiet Time Helper (via Virtual Switch) 
 - Temporarily Disable app without having to delete and recreate!
@@ -478,10 +397,9 @@ When the aforementioned Quiet Time switch state changes back to (on/off), some o
 #### <a name="qt-virtual-switch">Using a Virtual Switch with Quiet Time</a>
 
 While `Quiet Time` can be triggered by any Switch device, it is perhaps most useful to trigger it using a Virtual Switch. 
-- SmartThings now provides a standard `Virtual Device Creator` in the **SmartApps Marketplace**, int the "+ More" section. So you simply need to install and run this to create a Virtual Switch (I suggest naming it `Quiet Time`). 
 - Hubitat natively supports virtual switches; simply create them using the Devices menu.
 
-Once you have your virtual switch, simply configure this Helper to invoke Quiet Time actions when the virtual switch is turned on, and you're all set. Then add turning on this Virtual Switch to your Watch TV routine, or as an action for your SmartThings/Hubitat-integrated Harmony remote.
+Once you have your virtual switch, simply configure this Helper to invoke Quiet Time actions when the virtual switch is turned on, and you're all set. Then add turning on this Virtual Switch to your Watch TV routine, or as an action for your Hubitat-integrated Harmony remote.
 
 If you have Alexa (or Google Home), you even say "Alexa, turn on Quiet Time" and smile when your HVAC shifts into peaceful existence!
 
@@ -489,12 +407,12 @@ N.B., The use case for this new Helper came from a user whose HVAC system is rat
 
 ### <a name="features-routines-sa">Mode(/Routine)/Switches/Program` Helper *Updated!*</a>
 
-The `ecobee Suite Routines` Helper provides the ability to change the running Program (Comfort Setting) when the Location  Mode is changed, when a Switch (real or virtual) is turned on/off, or when a SmartThings (only) Routine is run. It can also be initiated by a Program (Schedule/Climate) change on an Ecobee thermostat.
+The `ecobee Suite Routines` Helper provides the ability to change the running Program (Comfort Setting) when the Location  Mode is changed, when a Switch (real or virtual) is turned on/off. It can also be initiated by a Program (Schedule/Climate) change on an Ecobee thermostat.
 
 #### Features
 
 - Change one or multiple thermostats
-- Trigger based on SmartThings Location Mode Change or SmartThings Routine Execution
+- Trigger based on Location Mode Change 
   - Choose any (including custom) Ecobee Programs to switch to. Or can even choose to Resume Program instead
   - Change the Fan Mode (Optional)
   - Set the Fan Minimum Runtime (Optional)
@@ -510,7 +428,7 @@ The `Ecobee Suite Smart Ciculation` Helper SmartApp will adjust fan mininum on t
 Beginning with Ecobee Suite release 1.5.*, Smart Circulation can be configured to disable circulation altogether (sets `fanMinOnTime` to 0) when the specified (Quiet Time) (real or virtual) Switch is turned off/on. If you want Quiet Time to really stop everything, then you need to enable this feature, otherwise Smart Circulation will override Quiet Time by setting the minimum on time to a non-zero number.
 
 <b>Features:</b>
-- Monitor/synchronize two or more temperature sensors (Ecobee or any SmartThings temperature sensor)
+- Monitor/synchronize two or more temperature sensors (Ecobee or any Hubitat temperature sensor)
 - Configurable maximum/target temperature delta
 - Configurable minimum fan minutes on per hour
 - Configurable maximum fan minutes on per hour
@@ -519,8 +437,9 @@ Beginning with Ecobee Suite release 1.5.*, Smart Circulation can be configured t
 - Option to override fan minutes per hour during Vacation hold
 - Enable during specific Location Modes or when thermostat is in specific Program
 - Temporarily Disable app without having to delete and recreate!
-- 
-### <a name="features-smart-humid-sa">Smart Humidity Helper</a> *New!*
+	
+	
+### <a name="features-smart-humid-sa">Smart Humidity Helper</a>
 
 The `Ecobee Suite Smart Humidity` Helper will adjust the humidity setpoint of your Ecobee Thermostat based on outdoor temperature, indoor temperature , and the thermal efficiency (rate of heat/humidity loss) of your structure.
 
@@ -557,11 +476,11 @@ This Helper will automatically change Ecobee Thermostats' Mode based on external
 #### Features
 
 * Choose from only the Modes that are configured on the thermostat (Auto, Aux_Heat, Cool, Heat, Off) 
-* Choose from 4 possible temperature sources:
-  * Zip Code (SmartThings-only - uses your Hub's location or a manually specified Zip Code) - uses SmartThings embedded support for The Weather Channel
-  * Any Hubitat or  SmartThings Temperature Sensor
+* Choose from 3 possible temperature sources:
+  * Zip Code (- uses your Hub's location or a manually specified Zip Code) 
+  * Any Hubitat or Temperature Sensor
   * The Ecobee-supplied outdoor Weather Temperature (note, this is notoriously bad data for most people, unless you live within a couple of miles of the weather sources Ecobee uses)
-  * A Hubitat/SmartThings-supported weather station including the author's MeteoWeather driver for the MeteoBridge/WeatherBridge weather gateway.
+  * A Hubitat-supported weather station including the author's MeteoWeather driver for the MeteoBridge/WeatherBridge weather gateway.
 * Optionally change the thermostat program/schedule/climate when changing modes
 * Optionally delivers Notifications whenever the thermostat(s) mode is changed
 * Use a single instance (below, above and between temperatures), or create multiple instances
@@ -578,7 +497,7 @@ The `ecobee Suite Smart Room` Helper will automate a normally unused room, Activ
 - One or more Doors, each with a contact sensor
   
 #### Optional
-- Hubitat/SmartThings-controlled vent running stock device drivers
+- Hubitat-controlled vent running stock device drivers
   - EcoNet Vent
   - Keene Smart Vent
   - Any other 'generic" vent device (operating like a dimmer)
@@ -595,9 +514,8 @@ The `ecobee Suite Smart Room` Helper will automate a normally unused room, Activ
     - If open while room is Activated, temporarily Deactivate the room
   - Optionally specify additional motion sensors within the Smart Room
     - If motion is detected while a Smart Room is Activated and all the Doors are closed *and* the Deactivate monitor is disabled (monitor will be re-enabled the next time the door closes)
-  - Optionally controls specified SmartThings-controlled vents
+  - Optionally controls specified Hubitat-controlled vents
     - Open vent(s) when Smart Room is activated, and close them when Deactivated
-    - Supports EcoNet and Keene vents using SmartThings stock DTH only
     - Optionally configure a minimum vent closed level (to protect over-pressure HVAC situation)
   - Optionally notify on Activations via Push, using Contact List or default Push
   - Temporarily Disable app without having to delete and recreate!
