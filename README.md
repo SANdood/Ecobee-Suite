@@ -29,12 +29,6 @@ The Ecobee Suite offers more than a dozen curated Helper applications that provi
     - [Finalizing the Installation in Hubitat Console](#install-console-hubitat)
 - [<b>Features</b>](#features)
   - [General Overview](#general)
-  - [Thermostat and Sensor Device User Interfaces](#features-therm-ui)
-    - [Thermostat User Interface (SmartThings Classic)](#thermostat)
-    - [Sensor User Interface (SmartThings Classic)](#sensor)
-    - [Hubitat/SmartThings Integration](#smartthings)
-    - [Operational Enhancements](#operational)
-    - [SmartThings Screenshots](#screenshots)
   - [Ecobee Suite Manager](#features-manager-sa)
   - [ecobee Suite Contacts & Switches Helper](#features-opencontact-sa)
   - [ecobee Suite Quiet Time Helper](#features-quiet-time-sa)
@@ -307,7 +301,7 @@ Key Highlights include:
 
 #### <a name="smartthings">SmartThings/Hubitat Platform Integration</a>
 
-  - Messages sent to the Device notification log (found under the Recently tab of a Device) are now optimized 
+  - Messages that are sent to the Device notification log (found under the Recently tab of a Device) are now optimized 
   - All current Attributes and Capabilities of Thermostat devices are supported
   - Most Ecobee Settings Object variables are are now available as Attributes of a Thermostat (so things like WebCoRE can see and use them). See the [list of Attributes](#attributes) later in this document for a complete listing. You can view the current value of any Attribute using the `<device>.currentValue('attribute-name')` API of the thermostat devices, and you can change *most* of these attributes using the `<device>.setEcobeeSetting('attribute-name', 'value')` API call.
   - Offers several extensions to the standard Attributes and API Commands defined by the thermostat-related capabilities (these are described in annotated lists later in this document. These include new API commands to:
@@ -564,12 +558,10 @@ The Helper's dynamic configuration calculator within settings enables you to see
 
 The most common error conditions are related to Ecobee Server outages, which have increased in frequency significantly starting in late 2018 and continuing into 2019.
 
-It is important to understand that the Ecobee Suite code is today extremely resilient and tolerant of these Ecobee Server outages. Generally, you need to do NOTHING when they occur - the code will attempt to reconnect repeatedly until it is successful because the servers came back on-line. During such an outage, you will see repeated timeout warnings in the Live Logging for Ecobee Suite Manager. On the SmartThings Classic app, you will also notice that the very bottom row shows a warning, as does the Apps list on the Hubitat Console. If you see these, you need only wait until the systems recover.
+It is important to understand that the Ecobee Suite code is today extremely resilient and tolerant of these Ecobee Server outages. Generally, you need to do NOTHING when they occur - the code will attempt to reconnect repeatedly until it is successful because the servers came back on-line. During such an outage, you will see repeated timeout warnings in the Live Logging for Ecobee Suite Manager. If you see these, you need only wait until the systems recover.
 
 The only time you should have to re-authenticate to recover from an outage is if the outage lasts so long that the Ecobee Servers invalidate your authentication. This usually doesn't happen, even for outages several hours long. You will know that you need to re-authenticate when one of these events occur:
 
-* you see a temperature of 451° on a red background of an Ecobee Suite Thermostat or Server device (SmartThings Classic app only)
-* the thermostat status line for the Ecobee Thermostat device in the SmartThings Classic app shows "failed" or "offline",
 * If you see the word "Offline" (in red) next to the name of your "Ecobee Suite Manager" on the Apps page in Hubitat
 
 If this occurs, simply open Ecobee Suite Manager and select the **Ecobee API Authorization** submenu to log in again - and yes, do this even though it might say that you are already connected. If the Ecobee servers are in fact back on-line, everything should start working again within the next few minutes.
@@ -578,52 +570,39 @@ For other issues:
 
 | Symptom 	| Possible Solution 	|
 |---------	|-------------------	|
-| The devices are not showing up in the Things tab after installation    	|  It can take several minutes for things to show up properly. If you don't want to wait then simply kill the SmartThings app and reload it.              	|
 | Receive error similar to "error java.lang.NullPointerException: Cannot get property 'authorities' on null object"        	| This indicates that you have not turned on OAuth for Ecobee Suite Manager. Please review the installation instructions and complete the OAuth steps.                  	|
 | "You are not authorized to perform the requested operation."        	|  This indicates that you have not turned on OAuth for Ecobee Suite Manager. Please review the installation instructions and complete the OAuth steps.                 	|
-| Irregular behavior after an update to the application and/or thermostat code| It is possible that after updating the codebase you may experience strange behavior, including possible app crashes. This seems to be a general issue with updates on SmartThings, but there have been complaints from the Hubitat community as well. Try the following steps: <br/> 1) Re-run the `Ecobee Suite Manager` application to re-initialize the devices <br/> 2) If that does not solve the problem, you may have to remove and re-install the entire Ecobee Suite (boo!!!). |
-| `physicalgraph.exception.ConflictException:` `Device still in use. Remove from` `any SmartApps or Dashboards,` `then try again @line -1 (doCall)`	| The initial installation failed for some reason, and it was unable to delete the temporary devices it creates. Try removing everything that you can again, and then go to the on-line IDE. There, list your devices, and delete ANY that have “Ecobee-Suite” (or any form of that text) in their device ID. Then rerun Ecobee Suite Manager from the SmartApps Marketplace.                  	|
+| Irregular behavior after an update to the application and/or thermostat code| It is possible that after updating the codebase you may experience strange behavior, including possible app crashes. There have been complaints from the Hubitat community. Try the following steps: <br/> 1) Re-run the `Ecobee Suite Manager` application to re-initialize the devices <br/> 2) If that does not solve the problem, you may have to remove and re-install the entire Ecobee Suite (boo!!!). |
+| `physicalgraph.exception.ConflictException:` `Device still in use. Remove from` `any Applications or Dashboards,` `then try again @line -1 (doCall)`	| The initial installation failed for some reason, and it was unable to delete the temporary devices it creates. Try removing everything that you can again, and then go to the on-line IDE. There, list your devices, and delete ANY that have “Ecobee-Suite” (or any form of that text) in their device ID. Then rerun Ecobee Suite Manager from the SmartApps Marketplace.                  	|
 |         	|                   	|
 
 
 ### Debug Level
 
-The `Ecobee Suite Manager` application allows the end user to configure the Debug Level they wish to use (ranging from 1-5). The higher the level the more debug information is fed into `Live Logging` on the Hubitat/SmartThings IDE.
+The `Ecobee Suite Manager` application allows the end user to configure the Debug Level they wish to use (ranging from 1-5). The higher the level the more debug information is fed into `Live Logging` on the Hubitat IDE.
 
 Also, if a user chooses Debug Level 5, then a new `Debug Dashboard` will appear within ES Manager. This dashboard gives direct access to various state information of the app as well as a few helper functions that can be used to manaually trigger actions that are normally timer based.
 
 ### Live Logging on IDE
 
-The `Live Logging` feature on the Hubitat/SmartThings IDE is an essential tool in the debugging process of any issues that may be encountered.
+The `Live Logging` feature on the Hubitat IDE is an essential tool in the debugging process of any issues that may be encountered.
 
-To access the `Live Logging` feature, follow these steps:
-- Go the SmartThings IDE (<https://graph.api.smartthings.com/>) and log in, or go to the the Hubitat Console
-  - On SmartThings, click `Live Logging` at the top of the page
-  - For Hubitat, select **Logs** from the left menu
+To access the `Live Logging` feature on Hubitat, select **Logs** from the left menu, then **Live Log** from the top menu.
 
 ### Installed Helper Info
-#### SmartThings IDE
-
-The SmartThings IDE also provides helpful insights related to the current state of any SmartApp running on the system. To access this information, follow the follwing steps:
-- Go the SmartThings IDE (<https://graph.api.smartthings.com/>) and log in
-- Click `My Locations` (select your location if you have more than one)
-- Scroll down and click `List SmartApps`
-- Find the `Ecobee Suite Manager` SmartApp and click the link
 
 #### Hubitat
-On Hubitat, you can get the same information for any App. Simply select the App from the **Apps** page, and then click on the Gear icon at the top-left of the page.
+On Hubitat, you can get detailed information for any App. Simply select the App from the **Apps** page, and then click on the Gear icon at the top-left of the page.
 
 ### <a name="quicklinks">Quick Links</a>
 - README.md (this file): <https://github.com/SANdood/Ecobee-Suite/blob/master/README.md>
-- SmartThings IDE: <https://graph.api.smartthings.com>
-
 
 ----------------------------------------------
 
 ## <a name="reporting-issues">Reporting Issues</a>
-All issues or feature requests should be submitted to the latest release thread on the SmartThings or Hubitat Community. For the major release version 1.7.\*\*, please use the platform-appropriate thread: [on SmartThings](https://community.smartthings.com/t/release-universal-ecobee-suite-version-1-8-01/187405) or [Hubitat](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839)
+All issues or feature requests should be submitted to the latest release thread on the Hubitat Community. For the major release version 1.9.\*\*, please use the thread on [Hubitat](https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839)
 
-If you have complaints, please email them to me directly at either [storageanarchy@gmail.com](mailto://storageanarchy@gmail.com) or to @storageanarchy on the SmartThings and/or Hubitat Communities.
+If you have complaints, please email them to me directly at either [storageanarchy@gmail.com](mailto://storageanarchy@gmail.com) or to @storageanarchy on the Hubitat Communities.
 
 ------------------------------------------------------------------
 <a name="license"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/License-1-8-00-section.png" width="50%" alt="License" /></a>
@@ -636,7 +615,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 ----------------------------------------------------
 <a name="integration"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Integrating-1-8-00-section.png" width="50%" alt="Integrating With Ecobee Suite Devices" /></a>
 
-The Ecobee Suite's thermostat devices can be leveraged by other custom applications, by the Hubitat Rule Manager, and by WebCoRE automations in a variety of ways. The provided Ecobee Thermostat DTH implements the following SmartThings capability sets completely (click each capability for the SmartThings Developer Documentation describing each capability):
+The Ecobee Suite's thermostat devices can be leveraged by other custom applications, by the Hubitat Rule Manager, and by WebCoRE automations in a variety of ways. The provided Ecobee Thermostat Device implements the following SmartThings capability sets completely (click each capability for the SmartThings Developer Documentation describing each capability):
 
 - [Actuator](https://smartthings.developer.samsung.com/develop/api-ref/capabilities.html#Actuator)
 - Health Check
@@ -1073,7 +1052,7 @@ And when it wants to turn the HVAC back on:
 2. stat.auto()
 3. cancelReservation(stat.id, app.id, 'modeOff')
 
-This order is important, because the entire SmartThings world is asynchronous. You want to be sure to grab the reservation before you turn off the device, and then you want to wait until you have turned the device back on AFTER you turn it on.
+This order is important, because the entire Hubitat world is asynchronous. You want to be sure to grab the reservation before you turn off the device, and then you want to wait until you have turned the device back on AFTER you turn it on.
 
   [Note: the revised implementation of Reservations in v1.6.10 and later uses atomicState variables to hold the reservations, explicitly to minimize race conditions. That said, I'm sure that they can still occur.]
 
@@ -1096,19 +1075,18 @@ Where:
 
 ### <a name="demandResponse">Demand Response</a>
 
-In cooperation with power companies in some countries (including the USA), Ecobee thermostats can be requested to perform energy-saving `demandResponse` actions by the power companies (usually only if you register/subscribe to the program, often with a cash incentive). This version of Ecobee Suite adds support for recognizing, reporting and displaying (on SmartThings Classic) these `demandResponse` activities.
+In cooperation with power companies in some countries (including the USA), Ecobee thermostats can be requested to perform energy-saving `demandResponse` actions by the power companies (usually only if you register/subscribe to the program, often with a cash incentive). This version of Ecobee Suite adds support for recognizing, reporting these `demandResponse` activities.
 
 These activities can take many forms, and so far I have only added support for the ones that I have experienced recently. First, there is a "pre-cool" request sent by the power company, usually to drop the `coolingSetpoint` (or increase the `heatingSetpoint`) between 3-5°F for 1.5 hours prior to sending the reduced power request. This latter `demandRequest` event will raise the current `coolingSetpoint` (or lower the `heatingSetpoint` by 4-5°F for a period of time (typ. 3-5 hours). These two events are reported slightly differently so that you can tell the difference:
-* Precool will be denoted as the attribute `currentProgramName` being set to **"Hold: Eco Prep"**. On SmartThings Classic, the program icon will change to the [green half-leaf icon](https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response_bg.png) that also appears on the thermostat itself;
-
-* The `demandResponse` event itself will be denoted as `currentProgramName` being simply **"Hold: Eco"**; the SmartThings Classic program icon will be the [green flower icon](https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_demand_response.png) that appears on the thermostat;
+* Precool will be denoted as the attribute `currentProgramName` being set to **"Hold: Eco Prep"**. 
+* The `demandResponse` event itself will be denoted as `currentProgramName` being simply **"Hold: Eco"**; 
 * In both cases, the following attributes are also updated to reflect the DR event:
   - `currentProgram` will be set to **"Eco"** if the event is optional (i.e., you can cancel it), or as **"Eco!"** (with an exclamation point) if it is a mandatory event that cannot be overridden 
 
   - `thermostatHold` will be set to **"demandResponse"**
   - `holdEndsAt` will describe the time the hold will end, as in **"today at 6:30pm"** (time is local thermostat time)
   - `holdStatus` will describe the event as **"Demand Response Event ends today at 6:30pm"** 
-* Additionally, a new command entry point has been created, **`cancelDemandResponse()`**. This command will cancel the current event IFF it is not a mandatory DR event. The "Resume/Cancel" button on the SmartThings Classic thermostat device will also change to enable cancelling the DR event.
+* Additionally, a new command entry point has been created, **`cancelDemandResponse()`**. This command will cancel the current event IFF it is not a mandatory DR event. 
 
 It is important to understand that DR events CAN be overridden by another user-generated hold, but the end time of such a hold will be forced by Ecobee to match the end-time of the DR event. DR events are also created *on top of* any current hold, and the existing hold will be returned to after the DR event completes, or if it is cancelled. Also, you can turn off the HVAC altogether while a DR event is running, but it will not be automatically turned back on when the event finishes.
 
@@ -1118,4 +1096,4 @@ Hopefully the above provides enough info for WebCoRE users and Groovy programmer
 
 This feature was added at user request. One person asked to be able to automatically cancel such events if they are at home; another wanted to take other energy-savings actions during a DR event (which often are scheduled when power rates are at their daily highest).
 
-Finally, note that this is my first implementation - their undoubtedly will arise situations that I don't handle properly. If you find one, please let me know so I can increase the robustness of the implementation.
+Finally, note that this is my first implementation - there undoubtedly will arise situations that I don't handle properly. If you find one, please let me know so I can increase the robustness of the implementation.
