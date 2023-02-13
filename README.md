@@ -1,6 +1,6 @@
 ![Universal Ecobee Suite, Version 1.8.00](https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Ecobee-Suite-1-9-00-Banner.png) 
 ======================================================
-### NOTICE: Latest updates posted 10 February 2023 at 7:30am
+### NOTICE: Latest updates posted 14 February 2023 at 7:30am
 
 <a name="overview"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Overview-1-8-00-section.png" width="50%" alt="Overview" /></a>
 
@@ -35,7 +35,7 @@ The Ecobee Suite offers more than a dozen curated Helper applications that provi
 	  - [Using a Virtual Switch with Quiet Time](#qt-virtual-switch)
   - [ecobee Suite Mode(/Routine)/Switches/Program Helper](#features-routines-sa) 
   - [ecobee Suite Smart Circulation Helper](#features-smart-circ-sa)
-  - [ecobee Suite Smart Humidity Helper](#features-smart-humid-sa) ***New!***
+  - [ecobee Suite Smart Humidity Helper](#features-smart-humid-sa)
   - [ecobee Suite Smart Mode, Program & Setpoints Helper](#smart-mode-sa)
   - [ecobee Suite Smart Room Helper](#features-smart-room-sa)
   - [ecobee Suite Smart Switches Helper](#features-smart-switches-sa)
@@ -148,6 +148,10 @@ While not required, I do humbly accept donations. If you would like to make an *
 
 The most significant changes in this release is the complete removal of ***all*** of my code that supported integration with SmartThings. As noted elsewhere, this is because SmartThings no longer supports Groovy-based apps or drivers, as of 1 January 2023.
 
+In addition, this release includes the following updates:
+  - Fixed all JSON Objects to match the recently-changed Hubitat definitions
+  - Added support for the new `fanSpeedOptions` feature of (some) Ecobee thermostats. This includes a small hack to get around an idiosyncracy in the actual implementation - simply choose a `fanSpeed` from the JSON list of options in the `fanSpeedOptions` attribute
+  - Added support for an `occupancy` attribute for thermostat and sensor devices, which will have the value `occupied` or `vacant`. This is perhaps a more appropriate attribute than using `motion`, in that it takes Ecobee a few moments to detect (and report) occupancy, and waits 15-30 minutes of no motion in the room to report `vacant`.
 
 #### Special Thanks to Hubitat Staff
 The author extends a special thank you to the Hubitat staff for assistance in getting the code-based Ecobee authentication working, as the documented Hubitat OAuth path doesn't work for Ecobee. Read through the OAuth init code in Ecobee Suite Manager to learn the (clever) trick they helped me employ. 
@@ -159,12 +163,14 @@ Over the years, I have invested heavily in reducing the CPU and memory overhead 
 -------------------------
 <a name="installation"><img src="https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Installation-1-8-00-section.png" width="50%" alt="Installation" /></a>
 
-STOPPED HERE!!!
+
 --------------------------
 
 ## <a name="install-hubitat">Hubitat Installation</a>
 
-The EASIEST way to install Ecobee Suite on Hubitat is to use the <a href=https://github.com/HubitatCommunity/hubitatpackagemanager>Hubitat Package Manager</a>, as this will automate the installation of the 13 Applications and 2 device drivers. But if you insist on doing it manually, follow these instructions:
+The EASIEST way to install Ecobee Suite on Hubitat is to use the <a href=https://github.com/HubitatCommunity/hubitatpackagemanager>Hubitat Package Manager (HPM)</a>, as this will automate the installation of the 13 Applications and 2 device drivers. Simply install HPM, then select Ecobee Suite to install. Then you can skip to the [next section to complete the installation and configuration](#install-console-hubitat).
+
+But if you insist on doing it manually, follow these instructions:
 
 ### <a name="install-prep-hubitat">Installation Preparation</a>
 
@@ -715,6 +721,8 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | equipmentStatus | idle | string | yes | int | Equipment status (idle, off, offline, ...) |
 | fanControlRequired | true | string | no | ES | Whether thermostat or HVAC is controlling the fan |
 | fanMinOnTime | 20 | number | no | ES | Minimum number of minutes per hour the fan should run (sum of heat/cool + fan only runtime) |
+| fanSpeed | low | string | no | ES | Current fan speed of the thermostat (one of the listed `fanSpeedOptions`) |
+| fanSpeedOptions | ["low", "high"] | JSON List | yes | ES | List of supported fan speeds (based off of thermostat configuration & wiring) |
 | features | <small>Home, HomeKit</small> | string | yes | ES | List of features this thermostat supports |
 | followMeComfort | false | string | no | ES | Whether thermostat should use remote sensors to adjust setpoints based on occupancy/presence/motion |
 | groupName | XXX | string | no | ES | The name of the the group this thermostat belongs to, if any |
@@ -780,7 +788,7 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | monthsBetween<br>Service | 6 | number | no | ES | Self-explanatory |
 | motion | inactive | string | yes | int | Whether motion has been detected |
 | name | <small>Downstairs</small> | string | yes | EC | Thermostat name (configured at the thermostat only) |
-| programsList | <small>["Home", "Sleep", "Awake", "Away"]</small> | string | yes | int | JSON-formatted list of Programs/Climates/Schedules supported on this thermostat - auto generated. <br><small>USAGE: `List thePrograms = new JsonSlurper().parseText( stat.currentValue( 'programsList' ))`</small> |
+| programsList | <small>["Home", "Sleep", "Awake", "Away"]</small> | JSON List | yes | int | JSON-formatted list of Programs/Climates/Schedules supported on this thermostat - auto generated. <br><small>USAGE: `List thePrograms = new JsonSlurper().parseText( stat.currentValue( 'programsList' ))`</small> |
 | programUpdated | <small>2020-02-13 07:32:52</small> | number | yes | int | thermostat time of last update to `thermostat.program` |
 | quickSave<br>SetBack | 4.0 | number | no | ES | The setpoint setback offset, in degrees, configured for a quick save event |
 | quickSave<br>SetForward | 4.0 | number | no | ES | The setpoint setforward offset, in degrees, configured for a quick save event |
@@ -788,7 +796,7 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | randomStart<br>DelayHeat | 0 | number | no | ES | If non-zero, the max minutes a heating random start can use |
 | remindMeDate | <small>2019-07-08</small> | string | no | ES | Date to send an alert reminder (HVAC service, filters, etc.) |
 | schedText | forever | string | yes | int | Internal text for how long the current hold is scheduled for |
-| schedule | Away | <small>JSON_<br>OBJECT</small>| yes | int | Same as `currentProgram` - use `setThermostatProgram()` or `setSchedule()` to change. Note that when in a **Hold**, the `schedule` string will be in this form: <br><small>**`Hold: Away until 2020-02-19 18:30:00`**</small> |
+| schedule | Away | String| yes | int | Same as `currentProgram` - use `setThermostatProgram()` or `setSchedule()` to change. Note that when in a **Hold**, the `schedule` string will be in this form: <br><small>**`Hold: Away until 2020-02-19 18:30:00`**</small> |
 | scheduled<br>Program | Away | string | yes | int | The program that is scheduled to be running now (may be different than `currentProgram` |
 | scheduled<br>ProgramId | away | string | yes | int | Internal ID of the scheduled program |
 | scheduled<br>Program<br>Name | Away | string | yes | int | The proper name of the scheduled program |
@@ -802,9 +810,9 @@ Follows is the complete list of attributes (states) that the DTH maintains and e
 | stage1Heating<br>DifferentialTemp | 0.5 | number | no | ES | The difference between current temperature and set-point that will trigger stage 2 heating. |
 | stage1Heating<br>DissipationTime | 31 | number | no | ES | The time after a heating cycle that the fan will run for to extract any heating left in the system. '31' means "auto" |
 | statHoldAction | <small>nextPeriod</small> | string | yes | int | Same as `holdAction` |
-| supported<br>Thermostat<br>FanModes | <small>[on, auto, circulate, off]</small> | JSON_<br>OBJECT | yes | int | Self-explanatory.<br><small>USAGE: `List theFanModes = ` `stat.currentValue( 'supportedThermostatFanModes' )[1..-2].tokenize(', ')`</small> |
-| supported<br>Thermostat<br>Modes | <small>[off, auto, cool, heat]</small> | JSON_<br>OBJECT | yes | int | Self-explanatory.<br><small>USAGE: `List theModes = ` `stat.currentValue( 'supportedThermostatModes' )[1..-2].tokenize(', ')`</small> |
-| supported<br>VentModes | [off] | JSON_<br>OBJECT | yes | int | Self-explanatory.<br><small>USAGE: `List theModes = ` `stat.currentValue( 'supportedVentModes' )[1..-2].tokenize(', ')`</small> |
+| supported<br>Thermostat<br>FanModes | <small>["on", "auto", "circulate", "off"]</small> | JSON List | yes | int | Self-explanatory |
+| supported<br>Thermostat<br>Modes | <small>["off", "auto", "cool", "heat"]</small> | JSON List | yes | int | Self-explanatory |
+| supported<br>VentModes | ["off"] | JSON List | yes | int | Self-explanatory |
 | tempAlertNotify | true | string | no | ES | Send temperature alerts to user |
 | tempAlertNotify<br>Technician | false | string | no | ES | Send temperature alerts to techinician |
 | tempCorrection | -1.0 | number | no | ES | Degrees added/subtracted to thermostat temp readings |
@@ -888,6 +896,7 @@ The complete set of **Thermostat* DTH commands that can be called programmatical
 | setDehumiditySetpoint(setpoint) |  | 35-100 - lower values have special meaning (trial and error) |
 | setEcobeeSetting(name, value) |  |  |
 | setFanMinOnTime(minutes) |  |  |
+| setFanSpeed(speed) |  | Must be one of `fanSpeedOptions` |
 | ~~setFanMinOnTimeDelay~~ |  | INTERNAL USE ONLY |
 | setHeatingSetpoint(setpoint) |  | There us a 2+ second delay before the setpoint is changed |
 | ~~setHeatingSetpointDelay~~ |  | INTERNAL USE ONLY |
