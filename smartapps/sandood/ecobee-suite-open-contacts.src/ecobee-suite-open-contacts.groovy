@@ -39,10 +39,11 @@
  *	1.8.22 - Expanded label display to include actual thermostatMode
  *	1.8.23 - Fixed label initialization
  *	1.8.24 - Fix sendMessage() for new Samsung SmartThings app
+ *	1.9.00 - Removed all ST code
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.24" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel() 	{ return "Ecobee Suite Contacts & Switches Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -68,24 +69,17 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     boolean notify = false
 	if (settings?.notify != null) {
-    	if (ST) app.deleteSetting('notify')		// clean up old garbage
-    	if (HE) app.removeSetting('notify')
+    	app.removeSetting('notify')		// clean up old garbage
 	}
     String defaultName = "Contacts & Switches"
     
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
             section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
-                if (ST) {
-                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
-                } else {
-                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
-                }
+                paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
                 paragraph("This Helper automatically turns the HVAC system Off when doors/windows are left open for too long, and/or when (real or virtual) switch(es) are turned on or off. "+
                           "The HVAC system is restored to its prior operation once all the doors/windows are closed and switch(es) are reversed, with a configurable delay "+
                           "before turning the HVAC Off and back On.\n\n"+
@@ -108,52 +102,34 @@ def mainPage() {
 			} else {
             	atomicState.appDisplayName = app.label
             }
-			if (HE) {
-				if (app.label.contains('<span ')) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(myLabel)
-					}
+			if (app.label.contains('<span ')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
 				} else {
-                	atomicState.appDisplayName = app.label
-                }
-			} else {
-            	def opts = [' (paused', ' (HVAC']
-				String flag
-				opts.each {
-					if (!flag && app.label.contains(it)) flag = it
+					String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(myLabel)
 				}
-				if (flag) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(flag)) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(flag))
-                        atomicState.appDisplayName = myLabel
-                        app.updateLabel(myLabel)
-                    }
-                } else {
-                	atomicState.appDisplayName = app.label
-                }
-            }
+			} else {
+				atomicState.appDisplayName = app.label
+			}
+
         	if (settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
 				if (settings.theThermostats || !settings.myThermostats) {
-					input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
+					input(name: "theThermostats", type: "${'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
                     		required: true, multiple: true, submitOnChange: true)
 				} else {
-            		input(name: "myThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
+            		input(name: "myThermostats", type: "${'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
                     		required: true, multiple: true, submitOnChange: true)
 				}
-                if (HE) paragraph ''
+                paragraph ''
             }          
 		}
     
 		if (!settings.tempDisable && ((settings.theThermostats?.size() > 0) || (settings.myThermostats?.size() > 0))) {
-			section(title: sectionTitle("Triggers")+(ST?"\n":'')+smallerTitle("Contact Sensors")) {
+			section(title: sectionTitle("Triggers")+smallerTitle("Contact Sensors")) {
 				input(name: "contactSensors", title: inputTitle("Select Contact Sensors: "), type: "capability.contactSensor", required: (!settings?.theSwitches), multiple: true,  submitOnChange: true, width: 6)
                 if (settings.contactSensors) {
                 	input(name: 'contactOpen', type: 'bool', title: inputTitle("Trigger Actions when ${settings.contactSensors.size()>1?'any of the contacts are':'the contact is'} open?"), 
@@ -174,7 +150,7 @@ def mainPage() {
                 input(name: "whichAction", title: inputTitle("Select which Actions to run")+" (Default=Notify Only)", type: "enum", required: true, 
                       options: ["Notify Only", "HVAC Actions Only", "Notify and HVAC Actions"], defaultValue: "Notify Only", submitOnChange: true, width: 6)
                 if (settings?.whichAction == null) { app.updateSetting('whichAction', 'Notify Only'); settings?.whichAction = 'Notify Only'; }
-				if (HE) paragraph("",width: 6)
+				paragraph("",width: 6)
 				if (settings?.whichAction != 'Notify Only') {
 					if (!settings.hvacOff && !settings.adjustSetpoints) {
 						if (maximize) paragraph('If you are using  the Quiet Time Helper, you can centralize off/idle Actions by turning on Quiet Time from this Helper instead of running HVAC Actions directly. '+
@@ -185,21 +161,21 @@ def mainPage() {
 							if (settings.qtSwitch) {
 								input(name: "qtOn", type: "enum", title: inputTitle("Enable Quiet Time when switch ${settings.qtSwitch.displayName} is:"), required: true, multiple: false, 
 									  options: ["on","off"], submitOnChange: true, width: 3)
-								if (HE) paragraph("", width: 9)
+								paragraph("", width: 9)
 								if (settings.qtOn != null) paragraph("Switch ${settings.qtSwitch.displayName} will be turned ${settings.qtOn?'On':'Off'} when HVAC Off Actions are taken.")
 							}
 						}
 					} 
 					if (!settings.quietTime && !settings.adjustSetpoints) {
 						input(name: 'hvacOff', type: "bool", title: inputTitle("Turn off HVAC?"), required: true, defaultValue: false, submitOnChange: true, width: 4)
-						//if (HE) paragraph("", width: 6)
+						//paragraph("", width: 6)
 						if ((settings?.hvacOff != null) && settings.hvacOff) {
 							if (maximize) {
 								paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. " +
 										  "Use the Quiet Time Helper for additional control options.\n\n"+
 										  'Note that no Actions will be run if the HVAC Mode was already Off when the first contact sensor or switch would have turned it ' +
 											'off; the HVAC will remain Off when all the contacts & switches are reset.')
-							} else if (HE) paragraph("", width: 8)
+							} else paragraph("", width: 8)
 						}
 					}
 					if (!settings.quietTime && !settings.hvacOff) {
@@ -222,96 +198,47 @@ def mainPage() {
 						options: ['0', '1', '2', '3', '4', '5', '10', '15', '30'], defaultValue: '0', width: 6)
 				}
 			}
-			if (ST) {
-				List echo = []
-				section("Notifications") {
-					if (settings?.whichAction != "HVAC Actions Only") {
-                    	notify = true
-						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, 
-							  required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
-						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
-							  required: ((settings.phone == null) && !settings.speak && !settings.pushNotify), multiple: true, submitOnChange: true)
-                        if (settings?.notifiers) {
-                            echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                            if (echo) {
-                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?", 
-                                	  defaultValue: false, submitOnChange: true)
-                            }
-                        }
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
-							  required: (!settings.pushNotify && !settings.notifiers && !settings.speak), submitOnChange: true)
-					}
-				}
-				if (notify) {
-					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "Speech Devices") {
-						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", 
-								  multiple: true, hideWhenEmpty: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", 
-								  multiple: true, hideWhenEmpty: true, submitOnChange: true)
-							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+			List echo = []
+			section(sectionTitle("Notifications")) {}
+			if (settings?.whichAction != "HVAC Actions Only") {
+				notify = true
+				section(smallerTitle("Notification Devices")) {
+					input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
+						  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+					if (settings?.notifiers) {
+						echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+						if (echo) {
+							input(name: "echoAnnouncements", type: "bool", title: inputTitle("Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?"), 
+								  defaultValue: false, submitOnChange: true)
 						}
 					}
 				}
-				if (notify && (echo || settings.speak)) {
-                	section("Do Not Disturb") {
-                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true)
-                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications from:'), required: (settings.speakTimeEnd != null))
-                        input(name: "speakTimeEnd", type: "time", title: inputTitle("Only speak notifications until:"), required: (settings.speakTimeStart != null))
-						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
-										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
-						if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
-                    }
-                }
-				if (maximize)  {
-					section() {
-						paragraph ( "A notification is always sent to the Hello Home log whenever an action is taken")
+			}
+			if (notify) {
+				section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
+					input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
+					if (settings.speak) {
+						input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select Speech devices"), 
+							  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+						input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select Music devices"), 
+							  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+						input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
 					}
 				}
-			} else {		// HE
-            	List echo = []
-				section(sectionTitle("Notifications")) {}
-				if (settings?.whichAction != "HVAC Actions Only") {
-                	notify = true
-					section(smallerTitle("Notification Devices")) {
-						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
-							  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
-						if (settings?.notifiers) {
-							echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-							if (echo) {
-								input(name: "echoAnnouncements", type: "bool", title: inputTitle("Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?"), 
-									  defaultValue: false, submitOnChange: true)
-							}
-						}
-					}
+			}
+			if (notify && (echo || settings.speak)) {
+				section(smallerTitle("Do Not Disturb")) {
+					input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
+					input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
+					input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
+					String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
+									(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
+					if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
 				}
-				if (notify) {
-					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
-						input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select Speech devices"), 
-								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select Music devices"), 
-								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-							input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
-						}
-					}
-				}
-                if (notify && (echo || settings.speak)) {
-                	section(smallerTitle("Do Not Disturb")) {
-                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
-                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
-                        input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
-						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
-										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
-						if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
-                    }
-                }
-				if (maximize) {
-					section(){
-						paragraph "A <i>'HelloHome'</i> notification is always sent to the Location Event log whenever an action is taken"		
-					}
+			}
+			if (maximize) {
+				section(){
+					paragraph "A <i>'HelloHome'</i> notification is always sent to the Location Event log whenever an action is taken"		
 				}
 			}
 			if (notify && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak && (settings?.speechDevices || settings?.musicDevices)))) {
@@ -329,29 +256,19 @@ def mainPage() {
             input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+		section() {
+			paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
     }
 }
 def customNotifications() {
-	//boolean ST = isST
-	//boolean HE = !ST
 	String pageLabel = getVersionLabel()
 	pageLabel = pageLabel.take(pageLabel.indexOf(','))
 	dynamicPage(name: "customNotifications", title: pageTitle("${pageLabel}\nCustom Notifications"), uninstall: false, install: false) {
-        section(title: sectionTitle("Customizations") + (ST?"\n":'') + (smallerTitle("Notification Prefix"))) {
+        section(title: sectionTitle("Customizations") + (smallerTitle("Notification Prefix"))) {
             input(name: "customPrefix", type: "enum", title: inputTitle("Prefix text:"), defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
                   options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false, width: 4)
             if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
@@ -508,8 +425,6 @@ void updated() {
 def initialize() {
 	LOG("${getVersionLabel()} - Initializing...", 2, "", 'info')
 	updateMyLabel()
-    //boolean ST = isSTHub
-    //boolean HE = !ST
     log.trace "Initializing with settings: ${settings}"
 	
 	if(settings.tempDisable == true) {
@@ -526,7 +441,7 @@ def initialize() {
     	def openSensors = 0
         def closedSensors = 0
         contactSensors.each {
-        	def currentContact = ST ? it?.currentValue('contact') : it?.currentValue('contact', true)	// bypass the cache on Hubitat
+        	def currentContact = it?.currentValue('contact', true)	// bypass the cache on Hubitat
             if (currentContact == 'open') { openSensors++; } else { closedSensors++; }
         }
     	if (contactOpen) {
@@ -546,7 +461,7 @@ def initialize() {
     	def onSwitches = 0
         def offSwitches = 0
         theSwitches.each {
-        def currentSwitch = ST ? it.currentValue('switch') : it.currentValue('switch', true)
+        def currentSwitch = it.currentValue('switch', true)
         	if (currentSwitch == 'on') { onSwitches++ } else { offSwitches++ }
         }
     	if (switchOn) {
@@ -573,37 +488,21 @@ def initialize() {
     		theStats.each() { therm ->
     			def tid = getDeviceId(therm.deviceNetworkId)
 				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-				if (ST) {
-					tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode'), HVACModeState: 'on', ]
-					if (settings.adjustSetpoints) {
-						tmpThermSavedState[tid] += [
-														heatSP: therm.currentValue('heatingSetpoint'), 
-														coolSP: therm.currentValue('coolingSetpoint'),
-														heatAdj: 999.0,
-														coolAdj: 999.0,
-														holdType: therm.currentValue('lastHoldType'),
-														thermostatHold: therm.currentValue('thermostatHold'),
-														currentProgramName: therm.currentValue('currentProgramName'),	// Hold: Home
-														currentProgramId: therm.currentValue('currentProgramId'),		// home
-														currentProgram: therm.currentValue('currentProgram'),			// Home
-												  ]
-					}
-				} else {
-					// We have to ensure we get the latest values on HE - it caches stuff when it probably shouldn't
-					tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode', true), HVACModeState: 'on' ]
-					if (settings.adjustSetpoints) {
-						tmpThermSavedState[tid] += [
-														heatSP: therm.currentValue('heatingSetpoint', true), 
-														coolSP: therm.currentValue('coolingSetpoint', true),
-														heatAdj: 999.0,
-														coolAdj: 999.0,
-														holdType: therm.currentValue('lastHoldType', true),
-														thermostatHold: therm.currentValue('thermostatHold', true),
-														currentProgramName: therm.currentValue('currentProgramName', true),	// Hold: Home
-														currentProgramId: therm.currentValue('currentProgramId', true),		// home
-														currentProgram: therm.currentValue('currentProgram', true),			// Home
-												  ]
-					}
+				
+				// We have to ensure we get the latest values on HE - it caches stuff when it probably shouldn't
+				tmpThermSavedState[tid] = [	mode: therm.currentValue('thermostatMode', true), HVACModeState: 'on' ]
+				if (settings.adjustSetpoints) {
+					tmpThermSavedState[tid] += [
+													heatSP: therm.currentValue('heatingSetpoint', true), 
+													coolSP: therm.currentValue('coolingSetpoint', true),
+													heatAdj: 999.0,
+													coolAdj: 999.0,
+													holdType: therm.currentValue('lastHoldType', true),
+													thermostatHold: therm.currentValue('thermostatHold', true),
+													currentProgramName: therm.currentValue('currentProgramName', true),	// Hold: Home
+													currentProgramId: therm.currentValue('currentProgramId', true),		// home
+													currentProgram: therm.currentValue('currentProgram', true),			// Home
+											  ]
 				}
     		}
     	}
@@ -613,7 +512,7 @@ def initialize() {
         theStats.each() { therm ->
     		def tid = getDeviceId(therm.deviceNetworkId)
             if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-            tmpThermSavedState[tid].mode = (ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true))
+            tmpThermSavedState[tid].mode = therm.currentValue('thermostatMode', true)
             tmpThermSavedState[tid].HVACModeState = 'off'
         }
         if (atomicState.HVACModeState != 'off') turnOffHVAC(true)
@@ -731,13 +630,12 @@ void sensorOpened(evt=null) {
     	return		// already in process of turning off
     }
 
-	//boolean ST = isSTHub
 	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
 	
 	def theStats = settings.theThermostats ?: settings.myThermostats
     if (HVACModeState == 'off') { // || (HVACModeState == 'off_pending')) {
     	// HVAC is already off
-		def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue('thermostatMode', true)
+		def tstatModes = theStats*.currentValue('thermostatMode', true)
 		if (tstatModes.contains('off')) { // at least 1 thermostat is actually off	
 			if (atomicState.openCount == 1) {
             	// Save the current HVAC state on the FIRST contact to open ONLY
@@ -745,7 +643,7 @@ void sensorOpened(evt=null) {
 				theStats.each { therm ->
 					def tid = getDeviceId(therm.deviceNetworkId)
 					if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-					def statMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
+					def statMode = therm.currentValue('thermostatMode', true)
 					tmpThermSavedState[tid].wasAlreadyOff = (statMode == 'off') 
 				}
 			}
@@ -800,7 +698,6 @@ void sensorClosed(evt=null) {
     atomicState.openCount = numOpen()
     
 	def HVACModeState = atomicState.HVACModeState
-    //boolean ST = isSTHub
     def theStats = settings.theThermostats ?: settings.myThermostats    
     if (allClosed() == true) {
     	if (HVACModeState == 'on_pending') return
@@ -812,7 +709,7 @@ void sensorClosed(evt=null) {
 				j++
 				def tid = getDeviceId(therm.deviceNetworkId)
 				if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-				def statMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
+				def statMode = therm.currentValue('thermostatMode', true)
 				if (tmpThermSavedState[tid].containsKey('wasAlreadyOff') && (tmpThermSavedState[tid].wasAlreadyOff == true)) i++
 			}
 			if (i == j) {
@@ -870,13 +767,12 @@ void sensorClosed(evt=null) {
 void turnOffHVAC(quietly = false) {
 	// Save current states
     LOG("turnoffHVAC(quietly=${quietly}) entered...", 4,null,'info')
-	//boolean ST = isSTHub
 	
     if (allClosed() && (atomicState.HVACModeState == 'off_pending')) {
     	// Nothing is open, maybe got closed while we were waiting, abort the "off"
         LOG("turnOffHVAC() called, but everything is closed/off, ignoring request & leaving HVAC on",3,null,'info')
         unschedule(turnOffHVAC)
-        def thermostatMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
+        def thermostatMode = therm.currentValue('thermostatMode', true)
         if (thermostatMode != 'off') atomicState.HVACModeState = 'on'
         updateMyLabel()
         return
@@ -904,7 +800,7 @@ void turnOffHVAC(quietly = false) {
                 //log.debug "making reservation ${now()}"
                 makeReservation(tid, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
                 //log.debug "got reservation ${now()}"
-				def thermostatMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true)
+				def thermostatMode = therm.currentValue('thermostatMode', true)
     			if (thermostatMode != 'off') {
                 	tmpThermSavedState[tid].mode = thermostatMode	// therm.currentValue('thermostatMode')
                     tmpThermSavedState[tid].HVACModeState = 'off'
@@ -917,8 +813,8 @@ void turnOffHVAC(quietly = false) {
             	}
             } else if (settings.adjustSetpoints) {
             	// Adjust the setpoints
-                def h = ST ? therm.currentValue('heatingSetpoint') : therm.currentValue('heatingSetpoint', true)
-                def c = ST ? therm.currentValue('coolingSetpoint') : therm.currentValue('coolingSetpoint', true)
+                def h = therm.currentValue('heatingSetpoint', true)
+                def c = therm.currentValue('coolingSetpoint', true)
                 // save the current values for when we turn back on
                 tmpThermSavedState[tid].heatSP = h
                 tmpThermSavedState[tid].coolSP = c
@@ -927,21 +823,13 @@ void turnOffHVAC(quietly = false) {
                 tmpThermSavedState[tid].heatAdj = h
                 tmpThermSavedState[tid].coolAdj = c
                 
-				if (ST) {
-					tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType')
-					tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold')
-					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName')	// Hold: Home, Vacation
-					tmpThermSavedState[tid].currentProgramId = therm.currentValue('currentProgramId')		// home
-					tmpThermSavedState[tid].currentProgram = therm.currentValue('currentProgram')			// Home
-					tmpThermSavedState[tid].scheduledProgram = therm.currentValue('scheduledProgram')
-				} else {
-					tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType', true)
-					tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold', true)
-					tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName', true)	// Hold: Home, Vacation
-					tmpThermSavedState[tid].currentProgramId = therm.currentValue('currentProgramId', true)		// home
-					tmpThermSavedState[tid].currentProgram = therm.currentValue('currentProgram', true)			// Home
-					tmpThermSavedState[tid].scheduledProgram = therm.currentValue('scheduledProgram', true)
-				}
+				tmpThermSavedState[tid].holdType = therm.currentValue('lastHoldType', true)
+				tmpThermSavedState[tid].thermostatHold = therm.currentValue('thermostatHold', true)
+				tmpThermSavedState[tid].currentProgramName = therm.currentValue('currentProgramName', true)	// Hold: Home, Vacation
+				tmpThermSavedState[tid].currentProgramId = therm.currentValue('currentProgramId', true)		// home
+				tmpThermSavedState[tid].currentProgram = therm.currentValue('currentProgram', true)			// Home
+				tmpThermSavedState[tid].scheduledProgram = therm.currentValue('scheduledProgram', true)
+
                 therm.setHeatingSetpoint(h, 'nextTransition')
                 therm.setCoolingSetpoint(c, 'nextTransition')
                 LOG("${therm.displayName} heatingSetpoint adjusted to ${h}, coolingSetpoint to ${c}",3,null,'info')
@@ -961,7 +849,7 @@ void turnOffHVAC(quietly = false) {
     	if (action.contains('Notify')  && !quietly) {
         //log.debug "setting up notifications @ ${now()}"
     		boolean notified = false
-			def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue(thermostatMode, true)
+			def tstatModes = theStats*.currentValue('thermostatMode', true)
 			boolean isOn = tstatModes.contains('auto') || tstatModes.contains('heat') || tstatModes.contains('cool')
         	Integer delay = (settings.offDelay != null ? settings.offDelay : 5) as Integer
 			String theStatsStr = getMsgTstat()
@@ -976,7 +864,7 @@ void turnOffHVAC(quietly = false) {
             //log.debug "doing contact sensors @ ${now()}"
             	def sensorList = []
             	settings.contactSensors.each { 
-                	def currentContact = ST ? it.currentValue('contact') : it.currentValue('contact', true)
+                	def currentContact = it.currentValue('contact', true)
             		if (currentContact == (settings.contactOpen?'open':'closed')) sensorList << it
             	}
             	if (!settings.useSensorNames) {
@@ -1010,7 +898,7 @@ void turnOffHVAC(quietly = false) {
         	if (!notified && settings.theSwitches) {
         		def switchList = []
             	theSwitches.each {
-                	def currentSwitch = ST ? it.currentValue('switch') : it.currentValue('switch', true)
+                	def currentSwitch = it.currentValue('switch', true)
             		if (currentSwitch == (switchOn?'on':'off')) switchList << it
             	}
 				if (!settings?.useSensorNames) {
@@ -1054,7 +942,6 @@ void turnOffHVAC(quietly = false) {
 void turnOnHVAC(quietly = false) {
 	// Restore previous state
     LOG("turnOnHVAC(quietly=${quietly}) entered...", 4,null,'debug')
-	//boolean ST = isSTHub
     
 	if (!allClosed() && (atomicState.HVACModeState == 'on_pending')) {
     	LOG("turnOnHVAC() called, but somethings is still open/on, ignoring request & leaving HVAC off",3,null,'info')
@@ -1087,7 +974,7 @@ void turnOnHVAC(quietly = false) {
                 LOG("${therm.displayName} Quiet Time disabled (${qtSwitch.displayName} turned ${onOff})",3,null,'info')
             } else if ((settings.hvacOff == null) || settings.hvacOff) {
                 // turn on the HVAC
-                def oldMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true) 
+                def oldMode = therm.currentValue('thermostatMode', true) 
                 def newMode = tmpThermSavedState[tid]?.mode ?: 'auto'
                 LOG("Current HVAC mode: ${oldMode}, desired HVAC mode: ${newMode}", 3, null, 'info')
                 if (newMode != oldMode) {
@@ -1126,7 +1013,7 @@ void turnOnHVAC(quietly = false) {
                     LOG("${therm.displayName} resumed current program",3,null,'info')
                 } else if (tmpThermSavedState[tid].currentProgramName == ('Hold: ' + tmpThermSavedState[tid].currentProgram)) {
                     // we were in a hold of a named program - reinstate the hold IF the saved scheduledProgram == the current scheduledProgram
-                    def scheduledProgram = ST ? therm.currentValue('scheduledProgram') : therm.currentValue('scheduledProgram', true)
+                    def scheduledProgram = therm.currentValue('scheduledProgram', true)
                     if (tmpThermSavedState[tid].scheduledProgram == scheduledProgram) {
                         therm.setThermostatProgram(tmpThermSavedState[tid].currentProgram, holdType)
                         LOG("${therm.displayName} returned to ${tmpThermSavedState[tid]} program (${holdType})",3,null,'info')
@@ -1153,7 +1040,7 @@ void turnOnHVAC(quietly = false) {
 		if (!doHVAC && (tstatNames == [])) tstatNames = theStats*.displayName
     	boolean notified = false
         Integer delay = (settings.onDelay != null ? settings.onDelay : 0) as Integer
-		def tstatModes = ST ? theStats*.currentValue('thermostatMode') : theStats*.currentValue('thermostatMode', true)
+		def tstatModes = theStats*.currentValue('thermostatMode', true)
 		def isOff = tstatModes?.contains('off')
 		String theStatsStr = getMsgTstat()
 		String justTheStats = theStatsStr.endsWith(' is') ? theStatsStr[0..-3] : (theStatsStr.endsWith(' are') ? theStatsStr[0..-4] : theStatsStr)
@@ -1187,18 +1074,17 @@ void turnOnHVAC(quietly = false) {
 }
 
 boolean allClosed() {
-	//boolean ST = isSTHub
 	// Check if all Sensors are in "HVAC ON" state   
     def response = true
     String txt = ''
     if (contactSensors) {
     	if (contactOpen) {
         	txt = 'closed'
-            def currentContacts = ST ? contactSensors*.currentContact : contactSensors*.currentValue('contact', true)
+            def currentContacts = contactSensors*.currentValue('contact', true)
         	if (currentContacts.contains('open')) response = false
         } else {
         	txt = 'open'
-        	def currentContacts = ST ? contactSensors*.currentContact : contactSensors*.currentValue('contact', true)
+        	def currentContacts = contactSensors*.currentValue('contact', true)
         	if (currentContacts.contains('closed')) response = false
         }
         if (response) LOG("All contact sensors are ${txt}",3,null,'info')
@@ -1207,11 +1093,11 @@ boolean allClosed() {
     if (response && theSwitches) {
     	if (switchOn) {
         	txt = 'off'
-        	def currentSwitches = ST ? theSwitches*.currentSwitch : theSwitches*.currentValue('switch', true)
+        	def currentSwitches = theSwitches*.currentValue('switch', true)
         	if (currentSwitches.contains('on')) response = false
         } else {
         	txt = 'on'
-        	def currentSwitches = ST ? theSwitches*.currentSwitch : theSwitches*.currentValue('switch', true)
+        	def currentSwitches = theSwitches*.currentValue('switch', true)
         	if (currentSwitches.contains('off')) response = false
         }
         if (response) LOG("All switches are ${txt}",3,null,'info')
@@ -1221,23 +1107,23 @@ boolean allClosed() {
 }
 
 def numOpen() {
-	//boolean ST = isSTHub
+
 	def response = 0
 	if (settings.contactSensors) {
 		if (settings.contactOpen) {
-			def currentContacts = ST ? contactSensors*.currentContact : contactSensors*.currentValue('contact', true)
+			def currentContacts = contactSensors*.currentValue('contact', true)
         	response = currentContacts.count { it == 'open' }
 		} else {
-			def currentContacts = ST ? contactSensors*.currentContact : contactSensors*.currentValue('contact', true)
+			def currentContacts = contactSensors*.currentValue('contact', true)
         	response = currentContacts.count { it == 'closed' }
 		}
 	}
 	if (settings.theSwitches) {
 		if ( settings.switchOn ) {
-        	def currentSwitches = ST ? theSwitches*.currentSwitch : theSwitches*.currentValue('switch', true)
+        	def currentSwitches = theSwitches*.currentValue('switch', true)
 			response += currentSwitches.count { it == 'on' }
 		} else {
-			def currentSwitches = ST ? theSwitches*.currentSwitch : theSwitches*.currentValue('switch', true)
+			def currentSwitches = theSwitches*.currentValue('switch', true)
 			response += currentSwitches.count { it == 'off' }
 		}
 	}
@@ -1404,64 +1290,25 @@ void sendMessage(notificationMessage) {
     	String msgPrefix = getMsgPrefix()
         String msg = (msgPrefix + notificationMessage.replaceAll(':','')).replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
         boolean addFrom = (msgPrefix && !msgPrefix.startsWith("From "))
-		if (ST) {
-			if (settings.notifiers) {
-				sendNotifications(msgPrefix, msg)               
-            }
-			if (settings.phone) { // check that the user did select a phone number
-				if ( settings.phone.indexOf(";") > 0){
-					def phones = settings.phone.split(";")
-					for ( def i = 0; i < phones.size(); i++) {
-						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-					}
-				} else {
-					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
-				}
-			} 
-			if (settings.pushNotify) {
-				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPush(msg)								// Push to everyone
-			}
-			if (settings.speak && notifyNowOK()) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak( (addFrom?"From ":"") + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText( (addFrom?"From ":"") + msg )
-					}
+		if (settings.notifiers) {
+			sendNotifications(msgPrefix, msg)               
+		}
+		if (settings.speak && notifyNowOK()) {
+			if (settings.speechDevices != null) {
+				settings.speechDevices.each {
+					it.speak((addFrom?"From ":"") + msg )
 				}
 			}
-		} else {		// HE
-			if (settings.notifiers) {
-                sendNotifications(msgPrefix, msg)               
-            }
-			if (settings.speak && notifyNowOK()) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak((addFrom?"From ":"") + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText((addFrom?"From ":"") + msg )
-					}
+			if (settings.musicDevices != null) {
+				settings.musicDevices.each {
+					it.setLevel( settings.volume )
+					it.playText((addFrom?"From ":"") + msg )
 				}
 			}
 		}
     }
     // Always send to Hello Home / Location Event log
-	if (ST) { 
-		sendNotificationEvent( notificationMessage )					
-	} else {
-		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
-	}
+	sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 }
 // Handles sending to Notification devices, with special handling for Echo Speaks devices (if settings.echoAnnouncements is true)
 boolean sendNotifications( String msgPrefix, String msg ) {
@@ -1502,12 +1349,7 @@ boolean sendNotifications( String msgPrefix, String msg ) {
 }
 void updateMyLabel() {
 	String flag
-    if (ST) {
-    	def opts = [ ' (paused', ' (HVAC: ']
-        opts.each {
-        	if (!flag && app.label.contains(it)) flag = it
-        }
-    } else flag = '<span '
+	flag = '<span '
 	
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
@@ -1520,20 +1362,15 @@ void updateMyLabel() {
 	}
     String newLabel
 	if (settings.tempDisable) {
-		newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		newLabel = myLabel + ( '<span style="color:red"> (paused)</span>' )
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		def theStats = settings.theThermostats ? settings.theThermostats : settings.myThermostats
 		def HVACModeState = atomicState.HVACModeState
-    	// String myStatus = (HVACModeState && (HVACModeState == 'on')) ? ('On - ' + ((ST ? theStats[0].currentValue('thermostatMode') : theStats[0].currentValue('thermostatMode', true)).capitalize())) : HVACModeState.capitalize()
-        String myStatus = HVACModeState ? ((HVACModeState == 'on') ? ('On - ' + ((ST ? theStats[0].currentValue('thermostatMode') : theStats[0].currentValue('thermostatMode', true)).capitalize())) : HVACModeState.capitalize()) : "Pending..."
+        String myStatus = HVACModeState ? ((HVACModeState == 'on') ? ('On - ' + ((theStats[0].currentValue('thermostatMode', true)).capitalize())) : HVACModeState.capitalize()) : "Pending..."
         //if (!myStatus) myStatus = 'initializing...'
-        if (ST) {
-        	newLabel = myLabel + " (HVAC: ${myStatus})"
-        } else {
-        	String color = myStatus.contains('Off') ? 'red' : 'green'
-        	newLabel = myLabel + "<span style=\"color:${color}\"> (HVAC: ${myStatus})</span>"
-        }
+       	String color = myStatus.contains('Off') ? 'red' : 'green'
+       	newLabel = myLabel + "<span style=\"color:${color}\"> (HVAC: ${myStatus})</span>"
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
 }
@@ -1609,13 +1446,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>') }
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>') }
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>') : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>' }
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>' }
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -1625,16 +1462,16 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return "<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
@@ -1644,36 +1481,22 @@ String getFormat(type, myText=""){
 
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
-}
-boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
-}
+String getPlatform() { return 'Hubitat' }	// if (platform == 'SmartThings') ...
+boolean getIsST() { return false }
+boolean getIsHE() { return true }
 
-String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+String getHubPlatform() { 
+	return 'Hubitat'
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
