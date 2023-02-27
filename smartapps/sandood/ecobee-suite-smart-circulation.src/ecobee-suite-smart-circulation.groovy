@@ -27,11 +27,12 @@
  *	1.8.11 - Fix settings descriptive text for minFanOnTime==0
  *  1.8.12 - Fix getThermostatModes()
  *	1.8.13 - Fix for Hubitat 'supportedThermostatModes', etc.
+ *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.13" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -56,19 +57,13 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
 	String defaultName = "Smart Circulation"
     
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
             section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
-                if (ST) {
-                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
-                } else {
-                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
-                }
+                paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
                 paragraph("This goal-seeking Helper tries to converge the ambient temperature of two or more rooms by dynamically adjusting the minimum fan circulation time (minutes per hour).")
             }
         }
@@ -88,43 +83,24 @@ def mainPage() {
 			} else {
             	atomicState.appDisplayName = app.label
             }
-			if (HE) {
-				if (app.label.contains('<span ')) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(myLabel)
-					}
+			if (app.label.contains('<span ')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
 				} else {
-                	atomicState.appDisplayName = app.label
-                }
-			} else {
-				def opts = [' (min/hr: ', ' (paused', ' (quiet']
-				String flag
-				opts.each {
-					if (!flag && app.label.contains(it)) flag = it
+					String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(myLabel)
 				}
-				if (flag) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(flag)) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(flag))
-                        atomicState.appDisplayName = myLabel
-                        app.updateLabel(myLabel)
-                    }
-                } else {
-                	atomicState.appDisplayName = app.label
-                }
-            }
+			} else {
+				atomicState.appDisplayName = app.label
+			}
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...") 
 			} else { 
-            	input(name: "theThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
+            	input(name: "theThermostat", type: 'device.EcobeeSuiteThermostat', title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
 					  required: true, multiple: false, submitOnChange: true)
             	if (settings?.theThermostat) {
-                	Integer currentOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true))
+                	Integer currentOnTime = (theThermostat.currentValue('fanMinOnTime', true))
                 	if (maximize) paragraph("The current circulation time for ${theThermostat.displayName} is ${currentOnTime} min/hr")
                 }
             }    
@@ -137,7 +113,7 @@ def mainPage() {
     					def total = 0.0G
     					int i=0
     					settings.theSensors.each {
-    						def temp = ST ? it.currentValue("temperature") : it.currentValue("temperature", true)
+    						def temp = it.currentValue("temperature", true)
 							//def temp = it.currentValue("temperature")
     						if (temp && (temp > 0)) {
 								temp = temp as BigDecimal
@@ -165,7 +141,7 @@ def mainPage() {
             	input(name: "deltaTemp", type: "enum", title: inputTitle("Select Temperature Delta"), required: true, defaultValue: "2.0", multiple:false, 
                 	  options:["1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0", "7.5", "10.0"], submitOnChange: true, width: 6)
 				if (maximize) paragraph "Circulation time (min/hr) will be increased/decreased when the difference between the maximum and the minimum temperature reading of the above sensors is more/less than the Temperature Delta."
-				if (!maximize && HE) paragraph("", width: 6)
+				if (!maximize) paragraph("", width: 6)
             	input(name: "minFanOnTime", type: "number", title: inputTitle("Minimum fan on time")+" (min/hr - 0-${settings.maxFanOnTime!=null?settings.maxFanOnTime:55})", 
                 	  required: true, defaultValue: 5, /*description: "5",*/ range: "0..${settings.maxFanOnTime!=null?settings.maxFanOnTime:55}", submitOnChange: true, width: 3)
                 // if (settings.minFanOnTime == null) { app.updateSetting('minFanOnTime', 5); settings.minFanOnTime = 5; }
@@ -258,19 +234,11 @@ def mainPage() {
             input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		} 
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+		section() {
+			paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
     }
 }
@@ -297,7 +265,6 @@ def initialize() {
     
     def tid = getDeviceId(theThermostat.deviceNetworkId)
     atomicState.theTid = tid
-	//boolean ST = isST
 	atomicState.amIRunning = null // Now using runIn to collapse multiple calls into single calcTemps()
     def mode = location.mode
 	updateMyLabel()
@@ -338,9 +305,9 @@ def initialize() {
         }
     }
 
-	Integer fanOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
+	Integer fanOnTime = theThermostat.currentValue('fanMinOnTime', true) as Integer
     Integer currentOnTime = fanOnTime ?: 0
-	String currentProgramName = ST ? theThermostat.currentValue("currentProgramName") : theThermostat.currentValue("currentProgramName", true)
+	String currentProgramName = theThermostat.currentValue("currentProgramName", true)
     boolean vacationHold = (currentProgramName == "Vacation")
 	if (settings.vacationOverride && settings.thePrograms) {
 		if (!settings.thePrograms.contains('Vacation')) {
@@ -356,9 +323,9 @@ def initialize() {
     // Also allow if none are configured
     boolean isOK = true
     if (theModes || thePrograms  || statModes) {
-		String currentProgram = ST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
+		String currentProgram = theThermostat.currentValue('currentProgram', true)
         if (!currentProgram) currentProgram = 'null'
-		String thermostatMode = ST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
+		String thermostatMode = theThermostat.currentValue('thermostatMode', true)
 		if (settings.needAll) {
 			isOK = 				settings.theModes ?		settings.theModes.contains(location.mode) 		: true
 			if (isOK) isOK = 	settings.thePrograms ?	settings.thePrograms.contains(currentProgram) 	: true
@@ -373,7 +340,7 @@ def initialize() {
     
     // Check the humidity?
     if (isOK && settings.theHumidistat) {
-		def ncCh = ST ? settings.theHumidistat.currentValue('humidity') : settings.theHumidistat.currentValue('humidity', true)
+		def ncCh = settings.theHumidistat.currentValue('humidity', true)
     	if (ncCh.toInteger() <= settings.highHumidity) {
         	isOK == false
             LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
@@ -453,7 +420,7 @@ def quietOnHandler(evt) {
 	LOG("Quiet Time switch ${evt.device.displayName} turned ${evt.value}", 3, null, 'info')
 	if (!atomicState.quietNow) {
     	atomicState.quietNow = true
-		Integer fanOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
+		Integer fanOnTime = theThermostat.currentValue('fanMinOnTime', true) as Integer
         Integer currentOnTime = fanOnTime?: 0	
         atomicState.quietOnTime = currentOnTime
         atomicState.circMinutes = 'quiet time'
@@ -498,15 +465,13 @@ def modeOrProgramHandler(evt=null) {
         runIn(2, updated, [overwrite: true])
         return
     }
-    
-    //boolean ST = isST
 	
 	// Allow adjustments if Location Mode and/or Thermostat Program and/or Thermostat Mode is currently as configured
     // Also allow if none are configured
     boolean isOK = true
     if (theModes || thePrograms  || statModes) {
-		String currentProgram = ST ? theThermostat.currentValue('currentProgram') : theThermostat.currentValue('currentProgram', true)
-		String thermostatMode = ST ? theThermostat.currentValue('thermostatMode') : theThermostat.currentValue('thermostatMode', true)
+		String currentProgram = theThermostat.currentValue('currentProgram', true)
+		String thermostatMode = theThermostat.currentValue('thermostatMode', true)
 		if (settings.needAll) {
 			isOK = 				settings.theModes ?		settings.theModes.contains(location.mode) 		: true
 			if (isOK) isOK = 	settings.thePrograms ?	settings.thePrograms.contains(currentProgram) 	: true
@@ -524,7 +489,7 @@ def modeOrProgramHandler(evt=null) {
     
     // Check the humidity?
     if (isOK && settings.theHumidistat) {
-		def currentHumidity = ST ? settings.theHumidistat.currentValue('humidity') : settings.theHumidistat.currentValue('humidity', true)
+		def currentHumidity = settings.theHumidistat.currentValue('humidity', true)
     	if ((currentHumidity as Integer) <= settings.highHumidity) {
         	isOK == false
             LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
@@ -564,9 +529,8 @@ def deltaHandler(evt=null) {
 
     // Make sure it is OK for us to be changing circulation times
 	if (!atomicState.isOK) return
-    //boolean ST = atomicState.isST
-	
-	String currentProgramName = ST ? theThermostat.currentValue('currentProgramName') : theThermostat.currentValue('currentProgramName', true)
+
+	String currentProgramName = theThermostat.currentValue('currentProgramName', true)
     boolean vacationHold = (currentProgramName && (currentProgramName == 'Vacation'))
 	if (vacationHold && !settings.vacationOverride) {
     	LOG("deltaHandler() - ${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 3, "", 'warn')
@@ -574,7 +538,7 @@ def deltaHandler(evt=null) {
     }
     def tid = getDeviceId(theThermostat.deviceNetworkId)
 	
-	Integer fanMinOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
+	Integer fanMinOnTime = theThermostat.currentValue('fanMinOnTime', true) as Integer
 	
     if (!vacationHold) {
         if ((fanMinOnTime == 0) && anyReservations(tid, 'circOff')) {
@@ -653,11 +617,9 @@ def deltaHandler(evt=null) {
 
 def calcTemps() {
 	LOG('Calculating temperatures...', 3, null, 'info')
-    //boolean ST = isST
 	
     // Makes no sense to change fanMinOnTime while heating or cooling is running - take action ONLY on events while idle or fan is running
-    // def statState = ST ? theThermostat.currentValue("thermostatOperatingState") : theThermostat.currentValue("thermostatOperatingState", true)
-	def statState = ST ? theThermostat.currentValue("thermostatOperatingState") :theThermostat.currentValue("thermostatOperatingState", true)
+	def statState = theThermostat.currentValue("thermostatOperatingState", true)
     if (statState && (statState.contains('ea') || statState.contains('oo'))) {
     	LOG("${theThermostat} is ${statState}, no adjustments made", 4, "", 'info' )
         return
@@ -671,14 +633,13 @@ def calcTemps() {
             return
 		}
 	}
-    // atomicState.lastCheckTime = now() 
+
     // parse temps - ecobee sensors can return "unknown", others may return
     def temps = []
     def total = 0.0G
     def i=0
     theSensors.each {
-    	// def temp = ST ? it.currentValue("temperature") : it.currentValue("temperature", true)
-		def temp = it.currentValue("temperature")
+		def temp = it.currentValue("temperature", true)
     	if (temp && (temp > 0)) {
 			temp = temp as BigDecimal
         	temps += [temp]	// we want to deal with valid inside temperatures only
@@ -698,11 +659,10 @@ def calcTemps() {
     if (outdoorSensor) {
     	def outTemp = null
         if (outdoorSensor.id == theThermostat.id) {
-        	// outTemp = ST ? theThermostat.currentValue("weatherTemperature") : theThermostat.currentValue("weatherTemperature", true)
-			outTemp = roundIt(theThermostat.currentValue("weatherTemperature"), 2)
+			outTemp = roundIt(theThermostat.currentValue("weatherTemperature", true), 2)
             LOG("Using ${theThermostat.displayName}'s weatherTemperature (${outTemp}°)",4,null,"info")
         } else {
-        	outTemp = roundIt(outdoorSensor.currentValue("temperature"), 2)
+        	outTemp = roundIt(outdoorSensor.currentValue("temperature", true), 2)
             LOG("Using ${outdoorSensor.displayName}'s temperature (${outTemp}°)",4,null,"info")
         }
         def inoutDelta = null
@@ -750,7 +710,7 @@ def calcTemps() {
     	currentOnTime = roundIt(atomicState.quietOnTime, 0) as Integer
         atomicState.quietOnTime = null
     } else {
-		Integer fanMinOnTime = (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true)) as Integer
+		Integer fanMinOnTime = theThermostat.currentValue('fanMinOnTime', true) as Integer
     	currentOnTime = fanMinOnTime ?: 0	// Ecobee Suite Manager will populate this with Vacation.fanMinOnTime if necessary
 	}
     Integer newOnTime = currentOnTime
@@ -825,17 +785,8 @@ def calcTemps() {
 // HELPER FUNCTIONS
 // Temporary/Global Pause functions
 void updateMyLabel() {
-	//boolean ST = isST
 	
-	String flag
-	if (ST) {
-    	def opts = [' (min/hr: ', ' (paused', ' (quiet']
-		opts.each {
-			if (!flag && app.label.contains(it)) flag = it
-		}
-	} else {
-		flag = '<span '
-	}
+	String flag = '<span '
 	
 	// Display vent status 
 	String myLabel = atomicState.appDisplayName
@@ -849,17 +800,17 @@ void updateMyLabel() {
 		myLabel = myLabel.substring(0, myLabel.indexOf(flag))
 		atomicState.appDisplayName = myLabel
 	}
-    def minutes = (atomicState.circMinutes != -1) ? atomicState.circMinutes : (ST ? theThermostat.currentValue('fanMinOnTime') : theThermostat.currentValue('fanMinOnTime', true))
+    def minutes = (atomicState.circMinutes != -1) ? atomicState.circMinutes : theThermostat.currentValue('fanMinOnTime', true)
     String newLabel
 	if (settings.tempDisable) {
-		newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		newLabel = myLabel + '<span style="color:red"> (paused)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (atomicState.minutes == 'quiet time') {
-		newLabel = myLabel + ( ST ? ' (quiet time)' : '<span style="color:green"> (quiet time)</span>' )
+		newLabel = myLabel + '<span style="color:green"> (quiet time)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (minutes > -1) { 
     	minutes = ' (min/hr: ' + minutes + ')'
-		newLabel = myLabel + ( ST ? minutes : '<span style="color:green">' + minutes + '</span>' )
+		newLabel = myLabel + '<span style="color:green">' + minutes + '</span>' 
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	}
     else {
@@ -919,13 +870,7 @@ List getThermostatPrograms() {
 List getThermostatModes() {
 	List statModes = ["off","heat","cool","auto","auxHeatOnly"]
 	List tm = []
-    if (settings.theThermostat) {
-        if (HE) {
-    	    tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes', true))
-        } else {
-            tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes'))
-        }
-    }
+    if (settings.theThermostat) tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes', true))
 	if (tm != []) statModes = tm
     return statModes.sort(false)
 }
@@ -999,13 +944,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>') }
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>') }
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>') : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>' }
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>' }
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -1015,54 +960,41 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return "<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
 			break;
 	}
 }
+
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
-}
-boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
-}
+String getPlatform() { return 'Hubitat' }	// if (platform == 'SmartThings') ...
+boolean getIsST() { return false }
+boolean getIsHE() { return true }
 
-String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+String getHubPlatform() { 
+	return 'Hubitat'
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
