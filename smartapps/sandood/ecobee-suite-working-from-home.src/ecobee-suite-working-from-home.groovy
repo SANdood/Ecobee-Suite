@@ -36,11 +36,12 @@
  *	1.8.20 - Fix whatHoldType for 'holdHours'
  *	1.8.21 - Fix for Hubitat 'supportedThermostatModes', etc.
  *	1.8.21a- Fix typo on line 194
+ *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.21a" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel() 	{ return "ecobee Suite Working From Home Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -48,7 +49,7 @@ definition(
     namespace: 			"sandood",
     author: 			"Barry A. Burke",
     description: 		"INSTALL USING ECOBEE SUITE MANAGER ONLY!\n\nIf, after thermostat mode change to 'Away' and/or at a particular time of day, anyone is still at home, " +
-    			 		"${ST?'trigger a \'Working From Home\' Routine (opt), ':''}, change the Location mode (opt), and/or reset thermostat(s) to 'Home' program (opt).",
+    			 		"change the Location mode (opt), and/or reset thermostat(s) to 'Home' program (opt).",
     category: 			"Convenience",
     parent: 			"sandood:Ecobee Suite Manager",
 	iconUrl:			"https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg",
@@ -67,19 +68,13 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     String defaultName = "Working From Home"
 	
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
             section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
-                if (ST) {
-                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
-                } else {
-                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
-                }
+                paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
                 paragraph("This Helper is used to override automated Ecobee schedules for the 'Away' program when 1 or more people are Working From Home (i.e., still present after a scheduled change to 'Away'). The override can be "+
                           "configured to occur immediately when the program changes to 'Away', or at a specific time of day (e.g., 5 minutes after the scheduled change), and the target program is configurable.")
             }
@@ -101,37 +96,23 @@ def mainPage() {
 			} else {
             	atomicState.appDisplayName = app.label
             }
-			if (HE) {
-				if (app.label.contains('<span ')) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(myLabel)
-					}
+			if (app.label.contains('<span ')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
 				} else {
-                	atomicState.appDisplayName = app.label
-                }
+					String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(myLabel)
+				}
 			} else {
-            	if (app.label.contains(' (paused)')) {
-                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                        atomicState.appDisplayName = myLabel
-                        app.updateLabel(myLabel)
-                    }
-                } else {
-                	atomicState.appDisplayName = app.label
-                }
-            }
+				atomicState.appDisplayName = app.label
+			}
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else {
-        		input (name: "myThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"),
+        		input (name: "myThermostats", type: 'device.EcobeeSuiteThermostat', title: inputTitle("Select Ecobee Suite Thermostat(s)"),
                 	   required: true, multiple: true, submitOnChange: true)
-				if (HE) paragraph ''
+				paragraph ''
 			}
         }
 
@@ -147,14 +128,11 @@ def mainPage() {
                 	input(name: 'awayPrograms', type: 'enum', title: inputTitle("When Program changes to any of these: "), options: programs, required: true, defaultValue: 'Away', multiple: true, 
                           submitOnChange: true, width: 6)
                 }
-				if (HE) paragraph ''
+				paragraph ''
             }
             
 			section( title: sectionTitle("Actions")) {
 				def phrases
-				if (ST) {
-                    phrases = location.helloHome?.getPhrases()*.label
-				}
 				// Row 1
         		input(name: "setHome", type: "bool", title: inputTitle("Change thermostat${settings?.myThermostats?.size()>1?'\'s':'s\''} Program?"), defaulValue: true, 
                 	  submitOnChange: true, width: 4)
@@ -167,7 +145,7 @@ def mainPage() {
 					input(name: "setMode", type: "mode", title: inputTitle("Set Location Mode"), required: false, multiple: false, submitOnChange: true, width: 4)
 					
 					// Row 2
-                    if (HE) paragraph("",width: 4)
+                    paragraph("",width: 4)
 					input(name: "holdType", title: inputTitle("Hold Type for Program")+" (optional)", type: "enum", required: false, 
 						  multiple: false, submitOnChange: true, defaultValue: "Ecobee Manager Setting",
 						  options:["Until I Change", "Until Next Program", "2 Hours", "4 Hours", "Custom Hours", "Thermostat Setting", 
@@ -179,28 +157,22 @@ def mainPage() {
 					
 					// Row 3
 					if (settings?.holdType == 'Until Next Program') {
-						//if (HE) paragraph("",width: 4)
 						if (maximize) paragraph("The '${settings?.homeProgram}' hold will be a temporary hold", width: 8)
 					} else if (settings?.holdType == 'Until I Change') {
-						//if (HE) paragraph("",width: 4)
 						if (maximize) paragraph("The '${settings?.homeProgram}' hold will be a permanent hold", width: 8)
 					} else if (settings.holdType=='Thermostat Setting') {
-						//if (HE) paragraph("",width: 4)
 						if (maximize) paragraph("Thermostat Setting at the time of the '${settings?.homeProgram}' hold request will be applied", width: 8)
 					} else if ((settings.holdType == null) || (settings.holdType == 'Ecobee Manager Setting') || (settings.holdType == 'Parent Ecobee (Connect) Setting')) {
-						//if (HE) paragraph("",width: 4)
 						if (maximize) paragraph("Ecobee Manager Setting at the time of the '${settings?.homeProgram}' hold request will be applied", width: 8)
 					} else if (settings?.holdType == '2 Hours') {
-						//if (HE) paragraph("",width: 4)
 						if (maximize) paragraph("The '${settings?.homeProgram}' hold request will be for 2 hours", width: 8)
 					} else if (settings?.holdType == '4 Hours') {
-						//if (HE) paragraph("",width: 4)
 						if (maximize) paragraph("The '${settings?.homeProgram}' hold request will be for 4 hours", width: 8)
 					} else 	if ((settings.holdType=="Specified Hours") || (settings?.holdType == 'Custom Hours')) {
-						if (HE) paragraph("",width: 4)
+						paragraph("",width: 4)
 						input(name: 'holdHours', title: inputTitle('How many hours (1-48)?'), type: 'number', range:"1..48", required: true, description: '2', defaultValue: 2,
 							  submitOnChange: true, width: 4)
-						if (HE) paragraph("",width: 4)
+						paragraph("",width: 4)
 						if (maximize) paragraph("The '${settings?.homeProgram}' hold request will be for ${holdHours} hours", width: 8)
 					} 
 				} else {
@@ -220,99 +192,51 @@ def mainPage() {
                 input(name: "modes", type: "mode", title: inputTitle("Only when Location Mode is"), multiple: true, required: false, submitOnChange: true, width: 4)
 				// paragraph HE ? "A 'HelloHome' notification is always sent to the Location Event log whenever an action is taken\n" : "A notification is always sent to the Hello Home log whenever an action is taken\n"
             }
-			if (ST) {
-				List echo = []
-				section("Notifications") {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
-					if (settings.notify) {
-						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, 
-							  required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
-						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
-							  required: ((settings.phone == null) && !settings.speak && !settings.pushNotify), multiple: true, submitOnChange: true)
-                        if (settings?.notifiers) {
-                            echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                            if (echo) {
-                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?", 
-                                	  defaultValue: false, submitOnChange: true)
-                            }
-                        }
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
-							  required: (!settings.pushNotify && !settings.notifiers && !settings.speak), submitOnChange: true)
-					}
-				}
-				if (settings.notify) {
-					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "Speech Devices") {
-						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", 
-								  multiple: true, hideWhenEmpty: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", 
-								  multiple: true, hideWhenEmpty: true, submitOnChange: true)
-							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+			List echo = []
+			section(sectionTitle("Notifications")) {
+				input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
+			}
+			if (settings.notify) {
+				section(smallerTitle("Notification Devices")) {
+					input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
+						  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+					if (settings?.notifiers) {
+						echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+						if (echo) {
+							input(name: "echoAnnouncements", type: "bool", title: inputTitle("Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?"), 
+								  defaultValue: false, submitOnChange: true)
 						}
-					}
-				}
-				if (settings.notify && (echo || settings.speak)) {
-                	section("Do Not Disturb") {
-                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true)
-                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications from:'), required: (settings.speakTimeEnd != null))
-                        input(name: "speakTimeEnd", type: "time", title: inputTitle("Only speak notifications until:"), required: (settings.speakTimeStart != null))
-						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
-										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
-						if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
-                    }
-                }
-				if (maximize)  {
-					section() {
-						paragraph ( "A notification is always sent to the Hello Home log whenever an action is taken")
-					}
-				}
-			} else {		// HE
-            	List echo = []
-				section(sectionTitle("Notifications")) {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
-				}
-				if (settings.notify) {
-					section(smallerTitle("Notification Devices")) {
-						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
-							  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
-						if (settings?.notifiers) {
-							echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-							if (echo) {
-								input(name: "echoAnnouncements", type: "bool", title: inputTitle("Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?"), 
-									  defaultValue: false, submitOnChange: true)
-							}
-						}
-					}
-				}
-				if (settings.notify) {
-					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
-						input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select Speech devices"), 
-								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select Music devices"), 
-								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-							input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
-						}
-					}
-				}
-                if (settings.notify && (echo || settings.speak)) {
-                	section(smallerTitle("Do Not Disturb")) {
-                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
-                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
-                        input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
-						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
-										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
-						if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
-                    }
-                }
-				if (maximize) {
-					section(){
-						paragraph "A <i>'HelloHome'</i> notification is always sent to the Location Event log whenever an action is taken"		
 					}
 				}
 			}
+			if (settings.notify) {
+				section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
+					input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
+					if (settings.speak) {
+						input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select Speech devices"), 
+							  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+						input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select Music devices"), 
+							  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+						input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
+					}
+				}
+			}
+			if (settings.notify && (echo || settings.speak)) {
+				section(smallerTitle("Do Not Disturb")) {
+					input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
+					input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
+					input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
+					String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
+									(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
+					if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
+				}
+			}
+			if (maximize) {
+				section(){
+					paragraph "A <i>'HelloHome'</i> notification is always sent to the Location Event log whenever an action is taken"		
+				}
+			}
+
 			if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak && (settings?.speechDevices || settings?.musicDevices)))) {
 				section(smallerTitle("Customization")) {
 					href(name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
@@ -327,28 +251,18 @@ def mainPage() {
             input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+       	section() {
+       		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
     }
 }
 
 def customNotifications(){
-	//oolean ST = isST
-	//boolean HE = !ST
 	dynamicPage(name: "customNotifications", title: pageTitle("${defaultName} Custom Notifications"), uninstall: false, install: false) {
-    	section(sectionTitle("Customizations") + (ST ? "\n" : '') + smallerTitle("Notification Prefix")){
+    	section(sectionTitle("Customizations") + smallerTitle("Notification Prefix")){
 			input(name: "customPrefix", type: "enum", title: inputTitle("Notification Prefix text:"), defaultValue: "(helper) at (location):", required: false, submitOnChange: true, 
 				  options: ['(helper):', '(helper) at (location):', '(location):', 'none', 'custom'], multiple: false)
 			if (settings?.customPrefix == null) { app.updateSetting('customPrefix', '(helper) at (location):'); settings.customPrefix = '(helper) at (location):'; }
@@ -388,10 +302,6 @@ def customNotifications(){
             def tc = myThermostats.size()
             boolean multiple = false
             
-            if (ST && settings.wfhPhrase) {
-            	samples = samples + thePrefix + "I executed '${settings.wfhPhrase}' because ${who} ${becauseText(who)}\n"
-                multiple = true
-            }
             if (settings.setMode) {
             	samples = samples + thePrefix + "I ${multiple?'also ':''}changed Location Mode to ${settings.setMode}\n"
                 multiple = true
@@ -441,18 +351,10 @@ def initialize() {
 
 def checkPresence() {
 	LOG("Check presence", 4, null, 'trace')
-	//boolean ST = isST
 	
     if (anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
     	def multiple = false
 		LOG("Someone is present", 2, null, 'trace')
-        if (ST && wfhPhrase) {
-            location.helloHome.execute(wfhPhrase)
-        	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
-			def who = whoIsHome()
-			sendMessage("I executed '${wfhPhrase}' because ${who} ${becaueText()}")
-            multiple = true
-        }
         if (settings.setMode) {
         	location.setMode(settings.setMode)
             sendMessage("I ${multiple?'also ':''}changed Location Mode to ${settings.setMode}")
@@ -462,7 +364,7 @@ def checkPresence() {
 			def verified = true
             String homeTarget = settings.homeProgram ?: 'Home'
         	myThermostats.each { tstat ->
-				String currentProgram = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
+				String currentProgram = tstat.currentValue('currentProgram', true)
                 if (!currentProgram) currentProgram = 'null'
 				if (currentProgram && (currentProgram != homeTarget)) {
                		String sendHoldType = whatHoldType(tstat)
@@ -491,7 +393,6 @@ def checkPresence() {
 
 def checkProgram(evt) {
 	LOG("Check program: ${evt.device.displayName} changed to ${evt.value}", 4, null, 'trace')
-    //boolean ST = isST
 	
     def multiple = false
     if (settings.onAway && (settings.awayPrograms.contains(evt.value)) && anyoneIsHome() && getDaysOk() && getModeOk() && getStatModeOk()) {
@@ -500,11 +401,6 @@ def checkProgram(evt) {
         sendMessage("I reset ${getMsgTstat()} to the '${settings.homeProgram}' program because Thermostat ${evt.device.displayName} changed to '${evt.value}' and ${who} ${becauseText(who)}")
         runIn(300, checkHome, [overwrite: true])
         
-    	if (ST && wfhPhrase) {
-            location.helloHome.execute(wfhPhrase)
-        	LOG("Executed ${wfhPhrase}", 4, null, 'trace')
-			sendMessage("I also executed '${wfhPhrase}'")
-        }
     	if (settings.setMode) {
         	location.setMode(settings.setMode)
             sendMessage("And I changed Location Mode to ${settings.setMode}")
@@ -514,12 +410,11 @@ def checkProgram(evt) {
 }
 
 def checkHome() {
-	//boolean ST = isST
 
 	if (settings.setHome) {
     	String homeTarget = settings.homeProgram ?: 'Home'
     	myThermostats.each { tstat ->
-			String  currentProgram = ST ? tstat.currentValue('currentProgram') : tstat.currentValue('currentProgram', true)
+			String  currentProgram = tstat.currentValue('currentProgram', true)
             if (!currentProgram) currentProgram = 'null'
         	if (currentProgram && (currentProgram != homeTarget)) { 	// Need to check if in Vacation Mode also...
                 String sendHoldType = whatHoldType(tstat)
@@ -604,11 +499,7 @@ List getThermostatModes() {
 	def statModes = []
 	def tm = []
 	settings.myThermostats?.each { stat ->
-        if (HE) {
-            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
-        } else {
-            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
-		}
+        tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
 		if (statModes == []) {	
 			if (tm) statModes = tm
 		} else {
@@ -620,10 +511,9 @@ List getThermostatModes() {
 
 boolean getStatModeOk() {
 	if (settings.statMode == null) return true
-	//boolean ST = isST
 	boolean result = false
 	settings.myThermostats?.each { stat ->
-		def statMode = ST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
+		def statMode = stat.currentValue('thermostatMode', true)
 		//log.debug "statMode: ${statMode}"
 		if (settings.statMode.contains(statMode)) {
 			//log.debug "statModeOk"
@@ -699,7 +589,7 @@ String whatHoldType(statDevice) {
             }
             break;
         case 'Thermostat Setting':
-       		String statHoldType = ST ? statDevice.currentValue('statHoldAction') : statDevice.currentValue('statHoldAction', true)
+       		String statHoldType = statDevice.currentValue('statHoldAction', true)
             switch(statHoldType) {
             	case 'useEndTime4hour':
                 	sendHoldType = 4
@@ -836,64 +726,25 @@ void sendMessage(notificationMessage) {
     	String msgPrefix = getMsgPrefix()
         String msg = (msgPrefix + notificationMessage.replaceAll(':','')).replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
         boolean addFrom = (msgPrefix && !msgPrefix.startsWith("From "))
-		if (ST) {
-			if (settings.notifiers) {
-				sendNotifications(msgPrefix, msg)               
-            }
-			if (settings.phone) { // check that the user did select a phone number
-				if ( settings.phone.indexOf(";") > 0){
-					def phones = settings.phone.split(";")
-					for ( def i = 0; i < phones.size(); i++) {
-						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-					}
-				} else {
-					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
-				}
-			} 
-			if (settings.pushNotify) {
-				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPush(msg)								// Push to everyone
-			}
-			if (settings.speak && notifyNowOK()) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak( (addFrom?"From ":"") + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText( (addFrom?"From ":"") + msg )
-					}
+		if (settings.notifiers) {
+			sendNotifications(msgPrefix, msg)               
+		}
+		if (settings.speak && notifyNowOK()) {
+			if (settings.speechDevices != null) {
+				settings.speechDevices.each {
+					it.speak((addFrom?"From ":"") + msg )
 				}
 			}
-		} else {		// HE
-			if (settings.notifiers) {
-                sendNotifications(msgPrefix, msg)               
-            }
-			if (settings.speak && notifyNowOK()) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak((addFrom?"From ":"") + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText((addFrom?"From ":"") + msg )
-					}
+			if (settings.musicDevices != null) {
+				settings.musicDevices.each {
+					it.setLevel( settings.volume )
+					it.playText((addFrom?"From ":"") + msg )
 				}
 			}
 		}
     }
     // Always send to Hello Home / Location Event log
-	if (ST) { 
-		sendNotificationEvent( notificationMessage )					
-	} else {
-		sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
-	}
+	sendLocationEvent(name: "HelloHome", descriptionText: notificationMessage, value: app.label, type: 'APP_NOTIFICATION')
 }
 // Handles sending to Notification devices, with special handling for Echo Speaks devices (if settings.echoAnnouncements is true)
 boolean sendNotifications( String msgPrefix, String msg ) {
@@ -933,7 +784,7 @@ boolean sendNotifications( String msgPrefix, String msg ) {
 	return true
 }
 void updateMyLabel() {
-	String flag = ST ? ' (paused)' : '<span '
+	String flag = '<span '
 	
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
@@ -945,7 +796,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		def newLabel = myLabel + '<span style="color:red"> (paused)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
@@ -1014,13 +865,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>') }
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>') }
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>') : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>' }
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>' }
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -1030,54 +881,41 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return "<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
 			break;
 	}
 }
+
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
-}
-boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
-}
+String getPlatform() { return 'Hubitat' }	// if (platform == 'SmartThings') ...
+boolean getIsST() { return false }
+boolean getIsHE() { return true }
 
-String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+String getHubPlatform() { 
+	return 'Hubitat'
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
