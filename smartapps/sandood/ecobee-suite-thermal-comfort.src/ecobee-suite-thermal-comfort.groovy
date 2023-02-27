@@ -34,7 +34,7 @@
  *	1.8.18 - Fix getThermostatModes()
  *	1.8.19 - Fix sendMessage() for new Samsung SmartThings app
  *	1.8.20 - Fix for Hubitat 'supportedThermostatModes', etc.
- *  1.8.21 - Fix for supportedThermostatPrograms error in setup
+ *	1.8.21 - Fix for supportedThermostatPrograms error in setup
  *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
@@ -411,7 +411,7 @@ List getThermostatModes() {
 	List statModes = ["off","heat","cool","auto","auxHeatOnly"]
 	List tm = []
     if (settings.theThermostat) {
-   	    tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes')) // , true)
+   	    tm = new JsonSlurper().parseText(theThermostat.currentValue('supportedThermostatModes', true))
     }
 	if (tm != []) statModes = tm
     return statModes.sort(false)
