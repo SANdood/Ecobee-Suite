@@ -25,11 +25,12 @@
  *	1.8.09 - Fix getThermostatModes()
  *	1.8.10 - heating/coolingSetpointDisplay not used on Hubitat version
  *	1.8.11 - Fix for Hubitat 'supportedThermostatModes', etc.
+ *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.11" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel() 	{ return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -54,19 +55,13 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     String defaultName = "Quiet Time"
 	
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
             section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
-                if (ST) {
-                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
-                } else {
-                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
-                }
+                paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
                 paragraph("Ideal for watching movies, this Helper implements the concept of 'Quiet Time' for your Ecobee Suite-controlled HVAC system. Activated by a (real or virtual) switch, the Helper will "+
                           "turn off the components of your system that create noise. The entire system can be turned off, as well as the fan, humidifier and dehumidifier. Alternately, setpoints can be changed "+
                           "as another means of reducing the noise. Quiet Time supports integration with other Helpers (e.g., Smart Circulation), and also supports auto-off after a configurable delay.")
@@ -88,35 +83,21 @@ def mainPage() {
 			} else {
             	atomicState.appDisplayName = app.label
             }
-			if (HE) {
-				if (app.label.contains('<span ')) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(myLabel)
-					}
+			if (app.label.contains('<span ')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
 				} else {
-                	atomicState.appDisplayName = app.label
-                }
+					String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(myLabel)
+				}
 			} else {
-            	if (app.label.contains(' (paused)')) {
-                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                        atomicState.appDisplayName = myLabel
-                        app.updateLabel(myLabel)
-                    }
-                } else {
-                	atomicState.appDisplayName = app.label
-                }
-            }
+				atomicState.appDisplayName = app.label
+			}
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")  
 			} else { 
-            	input(name: "theThermostats", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
+            	input(name: "theThermostats", type: "device.EcobeeSuiteThermostat", title: inputTitle("Select Ecobee Suite Thermostat(s)"), 
 					  required: true, multiple: true, submitOnChange: true)
             }          
 		}
@@ -144,7 +125,7 @@ def mainPage() {
 				if (settings.hvacOff) {
 					if (maximize) paragraph("HVAC Mode will be set to Off. Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off. "+
 							  "\n\nHVAC Mode will be returned to its original state when Quiet Time ends.", width: 8)
-				} else if (HE) paragraph("", width: (maximize?8:12))
+				} else paragraph("", width: (maximize?8:12))
 				
 				if (!settings.hvacOff) {
 					input(name: 'hvacMode', type: 'bool', title: inputTitle('Change HVAC Mode?'), required: true, defaultValue: false, submitOnChange: true, , width: 4)
@@ -152,13 +133,13 @@ def mainPage() {
 						input(name: 'quietMode', title: inputTitle('Set thermostat mode to'), type: 'enum', required: true, multiple: false, 
 								options:getThermostatModes(), width: 4, submitOnChange: true)
 						if (settings.quietMode) {
-							if (HE) paragraph("", width: 4)
-							if (HE) paragraph("", width: 4)
+							paragraph("", width: 4)
+							paragraph("", width: 4)
 							if (maximize) paragraph("HVAC Mode will be set to ${settings.quietMode} Mode." + 
 									  "${(settings.quietMode=='off')?' Circulation, Humidification and/or Dehumidification may still operate while HVAC is Off.':''}"+
 									  "\n\nHVAC Mode will be returned to its original state when Quiet Time ends.", width: 8)
 						}
-					} else if (HE) paragraph("", width: 8)
+					} else paragraph("", width: 8)
 				}
 				//if (settings.hvacOff || settings.hvacMode) paragraph("HVAC mode will be returned to its original state when Quiet Time ends")
 
@@ -172,10 +153,10 @@ def mainPage() {
 					} else {
 						if (maximize) paragraph("Circulation will not be modified.", width: 4)
 					}
-					if (HE && maximize) paragraph("", width: 4)
-					if (HE && maximize) paragraph("", width: 4)
+					if (maximize) paragraph("", width: 4)
+					if (maximize) paragraph("", width: 4)
 					if (maximize) paragraph("At the end of Quiet Time, the Fan Mode will be restored to its prior setting${settings.circOff?', and circulation will be re-enabled':''}.", width: 8)
-				} else if (HE && maximize) paragraph("", width: 8)
+				} else if (maximize) paragraph("", width: 8)
 					
 				if (settings.hvacOff || settings.hvacMode || settings.fanOff) {
 					input(name: 'modeResume', type: 'bool', title: inputTitle('Also resume the Current Program at the end of Quiet Time (recommended)?'), defaultValue: true, required: true, width: 10)
@@ -186,25 +167,25 @@ def mainPage() {
 					if (settings.adjustSetpoints) {
 						input(name: 'heatAdjust', type: 'decimal', title: inputTitle('Heating setpoint adjustment')+' (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
 						input(name: 'coolAdjust', type: 'decimal', title: inputTitle('Cooling setpoint adjustment')+' (+/- 20°)', required: true, defaultValue: 0.0, range: '-20..20', width: 4)
-						if (HE) paragraph("", width: 4)
+						paragraph("", width: 4)
 						input(name: 'setpointResume', type: 'enum', title: inputTitle('At the end of Quiet Time'), /*description: 'Tap to choose...',*/ multiple: false, required: true,
 								options: ['Restore prior Setpoints','Resume Current Program', 'Resume Scheduled Program'], submitOnChange: true, width: 8)
 						if (settings.setpointResume) {
 							if (maximize) paragraph(width: 9, "At the end of Quiet Time, ${settings.setpointResume.startsWith('Resu')?'the currently scheduled program will be resumed.':'the prior setpoints will be restored.'}")
-						} else if (HE) paragraph("", width: 9)
-					} else if (HE) paragraph("", width: 8)
+						} else paragraph("", width: 9)
+					} else paragraph("", width: 8)
 				}
 				if ((settings.theThermostats?.size() != 0) && atomicState.hasHumidifier) {
 					input(name: 'humidOff', type: 'bool', title: inputTitle('Turn off the Humidifier?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (settings.humidOff) {
 						if (maximize) paragraph("At the end of Quiet Time, the humidifier will be turned back on.", width: 8)
-					} else if (HE) paragraph("", width: 8)
+					} else paragraph("", width: 8)
 				}
 				if ((settings.theThermostats?.size() != 0) && atomicState.hasDehumidifier) {
 					input(name: 'dehumOff', type: 'bool', title: inputTitle('Turn off the Dehumidifier?'), required: true, defaultValue: false, submitOnChange: true, width: 4)
 					if (settings.dehumOff) {
 						if (maximize) paragraph("At the end of Quiet Time, the dehumidifier will be turned back on.", width: 8)
-					} else if (HE) paragraph("", width: 8)
+					} else paragraph("", width: 8)
 				}
 			}
 	//        section(title: 'Actions when Quiet Time Ends') {
@@ -257,19 +238,11 @@ def mainPage() {
             input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+       	section() {
+       		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
     }
 }
@@ -313,43 +286,24 @@ def initialize() {
     def statState = [:]
     settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
-		if (ST) {
-			statState[tid] = [
-								thermostatMode: 	stat.currentValue('thermostatMode'),
-								thermostatFanMode: 	stat.currentValue('thermostatFanMode'),
-								fanMinOnTime:		stat.currentValue('fanMinOnTime'),
-								heatingSetpoint:	stat.currentValue('heatingSetpoint'),
-								coolingSetpoint:	stat.currentValue('coolingSetpoint'),
-								holdType:			stat.currentValue('lastHoldType'),
-								hasHumidifier:		stat.currentValue('hasHumidifier'),
-								humidifierMode:		stat.currentValue('humidifierMode'),
-								hasDehumidifier:	stat.currentValue('hasDehumidifier'),
-								dehumidifierMode:	stat.currentValue('dehumidifierMode'),
-								thermostatHold:		stat.currentValue('thermostatHold'),
-								currentProgramName:	stat.currentValue('currentProgramName'),
-								currentProgramId:	stat.currentValue('currentProgramId'),
-								currentProgram:		stat.currentValue('currentProgram'),
-								scheduledProgram:	stat.currentValue('scheduledProgram'),
-							 ]   
-		} else {
-			statState[tid] = [
-								thermostatMode: 	stat.currentValue('thermostatMode', true),
-								thermostatFanMode: 	stat.currentValue('thermostatFanMode', true),
-								fanMinOnTime:		stat.currentValue('fanMinOnTime', true),
-								heatingSetpoint:	stat.currentValue('heatingSetpoint', true),
-								coolingSetpoint:	stat.currentValue('coolingSetpoint', true),
-								holdType:			stat.currentValue('lastHoldType', true),
-								hasHumidifier:		stat.currentValue('hasHumidifier', true),
-								humidifierMode:		stat.currentValue('humidifierMode', true),
-								hasDehumidifier:	stat.currentValue('hasDehumidifier', true),
-								dehumidifierMode:	stat.currentValue('dehumidifierMode', true),
-								thermostatHold:		stat.currentValue('thermostatHold', true),
-								currentProgramName:	stat.currentValue('currentProgramName', true),
-								currentProgramId:	stat.currentValue('currentProgramId', true),
-								currentProgram:		stat.currentValue('currentProgram', true),
-								scheduledProgram:	stat.currentValue('scheduledProgram', true),
-							 ] 
-		}
+
+		statState[tid] = [
+							thermostatMode: 	stat.currentValue('thermostatMode', true),
+							thermostatFanMode: 	stat.currentValue('thermostatFanMode', true),
+							fanMinOnTime:		stat.currentValue('fanMinOnTime', true),
+							heatingSetpoint:	stat.currentValue('heatingSetpoint', true),
+							coolingSetpoint:	stat.currentValue('coolingSetpoint', true),
+							holdType:			stat.currentValue('lastHoldType', true),
+							hasHumidifier:		stat.currentValue('hasHumidifier', true),
+							humidifierMode:		stat.currentValue('humidifierMode', true),
+							hasDehumidifier:	stat.currentValue('hasDehumidifier', true),
+							dehumidifierMode:	stat.currentValue('dehumidifierMode', true),
+							thermostatHold:		stat.currentValue('thermostatHold', true),
+							currentProgramName:	stat.currentValue('currentProgramName', true),
+							currentProgramId:	stat.currentValue('currentProgramId', true),
+							currentProgram:		stat.currentValue('currentProgram', true),
+							scheduledProgram:	stat.currentValue('scheduledProgram', true),
+						 ] 
         atomicState.statState = statState
     }
 	subscribe(qtSwitch, "switch.${settings.qtOn}", quietOnHandler)
@@ -462,18 +416,17 @@ def quietOnHandler(evt=null) {
 void turnOnQuietTime() {
 	LOG("Turning On Quiet Time",2,null,'info')
 	def statState = atomicState.statState
-	//boolean ST = isST
 	
     clearReservations()			// clean slate
 	settings.theThermostats.each() { stat ->
     	def tid = getDeviceId(stat.deviceNetworkId)
         if (settings.hvacOff) {
         	makeReservation(tid, 'modeOff')							// We have to reserve this now, to stop other Helpers from turning it back on
-        	statState[tid].thermostatMode = ST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
+        	statState[tid].thermostatMode = stat.currentValue('thermostatMode', true)
             if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
             LOG("${stat.device.displayName} Mode is Off",3,null,'info')
         } else if (settings.hvacMode) {
-        	statState[tid].thermostatMode = ST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
+        	statState[tid].thermostatMode = stat.currentValue('thermostatMode', true)
             if (settings.quietMode == 'off') {
             	makeReservation(tid, 'modeOff')
                 if (statState[tid].thermostatMode != 'off') stat.setThermostatMode('off')
@@ -487,20 +440,20 @@ void turnOnQuietTime() {
         }
         if (settings.fanOff) { 
         	makeReservation(tid, 'fanOff')						// reserve the fanOff also
-        	statState[tid].thermostatFanMode = ST ? stat.currentValue('thermostatFanMode') : stat.currentValue('thermostatMode', true)
+        	statState[tid].thermostatFanMode = stat.currentValue('thermostatMode', true)
             stat.setThermostatFanMode('off','indefinite')
             LOG("${stat.device.displayName} Fan Mode is off",3,null,'info')
         }
         if (settings.circOff) { 
         	makeReservation(tid, 'circOff')							// reserve no recirculation as well (SKIP VACACIRCOFF FOR NOW!!!)
-        	statState[tid].fanMinOnTime = ST ? stat.currentValue('fanMinOnTime') : stat.currentValue('fanMinOnTime', true)
+        	statState[tid].fanMinOnTime = stat.currentValue('fanMinOnTime', true)
             stat.setFanMinOnTime(0)
             LOG("${stat.device.displayName} Circulation time is 0 mins/hour",3,null,'info')
         }
         if ( !settings.hvacOff && !settings.hvacMode && settings.adjustSetpoints) {
-        	statState[tid].holdType = 			ST ? stat.currentValue('lastHoldType') 				: stat.currentValue('lastHoldType', true)
-        	statState[tid].heatingSetpoint = 	ST ? stat.currentValue('heatingSetpointDisplay') 	: stat.currentValue('heatingSetpoint', true)
-            statState[tid].coolingSetpoint = 	ST ? stat.currentValue('coolingSetpointDisplay') 	: stat.currentValue('coolingSetpoint', true)
+        	statState[tid].holdType = 			stat.currentValue('lastHoldType', true)
+        	statState[tid].heatingSetpoint = 	stat.currentValue('heatingSetpoint', true)
+            statState[tid].coolingSetpoint = 	stat.currentValue('coolingSetpoint', true)
             def h = statState[tid].heatingSetpoint + settings.heatAdjust
             def c = statState[tid].coolingSetpoint + settings.coolAdjust
             stat.setHeatingSetpoint(h, 'indefinite')
@@ -561,7 +514,7 @@ def quietOffHandler(evt=null) {
         return
     }
 	LOG("Quiet Time Off requested",2,null,'info')
-	//boolean ST = isST
+
     
     if ((settings.qtAutoOff != null) && (settings.qtAutoOff != '(Disabled)')) { unschedule(turnQuietOff) }
    	atomicState.isQuietTime = false
@@ -573,7 +526,7 @@ def quietOffHandler(evt=null) {
         	def tid = getDeviceId(stat.deviceNetworkId)
         	cancelReservation(tid, 'circOff')			// ASAP so SmartCirculation can carry on
         	if ((settings.hvacOff || settings.hvacMode) && statState[tid]?.thermostatMode) {
-				def ncTm = ST ? stat.currentValue('thermostatMode') : stat.currentValue('thermostatMode', true)
+				def ncTm = stat.currentValue('thermostatMode', true)
             	if (statState[tid]?.thermostatMode != 'off' && (ncTm == 'off')) {
                 	if (settings.hvacOff || (settings.hvacMode && (settings.quietMode == 'off'))) {	
                     	// we wanted it off
@@ -628,7 +581,7 @@ def quietOffHandler(evt=null) {
                     } else if (settings.setpointResume == 'Resume Current Program') {
                     	// If the scheduled program is still the same as when quiet time started, and there was a hold active at the start of Quiet Time
                         // then resume the program that was current at that time
-						def ncSp = ST ? stat.currentValue('scheduledProgram') : stat.currentValue('scheduledProgram', true)
+						def ncSp = stat.currentValue('scheduledProgram', true)
                         if ((ncSp == statState[tid].scheduledProgram) && (statState[tid].currentProgram != statState[tid].scheduledProgram)) {
                         	stat.setProgram(statState[tid].currentProgram)
                             LOG("${stat.device.displayName} resumed prior Hold: ${statState[tid].currentProgram}",3,null,'info')
@@ -731,11 +684,7 @@ List getThermostatModes() {
     def statModes = []
     settings.thermostats?.each { stat ->
         def tm = []
-        if (HE) {
-            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
-        } else {
-            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
-        }
+        tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
         if (statModes == []) {
             if (tm) statModes = tm
         } else {
@@ -858,9 +807,8 @@ def pauseOff(global = false) {
 	atomicState.globalPause = global
 }
 void updateMyLabel() {
-	//boolean ST = isST
     
-	String flag = ST ? ' (paused)' : '<span '
+	String flag = '<span '
 	
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
@@ -872,7 +820,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		def newLabel = myLabel + '<span style="color:red"> (paused)</span>' 
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
@@ -905,13 +853,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>') }
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>') }
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>') : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>' }
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>' }
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -921,16 +869,16 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return "<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
@@ -940,36 +888,22 @@ String getFormat(type, myText=""){
 
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
-}
-boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
-}
+String getPlatform() { return 'Hubitat' }	// if (platform == 'SmartThings') ...
+boolean getIsST() { return false }
+boolean getIsHE() { return true }
 
-String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+String getHubPlatform() { 
+	return 'Hubitat'
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
