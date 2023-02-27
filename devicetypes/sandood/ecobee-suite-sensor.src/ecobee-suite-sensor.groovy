@@ -38,11 +38,12 @@
  *	1.8.06 - Clean up null vs. 'null' attributes - HE doesn't overwrite existing attrs with null
  *	1.8.07 - HOTFIX: DeviceWatch fix for hubless ST locations 
  *	1.8.08 - Display temperature as default for the new Samsung app
+ *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum() 		{ return "1.8.08" }
+String getVersionNum() 		{ return "1.9.00" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 
@@ -86,6 +87,7 @@ metadata {
         attribute "debugLevel", "NUMBER"
 		attribute "doors", 'STRING'
 		attribute "humidity", 'NUMBER'
+		attribute "occupancy", 'ENUM', ['occupied', 'vacant']
         attribute "programsList", 'STRING'
 		attribute "temperatureDisplay", 'STRING'
 		attribute "thermostatId", 'STRING'
@@ -98,13 +100,8 @@ metadata {
         attribute "scheduleUpdated", 'NUMBER'
         attribute "eventsUpdated", 'NUMBER'
 		
-		if (isST) {
-			command "addSensorToProgram",		['string']
-			command "deleteSensorFromProgram", 	['string']
-		} else {
-			command "addSensorToProgram", 		[[name:'Program Name*', type:'STRING', description:'Add sensor to this Program Name']]
-			command "deleteSensorFromProgram", 	[[name:'Program Name*', type:'STRING', description:'Delete sensor from this Program Name']]
-		}
+		command "addSensorToProgram", 		[[name:'Program Name*', type:'STRING', description:'Add sensor to this Program Name']]
+		command "deleteSensorFromProgram", 	[[name:'Program Name*', type:'STRING', description:'Delete sensor from this Program Name']]
         
 	// These commands are all really internal-use only
 		command "addSensorToAway", 				[]
@@ -119,11 +116,7 @@ metadata {
 		command "noOp", 						[]
 		command "removeSensorFromAway", 		[]
 		command "removeSensorFromHome", 		[]
-        if (isST) {
-        	command "removeSensorFromProgram", 	['string']
-        } else {
-        	command "removeSensorFromProgram",	[[name:'Program Name*', type:'STRING', description:'Remove sensor from this Program Name']]
-        }
+       	command "removeSensorFromProgram",	[[name:'Program Name*', type:'STRING', description:'Remove sensor from this Program Name']]
 		command "removeSensorFromSleep", 		[]
         command "addSensorToPrograms"
         command "deleteSensorFromPrograms"
@@ -143,121 +136,6 @@ metadata {
 		backgroundColor:"#ff9c14"		// ecobee flame orange
         backgroundColor:"#00A0D3"		// SmartThings new "good" blue (replaced green)
 */    
-	if (isST) {
-	tiles(scale: 2) {
-		multiAttributeTile(name:"temperatureDisplay", type: "generic", width: 6, height: 4){
-			tileAttribute ("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
-				attributeState("temperature", label:'\n${currentValue}',
-					backgroundColors: getTempColors(), defaultState: true)
-			}
-			tileAttribute ("device.motion", key: "SECONDARY_CONTROL") {
-                attributeState "active", action:"noOp", nextState: "active", label:"Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_motion.png"
-				attributeState "inactive", action: "noOp", nextState: "inactive", label:"No Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_nomotion.png"
-            	attributeState "unknown", action: "noOp", label:"Off\nline", nextState: "unknown", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_noconnection.png"
-             	attributeState "offline", action: "noOp", label:"Off\nline", nextState: "offline", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_noconnection.png"
- 				attributeState "not supported", action: "noOp", nextState: "not supported", label: "N/A", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/notsupported_x.png"
-            }
-		}
-
-        valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, decoration: 'flat') {
-        	// Use the first version below to show Temperature in Device History - will also show Large Temperature when device is default for a room
-            // 		The second version will show icon in device lists
-			state("default", label:'${currentValue}°', /*unit:"dF",*/ backgroundColors: getTempColors(), defaultState: true)
-            //state("default", label:'${currentValue}°', /* unit:"dF",*/ backgroundColors: getTempColors(), defaultState: true, icon:'st.Weather.weather2')
-		}
-        
-        standardTile("motion", "device.motion", width: 2, height: 2, decoration: "flat") {
-			state "active", action:"noOp", nextState: "active", label:"Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_motion.png"
-			state "inactive", action: "noOp", nextState: "inactive", label:"No Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_nomotion.png"
-            state "unknown", action: "noOp", label:"Offline", nextState: "unknown", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_noconnection.png"
-            state "not supported", action: "noOp", nextState: "not supported", label: "N/A", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/notsupported_x.png"
-		}
-
-        standardTile("refresh", "device.doRefresh", width: 1, height: 1, decoration: "flat") {
-            state "refresh", action:"doRefresh", nextState: 'updating', label: "Refresh", defaultState: true, icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/ecobee_refresh_green.png"
-            state "updating", label:"Working", icon: "st.motion.motion.inactive"
-		}
-
-		standardTile("Home", "device.Home", width: 1, height: 1, decoration: "flat") {
-			state 'on', action:"deleteSensorFromHome", nextState: 'updating', label:'on', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue_solid.png"
-			state 'off', action: "addSensorToHome", nextState: 'updating', label:'off', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue.png"
-            state 'updating', label:"Working...", icon: "st.motion.motion.inactive"
-		}
-        
-        standardTile("Away", "device.Away", width: 1, height: 1, decoration: "flat") {
-			state 'on', action:"deleteSensorFromAway", nextState: 'updating', label:'on', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue_solid.png"
-			state 'off', action: "addSensorToAway", nextState: 'updating', label:'off', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue.png"
-            state 'updating', label:"Working...", icon: "st.motion.motion.inactive"
-		}
-
-        standardTile("Sleep", "device.Sleep", width: 1, height: 1, decoration: "flat") {
-            state 'on', action:"deleteSensorFromSleep", nextState: 'updating', label:'on', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue_solid.png"
-			state 'off', action: "addSensorToSleep", nextState: 'updating', label:'off', icon:"https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue.png"
-            state 'updating', label:"Working...", icon: "st.motion.motion.inactive"
-		}
-        
-        standardTile('vents', 'device.vents', width: 1, height: 1, decoration: 'flat') {
-        	state 'default', label: '', action: 'noOp', nextState: 'default', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", backgroundColor:"#ffffff"
-            state 'notused', label: 'vents', action: 'noOp', nextState: 'notused', icon: "st.vents.vent", backgroundColor:"#ffffff"
-            state 'open', label: 'open', action: 'noOp', nextState: 'open', icon: "st.vents.vent-open", backgroundColor:"#ff9c14"
-            state 'closed', label: 'closed', action: 'noOp', nextState: 'closed', icon: "st.vents.vent", backgroundColor:"#d28de0"
-        }
-
-        standardTile('doors', 'device.doors', width: 1, height: 1, decoration: 'flat') {
-        	state 'default', label: '', action: 'noOp', nextState: 'default', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", backgroundColor:"#ffffff"
-            state 'open', label: 'open', action: 'noOp', nextState: 'open', backgroundColor:"#00A0D3", icon: "st.contact.contact.open"
-            state 'closed', label: 'closed', action: 'noOp', nextState: 'closed', backgroundColor:"#d28de0", icon: "st.contact.contact.closed"
-        }
-        
-        standardTile('windows', 'device.windows', width: 1, height: 1, decoration: 'flat') {
-        	state 'default', label: '', action: 'noOp', nextState: 'default', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", backgroundColor:"#ffffff"
-            state 'notused', label: 'windows', action: 'noOp', nextState: 'notused', icon: "st.Home.home9", backgroundColor:"#ffffff"
-            state 'open', label: 'open', action: 'noOp', nextState: 'open', icon: "st.Home.home9", backgroundColor:"#d28de0"
-            state 'closed', label: 'closed', action: 'noOp', nextState: 'closed', icon: "st.Home.home9", backgroundColor:"#00A0D3"
-        }
-        
-         standardTile('SmartRoom', 'device.SmartRoom', width: 1, height: 1, decoration: 'flat') {
-        	state 'default', label: '', action: 'noOp', nextState: 'default', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png", backgroundColor:"#ffffff"
-            state 'active', label: 'active', action: 'disableSmartRoom', nextState: "disable", icon: "st.Home.home1", backgroundColor:"#00A0D3"
-            state 'inactive', label: 'inactive', action: 'enableSmartRoom', nextState: "enable", icon: "st.Home.home2", backgroundColor:"#d28de0"
-            state 'disabled', label: 'disabled', action: 'enableSmartRoom', nextState: "enable", icon: "st.Home.home2", backgroundColor:"#ff9c14"	// turned off in Smart Room settings
-            state 'enable', label:"Working...", icon: "st.motion.motion.inactive", backgroundColor:"#ffffff"
-            state 'disable', label:"Working...", icon: "st.motion.motion.inactive", backgroundColor:"#ffffff"
-        }
-        
-        standardTile('blank', 'device.blank', width: 1, height: 1, decoration: 'flat') {
-        	state 'default', label: '', action: 'noOp', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/blank.png"
-        }
-        
-        standardTile("currentProgramIcon", "device.currentProgramName", height: 2, width: 2, decoration: "flat") {
-			state "Home", 				action:"noOp", 	nextState:'Home', 				label: 'Home', 				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue.png"
-			state "Away", 				action:"noOp", 	nextState:'Away', 				label: 'Away', 				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue.png"
-            state "Sleep", 				action:"noOp", 	nextState:'Sleep', 				label: 'Sleep', 			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue.png"
-            state "Awake", 				action:"noOp", 	nextState:'Awake', 				label: 'Awake', 			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake.png"
-            state "Wakeup", 			action:"noOp", 	nextState:'Wakeup', 			label: 'Wakeup', 			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_awake.png"
-			state "Auto", 				action:"noOp", 	nextState:'Auto', 				label: 'Auto', 				icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png"
-			state "Auto Away", 			action:"noOp", 	nextState:'Auto Away', 			label: 'Auto Away', 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue.png" // Fix to auto version
-            state "Auto Home", 			action:"noOp", 	nextState:'Auto Home', 			label: 'Auto Home', 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue.png" // Fix to auto
-            state "Hold", 				action:"noOp", 	nextState:"Hold", 				label: "Hold Activated", 	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png"
-            state "Hold: Fan", 			action:"noOp", 	nextState:"Hold: Fan", 			label: "Hold: Fan", 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid.png"
-            state "Hold: Fan On", 		action:"noOp", 	nextState:'Hold: Fan on', 		label: "Hold: Fan On", 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_solid_blue.png"
-            state "Hold: Fan Auto",		action:"noOp", 	nextState:'Hold: Fan Auto',		label: "Hold: Fan Auto", 	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on_blue.png"
-            state "Hold: Circulate",	action:"noOp", 	nextState:'Hold: Circulate',	label: "Hold: Circulate",	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/systemmode_fan_on-1_blue..png"
-			state "Hold: Home", 		action:"noOp", 	nextState:'Hold: Home', 		label: 'Hold: Home', 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_home_blue_solid.png"
-            state "Hold: Away", 		action:"noOp", 	nextState:'Hold: Away', 		label: 'Hold: Away', 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_away_blue_solid.png"
-            state "Hold: Sleep", 		action:"noOp", 	nextState:'Hold: Sleep', 		label: 'Hold: Sleep',		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_asleep_blue_solid.png"
-      		state "Vacation", 			action:"noOp",	nextState:'Vacation', 			label: 'Vacation', 			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_vacation_blue_solid.png"
-			state "Offline", 			action:"noOp",	nextState:'Offline', 			label: 'Offline', 			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_black_dot.png"
-            state "Hold: Temp", 		action:'noOp',	nextState: 'Hold: Temp', 		label: 'Hold: Temp', 		icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_hold.png"
-			state "default", 			action:"noOp", 	nextState:'default', 			label:'${currentValue}', 	icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/schedule_generic_chair_blue.png"
-		}
-
-		main (['temperature']) //, "temperatureDisplay",])
-		details(   ['temperatureDisplay',
-        			'currentProgramIcon', 	'doors', 'windows', 'vents', 'SmartRoom',
-                    						'Home',  'Away',  'Sleep', 'refresh'])
-	}
-    }
     preferences {
        	input "dummy", "text", title: "${getVersionLabel()}", description: "."
 	}
@@ -310,17 +188,6 @@ void updated() {
 	if (!device.displayName.contains('TestingForInstall')) {
 		// Try not to get hung up in the Health Check so that ES Manager can delete the temporary device
 		sendEvent(name: 'checkInterval', value: 3900, displayed: false) //, isStateChange: true)  // 65 minutes (we get forcePolled every 60 minutes
-		if (ST) {
-			//sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
-			updateDataValue("EnrolledUTDH", "true")
-            sendEvent(name: "DeviceWatch-DeviceStatus", value: "online")
-			sendEvent(name: "healthStatus", value: "online")
-            if (location.hubs[0] && location.hubs[0].id) {
-            	sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked", hubHardwareId: location.hubs[0].id.toString()]), displayed: false)
-            } else {
-            	sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "cloud", scheme:"untracked"]), displayed: false)
-            }
-		}
 	}
 }
 
@@ -338,7 +205,7 @@ def generateEvent(Map results) {
 	String tempScale = getTemperatureScale()
     def precision = device.currentValue('decimalPrecision')
     if (!precision) precision = (tempScale == 'C') ? 1 : 0
-    String currentProgramName = ST ? device.currentValue('currentProgramName') : device.currentValue('currentProgramName', true)
+    String currentProgramName = device.currentValue('currentProgramName', true)
     def isConnected = (currentProgramName != 'Offline')
 
 	if(results) {
@@ -380,6 +247,7 @@ def generateEvent(Map results) {
 							//		  descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 							event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, 
 									 value: sendValue, isStateChange: true, displayed: true]
+							LOG("Temperature is ${tempDisplay}${tempScale}", 1, null, 'info')
 							objectsUpdated += 2
 						}
 					}
@@ -394,6 +262,13 @@ def generateEvent(Map results) {
 					isChange = isStateChange(device, name, sendValue.toString())
 					if (isChange) {
 						event = [name: name, linkText: linkText, descriptionText: "Motion is ${sendValue}", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+						objectsUpdated++
+					}
+					String occupancy = ((value == 'active') ? 'occupied' : 'vacant')
+					isChange = isChange ?: isStateChange(device, 'occupancy', occupancy)
+					if (isChange) {
+						sendEvent (name: 'occupancy', linkText: linkText, value: occupancy, descriptionText: "Occupancy is ${occupancy}", isStateChange: true, displayed: true)
+						LOG("Room is ${occupancy}", 1, null, 'info')
 						objectsUpdated++
 					}
 				    break;
@@ -488,7 +363,7 @@ void updateSensorPrograms(List activeList, List inactiveList) {
 	// Let our parent do all the work...
 	def result = parent.updateSensorPrograms(this, device.currentValue('thermostatId').toString(), getSensorId(), activeList, inactiveList)
     if (result) {
-    	def programsList = ST ? device.currentValue('programsList') : device.currentValue('programsList', true)
+    	def programsList = device.currentValue('programsList', true)
         activeList.each { program ->
         	sendEvent(name: "${program}", value: 'on', descriptionText: "Sensor added to the ${program.capitalize()} program", isStateChange: true, displayed: true)
     		if (!programIdList().contains(program.toLowerCase())) state?."$program" = 'on'
@@ -613,34 +488,24 @@ def getStockTempColors() {
 // Copyright (c) 2019, Barry A. Burke (storageanarchy@gmail.com)
 String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
 boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
+    return false   
 }
 boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
+    return true
 }
 
 String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+	return "Hubitat"
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
 	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= "Hubitat"
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
