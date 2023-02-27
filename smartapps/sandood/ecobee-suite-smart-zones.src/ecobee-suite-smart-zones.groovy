@@ -25,11 +25,12 @@
  *	1.8.09 - Miscellaneous updates & fixes
  *  1.8.10 - Fix getThermostatModes() & getThermostatFanModes()
  *	1.8.11 - Fix for Hubitat 'supportedThermostatModes', etc.
+ *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.11" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -54,19 +55,13 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
 	String defaultName = "Smart Zones"
     
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
     	if (maximize) {
             section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
-                if (ST) {
-                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
-                } else {
-                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
-                }
+                paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
                 paragraph("This multi-modal Helper will either synchronize Ecobee Suite thermostats' Operating State across a multi-zone HVAC system (in Cooperative Mode), or it will turn off all " +
                 		  "idle thermostats whenever one starts heat/cooling/fan only (Isolated Mode)")
             }
@@ -88,31 +83,17 @@ def mainPage() {
 			} else {
             	atomicState.appDisplayName = app.label
             }
-			if (HE) {
-				if (app.label.contains('<span ')) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(myLabel)
-					}
+			if (app.label.contains('<span ')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
 				} else {
-                	atomicState.appDisplayName = app.label
-                }
+					String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(myLabel)
+				}
 			} else {
-            	if (app.label.contains(' (paused)')) {
-                	if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(' (paused)')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(' (paused)'))
-                        atomicState.appDisplayName = myLabel
-                        app.updateLabel(myLabel)
-                    }
-                } else {
-                	atomicState.appDisplayName = app.label
-                }
-            }
+				atomicState.appDisplayName = app.label
+			}
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else {
@@ -125,9 +106,9 @@ def mainPage() {
                 	  options: ["cooperate": "Cooperative", "isolate": "Isolated"])
                 
             	if ((settings?.masterThermostat && !settings?.helperMode) || (settings?.helperMode && (settings.helperMode == 'cooperate'))) {
-					input(name: "masterThermostat", type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select Master Ecobee Suite Thermostat"), required: true, multiple: false, submitOnChange: true)
+					input(name: "masterThermostat", type: 'device.EcobeeSuiteThermostat', title: inputTitle("Select Master Ecobee Suite Thermostat"), required: true, multiple: false, submitOnChange: true)
                 } else {
-                	input(name: "theThermostats", type:"${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", title: inputTitle("Select two or more Ecobee Suite Thermostats"), 
+                	input(name: "theThermostats", type: 'device.EcobeeSuiteThermostat', title: inputTitle("Select two or more Ecobee Suite Thermostats"), 
 					  	  required: true, multiple: true, submitOnChange: true)
 					if (settings?.theThermostats) {
 						if (settings.theThermostats.size() == 1) paragraph getFormat("warning", "You must select at least 2 Ecobee Suite Thermostsats...")
@@ -139,7 +120,7 @@ def mainPage() {
         if (!settings?.tempDisable && (settings?.helperMode == 'cooperate') && settings?.masterThermostat) {
         	section(title: sectionTitle('Cooperative Mode: Slaves')) {
 				// Settings option for using Mode or Routine
-				input(name: "slaveThermostats", title: inputTitle("Select Slave Ecobee Suite Thermostat(s)"), type: "${ST?'device.ecobeeSuiteThermostat':'device.EcobeeSuiteThermostat'}", required: true, multiple: true, submitOnChange: true)
+				input(name: "slaveThermostats", title: inputTitle("Select Slave Ecobee Suite Thermostat(s)"), type: 'device.EcobeeSuiteThermostat', required: true, multiple: true, submitOnChange: true)
 			}
 			if (slaveThermostats) {
 				section(title: sectionTitle("Cooperative Mode: Actions")) {
@@ -158,16 +139,16 @@ def mainPage() {
 			section(title: sectionTitle("Isolated Mode: Actions")) {
 				input(name: "busyStates", type: "enum", title: inputTitle("When any Thermostat's Operating State becomes one of these..."), submitOnChange: true, required: true, width: 6, multiple: true,
                 	  options: ["cooling": "Cooling", "heating": "Heating", "fan only": "Fan Only"], defaultValue: "cooling")
-				if (HE) paragraph("", width: 6)
+				paragraph("", width: 6)
             	input(name: "hvacOff", type: "bool", title: inputTitle("Turn off the idle Thermostat${(settings?.theThermostats?.size() > 2)?'s':''}?"), defaultValue: false, submitOnChange: true, width: 4)
                 if (settings?.hvacOff) {
                 	input(name: "fanOff", type: "bool", title: inputTitle("Turn off the Fan on the idle systems?"), defaultValue: false, submitOnChange: true, width: 6)
-                	if (HE) paragraph("", width: 2)
+                	paragraph("", width: 2)
                 }
                 def statModes = getThermostatModes()
                 if (settings?.hvacOff) input(name: "hvacOn", type: "enum", title: inputTitle("Return HVAC to"), defaultValue: "Prior State", options: statModes, width: 4)
                 if (settings?.fanOff) {
-                	if (HE && !settings?.hvacOff) paragraph("", width: 4)
+                	if (!settings?.hvacOff) paragraph("", width: 4)
                     def fanModes = getThermostatFanModes()
                     input(name: "fanOn", type: "enum", title: inputTitle("Return Fan to"), defaultValue: "Prior State", options: fanModes, width: 4)
                     if (settings?.fanOn == 'Circulate') input(name: "fanOnTime", type: "number", title: inputTitle("Fan Circulation Time (minutes)"), range: 1..55, defaultValue: 20, submitOnChange: true, width: 4)
@@ -181,7 +162,7 @@ def mainPage() {
             	paragraph(smallerTitle("Only during this time period:"), width: 3)
 				
                 input(name: "fromTime", type: "time", title: inputTitle("From:"), required: false, submitOnChange: true, width: 2)
-                //if (HE) paragraph("", width: 8)
+                //paragraph("", width: 8)
         		input(name: "toTime", type: "time", title: inputTitle("To:"), required: (settings?.fromTime != null), submitOnChange: true, width: 2)
 				//def between = ((settings.fromTime != null) && (settings.toTime != null)) ? myTimeOfDayIsBetween(timeToday(fromTime), timeToday(toTime), new Date(), location.timeZone) : true
 				paragraph(getFormat("note","All thermostats will be returned to the 'on' Mode outside of the above conditions"))
@@ -195,19 +176,11 @@ def mainPage() {
             input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+       	section() {
+       		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
     }
 }
@@ -229,21 +202,20 @@ def initialize() {
 	LOG("${getVersionLabel()} Initializing (${settings?.helperMode})...", 2, "", 'info')
     atomicState.versionLabel = getVersionLabel()
 	updateMyLabel()
-	//boolean ST = atomicState.isST
 	boolean isolate = (settings?.helperMode == 'isolate')
     boolean cooperate = (settings?.helperMode == 'isolate')
     
     if (cooperate) {
         // Get slaves into a known state
         slaveThermostats.each { stat ->
-            String ncTh= ST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true) 
+            String ncTh= stat.currentValue('thermostatHold', true) 
             if (ncTh == 'hold') {
                 if (state."${stat.displayName}-currProg" == null) {
-                    state."${stat.displayName}-currProg" = ST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+                    state."${stat.displayName}-currProg" = stat.currentValue('currentProgram', true)
                     if (state."${stat.displayName}-currProg" == 'null') state."${stat.displayName}-currProg" = null		// it really IS null!
                 }
                 if (state."${stat.displayName}-holdType" == null) {
-                    state."${stat.displayName}-holdType" = ST ? stat.currentValue('lastHoldType') : stat.currentValue('lastHoldType', true)
+                    state."${stat.displayName}-holdType" = stat.currentValue('lastHoldType', true)
                 }
             } else {
                 state."${stat.displayName}-currProg" = null
@@ -290,8 +262,7 @@ def masterFanStateHandler(evt=null) {
 }
 
 void theAdjuster() {
-	//boolean ST = atomicState.isST
-	def masterOpState = ST ? masterThermostat.currentValue('thermostatOperatingState') : masterThermostat.currentValue('thermostatOperatingState', true)
+	def masterOpState = masterThermostat.currentValue('thermostatOperatingState', true)
 	LOG("theAdjuster() - master thermostatOperatingState = ${masterOpState}", 3, null, 'info')
 	
 	switch (masterOpState) {
@@ -299,7 +270,7 @@ void theAdjuster() {
 			// master is fan-only, turn on fan for any slaves not already running their fan
             if ((settings.shareFan == null) || settings.shareFan) {
 				slaveThermostats.each { stat ->
-                	def statOpState = ST ? stat.currentValue('thermostatOperatingState') : stat.currentValue('thermostatOperatingState', true)
+                	def statOpState = stat.currentValue('thermostatOperatingState', true)
 					if (statOpState == 'idle') {
 						setFanOn(stat) 	// stat.setThermostatFanMode('on', 'nextTransition')
 					}
@@ -313,7 +284,7 @@ void theAdjuster() {
             
 		case 'idle':
         	slaveThermostats.each { stat ->
-				ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+				ncCpn = stat.currentValue('currentProgramName', true)
             	if (ncCpn == 'Hold: Fan On') {
                     setFanAuto(stat)
                 }
@@ -323,18 +294,18 @@ void theAdjuster() {
 		case 'heating':
         	if (settings.shareHeat) {
             	slaveThermostats.each { stat ->
-                	def statOpState = ST ? stat.currentValue('thermostatOperatingState') : stat.currentValue('thermostatOperatingState', true)
+                	def statOpState = stat.currentValue('thermostatOperatingState', true)
                 	if (statOpState == 'heating') {
                     	setFanAuto(stat) // stat.resumeProgram(true)		// should get us back to desired fan mode
                     } else if (statOpState == 'fanOnly') {
                     	// See if we are holding the fan but don't need the heat any more
-						String ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+						String ncCpn = stat.currentValue('currentProgramName', true)
                         if (ncCpn == 'Hold: Fan On') {
-                      		def heatTo = ST ? stat.currentValue('heatingSetpoint') : stat.currentValue('heatingSetpoint', true)
+                      		def heatTo = stat.currentValue('heatingSetpoint', true)
                         	if (heatTo != null) {
-                        		def temp = ST ? stat.currentValue('temperature') : stat.currentValue('temperature', true)
+                        		def temp = stat.currentValue('temperature', true)
                             	if (temp != null) {
-                            		def heatAt = ST ? stat.currentValue('heatAtSetpoint') : stat.currentValue('heatAtSetpoint', true)
+                            		def heatAt = stat.currentValue('heatAtSetpoint', true)
                                 	if (heatAt != null) {
                             			if ((temp >= heatTo) || (temp < heatAt)) { 
                                         	// This Zone has reached its target, stop stealing heat
@@ -345,11 +316,11 @@ void theAdjuster() {
                             }
                         }
                     } else if (statOpState == 'idle') {
-                    	def heatTo = ST ? stat.currentValue('heatingSetpoint') : stat.currentValue('heatingSetpoint', true)
+                    	def heatTo = stat.currentValue('heatingSetpoint', true)
                         if (heatTo != null) {
-                        	def temp = ST ? stat.currentValue('temperature') : stat.currentValue('temperature', true)
+                        	def temp = stat.currentValue('temperature', true)
                             if (temp != null) {
-                            	def heatAt = ST ? stat.currentValue('heatAtSetpoint') : stat.currentValue('heatAtSetpoint', true)
+                            	def heatAt = stat.currentValue('heatAtSetpoint', true)
                                 if (heatAt != null) {
                             		if ((temp < heatTo) && (temp > heatAt)) { 
                                 		setFanOn(stat) // stat.setThermostatFanMode('on', 'nextTransition')		// turn the fan on to leech some heat		
@@ -358,7 +329,7 @@ void theAdjuster() {
                             }
                         }
                     } else { // Must be 'cooling'
-						String ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+						String ncCpn = stat.currentValue('currentProgramName', true)
                         if (ncCpn == 'Hold: Fan On') setFanAuto(stat)	// Just make sure fan is in Auto mode
                     }
                 }
@@ -367,7 +338,7 @@ void theAdjuster() {
                 if ((settings.shareFan == null) || settings.shareFan) {
                 	// but we are sharing fan - turn off fan to avoid overheating this zone
                 	slaveThermostats.each { stat ->
-						String ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+						String ncCpn = stat.currentValue('currentProgramName', true)
                 		if (ncCpn == 'Hold: Fan On') {
                         	setFanAuto(stat)
                         }
@@ -379,19 +350,19 @@ void theAdjuster() {
 		case 'cooling':
 			if (settings.shareCool) {
 				slaveThermostats.each { stat->
-                    def statOpState = ST ? stat.currentValue('thermostatOperatingState') : stat.currentValue('thermostatOperatingState', true)
+                    def statOpState = stat.currentValue('thermostatOperatingState', true)
 					if (statOpState == 'cooling') {
                     	// We are cooling too - double-check that fan is in Auto mode
                         setFanAuto(stat)				
                     } else if (statOpState == 'fanOnly') {
                     	// Check if we are holding the fan but don't need the cool any more
-						String ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+						String ncCpn = stat.currentValue('currentProgramName', true)
                         if (ncCpn == 'Hold: Fan On') {
-                      		def coolTo = ST ? stat.currentValue('coolingSetpoint') : stat.currentValue('coolingSetpoint', true)
+                      		def coolTo = stat.currentValue('coolingSetpoint', true)
                         	if (coolTo != null) {
-                        		def temp = ST ? stat.currentValue('temperature') : stat.currentValue('temperature', true)
+                        		def temp = stat.currentValue('temperature', true)
                             	if (temp != null) {
-                            		def coolAt = ST ? stat.currentValue('coolAtSetpoint') : stat.currentValue('coolAtSetpoint', true)
+                            		def coolAt = stat.currentValue('coolAtSetpoint', true)
                                 	if (coolAt != null) {
                             			if ((temp <= coolTo) || (temp > coolAt)) { 
                                         	// This Zone has reached its target, stop stealing cool
@@ -403,11 +374,11 @@ void theAdjuster() {
                         }
                     } else if (statOpState == 'idle') {
                     	// Check if we need the cool
-                    	def coolTo = ST ? stat.currentValue('coolingSetpoint') : stat.currentValue('coolingSetpoint', true)
+                    	def coolTo = stat.currentValue('coolingSetpoint', true)
                         if (coolTo != null) {
-                        	def temp = ST ? stat.currentValue('temperature') : stat.currentValue('temperature', true)
+                        	def temp = stat.currentValue('temperature', true)
                             if (temp != null) {
-                            	def coolAt = ST ? stat.currentValue('coolAtSetpoint') : stat.currentValue('coolAtSetpoint', true)
+                            	def coolAt = stat.currentValue('coolAtSetpoint', true)
                                 if (coolAt != null) {
                             		if ((temp > coolSp) && (temp < coolAt)) {
                                 	   	setFanOn(stat)
@@ -416,7 +387,7 @@ void theAdjuster() {
                     		}
                         }
                     } else { // Must be 'heating'
-						String ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+						String ncCpn = stat.currentValue('currentProgramName', true)
                         if (ncCpn == 'Hold: Fan On') setFanAuto(stat)	// Just make sure fan is in Auto mode
                     }
                 }
@@ -425,7 +396,7 @@ void theAdjuster() {
                 if ((settings.shareFan == null) || settings.shareFan) {
                 	// but we are sharing fan - turn off fan to avoid overcooling this zone
                 	slaveThermostats.each { stat ->
-						String ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+						String ncCpn = stat.currentValue('currentProgramName', true)
                 		if (ncCpn == 'Hold: Fan On') {	// set auto for now, so we don't break fanMinOnTime/Circulation
                         	setFanAuto(stat)
                         }
@@ -437,7 +408,7 @@ void theAdjuster() {
 		default:
         	// we ignore the other possible OperatingStates (e.g., 'pendhing heat', etc.)
             slaveThermostats.each { stat ->
-				String ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
+				String ncCpn = stat.currentValue('currentProgramName', true)
             	if (ncCpn == 'Hold: Fan On') setFanAuto(stat)
             }
 			break;
@@ -445,24 +416,23 @@ void theAdjuster() {
 }
 
 void setFanAuto(stat) {
-	//boolean ST = atomicState.isST
 	
 	def oldProg = state."${stat.displayName}-currProg"
     if (oldProg) {
-		String ncCp = ST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+		String ncCp = stat.currentValue('currentProgram', true)
     	if (ncCp != oldProg) stat.setThermostatProgram(oldProg, state."${stat.displayName}-holdType")
         state."${stat.displayName}-currProg" = null
         state."${stat.displayName}-holdType" = null
     }
-	def fanMOT = ST ? stat.currentValue('fanMinOnTime') : stat.currentValue('fanMinOnTime', true)
+	def fanMOT = stat.currentValue('fanMinOnTime', true)
     if ((fanMOT != null) && (fanMOT != 0)) {
-		String ncTfmd = ST ? stat.currentValue('thermostatFanModeDisplay') : stat.currentValue('thermostatFanModeDisplay', true)
+		String ncTfmd = stat.currentValue('thermostatFanModeDisplay', true)
     	if (ncTfmd != 'circulate') {
         	stat.setThermostatFanMode('circulate')
             LOG("${stat.displayName} fanMode = circulate", 3)
         }
     } else {
-		String ncTfm = ST ? stat.currentValue('thermostatFanMode') : stat.currentValue('thermostatFanMode', true)
+		String ncTfm = stat.currentValue('thermostatFanMode', true)
     	if (ncTfm != 'auto') {
         	stat.setThermostatFanMode('auto')
             LOG("${stat.displayName} fanMode = auto", 3)
@@ -471,15 +441,14 @@ void setFanAuto(stat) {
 }
 
 void setFanOn(stat) {
-	//boolean ST = atomicState.isST
 	
-	String ncCpn = ST ? stat.currentValue('currentProgramName') : stat.currentValue('currentProgramName', true)
-	String ncTfm = ST ? stat.currentValue('thermostatFanMode') : stat.currentValue('thermostatFanMode', true)
+	String ncCpn = stat.currentValue('currentProgramName', true)
+	String ncTfm = stat.currentValue('thermostatFanMode', true)
 	if ((ncCpn != 'Hold: Fan On') || (ncTfm != 'on')) {
-		String ncTh = ST ? stat.currentValue('thermostatHold') : stat.currentValue('thermostatHold', true)
+		String ncTh = stat.currentValue('thermostatHold', true)
     	if (ncTh == 'hold') {
-        	state."${stat.displayName}-holdType" = ST ? stat.currentValue('lastHoldType') : stat.currentValue('lastHoldType', true)
-        	state."${stat.displayName}-currProg" = ST ? stat.currentValue('currentProgram') : stat.currentValue('currentProgram', true)
+        	state."${stat.displayName}-holdType" = stat.currentValue('lastHoldType', true)
+        	state."${stat.displayName}-currProg" = stat.currentValue('currentProgram', true)
             if (state."${stat.displayName}-currProg" == 'null') state."${stat.displayName}-currProg" = null
         }
     	stat.setThermostatFanMode('on', 'nextTransition')
@@ -537,7 +506,6 @@ def thermostatHandler(evt) {
 
 void turnOffHVAC(therm) {
 	LOG("turnOffHVAC(${therm.displayName}}) entered...", 4,null,'info')
-	//boolean ST = isST
     
     if (settings.hvacOff) {
     	String tid = getDeviceId(therm.deviceNetworkId)
@@ -545,9 +513,9 @@ void turnOffHVAC(therm) {
     	if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
         // turn off the HVAC & save the state
 		makeReservation(tid, 'modeOff')						// make sure nobody else turns HVAC on until I'm ready
-		String thermostatMode = 	ST ? therm.currentValue('thermostatMode') 		: therm.currentValue('thermostatMode', true)
-        String thermostatFanMode = 	ST ? therm.currentValue('thermostatFanMode') 	: therm.currentValue('thermostatFanMode', true)
-        def fanMinOnTime = 			(ST ? therm.currentValue('fanMinOnTime') 		: therm.currentValue('fanMinOnTime', true)) ?: 0
+		String thermostatMode = 	therm.currentValue('thermostatMode', true)
+        String thermostatFanMode = 	therm.currentValue('thermostatFanMode', true)
+        def fanMinOnTime = 			(therm.currentValue('fanMinOnTime', true)) ?: 0
     	if (thermostatMode != 'off') {
         	fanToo = false
             tmpThermSavedState[tid].mode = thermostatMode
@@ -575,14 +543,13 @@ void turnOffHVAC(therm) {
 
 void turnOnHVAC(therm) {
  	LOG("turnOnHVAC(${therm.displayName}) entered...", 4,null,'info')
-	//boolean ST = isST
 
 	if (settings.hvacOff) {
     	// turn on the HVAC
     	String tid = getDeviceId(therm.deviceNetworkId)
     	def tmpThermSavedState = atomicState.thermSavedState ?: [:]
         if (!tmpThermSavedState || !tmpThermSavedState[tid]) tmpThermSavedState[tid] = [:]
-        String currentMode = ST ? therm.currentValue('thermostatMode') : therm.currentValue('thermostatMode', true) 		// Better be "off"
+        String currentMode = therm.currentValue('thermostatMode', true) 		// Better be "off"
      
         String thermostatMode
         String thermostatFanMode
@@ -645,13 +612,13 @@ void turnOnHVAC(therm) {
             			} else {
               				// Nobody else but me has a reservation
                 			cancelReservation(tid, 'fanOff')
-							currentFanTime = ST ? therm.currentValue('fanMinOnTime') 		: therm.currentValue('fanMinOnTime', true)
+							currentFanTime = therm.currentValue('fanMinOnTime', true)
 							if (fanMinOnTime != currentFanTime) {
 								andFan = true
 								therm.setFanMinOnTime = fanMinOnTime
 								log.debug "therm.setFanMinOnTime( ${fanMinOnTime} )"
 							}
-							currentFanMode = ST ? therm.currentValue('thermostatFanMode') 	: therm.currentValue('thermostatFanMode', true)
+							currentFanMode = therm.currentValue('thermostatFanMode', true)
 							if (thermostatFanMode != currentFanMode) {
 								andFan = true
 								therm.setFanMode(thermostatFanMode)
@@ -742,9 +709,8 @@ List getGuestList(String tid, String type='modeOff') {
 }
 
 void updateMyLabel() {
-	//boolean ST = atomicState.isST
     
-	String flag = ST ? ' (paused)' : '<span '
+	String flag = '<span '
 	
 	String myLabel = atomicState.appDisplayName
 	if ((myLabel == null) || !app.label.startsWith(myLabel)) {
@@ -756,7 +722,7 @@ void updateMyLabel() {
 		atomicState.appDisplayName = myLabel
 	}
 	if (settings.tempDisable) {
-		def newLabel = myLabel + ( ST ? ' (paused)' : '<span style="color:red"> (paused)</span>' )
+		def newLabel = myLabel + '<span style="color:red"> (paused)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
 		if (app.label != myLabel) app.updateLabel(myLabel)
@@ -802,11 +768,7 @@ List getThermostatModes() {
 	def tm = []
     if (settings.theThermostats) {
         settings.theThermostats?.each { stat ->
-            if (HE) {
-                tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
-            } else {
-				tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes'))
-			}
+            tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
 			if (statModes == []) {	
 				if (tm) statModes = tm
 			} else {
@@ -822,11 +784,7 @@ List getThermostatFanModes() {
 	def tfm = []
     if (settings?.theThermostats) {
     	settings.theThermostats.each { stat ->
-            if (HE) {
-                tfm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes', true))
-            } else {
-				tfm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes'))
-			}
+			tfm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatFanModes', true))
             if (tfm) fanModes = (fanModes == []) ? tfm : fanModes.intersect(tfm)
         }
     }
@@ -857,18 +815,19 @@ void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent
         	break;
     }
 }
+
 String getTheBee	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=78 height=78 align=right></img>'}
 String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg width=30 height=30 align=left></img>'}
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>') }
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>') }
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>') : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>' }
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>' }
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -878,53 +837,41 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return "<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
 			break;
 	}
 }
+
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
+String getPlatform() { return 'Hubitat' }	// if (platform == 'SmartThings') ...
+boolean getIsST() { return false }
+boolean getIsHE() { return true }
+
+String getHubPlatform() { 
+	return 'Hubitat'
 }
-boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
-}
-String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
-}
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
