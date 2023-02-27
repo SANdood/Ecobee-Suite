@@ -40,6 +40,7 @@
  *	1.8.24 - Fix sendMessage() for new Samsung SmartThings app
  * 	1.8.25 - Fixed setpoint adjustments for "middle" tange
  *	1.8.26 - Fix whatHoldType for 'holdHours'
+ *	1.8.27 - Fix for Hubitat 'supportedThermostatModes', etc.
  *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
@@ -1272,11 +1273,11 @@ def roundIt( BigDecimal value, decimals=0) {
 List getThermostatModes() {
 	List statModes = []
 	settings.thermostats?.each { stat ->
-		def tm = stat.currentValue('supportedThermostatModes')
+		def tm = stat.currentValue('supportedThermostatModes', true)
 		if (statModes == []) {	
-			if (tm && (tm != '[]')) statModes = tm[1..-2].tokenize(", ")
+			if (tm && (tm != '[]')) statModes = new JsonSlurper().parseText(tm)    // tm[1..-2].tokenize(", ")
 		} else {
-			def nm = (tm && (tm != '[]')) ? tm[1..-2].tokenize(", ") : []
+			def nm = (tm && (tm != '[]')) ? new JsonSlurper().parseText(tm) /* tm[1..-2].tokenize(", ") */ : []
 			if (nm) statModes = statModes.intersect(nm)
 		}
 	}
@@ -1289,11 +1290,11 @@ List getThermostatPrograms() {
 	if (settings.thermostats?.size() > 0) {
 		settings.thermostats.each { stat ->
         	List progs = []
-        	String cl = stat.currentValue('climatesList')
+        	String cl = stat.currentValue('climatesList', true)
     		if (cl && (cl != '[]')) {
-        		progs = cl[1..-2].split(', ')
+        		progs = new JsonSlurper().parseText(cl)     // cl[1..-2].split(', ')
         	} else {
-    			String pl = stat.currentValue('programsList')
+    			String pl = stat.currentValue('programsList', true)
         		progs = pl ? new JsonSlurper().parseText(pl) : []
         	}
 			if (!programs) {
@@ -1396,9 +1397,9 @@ def getHeatRange() {
 	settings.thermostats.each { stat ->
 		def lo
 		def hi
-		def setp = stat.currentValue('heatRangeLow')
+		def setp = stat.currentValue('heatRangeLow', true)
 		lo = lo ? ((setp < lo) ? setp : lo) : setp
-		setp = stat.currentValue('heatRangeHigh')
+		setp = stat.currentValue('heatRangeHigh', true)
 		hi = hi ? ((setp > hi) ? setp : hi) : setp
 		// if there are multiple stats, we need to find the range that ALL stats can support
 		low = low ? ((lo > low) ? lo : low) : lo
@@ -1412,9 +1413,9 @@ def getCoolRange() {
 	settings.thermostats.each { stat ->
 		def lo
 		def hi
-		def setp = stat.currentValue('coolRangeLow')
+		def setp = stat.currentValue('coolRangeLow', true)
 		lo = lo ? ((setp < lo) ? setp : lo) : setp
-		setp = stat.currentValue('coolRangeHigh')
+		setp = stat.currentValue('coolRangeHigh', true)
 		hi = hi ? ((setp > hi) ? setp : hi) : setp
 		// if there are multiple stats, we need to find the range that ALL stats can support
 		low = low ? ((lo > low) ? lo : low) : lo
@@ -1783,7 +1784,7 @@ void updateMyLabel() {
 		String newLabel = myLabel
 		if (settings.thermostats?.size()) {
         	String thermostatMode = thermostats[0].currentValue('thermostatMode', true).capitalize()
-			String modeProgStr = ' (' + thermostatMode + ' - ' + thermostats[0].currentValue('currentProgramName') + ')'
+			String modeProgStr = ' (' + thermostatMode + ' - ' + thermostats[0].currentValue('currentProgramName', true) + ')'
             String color = (thermostatMode == 'Off') ? 'red' : 'green'
 			newLabel = newLabel + '<span style="color:' + color + '">' + modeProgStr + '</span>'
 		}
