@@ -33,11 +33,12 @@
  *	1.8.17 - Even better active/inactive checks
  *	1.8.18 - Added "Hold" and "Vacation" as valid programs
  *	1.8.19 - Fix sendMessage() for new Samsung SmartThings app
+ *	1.9.00 - Removed all ST code
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.8.19" }
+String getVersionNum()		{ return "1.9.00" }
 String getVersionLabel() { return "Ecobee Suite Smart Room Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -63,8 +64,6 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	//boolean ST = isST
-	//boolean HE = !ST
     def vc = 0			// vent counter
     boolean maximize = (settings?.minimize) == null ? true : !settings.minimize
     String defaultName = "Smart Room"
@@ -72,11 +71,7 @@ def mainPage() {
 	dynamicPage(name: "mainPage", title: pageTitle(getVersionLabel().replace('per, v',"per\nV")), uninstall: true, install: true) {
 		if (maximize) {
             section(title: inputTitle("Helper Description & Release Notes"), hideable: true, hidden: (atomicState.appDisplayName != null)) {
-                if (ST) {
-                    paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
-                } else {
-                    paragraph(theBeeLogo+"<h4><b>  ${app.name.capitalize()}</b></h4>")
-                }
+                paragraph(image: theBeeUrl, title: app.name.capitalize(), "")
                 paragraph("This Helper creates 'Smart Rooms' that are automatically activated based on motion detection and door state. If a door is left open for a specified time, the Smart Room will become active. It will remain active "+
                           "as long as the door is open. When the door is closed, Smart Room will become inactive after a specified timeout, unless motion is detected within the room while the door is closed.\n\n "+
                           "When a Smart Room is activated, it will optionally enable (unpause) the associated Smart Vent Helper(s) for the room, or it can open the selected vents directly. If vents are operated directly, the room's Ecobee "+
@@ -100,47 +95,28 @@ def mainPage() {
 			} else {
             	atomicState.appDisplayName = app.label
             }
-			if (HE) {
-				if (app.label.contains('<span ')) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-						String myLabel = app.label.substring(0, app.label.indexOf('<span '))
-						atomicState.appDisplayName = myLabel
-						app.updateLabel(myLabel)
-					}
+			if (app.label.contains('<span ')) {
+				if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains('<span ')) {
+					app.updateLabel(atomicState.appDisplayName)
 				} else {
-                	atomicState.appDisplayName = app.label
-                }
-			} else {
-				def opts = [' (paused', ' (active', ' (inactive', ' (disabled', ' (default']
-				String flag
-				opts.each {
-					if (!flag && app.label.contains(it)) flag = it
+					String myLabel = app.label.substring(0, app.label.indexOf('<span '))
+					atomicState.appDisplayName = myLabel
+					app.updateLabel(myLabel)
 				}
-				if (flag) {
-					if ((atomicState?.appDisplayName != null) && !atomicState?.appDisplayName.contains(flag)) {
-						app.updateLabel(atomicState.appDisplayName)
-					} else {
-                        String myLabel = app.label.substring(0, app.label.indexOf(flag))
-                        atomicState.appDisplayName = myLabel
-                        app.updateLabel(myLabel)
-                    }
-                } else {
-                	atomicState.appDisplayName = app.label
-                }
-            }
+			} else {
+				atomicState.appDisplayName = app.label
+			}
         	if(settings.tempDisable) { 
 				paragraph getFormat("warning","This Helper is temporarily paused...")
 			} else { 
             	if (maximize) paragraph("A Smart Room is defined by one or more Ecobee Sensors (required)")
         		//input(name: "theSensors", type:"enum", title: inputTitle("Select Ecobee Suite Sensor(s)"), options: getEcobeeSensorsList(), required: true, multiple: true, submitOnChange: true)
-                input(name: "theSensorDevices", type:(ST?"device.ecobeeSuiteSensor":"device.EcobeeSuiteSensor"), title: inputTitle("Select Ecobee Suite Sensor(s)"), required: true, multiple: true, submitOnChange: true)
+                input(name: "theSensorDevices", type: "device.EcobeeSuiteSensor", title: inputTitle("Select Ecobee Suite Sensor(s)"), required: true, multiple: true, submitOnChange: true)
 				input(name: "activeProgs", type:"enum", title: inputTitle("Select Active programs for this Smart Room"), options: getProgramsList()+["Hold","Vacation"], required: true, multiple: true, width: 6)
                 if (settings?.theSensorDevices?.size() > 1) {
                 	paragraph (warningText + 
 							   (maximize?'Only 1 Ecobee Suite Sensor can be registered for Active/Inactive programs, and you have selected multiple. ':'') +
-							   "Only ${isHE?'<b><i>':''}${settings?.theSensorDevices[0].displayName}${isHE?'</i>,</b>':''} will be included in the "+
+							   "Only <b><i>${settings?.theSensorDevices[0].displayName}</i>,</b> will be included in the "+
                     		  "selected program(s).")
                 }
 				input(name: "inactiveProgs", type:"enum", title: inputTitle("Select Inactive programs for this Smart Room")+" (optional)", options: getProgramsList()+["Hold","Vacation"], required: false, multiple: true, width: 6)
@@ -175,16 +151,16 @@ def mainPage() {
                 }
 				if (!allVentApps || !settings?.manageSmartVents) {
                     if (maximize) paragraph("This Helper can open selected Econet, Keen or Generic(dimmer) vents and/or switches while a Smart Room is Active, and close them when Inactive")
-                    input(name: "theEconetVents", type: "${ST?'device.econetVent':'device.EcoNetVent'}", title: inputTitle("Select EcoNet Vent(s)?"), multiple: true, submitOnChange: true, 
+                    input(name: "theEconetVents", type: 'device.EcoNetVent', title: inputTitle("Select EcoNet Vent(s)?"), multiple: true, submitOnChange: true, 
                           hideWhenEmpty: true, required: (!settings.theHCEcoVents && !settings.theKeenVents && !settings.theHCKeenVents && !settings.theGenericVents && !settings.theGenericSwitches))
                     if (settings.theEconetVents) vc = settings.theEconetVents.size()
-                    input(name: "theHCEcoVents", type: "${ST?'device.hubconnectEcovent':'device.HubConnectEcoVent'}", title: inputTitle("Select HubConnect EcoNet Vent(s)?"), multiple:true, 
+                    input(name: "theHCEcoVents", type: 'device.HubConnectEcoVent', title: inputTitle("Select HubConnect EcoNet Vent(s)?"), multiple:true, 
                           submitOnChange: true, hideWhenEmpty: true, required: (!settings.theEconetVents && !settings.theKeenVents && !settings.theHCKeenVents && !settings.theGenericVents && !settings.theGenericSwitches))
                     if (settings.theHCEcoVents) vc = vc + settings.theHCEcoVents.size()
-                    input(name: "theKeenVents", type: "${ST?'device.keenHomeSmartVent':'device.KeenHomeSmartVent'}", title: inputTitle("Select Keen Home Smart Vent(s)?"), multiple:true, 
+                    input(name: "theKeenVents", type: 'device.KeenHomeSmartVent', title: inputTitle("Select Keen Home Smart Vent(s)?"), multiple:true, 
                           submitOnChange: true, hideWhenEmpty: true, required: (!settings.theEconetVents && !settings.theHCEcoVents && !settings.theKeenVents && !settings.theHCKeenVents && !settings.theGenericVents && !settings.theGenericSwitches))
                     if (settings.theKeenVents) vc = vc + settings.theKeenVents.size()
-                    input(name: "theHCKeenVents", type: "${ST?'device.hubconnectKeenHomeSmartVent':'device.HubConnectKeenHomeSmartVent'}", title: inputTitle("Select HubConnect Keen Home Smart Vent(s)?"), multiple:true, 
+                    input(name: "theHCKeenVents", type: 'device.HubConnectKeenHomeSmartVent', title: inputTitle("Select HubConnect Keen Home Smart Vent(s)?"), multiple:true, 
                           submitOnChange: true, hideWhenEmpty: true, required: (!settings.theEconetVents && !settings.theHCEcoVents && !settings.theKeenVents && !settings.theGenericVents && !settings.theGenericSwitches))
                     if (settings.theHCKeenVents) vc = vc + settings.theHCKeenVents.size()
                     input(name: "theGenericVents", type: 'capability.switchLevel', title: inputTitle("Select Generic (dimmer) Vent(s)"), multiple: true, submitOnChange: true, hideWhenEmpty: true, 
@@ -201,99 +177,51 @@ def mainPage() {
                     }
                 }
         	}
-			if (ST) {
-				List echo = []
-				section("Notifications") {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
-					if (settings.notify) {
-						input(name: 'pushNotify', type: 'bool', title: "Send Push notifications to everyone?", defaultValue: false, 
-							  required: ((settings?.phone == null) && !settings.notifiers && !settings.speak), submitOnChange: true)
-						input(name: "notifiers", type: "capability.notification", title: "Select Notification Devices", hideWhenEmpty: true,
-							  required: ((settings.phone == null) && !settings.speak && !settings.pushNotify), multiple: true, submitOnChange: true)
-                        if (settings?.notifiers) {
-                            echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-                            if (echo) {
-                            	input(name: "echoAnnouncements", type: "bool", title: "Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?", 
-                                	  defaultValue: false, submitOnChange: true)
-                            }
-                        }
-						input(name: "phone", type: "text", title: "SMS these numbers (e.g., +15556667777; +441234567890)", 
-							  required: (!settings.pushNotify && !settings.notifiers && !settings.speak), submitOnChange: true)
-					}
-				}
-				if (settings.notify) {
-					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: "Speech Devices") {
-						input(name: "speak", type: "bool", title: "Speak the messages?", required: true, defaultValue: false, submitOnChange: true)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: "On these speech devices", 
-								  multiple: true, hideWhenEmpty: true, submitOnChange: true)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: "On these music devices", 
-								  multiple: true, hideWhenEmpty: true, submitOnChange: true)
-							if (settings.musicDevices != null) input(name: "volume", type: "number", range: "0..100", title: "At this volume (%)", defaultValue: 50, required: true)
+			List echo = []
+			section(sectionTitle("Notifications")) {
+				input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
+			}
+			if (settings.notify) {
+				section(smallerTitle("Notification Devices")) {
+					input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
+						  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
+					if (settings?.notifiers) {
+						echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
+						if (echo) {
+							input(name: "echoAnnouncements", type: "bool", title: inputTitle("Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?"), 
+								  defaultValue: false, submitOnChange: true)
 						}
-					}
-				}
-				if (settings.notify && (echo || settings.speak)) {
-                	section("Do Not Disturb") {
-                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true)
-                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications from:'), required: (settings.speakTimeEnd != null))
-                        input(name: "speakTimeEnd", type: "time", title: inputTitle("Only speak notifications until:"), required: (settings.speakTimeStart != null))
-						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
-										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
-						if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
-                    }
-                }
-				if (maximize)  {
-					section() {
-						paragraph ( "A notification is always sent to the Hello Home log whenever an action is taken")
-					}
-				}
-			} else {		// HE
-            	List echo = []
-				section(sectionTitle("Notifications")) {
-					input(name: "notify", type: "bool", title: inputTitle("Notify on Actions?"), required: true, defaultValue: false, submitOnChange: true, width: 3)
-				}
-				if (settings.notify) {
-					section(smallerTitle("Notification Devices")) {
-						input(name: "notifiers", type: "capability.notification", multiple: true, title: inputTitle("Select Notification devices"), submitOnChange: true,
-							  required: (!settings.speak || ((settings.musicDevices == null) && (settings.speechDevices == null))))
-						if (settings?.notifiers) {
-							echo = settings.notifiers.findAll { (it.deviceNetworkId.contains('|echoSpeaks|') && it.hasCommand('sendAnnouncementToDevices')) }
-							if (echo) {
-								input(name: "echoAnnouncements", type: "bool", title: inputTitle("Use ${echo.size()>1?'simultaneous ':''}Announcements for the selected Echo Speaks device${echo.size()>1?'s':''}?"), 
-									  defaultValue: false, submitOnChange: true)
-							}
-						}
-					}
-				}
-				if (settings.notify) {
-					section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
-						input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
-						if (settings.speak) {
-							input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select Speech devices"), 
-								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-							input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select Music devices"), 
-								  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
-							input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
-						}
-					}
-				}
-                if (settings.notify && (echo || settings.speak)) {
-                	section(smallerTitle("Do Not Disturb")) {
-                    	input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
-                        input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
-                        input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
-						String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
-										(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
-						if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
-                    }
-                }
-				if (maximize) {
-					section(){
-						paragraph "A <i>'HelloHome'</i> notification is always sent to the Location Event log whenever an action is taken"		
 					}
 				}
 			}
+			if (settings.notify) {
+				section(hideWhenEmpty: (!"speechDevices" && !"musicDevices"), title: smallerTitle("Speech Devices")) {
+					input(name: "speak", type: "bool", title: inputTitle("Speak messages?"), required: !settings?.notifiers, defaultValue: false, submitOnChange: true, width: 6)
+					if (settings.speak) {
+						input(name: "speechDevices", type: "capability.speechSynthesis", required: (settings.musicDevices == null), title: inputTitle("Select Speech devices"), 
+							  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+						input(name: "musicDevices", type: "capability.musicPlayer", required: (settings.speechDevices == null), title: inputTitle("Select Music devices"), 
+							  multiple: true, submitOnChange: true, hideWhenEmpty: true, width: 4)
+						input(name: "volume", type: "number", range: "0..100", title: inputTitle("At this volume (%)"), defaultValue: 50, required: false, width: 4)
+					}
+				}
+			}
+			if (settings.notify && (echo || settings.speak)) {
+				section(smallerTitle("Do Not Disturb")) {
+					input(name: "speakModes", type: "mode", title: inputTitle('Only speak notifications during these Location Modes:'), required: false, multiple: true, submitOnChange: true, width: 6)
+					input(name: "speakTimeStart", type: "time", title: inputTitle('Only speak notifications<br>between...'), required: (settings.speakTimeEnd != null), submitOnChange: true, width: 3)
+					input(name: "speakTimeEnd", type: "time", title: inputTitle("<br>...and"), required: (settings.speakTimeStart != null), submitOnChange: true, width: 3)
+					String nowOK = (settings.speakModes || ((settings.speakTimeStart != null) && (settings.speakTimeEnd != null))) ? 
+									(" - with the current settings, notifications WOULD ${notifyNowOK()?'':'NOT '}be spoken now") : ''
+					if (maximize) paragraph(getFormat('note', "If both Modes and Times are set, both must be true" + nowOK))
+				}
+			}
+			if (maximize) {
+				section(){
+					paragraph "A <i>'HelloHome'</i> notification is always sent to the Location Event log whenever an action is taken"		
+				}
+			}
+
 			if ((settings?.notify) && (settings?.pushNotify || settings?.phone || settings?.notifiers || (settings?.speak && (settings?.speechDevices || settings?.musicDevices)))) {
 				section(smallerTitle("Customization")) {
 					href(name: "customNotifications", title: inputTitle("Customize Notifications"), page: "customNotifications", 
@@ -308,19 +236,11 @@ def mainPage() {
             input(name: "infoOff", 		title: inputTitle("Disable info logging"), 		type: "bool", required: false, defaultValue: false, submitOnChange: true, width: 3)
 		}       
 		// Standard footer
-        if (ST) {
-            section("") {
-        		href(name: "hrefNotRequired", description: "Tap to donate via PayPal", required: false, style: "external", image: "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png",
-                	 url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url", title: "Your donation is appreciated!" )
-    		}
-        	section(getVersionLabel().replace('er, v',"er\nV")+"\n\nCopyright \u00a9 2017-2020 Barry A. Burke\nAll rights reserved.") {}
-        } else {
-        	section() {
-        		paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
-						  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
-						  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
-						  "<small><i>donation is appreciated!</i></small></div>" )
-            }
+		section() {
+			paragraph(getFormat("line")+"<div style='color:#5BBD76;text-align:center'>${getVersionLabel()}<br><small>Copyright \u00a9 2017-2020 Barry A. Burke - All rights reserved.</small><br>"+
+					  "<small><i>Your</i>&nbsp;</small><a href='https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=MJQD5NGVHYENY&currency_code=USD&source=url' target='_blank'>" + 
+					  "<img src='https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/paypal-green.png' border='0' width='64' alt='PayPal Logo' title='Please consider donating via PayPal!'></a>" +
+					  "<small><i>donation is appreciated!</i></small></div>" )
 		}
     }
 }
@@ -692,7 +612,7 @@ void activateRoom() {
         anyInactive = false
         def sensorsRegistered = 0
 		def sensor = theSensorDevices[0]
-        def smartRoomStatus = ST ? sensor.currentValue('SmartRoom') : sensor.currentValue('SmartRoom', true)
+        def smartRoomStatus = sensor.currentValue('SmartRoom', true)
         if (smartRoomStatus == 'inactive') anyInactive = true
         if (smartRoomStatus == 'enable') anyInactive = true		// we are turning on
         List notPrograms = getProgramsList() - settings.activeProgs
@@ -758,9 +678,8 @@ void deactivateRoom() {
         //un-register this room's sensor(s) from the thermostat for the appropriate program(s)
         //and register this room's sensor(s) with the thermostat for the appropriate program(s)
         anyActive = false
-        //boolean ST = isST
         def sensor = theSensorDevices[0]
-        def smartRoomStatus = ST ? sensor.currentValue('SmartRoom') : sensor.currentValue('SmartRoom', true) 
+        def smartRoomStatus = sensor.currentValue('SmartRoom', true) 
         if (smartRoomStatus == 'active') anyActive = true 
         if (smartRoomStatus == 'disable') anyActive = true
         List notPrograms = getProgramsList() - settings.inactiveProgs
@@ -886,7 +805,7 @@ boolean needClimateChange(sensor, List adds, List removes) {
     if (removes) removes = removes - ["Hold", "Vacation"]
 	if (!adds && !removes) return false
     
-    String ac = ST ? sensor.currentValue('activeClimates') : sensor.currentValue('activeClimates', true)
+    String ac = sensor.currentValue('activeClimates', true)
     def activeClimates = ac ? ((ac == '[]') ? [] : ac[1..-2].tokenize(', ').sort(false)) : []
     log.debug "activeClimates: ${activeClimates}"
     boolean updatesToDo = false
@@ -1052,69 +971,30 @@ private myTimeOfDayIsBetween(Date fromDate, Date toDate, Date checkDate, timeZon
 }
 void sendMessage(notificationMessage) {
 	LOG("Notification Message (notify=${settings.notify}): ${notificationMessage + getMsgRoomName()}", 2, null, "trace")
-   // boolean ST = isST
     if (settings.notify) {
     	String msgPrefix = getMsgPrefix()
         String msg = msgPrefix + (notificationMessage.trim() + getMsgRoomName()).replaceAll(':','').replaceAll('  ',' ').replaceAll('  ',' ').trim().capitalize()
         boolean addFrom = (msgPrefix && !msgPrefix.startsWith("From "))
-		if (ST) {
-			if (settings.notifiers) {
-				sendNotifications(msgPrefix, msg)               
-            }
-			if (settings.phone) { // check that the user did select a phone number
-				if ( settings.phone.indexOf(";") > 0){
-					def phones = settings.phone.split(";")
-					for ( def i = 0; i < phones.size(); i++) {
-						LOG("Sending SMS ${i+1} to ${phones[i]}", 3, null, 'info')
-						sendSmsMessage(phones[i].trim(), msg)				// Only to SMS contact
-					}
-				} else {
-					LOG("Sending SMS to ${settings.phone}", 3, null, 'info')
-					sendSmsMessage(settings.phone.trim(), msg)						// Only to SMS contact
-				}
-			} 
-			if (settings.pushNotify) {
-				LOG("Sending Push to everyone", 3, null, 'warn')
-				sendPush(msg)								// Push to everyone
-			}
-			if (settings.speak && notifyNowOK()) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak( (addFrom?"From ":"") + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText( (addFrom?"From ":"") + msg )
-					}
+		if (settings.notifiers) {
+			sendNotifications(msgPrefix, msg)               
+		}
+		if (settings.speak && notifyNow()) {
+			if (settings.speechDevices != null) {
+				settings.speechDevices.each {
+					it.speak((addFrom?"From ":"") + msg )
 				}
 			}
-		} else {		// HE
-			if (settings.notifiers) {
-                sendNotifications(msgPrefix, msg)               
-            }
-			if (settings.speak && notifyNow()) {
-				if (settings.speechDevices != null) {
-					settings.speechDevices.each {
-						it.speak((addFrom?"From ":"") + msg )
-					}
-				}
-				if (settings.musicDevices != null) {
-					settings.musicDevices.each {
-						it.setLevel( settings.volume )
-						it.playText((addFrom?"From ":"") + msg )
-					}
+			if (settings.musicDevices != null) {
+				settings.musicDevices.each {
+					it.setLevel( settings.volume )
+					it.playText((addFrom?"From ":"") + msg )
 				}
 			}
 		}
+
     }
     // Always send to Hello Home / Location Event log
-	if (ST) { 
-		sendNotificationEvent( msg )					
-	} else {
-		sendLocationEvent(name: "HelloHome", descriptionText: msg, value: app.label, type: 'APP_NOTIFICATION')
-	}
+	sendLocationEvent(name: "HelloHome", descriptionText: msg, value: app.label, type: 'APP_NOTIFICATION')
 }
 // Handles sending to Notification devices, with special handling for Echo Speaks devices (if settings.echoAnnouncements is true)
 boolean sendNotifications( String msgPrefix, String msg ) {
@@ -1158,7 +1038,6 @@ def getSensorPrograms(sensor) {
     return (cl ? ((cl == '[]') ? ['Away', 'Home', 'Sleep'] : cl[1..-2].tokenize(', ').sort(false)) : ['Away', 'Home', 'Sleep'])
 }
 def getProgramsList() { 
-	//boolean ST = isST
 	def programs = []
 	if (settings.theSensorDevices) {
     	settings.theSensorDevices.each { sensor ->
@@ -1201,17 +1080,7 @@ List getGuestList(String tid, String type='modeOff') {
 	return parent.getGuestList( tid, type )
 }
 void updateMyLabel() {
-	boolean ST = isST
-	
-	String flag
-	if (ST) {
-    	def opts = [' (paused', ' (active', ' (inactive', ' (disabled', ' (default']
-		opts.each {
-			if (!flag && app.label.contains(it)) flag = it
-		}
-	} else {
-		flag = '<span '
-	}
+	String flag = '<span '
 	
 	// Display vent status 
 	String myLabel = atomicState.appDisplayName
@@ -1230,13 +1099,13 @@ void updateMyLabel() {
     String newLabel
 	if (settings.tempDisable) {
     	smartRoom = ' (paused)'
-		newLabel = myLabel + ( ST ? smartRoom : '<span style="color:red">' + smartRoom + '</span>' )
+		newLabel = myLabel + '<span style="color:red">' + smartRoom + '</span>' 
 		if (app.label != newLabel) app.updateLabel(newLabel)
     } else if (smartRoom == 'inactive') {
-		newLabel = myLabel + ( ST ? ' ('+smartRoom+')' : '<span style="color:orange"> (' + smartRoom + ')</span>' )
+		newLabel = myLabel + '<span style="color:orange"> (' + smartRoom + ')</span>' 
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (smartRoom != 'default') {
-		newLabel = myLabel + ( ST ? ' ('+smartRoom+')' : '<span style="color:green"> (' + smartRoom + ')</span>' )
+		newLabel = myLabel + '<span style="color:green"> (' + smartRoom + ')</span>' 
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else {
     	// display nothing if SmartRoom is 'default'
@@ -1303,13 +1172,13 @@ String getTheBeeLogo()				{ return '<img src=https://raw.githubusercontent.com/S
 String getTheSectionBeeLogo()		{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-300x300.png width=25 height=25 align=left></img>'}
 String getTheBeeUrl ()				{ return "https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/ecobee-logo-1x.jpg" }
 String getTheBlank	()				{ return '<img src=https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/blank.png width=400 height=35 align=right hspace=0 style="box-shadow: 3px 0px 3px 0px #ffffff;padding:0px;margin:0px"></img>'}
-String pageTitle 	(String txt) 	{ return HE ? getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') : txt }
-String pageTitleOld	(String txt)	{ return HE ? getFormat('header-ecobee','<h2>'+txt+'</h2>') 	: txt }
-String sectionTitle	(String txt) 	{ return HE ? getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>')	: txt }
-String smallerTitle (String txt)	{ return txt ? (HE ? '<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>'				: txt) : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
-String sampleTitle	(String txt) 	{ return HE ? '<b><i>'+txt+'<i></b>'			 				: txt }
-String inputTitle	(String txt) 	{ return HE ? '<b>'+txt+'</b>'								: txt }
-String getWarningText()				{ return HE ? "<span style='color:red'><b>WARNING: </b></span>"	: "WARNING: " }
+String pageTitle 	(String txt) 	{ return getFormat('header-ecobee','<h2>'+(txt.contains("\n") ? '<b>'+txt.replace("\n","</b>\n") : txt )+'</h2>') }
+String pageTitleOld	(String txt)	{ return getFormat('header-ecobee','<h2>'+txt+'</h2>') }
+String sectionTitle	(String txt) 	{ return getTheSectionBeeLogo() + getFormat('header-nobee','<h3><b>&nbsp;&nbsp;'+txt+'</b></h3>') }
+String smallerTitle (String txt)	{ return txt ? ('<h3 style="color:#5BBD76"><b><u>'+txt+'</u></b></h3>') : '' } // <hr style="background-color:#5BBD76;height:1px;width:52%;border:0;align:top">
+String sampleTitle	(String txt) 	{ return '<b><i>'+txt+'<i></b>' }
+String inputTitle	(String txt) 	{ return '<b>'+txt+'</b>' }
+String getWarningText()				{ return "<span style='color:red'><b>WARNING: </b></span>" }
 String getFormat(type, myText=""){
 	switch(type) {
 		case "header-ecobee":
@@ -1319,54 +1188,41 @@ String getFormat(type, myText=""){
 			return "<div style='width:50%;min-width:400px;color:#FFFFFF;background-color:#5BBD76;padding-left:0.5em;padding-right:0.5em;box-shadow: 0px 3px 3px 0px #b3b3b3'>${myText}</div>"
 			break;
     	case "line":
-			return HE ? "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>" : "-----------------------------------------------"
+			return "<hr style='background-color:#5BBD76; height: 1px; border: 0;'></hr>"
 			break;
 		case "title":
 			return "<h2 style='color:#5BBD76;font-weight: bold'>${myText}</h2>"
 			break;
 		case "warning":
-			return HE ? "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>" : "WARNING: ${myText}"
+			return "<span style='color:red'><b>WARNING: </b><i></span>${myText}</i>"
 			break;
 		case "note":
-			return HE ? "<b>NOTE: </b>${myText}" : "NOTE:<br>${myText}"
+			return "<b>NOTE: </b>${myText}"
 			break;
 		default:
 			return myText
 			break;
 	}
 }
+
 // SmartThings/Hubitat Portability Library (SHPL)
 // Copyright (c) 2019-2020, Barry A. Burke (storageanarchy@gmail.com)
-String getPlatform() { return ((hubitat?.device?.HubAction == null) ? 'SmartThings' : 'Hubitat') }	// if (platform == 'SmartThings') ...
-boolean getIsST() {
-	if (ST == null) {
-    	// ST = physicalgraph?.device?.HubAction ? true : false // this no longer compiles on Hubitat for some reason
-        if (HE == null) HE = getIsHE()
-        ST = !HE
-    }
-    return ST    
-}
-boolean getIsHE() {
-	if (HE == null) {
-    	HE = hubitat?.device?.HubAction ? true : false
-        if (ST == null) ST = !HE
-    }
-    return HE
-}
+String getPlatform() { return 'Hubitat' }	// if (platform == 'SmartThings') ...
+boolean getIsST() { return false }
+boolean getIsHE() { return true }
 
-String getHubPlatform() {
-    hubPlatform = getIsST() ? "SmartThings" : "Hubitat"
-	return hubPlatform
+String getHubPlatform() { 
+	return 'Hubitat'
 }
-boolean getIsSTHub() { return isST }					// if (isSTHub) ...
-boolean getIsHEHub() { return isHE }					// if (isHEHub) ...
+boolean getIsSTHub() { return false }					// if (isSTHub) ...
+boolean getIsHEHub() { return true }					// if (isHEHub) ...
 
 def getParentSetting(String settingName) {
-	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
+	return parent?."${settingName}"
 }
-@Field String  hubPlatform 	= getHubPlatform()
-@Field boolean ST 			= getIsST()
-@Field boolean HE 			= getIsHE()
+@Field String  hubPlatform 	= 'Hubitat'
+@Field boolean ST 			= false
+@Field boolean HE 			= true
 @Field String  debug		= 'debug'
 @Field String  error		= 'error'
 @Field String  info			= 'info'
