@@ -1015,7 +1015,7 @@ void ventOff( theVent ) {
 		}
     }
     // Display the contact as "closed", even if we are partially open (so that HomeKit shows open/closed Blinds)
-    if (theVent.hasAttribute('contact') && theVent.hasCommand('closeContact') && (theVent.currentValue('contact') != 'closed')) theVent.closeContact()
+    if (theVent.hasAttribute('contact') && theVent.hasCommand('closeContact') && (theVent.currentValue('contact', true) != 'closed')) theVent.closeContact()
 }
 
 void ventOn( theVent ) {
@@ -1068,7 +1068,7 @@ void ventOn( theVent ) {
         }
     }
     // Display the contact as "open", even if we are only partially open (so that HomeKit shows open/closed Blinds)
-    if (theVent.hasAttribute('contact') && theVent.hasCommand('openContact') && (theVent.currentValue('contact') != 'open')) theVent.openContact()
+    if (theVent.hasAttribute('contact') && theVent.hasCommand('openContact') && (theVent.currentValue('contact', true) != 'open')) theVent.openContact()
 }
 
 void ventLevel( theVent, level=50 ) {
@@ -1112,7 +1112,7 @@ void ventLevel( theVent, level=50 ) {
         }
     }
     // Display the vent's contact as "open", even if we are only partially open (so that HomeKit shows open/closed Blinds)
-    if (theVent.hasAttribute('contact') && theVent.hasCommand('openContact') && (theVent.currentValue('contact') != 'open')) theVent.openContact()
+    if (theVent.hasAttribute('contact') && theVent.hasCommand('openContact') && (theVent.currentValue('contact', true) != 'open')) theVent.openContact()
 }
 // Helper Functions
 // Ask our parents for help sending the events to our peer sensor devices
@@ -1126,11 +1126,11 @@ void generateSensorEvents( Map dataMap ) {
 List getThermostatPrograms() {
 	List programs = ["Away","Home","Sleep"]
 	if (settings?.theThermostat) {
-    	String cl = settings.theThermostat?.currentValue('climatesList')
+    	String cl = settings.theThermostat?.currentValue('climatesList', true)
     	if (cl && (cl != '[]')) {
         	programs = cl[1..-2].split(', ')
         } else {
-    		String pl = settings?.theThermostat?.currentValue('programsList')
+    		String pl = settings?.theThermostat?.currentValue('programsList', true)
         	def progs = pl ? new JsonSlurper().parseText(pl) : []
             if (progs) programs = progs
         }
