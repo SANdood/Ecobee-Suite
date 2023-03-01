@@ -55,8 +55,9 @@
  *	1.9.0b - Hack around Ecobee medium/high idiosyncrasy  (show speeds to match the physical device)
  *	1.9.0c - Added occupancy (occupied/vacant) attribute
  *	1.9.00 - Removed all ST code
+ *	1.9.01 - Fixed initial fan speed setting
  */
-String getVersionNum() 		{ return "1.9.00" }
+String getVersionNum() 		{ return "1.9.01" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -852,14 +853,17 @@ def generateEvent(List updates) {
 						break;
 					
 					case 'fanSpeed':
-						List fanSpeedOptions = new JsonSlurper().parseText(device.currentValue('fanSpeedOptions',true))
+                        String fso = device.currentValue('fanSpeedOptions',true)
+                        List fanSpeedOptions = []
+                        if (fso) fanSpeedOptions = new JsonSlurper().parseText(fso)
 						String realFanSpeed = (fanSpeedOptions.size() <= 1) ? 'low' : 'optimized'
-						if (fanSpeedOptions.contains(sendValue) && (sendValue != 'medium')) {
+						if (fanSpeedOptions?.contains(sendValue) && (sendValue != 'medium')) {
 							realFanSpeed = sendValue as String
-						} else if ((sendValue == 'medium') && !fanSpeedOptions.contains('medium') &&  fanSpeedOptions.contains("high")) {				// work around for Ecobee idiosyncracy	 
+						} else if ((sendValue == 'medium') && !fanSpeedOptions?.contains('medium') &&  fanSpeedOptions?.contains("high")) {				// work around for Ecobee idiosyncracy	 
 							realFanSpeed = 'high' 					// medium turns on high if only 2 speeds exist
 						}
-						isChange = (device.currentValue('fanSpeed', true) != realFanSpeed)
+                        String fs = device.currentValue('fanSpeed', true)
+						isChange = (!fs || (fs != realFanSpeed))
 						if (isChange || forceChange) event = eventFront + [value: realFanSpeed, descriptionText: "Fan Speed is ${realFanSpeed}", isStateChange: true, displayed: true]
 						break;
 
