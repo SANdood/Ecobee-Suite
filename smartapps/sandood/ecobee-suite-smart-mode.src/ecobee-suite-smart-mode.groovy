@@ -41,11 +41,12 @@
  * 	1.8.25 - Fixed setpoint adjustments for "middle" tange
  *	1.8.26 - Fix whatHoldType for 'holdHours'
  *	1.9.00 - Removed all ST code
+ *	1.9.01 - Fixed configuratiion error
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.00" }
+String getVersionNum()		{ return "1.9.01" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -1291,7 +1292,7 @@ List getThermostatPrograms() {
         	List progs = []
         	String cl = stat.currentValue('climatesList', true)
     		if (cl && (cl != '[]')) {
-        		progs = new JsonSlurper().parseText(cl)     // cl[1..-2].split(', ')
+        		progs = cl[1..-2].split(', ')
         	} else {
     			String pl = stat.currentValue('programsList', true)
         		progs = pl ? new JsonSlurper().parseText(pl) : []
