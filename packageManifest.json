@@ -67,7 +67,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.9.00"
+      "version": "1.9.01"
     },
     {
       "id": "8d9d8751-6679-4581-b594-41549106c789",
