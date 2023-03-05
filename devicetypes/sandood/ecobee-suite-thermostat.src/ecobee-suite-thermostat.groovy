@@ -56,8 +56,9 @@
  *	1.9.0c - Added occupancy (occupied/vacant) attribute
  *	1.9.00 - Removed all ST code
  *	1.9.01 - Fixed initial fan speed setting
+ *	1.9.02 - Fix thermostatOperatingState initialization error
  */
-String getVersionNum() 		{ return "1.9.01" }
+String getVersionNum() 		{ return "1.9.02" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -627,71 +628,73 @@ def generateEvent(List updates) {
 						break;
 
 					case 'thermostatOperatingState':
-						// A little tricky, but this is how we display Smart Recovery within the stock Thermostat multiAttributeTile
-						// thermostatOperatingStateDisplay has the same values as thermostatOperatingState, plus "heating (smart recovery)"
-						// and "cooling (smart recovery)". We separately update the standard thermostatOperatingState attribute.
-						//log.debug "thermostatOperatingState: ${sendValue}"
-						boolean displayDesc
-						String descText
-						String realValue
-						if (sendValue.contains('(')) {
-							displayDesc = true				// only show this update ThermOpStateDisplay if we are in Smart Recovery
-							if (sendValue.contains('mart')) {
-								descText = 'in Smart Recovery'	// equipmentOperatingState will show what is actually running
-								realValue = sendValue.take(7)
-							} else if (sendValue.contains('ver')) {
-								descText = 'Overcooling to Dehumidify'
-								realValue = 'cooling'	// this gets us to back to just heating/cooling
-							} else if (sendValue.startsWith('fan')) {
-								if 		(sendValue.contains('deh')) descText = 'Dehumidifying'
-								else if (sendValue.contains('hum')) descText = 'Humidifying'
-								else if (sendValue.contains('eco')) descText = 'Economizing'
-								else if (sendValue.contains('ven')) descText = 'Ventilating'
-								else if (sendValue.contains('hot w')) descText = 'Heating Water'
-								realValue = 'fan only'
-							} else if (sendValue.contains('hot w')) {
-								descText = 'Heating Water'
-								realValue = sendValue.contains('heating') ? 'heating' : 'idle'
-							}
-						} else {
-							displayDesc = false				// hide this message - is redundant with EquipOpState
-							descText = sendValue.capitalize()
-							realValue = sendValue
-						}
-						if ((forceChange || isStateChange(device, 'thermostatOperatingStateDisplay', sendValue))) {
-							//log.debug "updating thermostatOperatingStateDisplay with ${sendValue}"
-							sendEvent(name: "thermostatOperatingStateDisplay", value: sendValue, descriptionText: "Thermostat Operating State is ${descText}", linkText: linkText,
-											handlerName: "${name}Display", isStateChange: true, displayed: displayDesc)
-							LOG("HVAC system is ${descText}", 1, null, 'info')
-							objectsUpdated++
-						}
-
-						// now update thermostatOperatingState - is limited by API to idle, fan only, heating, cooling, pending heat, pending cool, ventilator only
-						if (forceChange || isStateChange(device, name, realValue)) {
-							// First, check if we need to change the Heating at/Heating to temperature values
-							if (realValue.contains('heat')) {	// heating, aux heat, emergency heat are all the same
-								// heatingSetpoint should display actual setpoint for "Heating to..."
-								String heatSetp = device.currentValue('heatingSetpoint', true).toString()
-								sendEvent(name: 'thermostatSetpoint', value: heatSetp, unit: tu, descriptionText: "Thermostat setpoint is ${heatSetp}°${tu}", displayed: true) // For Google Home
-								sendEvent(name: 'lastRunningMode', value: 'heat', displayed: false) // For Google Home
-								updateDataValue('lastRunningMode', 'heat')
-								state.lastRunningMode = 'heat'
-							}
-							if (realValue.startsWith('cool')) {
-								// coolingSetpoint should display actual setpoint for "Cooling to..."
-								String coolSetp = device.currentValue('coolingSetpoint', true).toString()
-								sendEvent(name: 'thermostatSetpoint', value: coolSetp, unit: tu, descriptionText: "Thermostat setpoint is ${coolSetp}°${tu}", displayed: true) // For Google Home
-								sendEvent(name: 'lastRunningMode', value: 'cool', displayed: false) // For Google Home
-								updateDataValue('lastRunningMode', 'cool')
-								state.lastRunningMode = 'cool'
+                        if (sendValue != "") {
+                            // A little tricky, but this is how we display Smart Recovery within the stock Thermostat multiAttributeTile
+                            // thermostatOperatingStateDisplay has the same values as thermostatOperatingState, plus "heating (smart recovery)"
+                            // and "cooling (smart recovery)". We separately update the standard thermostatOperatingState attribute.
+                            //log.debug "thermostatOperatingState: ${sendValue}"
+                            boolean displayDesc
+                            String descText
+                            String realValue
+                            if (sendValue.contains('(')) {
+                                displayDesc = true				// only show this update ThermOpStateDisplay if we are in Smart Recovery
+                                if (sendValue.contains('mart')) {
+                                    descText = 'in Smart Recovery'	// equipmentOperatingState will show what is actually running
+                                    realValue = sendValue.take(7)
+                                } else if (sendValue.contains('ver')) {
+                                    descText = 'Overcooling to Dehumidify'
+                                    realValue = 'cooling'	// this gets us to back to just heating/cooling
+                                } else if (sendValue.startsWith('fan')) {
+                                    if 		(sendValue.contains('deh')) descText = 'Dehumidifying'
+                                    else if (sendValue.contains('hum')) descText = 'Humidifying'
+                                    else if (sendValue.contains('eco')) descText = 'Economizing'
+                                    else if (sendValue.contains('ven')) descText = 'Ventilating'
+                                    else if (sendValue.contains('hot w')) descText = 'Heating Water'
+                                    realValue = 'fan only'
+                                } else if (sendValue.contains('hot w')) {
+                                    descText = 'Heating Water'
+                                    realValue = sendValue.contains('heating') ? 'heating' : 'idle'
+                                }
+                            } else {
+                                displayDesc = false				// hide this message - is redundant with EquipOpState
+                                descText = sendValue.capitalize()
+                                realValue = sendValue
                             }
-							event = eventFront + [value: realValue, descriptionText: "Thermostat Operating State is ${realValue}", displayed: false]
+                            if ((forceChange || isStateChange(device, 'thermostatOperatingStateDisplay', sendValue))) {
+                                //log.debug "updating thermostatOperatingStateDisplay with ${sendValue}"
+                                sendEvent(name: "thermostatOperatingStateDisplay", value: sendValue, descriptionText: "Thermostat Operating State is ${descText}", linkText: linkText,
+                                          handlerName: "${name}Display", isStateChange: true, displayed: displayDesc)
+                                LOG("HVAC system is ${descText}", 1, null, 'info')
+                                objectsUpdated++
+                                    }
 
-							// Keep track of whether we were last heating or cooling
-							def lastOpState = device.currentValue('thermostatOperatingState', true)
-							if (lastOpState && (lastOpState.contains('ea') || lastOpState.contains('oo'))) sendEvent(name: 'lastOpState', value: lastOpState, displayed: false)
-						}
-						break;
+                            // now update thermostatOperatingState - is limited by API to idle, fan only, heating, cooling, pending heat, pending cool, ventilator only
+                            if (forceChange || isStateChange(device, name, realValue)) {
+                                // First, check if we need to change the Heating at/Heating to temperature values
+                                if (realValue.contains('heat')) {	// heating, aux heat, emergency heat are all the same
+                                    // heatingSetpoint should display actual setpoint for "Heating to..."
+                                    String heatSetp = device.currentValue('heatingSetpoint', true).toString()
+                                    sendEvent(name: 'thermostatSetpoint', value: heatSetp, unit: tu, descriptionText: "Thermostat setpoint is ${heatSetp}°${tu}", displayed: true) // For Google Home
+                                    sendEvent(name: 'lastRunningMode', value: 'heat', displayed: false) // For Google Home
+                                    updateDataValue('lastRunningMode', 'heat')
+                                    state.lastRunningMode = 'heat'
+                                }
+                                if (realValue.startsWith('cool')) {
+                                    // coolingSetpoint should display actual setpoint for "Cooling to..."
+                                    String coolSetp = device.currentValue('coolingSetpoint', true).toString()
+                                    sendEvent(name: 'thermostatSetpoint', value: coolSetp, unit: tu, descriptionText: "Thermostat setpoint is ${coolSetp}°${tu}", displayed: true) // For Google Home
+                                    sendEvent(name: 'lastRunningMode', value: 'cool', displayed: false) // For Google Home
+                                    updateDataValue('lastRunningMode', 'cool')
+                                    state.lastRunningMode = 'cool'
+                                }
+                                event = eventFront + [value: realValue, descriptionText: "Thermostat Operating State is ${realValue}", displayed: false]
+
+                                // Keep track of whether we were last heating or cooling
+                                def lastOpState = device.currentValue('thermostatOperatingState', true)
+                                if (lastOpState && (lastOpState.contains('ea') || lastOpState.contains('oo'))) sendEvent(name: 'lastOpState', value: lastOpState, displayed: false)
+                            }
+                        }
+                        break;
 
 					case 'equipmentOperatingState':
 						if ((sendValue != 'off') && (tMode == 'off')) {
