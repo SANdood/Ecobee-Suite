@@ -3,7 +3,7 @@
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.3.3",
   "dateReleased": "2022-12-12",
-  "releaseNotes": "Removed all SmartThings code to maximize performance and efficiency on Hubitat",
+  "releaseNotes": "This update fixes errors in thermostatOperatingMode and in the Smart Circulation and Smart Mode Helpers",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/796",
   "apps": [
     {
