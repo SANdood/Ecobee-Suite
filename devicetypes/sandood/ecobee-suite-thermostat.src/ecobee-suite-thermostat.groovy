@@ -57,8 +57,9 @@
  *	1.9.00 - Removed all ST code
  *	1.9.01 - Fixed initial fan speed setting
  *	1.9.02 - Fix thermostatOperatingState initialization error
+ *	1.9.03 - Handle additional thermOpStates
  */
-String getVersionNum() 		{ return "1.9.02" }
+String getVersionNum() 		{ return "1.9.03" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -644,13 +645,13 @@ def generateEvent(List updates) {
                                 } else if (sendValue.contains('ver')) {
                                     descText = 'Overcooling to Dehumidify'
                                     realValue = 'cooling'	// this gets us to back to just heating/cooling
-                                } else if (sendValue.startsWith('fan')) {
+								} else if (sendValue.startsWith('fan') || sendValue.startsWith('idle')) {
+									realValue = sendValue.startsWith('fan') ? 'fan only' : 'idle' 
                                     if 		(sendValue.contains('deh')) descText = 'Dehumidifying'
                                     else if (sendValue.contains('hum')) descText = 'Humidifying'
                                     else if (sendValue.contains('eco')) descText = 'Economizing'
                                     else if (sendValue.contains('ven')) descText = 'Ventilating'
                                     else if (sendValue.contains('hot w')) descText = 'Heating Water'
-                                    realValue = 'fan only'
                                 } else if (sendValue.contains('hot w')) {
                                     descText = 'Heating Water'
                                     realValue = sendValue.contains('heating') ? 'heating' : 'idle'
@@ -660,13 +661,14 @@ def generateEvent(List updates) {
                                 descText = sendValue.capitalize()
                                 realValue = sendValue
                             }
+							//if (descText = "") log.debug "sv: ${sendValue}, rv: ${realValue}, dt: ${descText}"
                             if ((forceChange || isStateChange(device, 'thermostatOperatingStateDisplay', sendValue))) {
                                 //log.debug "updating thermostatOperatingStateDisplay with ${sendValue}"
                                 sendEvent(name: "thermostatOperatingStateDisplay", value: sendValue, descriptionText: "Thermostat Operating State is ${descText}", linkText: linkText,
                                           handlerName: "${name}Display", isStateChange: true, displayed: displayDesc)
-                                LOG("HVAC system is ${descText}", 1, null, 'info')
+                                LOG("HVAC system is ${sendValue}", 1, null, 'info')
                                 objectsUpdated++
-                                    }
+                            }
 
                             // now update thermostatOperatingState - is limited by API to idle, fan only, heating, cooling, pending heat, pending cool, ventilator only
                             if (forceChange || isStateChange(device, name, realValue)) {
