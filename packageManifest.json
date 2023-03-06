@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.9.02"
+      "version": "1.9.03"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
