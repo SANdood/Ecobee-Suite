@@ -58,8 +58,9 @@
  *	1.9.01 - Fixed initial fan speed setting
  *	1.9.02 - Fix thermostatOperatingState initialization error
  *	1.9.03 - Handle additional thermOpStates
+ *	1.9.04 - Fixed JsonSlurper null error (line 487)
  */
-String getVersionNum() 		{ return "1.9.03" }
+String getVersionNum() 		{ return "1.9.04" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -484,7 +485,7 @@ def generateEvent(List updates) {
 	def vType = device.currentValue('ventilatorType')
 	if ((vType != null) && (vType != 'none')) {
 		if ((state.supportedVentModes == []) || (state.supportedVentModes.size() == 1)){
-			state.supportedVentModes = groovy.json.JsonSlurper().parseText(ventModes()).sort(false)
+			state.supportedVentModes = new groovy.json.JsonSlurper().parseText(ventModes()).sort(false)
 			sendEvent(name: 'supportedVentModes', value: state.supportedVentModes, displayed: false, isStateChange: true)
 		}
 	} else {
