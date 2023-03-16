@@ -59,8 +59,9 @@
  *	1.9.02 - Fix thermostatOperatingState initialization error
  *	1.9.03 - Handle additional thermOpStates
  *	1.9.04 - Fixed JsonSlurper null error (line 487)
+ *	1.9.05 - Added missing 'set' commands (schedule, fanMode, thermostatMode)
  */
-String getVersionNum() 		{ return "1.9.04" }
+String getVersionNum() 		{ return "1.9.05" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -354,6 +355,9 @@ metadata {
 		command "setProgramSetpoints", 		[[name:'Program Name*', type:'STRING', description:'Program to change'],
 											 [name:'Heating Setpoint*', type:'NUMBER', description:'Heating setpoint temperature'],
 											 [name:'Cooling Setpoint*', type:'NUMBER', description:'Cooling setpoint temperature']]
+		command "setSchedule",				[[name: 'Schedule*', type: 'JSON_OBJECT']]
+		command "setThermostatFanMode",		[[name: 'Fan Mode*', type: 'ENUM', constraints: ['auto', 'circulate', 'off', 'on']]]
+		command "setThermostatMode",			[[name: 'Thermostat Mode*', type: 'ENUM', constraints: ['auto', 'auxHeat', 'cool', 'heat', 'off']]]
 		command "setThermostatHoldHours",   [[name:'Hold Hours', type:'NUMBER', description:'Default Hours for an Hold Type == Hold Hours (use zero to default to ES Manager setting)']]
 		command "setThermostatProgram", 	[[name:'Program Name*', type:'STRING', description:'Desired Program'],
 											 [name:'Hold Type*', type:'ENUM', description:'Select an option',
