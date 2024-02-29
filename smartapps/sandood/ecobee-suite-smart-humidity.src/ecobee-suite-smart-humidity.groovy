@@ -630,21 +630,22 @@ def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
 	if (cmdScale == temperatureScale) {
         return roundIt(scaledSensorValue, precision)
 	} else if (cmdScale == 'F') {				
-        return roundIt(fToC(scaledSensorValue), precision)
+        return roundIt(fToC(scaledSensorValue.toBigDecimal()), precision)
 	} else {
-        return roundIt(cToF(scaledSensorValue), precision)
+	// PR NOTE: I'm not able to test this it seems, but I'm assuming the same conversion is required here as well
+        return roundIt(cToF(scaledSensorValue.toBigDecimal()), precision)
 	}
 }
 // Calculate a close approximation of Dewpoint based on Temperature & Relative Humidity
 //    TD: =243.04*(LN(RH/100)+((17.625*T)/(243.04+T)))/(17.625-LN(RH/100)-((17.625*T)/(243.04+T)))
-def calculateDewpoint( temp, rh, units) {
+def calculateDewpoint( BigDecimal temp, rh, units) {
 	def t = ((units == 'C') ? temp : fToC(temp)) as BigDecimal
 	def dpC = 243.04*(Math.log(rh/100.0)+((17.625*t)/(243.04+t)))/(17.625-Math.log(rh/100.0)-((17.625*t)/(243.04+t)))
     return (units == 'C') ? roundIt(dpC, 2) : roundIt(cToF(dpC), 1)
 }
 // Calculate a close approximation of Relative Humidity based on Temperature and Dewpoint
 //    RH: =100*(EXP((17.625*TD)/(243.04+TD))/EXP((17.625*T)/(243.04+T)))
-def calculateRelHumidity( temp, dp, units) {
+def calculateRelHumidity( BigDecimal temp, dp, units) {
 	def t  = ((units == 'C') ? temp : fToC(temp)) as BigDecimal
     def td = ((units == 'C') ? dp	: fToC(dp))   as BigDecimal
     def rh = 100*((Math.exp((17.625*td)/(243.04+td)))/(Math.exp((17.625*t)/(243.04+t))))
@@ -656,11 +657,11 @@ def roundIt( value, decimals=0 ) {
 def roundIt( BigDecimal value, decimals=0) {
 	return (value == null) ? null : value.setScale(decimals, BigDecimal.ROUND_HALF_DOWN) 
 }
-def cToF(temp) {
+def cToF(BigDecimal temp) {
 	return (temp != null) ? ((temp * 1.8) + 32) : null
 }
-def fToC(temp) {	
-	return (temp != null) ? ((temp - 32) / 1.8) : null
+def fToC(BigDecimal temp) {    
+    return (temp != null) ? ((temp - 32) / 1.8) : null
 }
 void LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
     switch (logType) {
