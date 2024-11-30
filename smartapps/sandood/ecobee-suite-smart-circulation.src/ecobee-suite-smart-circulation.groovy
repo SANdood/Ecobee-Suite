@@ -805,7 +805,7 @@ void updateMyLabel() {
 	if (settings.tempDisable) {
 		newLabel = myLabel + '<span style="color:red"> (paused)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
-	} else if (atomicState.minutes == 'quiet time') {
+	} else if (atomicState.circMinutes == 'quiet time') {
 		newLabel = myLabel + '<span style="color:green"> (quiet time)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (minutes > -1) { 
