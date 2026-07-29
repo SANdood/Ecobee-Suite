@@ -19,7 +19,7 @@ When reporting an issue, I require:
   - **Ecobee Suite Manager**
   - **Ecobee Suite Thermostat**
   - And if your problem is related to a Helper app, the **Ecobee Suite XXXX Helper**
-* A snapshot of Live Logging for each of the above *at the time the problem occured.* The log entries are designed to help us both understand what is going on. Note that most problems are related to a failure or error condition somewhere, so look for the keywords 'error' and 'warn' in the Live Log. 
+* A snapshot of Live Logging for each of the above *at the time the problem occurred.* The log entries are designed to help us both understand what is going on. Note that most problems are related to a failure or error condition somewhere, so look for the keywords 'error' and 'warn' in the Live Log. 
 
 Send all of the above to me in the appropriate forum - ideally in a PM because the logs do reveal certain "secrets" about your environment.
 
