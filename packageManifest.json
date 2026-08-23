@@ -2,8 +2,8 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.3.3",
-  "dateReleased": "2022-12-12",
-  "releaseNotes": "This update fixes errors in thermostatOperatingMode and in the Smart Circulation and Smart Mode Helpers",
+  "dateReleased": "2026-08-23",
+  "releaseNotes": "1.9.06 - Bug-fix release. Corrects assignment-vs-comparison and undefined-identifier defects across five Helpers, restores change detection in the Sensor driver, reduces Ecobee Suite Manager atomicState write volume, and adds hold-over-vacation support to the Manager and Thermostat.",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/796",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.9.00"
+      "version": "1.9.06"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -31,7 +31,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.9.00"
+      "version": "1.9.06"
     },
     {
       "id": "c630b027-9cdf-49ff-bff6-28ced385a9e2",
@@ -49,7 +49,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.9.00"
+      "version": "1.9.06"
     },
     {
       "id": "d14d22cf-bdb4-4d12-8c89-ac849a5e0e53",
@@ -67,7 +67,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.9.01"
+      "version": "1.9.06"
     },
     {
       "id": "8d9d8751-6679-4581-b594-41549106c789",
@@ -85,7 +85,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.9.00"
+      "version": "1.9.06"
     },
     {
       "id": "e60053c8-a397-4231-ba7f-59ef23505740",
@@ -103,7 +103,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.9.00"
+      "version": "1.9.06"
     },
     {
       "id": "487d8dde-077c-4ae3-b17b-180039b3e59d",
@@ -112,7 +112,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy",
       "required": true,
       "oauth": false,
-      "version": "1.9.00"
+      "version": "1.9.06"
     },
     {
       "id": "1438882b-2411-406d-a831-997c4b569c31",
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.9.05"
+      "version": "1.9.06"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",
@@ -139,7 +139,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy",
       "required": true,
-      "version": "1.9.00"
+      "version": "1.9.06"
     },
     {
       "id": "71a545f8-bfe1-4cff-aeb3-59f5bde16e6d",

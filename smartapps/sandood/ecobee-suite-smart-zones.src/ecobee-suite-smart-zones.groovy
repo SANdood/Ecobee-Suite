@@ -26,11 +26,12 @@
  *  1.8.10 - Fix getThermostatModes() & getThermostatFanModes()
  *	1.8.11 - Fix for Hubitat 'supportedThermostatModes', etc.
  *	1.9.00 - Removed all ST code
+ *	1.9.06 - Fixed: the cooperate flag tested for 'isolate', breaking BOTH helper modes; thermostatOperatingState compared against 'fanOnly' instead of 'fan only' in two places; an undefined coolSp in the cooling-window test; a comparison where an assignment was intended when setting HVACModeState to idle.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.00" }
+String getVersionNum()		{ return "1.9.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Zones Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -203,7 +204,7 @@ def initialize() {
     atomicState.versionLabel = getVersionLabel()
 	updateMyLabel()
 	boolean isolate = (settings?.helperMode == 'isolate')
-    boolean cooperate = (settings?.helperMode == 'isolate')
+    boolean cooperate = (settings?.helperMode == 'cooperate')
     
     if (cooperate) {
         // Get slaves into a known state
@@ -297,7 +298,7 @@ void theAdjuster() {
                 	def statOpState = stat.currentValue('thermostatOperatingState', true)
                 	if (statOpState == 'heating') {
                     	setFanAuto(stat) // stat.resumeProgram(true)		// should get us back to desired fan mode
-                    } else if (statOpState == 'fanOnly') {
+                    } else if (statOpState == 'fan only') {
                     	// See if we are holding the fan but don't need the heat any more
 						String ncCpn = stat.currentValue('currentProgramName', true)
                         if (ncCpn == 'Hold: Fan On') {
@@ -354,7 +355,7 @@ void theAdjuster() {
 					if (statOpState == 'cooling') {
                     	// We are cooling too - double-check that fan is in Auto mode
                         setFanAuto(stat)				
-                    } else if (statOpState == 'fanOnly') {
+                    } else if (statOpState == 'fan only') {
                     	// Check if we are holding the fan but don't need the cool any more
 						String ncCpn = stat.currentValue('currentProgramName', true)
                         if (ncCpn == 'Hold: Fan On') {
@@ -380,7 +381,7 @@ void theAdjuster() {
                             if (temp != null) {
                             	def coolAt = stat.currentValue('coolAtSetpoint', true)
                                 if (coolAt != null) {
-                            		if ((temp > coolSp) && (temp < coolAt)) {
+                            		if ((temp > coolTo) && (temp < coolAt)) {
                                 	   	setFanOn(stat)
                                     }
                                 }
@@ -479,7 +480,7 @@ def thermostatHandler(evt) {
         	theThermostats.each { stat ->
             	turnOnHVAC(stat)
             }
-            atomicState.HVACModeState == 'idle'	// we'll only do this once...
+            atomicState.HVACModeState = 'idle'	// we'll only do this once...
         }
     } else if (evt.value.startsWith('idle') && (tid == atomicState.runningThermostat)) {
     	// turn them all back on again

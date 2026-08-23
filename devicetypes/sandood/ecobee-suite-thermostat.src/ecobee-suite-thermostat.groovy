@@ -60,8 +60,9 @@
  *	1.9.03 - Handle additional thermOpStates
  *	1.9.04 - Fixed JsonSlurper null error (line 487)
  *	1.9.05 - Added missing 'set' commands (schedule, fanMode, thermostatMode)
+ *	1.9.06 - Added setHoldOverVacation() and setHoldOverVacationProgram() commands: place a hold over an active calendar vacation without cancelling it.
  */
-String getVersionNum() 		{ return "1.9.05" }
+String getVersionNum() 		{ return "1.9.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -365,6 +366,8 @@ metadata {
 											 [name:'Hold Hours', type:'NUMBER', description:'Hours to Hold (if Hold Type == Hold Hours]']]
   		command "setVacationFanMinOnTime",	[[name:'Fan Min On Time for Vacation Hold*', type:'NUMBER', description:'Minimum fan minutes/hour (0-55)']]
 		command "wakeup", 					[]
+		command "setHoldOverVacation", [[name:'Heat Setpoint*', type:'NUMBER'],[name:'Cool Setpoint*', type:'NUMBER'],[name:'Hold Type', type:'ENUM', constraints:['holdHours','nextTransition','indefinite']],[name:'Hold Hours', type:'NUMBER']]
+		command "setHoldOverVacationProgram", [[name:'Program Name*', type:'STRING', description:'Program/climate to hold over the Vacation (e.g. Vacation)'],[name:'Hold Type', type:'ENUM', constraints:['holdHours','nextTransition','indefinite']],[name:'Hold Hours', type:'NUMBER']]
 	}
 
 	simulator { }
@@ -1525,6 +1528,21 @@ void updateThermostatSetpoints() {
 	state.newHeatingSetpoint = null
 	state.newCoolingSetpoint = null
 	runIn(5, 'refresh', [overwrite: true])
+}
+
+// place a hold OVER an active Vacation (preserves the calendar event). Intentionally skips the vacation guard.
+void setHoldOverVacation(heat, cool, String holdType='holdHours', holdHours=2) {
+	if (parent.setHoldOverVacation(this, heat, cool, getDeviceId(), holdType, (holdHours?:2)))
+		generateEvent([coolingSetpoint: roundIt(cool,1), heatingSetpoint: roundIt(heat,1), thermostatHold:'hold', lastHoldType: holdType])
+	else LOG("setHoldOverVacation() failed", 1, null, 'warn')
+}
+
+// hold a named Program (e.g. 'Vacation') OVER an active calendar vacation via
+// holdClimateRef, so currentProgram reads the program name naturally (no display rewrite/freeze). holdHours failsafe.
+void setHoldOverVacationProgram(String program, String holdType='holdHours', holdHours=2) {
+    if (parent.setHoldOverVacationProgram(this, program, getDeviceId(), holdType, (holdHours?:2)))
+        generateEvent([thermostatHold:'hold', lastHoldType: holdType])
+    else LOG("setHoldOverVacationProgram() failed", 1, null, 'warn')
 }
 
 // raiseSetpoint: called by tile when user hit raise temperature button on UI

@@ -42,11 +42,12 @@
  *	1.8.26 - Fix whatHoldType for 'holdHours'
  *	1.9.00 - Removed all ST code
  *	1.9.01 - Fixed configuratiion error
+ *	1.9.06 - Fixed the reservation type in the mode-change warning: 'offMode' should be 'modeOff'.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.01" }
+String getVersionNum()		{ return "1.9.06" }
 String getVersionLabel()	{ return "Ecobee Suite Smart Mode, Programs & Setpoints Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -777,7 +778,7 @@ def insideChangeHandler(evt) {
 					if (!override) {
 						// if Anybode else (but not me) has a reservation on this being off, I can't turn it back on
 						insideOverride[tid] = false
-						LOG("${evt.device.displayName} inside temp is ${theTemp}°${evt.unit}, but can't change to ${newMode} since ${getGuestList(tid,'offMode').toString()[1..-2]} have offMode reservations",2,null,'warn')
+						LOG("${evt.device.displayName} inside temp is ${theTemp}°${evt.unit}, but can't change to ${newMode} since ${getGuestList(tid,'modeOff').toString()[1..-2]} have modeOff reservations",2,null,'warn')
 						// Here's where we could subscribe to reservations and re-evaluate. For now, just wait for another inside Temp Change to occur
 					} else {
 						// not currently off or there are no modeOff reservations (other than my own), change away!

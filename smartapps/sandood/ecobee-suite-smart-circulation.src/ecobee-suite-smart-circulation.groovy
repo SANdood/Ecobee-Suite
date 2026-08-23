@@ -28,11 +28,12 @@
  *  1.8.12 - Fix getThermostatModes()
  *	1.8.13 - Fix for Hubitat 'supportedThermostatModes', etc.
  *	1.9.00 - Removed all ST code
+ *	1.9.06 - Fixed: getHubPlatform referenced without parentheses; the quiet-switch subscription used an undefined 'off'; two comparisons where an assignment was intended, leaving the humidity gate unable to disable adjustment; an undefined 'ncCh' in two humidity log messages; the wrong atomicState key when reporting quiet-time minutes.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.00" }
+String getVersionNum()		{ return "1.9.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Circulation Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -261,7 +262,7 @@ def initialize() {
 	String version = getVersionLabel()
 	LOG("${version} Initializing...", 2, "", 'info')
     atomicState.versionLabel = getVersionLabel()
-    atomicState.hubPlatform = getHubPlatform
+    atomicState.hubPlatform = getHubPlatform()
     
     def tid = getDeviceId(theThermostat.deviceNetworkId)
     atomicState.theTid = tid
@@ -288,7 +289,7 @@ def initialize() {
     if (settings.quietSwitches) {
     	subscribe(quietSwitches, "switch.${qtOn}", quietOnHandler)
         def qtOff = settings.qtOn == 'on' ? 'off' : 'on'
-        subscribe(quietSwitches, "switch.${off}", quietOffHandler)
+        subscribe(quietSwitches, "switch.${qtOff}", quietOffHandler)
         atomicState.quietNow = (settings.quietSwitches.currentSwitch.contains(settings.qtOn)) ? true : false
     } else {
     	atomicState.quietNow = false
@@ -342,7 +343,7 @@ def initialize() {
     if (isOK && settings.theHumidistat) {
 		def ncCh = settings.theHumidistat.currentValue('humidity', true)
     	if (ncCh.toInteger() <= settings.highHumidity) {
-        	isOK == false
+        	isOK = false
             LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
 		} else {
 			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${ncCh}% (${settings.highHumidity}% set), adjusting", 3, null, "info")
@@ -491,10 +492,10 @@ def modeOrProgramHandler(evt=null) {
     if (isOK && settings.theHumidistat) {
 		def currentHumidity = settings.theHumidistat.currentValue('humidity', true)
     	if ((currentHumidity as Integer) <= settings.highHumidity) {
-        	isOK == false
-            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${ncCh}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
+        	isOK = false
+            LOG("Relative Humidity at ${settings.theHumidistat.displayName} is only ${currentHumidity}% (${settings.highHumidity}% set), not adjusting", 3, null, "info")
 		} else {
-			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${ncCh}% (${settings.highHumidity}% set), adjusting enabled", 3, null, "info")
+			LOG("Relative Humidity at ${settings.theHumidistat.displayName} is ${currentHumidity}% (${settings.highHumidity}% set), adjusting enabled", 3, null, "info")
 		}
     }
     
@@ -805,7 +806,7 @@ void updateMyLabel() {
 	if (settings.tempDisable) {
 		newLabel = myLabel + '<span style="color:red"> (paused)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
-	} else if (atomicState.minutes == 'quiet time') {
+	} else if (atomicState.circMinutes == 'quiet time') {
 		newLabel = myLabel + '<span style="color:green"> (quiet time)</span>'
 		if (app.label != newLabel) app.updateLabel(newLabel)
 	} else if (minutes > -1) { 

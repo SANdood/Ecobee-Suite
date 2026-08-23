@@ -28,10 +28,11 @@
  *	1.8.12 - Added fanControl support, changed name to Smart Switch/Dimmer/Fan
  *	1.8.13 - Only "deactivate" during selected days and outside of "disabled" time window
  *	1.9.00 - Removed all ST code
+ *	1.9.06 - Fixed: the reverse action turned a switch ON where it should turn it OFF; dayCheck referenced without parentheses, so the test never evaluated.
  */
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.00" }
+String getVersionNum()		{ return "1.9.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Smart Switch/Dimmer/Fan Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -346,7 +347,7 @@ def opStateHandler(evt) {
                 }
                 if (cs != 'off') { 
                    	LOG("Turning off ${theSwitch.displayName}",2,null,'info')
-                   	theSwitch.on() 
+                   	theSwitch.off() 
                 } else {
                   	LOG("${theSwitch.displayName} was already off",2,null,'info')
                 }
@@ -419,7 +420,7 @@ def opStateHandler(evt) {
     updateMyLabel()
 }
 void reverseActionsScheduled() {
-	if (dayCheck) reverseActions()
+	if (dayCheck()) reverseActions()
 }
 void reverseActions() {
 	Map priorState = settings.reversePreserve ? atomicState.priorState : [:]

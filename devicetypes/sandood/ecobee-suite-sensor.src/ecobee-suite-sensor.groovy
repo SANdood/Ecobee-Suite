@@ -39,11 +39,12 @@
  *	1.8.07 - HOTFIX: DeviceWatch fix for hubless ST locations 
  *	1.8.08 - Display temperature as default for the new Samsung app
  *	1.9.00 - Removed all ST code
+ *	1.9.06 - Restored change detection on temperature and two further attribute groups that were sending an event on every parent update regardless of value; the value is now rounded BEFORE the change test so the test matches what is actually sent; added a periodic forced send so HealthCheck cannot mark the device offline.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum() 		{ return "1.9.00" }
+String getVersionNum() 		{ return "1.9.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Sensor, version ${getVersionNum()} on ${getPlatform()}" }
 def programIdList() 		{ return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram() - better to use the Name
 
@@ -202,6 +203,7 @@ def generateEvent(Map results) {
 	def startMS = now()
 	
 	Integer objectsUpdated = 0
+	Integer objectsSuppressed = 0		// events NOT sent because the value did not change
 	String tempScale = getTemperatureScale()
     def precision = device.currentValue('decimalPrecision')
     if (!precision) precision = (tempScale == 'C') ? 1 : 0
@@ -231,18 +233,38 @@ def generateEvent(Map results) {
 						// event = [name: name, linkText: linkText, descriptionText: "Sensor is Offline", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
 					} else {
 						// must be online  
-						// isChange = isStateChange(device, name, sendValue)
-						isChange = true // always send the temperature, else HealthCheck will think we are OFFLINE
-
-						// Generate the display value that will preserve decimal positions ending in 0
-						if (isChange) {
-							def dValue = value.toBigDecimal()
-							if (precision == 0) {
-								tempDisplay = roundIt(dValue, 0).toString() + '°'
-								sendValue = roundIt(dValue, 0).toInteger()								// Remove decimals in device lists also
+						// Previously this read `isChange = true`, forcing a
+						// temperature event on EVERY parent update whether or not the value moved.
+						// ORDER MATTERS: round FIRST, then test for change on the ROUNDED value -- that is
+						// what actually gets sent. Comparing the raw value would report a change for
+						// 70.1 -> 70.3 and still emit an unchanged "70".
+						// HealthCheck needs only a PERIODIC heartbeat (checkInterval is 3900 s), so a forced
+						// send every TEMP_HEARTBEAT_MS keeps the device out of OFFLINE. A real change also
+						// resets the heartbeat clock.
+						String cbDisplay = ''
+						def dValue = value.toBigDecimal()
+						if (precision == 0) {
+							cbDisplay = roundIt(dValue, 0).toString() + '°'
+							sendValue = roundIt(dValue, 0).toInteger()								// Remove decimals in device lists also
+						} else {
+							cbDisplay = String.format( "%.${precision.toInteger()}f", roundIt(dValue, precision.toInteger())) + '°'
+						}
+						isChange = isStateChange(device, name, sendValue as String)
+						if (!isChange) {
+							Long cbLast = (state.cbLastTempSendMS ?: 0L) as Long
+							if ((now() - cbLast) >= TEMP_HEARTBEAT_MS) {
+								isChange = true
+								state.cbHeartbeats = (state.cbHeartbeats ?: 0) + 1
 							} else {
-								tempDisplay = String.format( "%.${precision.toInteger()}f", roundIt(dValue, precision.toInteger())) + '°'
+								objectsSuppressed++
 							}
+						}
+						if (isChange) {
+							state.cbLastTempSendMS = now()
+							tempDisplay = cbDisplay
+						}
+
+						if (isChange) {
 							//sendEvent(name: 'temperatureDisplay', linkText: linkText, value: "${tempDisplay}", handlerName: 'temperatureDisplay', 
 							//		  descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 							event = [name: name, linkText: linkText, descriptionText: "Temperature is ${tempDisplay}", unit: tempScale, handlerName: name, 
@@ -304,27 +326,28 @@ def generateEvent(Map results) {
             case 'climatesList':
 			case 'thermostatId':
             case 'activeClimates':
-                   // isChange = isStateChange(device, name, sendValue)
-                   // if (isChange) {
+                    // change gate RE-ENABLED (was commented out) -- these fired on
+                    // every parent update regardless of value.
+                    isChange = isStateChange(device, name, sendValue)
+                    if (isChange) {
                         event = [name: name, linkText: linkText, handlerName: name, value: sendValue, /* isStateChange: true, */ displayed: false]
                         objectsUpdated++
-                   // }
+                    } else { objectsSuppressed++ }
                     break;
 			default:
                     // Must be a non-standard program name, or one of the XXXupdated timestamps
-                   // isChange = isStateChange(device, name, sendValue)
-                   // if (isChange) {
+                    // change gate RE-ENABLED (was commented out). This also stops the
+                    // unconditional state."${name}" / updateDataValue() writes on unchanged values.
+                    isChange = isStateChange(device, name, sendValue)
+                    if (isChange) {
                         event = [name: name, linkText: linkText, handlerName: name, value: sendValue, /*isStateChange: true,*/ displayed: false]
                         if (!name.endsWith("Updated")) {
                             // Save non-standard Programs in a state variable and a dataValue
                             state."${name}" = sendValue
                             updateDataValue( name, sendValue )
-                        } // else {
-                            //if (getDataValue(name) != null) updateDataValue(name, "")
-                            //if (getDataValue('thermostatUpdated') != "") updateDataValue('thermostatUpdated', "")
-                        //}
+                        }
                         objectsUpdated++
-                   // }
+                    } else { objectsSuppressed++ }
                     break;
             }			
 			if (event != [:]) sendEvent(event)
@@ -334,7 +357,11 @@ def generateEvent(Map results) {
 		}
 	}
 	def elapsed = now() - startMS
-    LOG("Updated ${objectsUpdated} object${objectsUpdated!=1?'s':''} (${elapsed}ms)",2,this,'info')
+    // cumulative counters live in state only -- deliberately NOT attributes, because an
+    // attribute would itself emit an event and defeat the purpose of the fix.
+    state.cbSent = (state.cbSent ?: 0) + objectsUpdated
+    state.cbSuppressed = (state.cbSuppressed ?: 0) + objectsSuppressed
+    LOG("Updated ${objectsUpdated} object${objectsUpdated!=1?'s':''}, suppressed ${objectsSuppressed} (${elapsed}ms) [cum sent ${state.cbSent} / suppressed ${state.cbSuppressed}]",2,this,'info')
 }
 
 //generate custom mobile activity feeds event
@@ -378,11 +405,11 @@ void updateSensorPrograms(List activeList, List inactiveList) {
 }
 
 void enableSmartRoom() {
-	sendEvent(name: "SmartRoom", value: "enable", isSateChange: true, displayed: false)		// the Smart Room SmartApp should be watching for this
+	sendEvent(name: "SmartRoom", value: "enable", isStateChange: true, displayed: false)		// the Smart Room SmartApp should be watching for this
 }
 
 void disableSmartRoom() {
-	sendEvent(name: "SmartRoom", value: "disable", isSateChange: true, displayed: false)		// the Smart Room SmartApp should be watching for this
+	sendEvent(name: "SmartRoom", value: "disable", isStateChange: true, displayed: false)		// the Smart Room SmartApp should be watching for this
 }
 
 String getSensorId() {
@@ -503,6 +530,7 @@ boolean getIsHEHub() { return true }					// if (isHEHub) ...
 def getParentSetting(String settingName) {
 	return ST ? parent?.settings?."${settingName}" : parent?."${settingName}"
 }
+@Field final Long TEMP_HEARTBEAT_MS = 1800000L	// forced temperature heartbeat, 30 min (checkInterval is 65 min)
 @Field String  hubPlatform 	= "Hubitat"
 @Field boolean ST 			= false
 @Field boolean HE 			= true

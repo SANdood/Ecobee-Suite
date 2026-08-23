@@ -36,11 +36,12 @@
  *	1.8.20 - Fix for Hubitat 'supportedThermostatModes', etc.
  *  1.8.21 - Fix for supportedThermostatPrograms error in setup
  *	1.9.00 - Removed all ST code
+ *	1.9.06 - Removed the commented-out getMultiThermometers() block (dead code).
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.00" }
+String getVersionNum()		{ return "1.9.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermal Comfort Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -866,26 +867,6 @@ def getMultiHumidistats() {
 	}
     return humidity
 }
-/*					
-def getMultiThermometers() {
-	if (!settings.thermometers) 			return settings.theThermostat.currentTemperature
-	if (settings.thermometers.size() == 1) 	return settings.thermostats[0].currentTemperature
-	
-	def tempList = settings.thermometers.currentTemperature
-	def result
-	switch(settings.multiTempType) {
-		case 'average':
-			return roundIt( (tempList.sum() / tempList.size()), (getTemperatureScale()=='C'?2:1))
-			break;
-		case 'lowest':
-			return tempList.min()
-			break;
-		case 'highest':
-			return tempList.max()
-			break;
-	}
-}
-*/
 
 // Helper Functions
 String textListToString(list) {

@@ -26,11 +26,12 @@
  *	1.8.10 - heating/coolingSetpointDisplay not used on Hubitat version
  *	1.8.11 - Fix for Hubitat 'supportedThermostatModes', etc.
  *	1.9.00 - Removed all ST code
+ *	1.9.06 - Fixed: fan mode captured from thermostatMode instead of thermostatFanMode; a settings.quAutoOff typo in the hours branch of the auto-off timer; an assignment inside the isQuietTime test that always evaluated false; settings.thermostats instead of theThermostats when iterating.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.00" }
+String getVersionNum()		{ return "1.9.06" }
 String getVersionLabel() 	{ return "Ecobee Suite Quiet Time Helper, version ${getVersionNum()} on ${getHubPlatform()}" }
 
 definition(
@@ -440,7 +441,7 @@ void turnOnQuietTime() {
         }
         if (settings.fanOff) { 
         	makeReservation(tid, 'fanOff')						// reserve the fanOff also
-        	statState[tid].thermostatFanMode = stat.currentValue('thermostatMode', true)
+        	statState[tid].thermostatFanMode = stat.currentValue('thermostatFanMode', true)
             stat.setThermostatFanMode('off','indefinite')
             LOG("${stat.device.displayName} Fan Mode is off",3,null,'info')
         }
@@ -494,7 +495,7 @@ void turnOnQuietTime() {
     atomicState.isQuietTime = true
     
     if ((settings.qtAutoOff != null) && (settings.qtAutoOff != '(Disabled)')) {
-    	def seconds = settings.qtAutoOff.contains('Minute')? (settings.qtAutoOff.tokenize()[0].toInteger() * 60) : (settings.quAutoOff.tokenize()[0].toInteger() * 3600)
+    	def seconds = settings.qtAutoOff.contains('Minute')? (settings.qtAutoOff.tokenize()[0].toInteger() * 60) : (settings.qtAutoOff.tokenize()[0].toInteger() * 3600)
         LOG("Quiet Time Auto Off scheduled in ${seconds} seconds.",2,null,'info')
        	runIn( seconds, turnQuietOff, [overwrite: true])
   	}        
@@ -509,7 +510,7 @@ void turnQuietOff() {
 }
 
 def quietOffHandler(evt=null) {
-    if (!atomicState.isQuietTime || (atomicState.quietTime = false)) {
+    if (!atomicState.isQuietTime) {
     	LOG("Quiet Time Off requested, but not in Quiet Time",1,null,'warn')
         return
     }
@@ -682,7 +683,7 @@ String getDeviceId(networkId) {
 // return all the modes that ALL thermostats support
 List getThermostatModes() {
     def statModes = []
-    settings.thermostats?.each { stat ->
+    settings.theThermostats?.each { stat ->
         def tm = []
         tm = new JsonSlurper().parseText(stat.currentValue('supportedThermostatModes', true))
         if (statModes == []) {

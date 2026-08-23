@@ -39,11 +39,12 @@
  *	1.8.56 - Added fanSpeed attribute support (use 'setFanSpeed' or 'setEcobeeSetting' on thermostat to change)
  *	1.9.0a - Added new Capabilities support (fanSpeedOptions only, for now)
  *	1.9.00 - Removed all ST code
+ *	1.9.06 - Reduced atomicState write volume: thermostats, remoteSensorsData and statUpdates are now passed as parameters rather than persisted (obsolete keys are evicted on update), and an unchanged latestRevisions map is no longer rewritten once per thermostat per poll. Added setHoldOverVacation() and setHoldOverVacationProgram(), which hold a named program over an active calendar vacation without cancelling it; resumeProgram() now reflects a still-running vacation's program and setpoints instead of freezing at the prior hold values.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.00" }
+String getVersionNum()		{ return "1.9.06" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1047,6 +1048,15 @@ void updated() {
 	LOG("Updated with settings: ${settings}",1,null,'trace')	
 	unschedule()
     cleanupStates()
+	// evict the keys that are no longer written. Every atomicState write
+	// serialises the ENTIRE map, so a dead `thermostats` map would keep costing on every
+	// other write. Harmless if already absent.
+	atomicState.remove('thermostats')
+	atomicState.remove('remoteSensorsData')
+	atomicState.remove('statUpdates')
+	state.remove('statUpdates')
+	state.remove('thermostats')
+	state.remove('remoteSensorsData')
 	initialize()
 }
 
@@ -1269,7 +1279,7 @@ def initialize() {
 	atomicState.myStatsClimates 	= [:]
 	atomicState.oemCfg 				= [:]
 	atomicState.program 			= [:]
-    atomicState.remoteSensorsData	= [:]
+    // initializer removed - the key is no longer written or read (it is passed as a parameter).
 	atomicState.runningEvent 		= [:]
 	atomicState.runtime 			= [:]
 	atomicState.schedule 			= [:]
@@ -1904,14 +1914,18 @@ void pollChildren(String deviceId="",force=false) {
 	}
 }
 
-void generateAlertsAndEvents() {
-	generateTheEvents()
+void generateAlertsAndEvents(Map cbStats, Map cbSensors) {
+	generateTheEvents(cbStats, cbSensors)
 }
 
-void generateTheEvents() {
+// stats/sensors now arrive as PARAMETERS. They were persisted to
+// atomicState purely to hand them between functions inside this same execution - 2 full-map
+// serialisations per poll, and permanent state-DB residency for the largest maps ESM holds.
+// Callers pass [:] when the updater was skipped, so a no-change
+// poll no longer re-sends the PREVIOUS poll's data; the hourly forcePoll (60 min) still
+// refreshes every child inside the 65-minute checkInterval health window.
+void generateTheEvents(Map stats, Map sensors) {
 	def startMS = now()
-	Map stats = atomicState.thermostats
-	Map sensors = atomicState.remoteSensorsData
 	stats?.each { DNI ->
 		if (DNI?.value?.data) getChildDevice(DNI.key).generateEvent(DNI.value.data)
 	}
@@ -2550,7 +2564,10 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
                     }
 					//if (stat.energy) log.debug "stat[${tid}].energy: ${stat.energy}"
 				}
-				atomicState.latestRevisions = latestRevisions
+				// DELETED `atomicState.latestRevisions = latestRevisions`. It sat INSIDE
+				// resp.json.thermostatList.each{}, rewriting a map never modified in the loop and already stored by
+				// checkThermostatSummary(). Every atomicState write serialises the WHOLE map on Hubitat, so this cost
+				// one full-map serialisation PER THERMOSTAT PER POLL for no effect.
                 
 				// let's don't copy all pf the weather info...we only need a few bits bits of it
 				if (getWeather || forcePoll) {
@@ -2702,16 +2719,24 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
         if (weatherUpdated) 	atomicState.weather 			= tempWeather
         if (alertsUpdated) 		atomicState.alerts 				= tempAlerts
 		if (capabilitiesUpdated) atomicState.capabilities		= tempCapabilities
-								atomicState.statUpdates 		= statUpdates
+		// DELETED `atomicState.statUpdates = statUpdates`. It is written once per poll and
+		// read only by updateThermostatData()/updateSensorData(), both called below from this same
+		// callback with the local still in scope. Passed as a parameter instead.
+		// Plain-map copy: the local carries .withDefault{[]}, but the readers have always seen a
+		// post-deserialisation plain map (null on a missing key). `[:] +` preserves that exactly.
+		Map cbStatUpdates = [:] + statUpdates
 		//statUpdates = null
 
 		// Update the data and send it down to the devices as events
 		if (debugLevelFour) LOG("pollEcobeeAPICallback() - T: ${thermostatUpdated}, R: ${runtimeUpdated} A: ${alertsUpdated}, E: ${equipUpdated}, e: ${extendRTUpdated}", 1, null, 'trace')
 
+		// hold this poll's data in locals instead of atomicState
+		Map cbStatData 		= [:]
+		Map cbSensorData 	= [:]
 		if (settings.thermostats) {
 			if (forcePoll || thermostatUpdated || rtReallyUpdated || extendRTUpdated || settingsUpdated || weatherUpdated || equipUpdated || audioUpdated) {
             	// if (atomicState.needPrograms) atomicState.needPrograms = false // (SR) - To handle rare occasions that atomicState.needPrograms does not properly reset after
-				updateThermostatData()		// update thermostats first (some sensor data is dependent upon thermostat changes)
+				cbStatData = updateThermostatData(cbStatUpdates)		// update thermostats first (some sensor data is dependent upon thermostat changes)
 			} else {
 				LOG("No thermostat updates...", 2, null, 'info')
                 //if (atomicState.needPrograms) atomicState.needPrograms = false
@@ -2719,7 +2744,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 		}
 		if (settings.ecobeesensors) {						// Only update configured sensors (and then only if they have changes)
 			if (forcePoll || sensorsUpdated || thermostatUpdated) { // possibly can get away with climatesUpdated, 
-				updateSensorData() 
+				cbSensorData = updateSensorData(cbStatUpdates)
 			} else {
 				LOG("No sensor updates...", 2, null, 'info')
 			} 
@@ -2727,7 +2752,9 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
         
 		// pollChildren() will actually send all the events we just created, once we return
 		// just a bit more housekeeping...
-		atomicState.lastRevisions = atomicState.latestRevisions		// copy the Map
+		// use the local read at the top of this callback rather than re-reading
+		// atomicState.latestRevisions - identical value, one less full-map deserialisation per poll.
+		atomicState.lastRevisions = latestRevisions		// copy the Map
 		updatesLog.forcePoll = false
 		updatesLog.runtimeUpdated = false
 		def needPrograms = atomicState.needPrograms
@@ -2750,7 +2777,7 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 
 		//LOG("Polling thermostat${(numStats>1)?'s':''} ${names} (${tids}) completed", 2, null, 'info')
         LOG("Polling ${tids} completed", 2, null, 'info')
-		if (debugLevelFour) LOG("pollEcobeeAPICallback() - Updated thermostat${(numStats>1)?'s':''} ${names} (${tidList}) ${atomicState.thermostats}", 1, null, 'info')
+		if (debugLevelFour) LOG("pollEcobeeAPICallback() - Updated thermostat${(numStats>1)?'s':''} ${names} (${tidList}) ${cbStatData}", 1, null, 'info')
 		if (atomicState.inTimeoutRetry) atomicState.inTimeoutRetry = 0	// Not in Timeout Recovery any longer
 	
 	// Now we have to actually send the updates
@@ -2761,9 +2788,9 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
         
         // Work-around SmartThings CPU time limit of 20 seconds...
 		if (alertsUpdated) {
-			generateAlertsAndEvents()
+			generateAlertsAndEvents(cbStatData, cbSensorData)
 		} else {
-			generateTheEvents()
+			generateTheEvents(cbStatData, cbSensorData)
 		}
 	} 	
 	
@@ -2926,7 +2953,7 @@ String alertTranslation( alertType, notificationType ){
 	return 'An Alert'
 }
 
-void updateSensorData() {
+Map updateSensorData(Map statUpdates) {			// was no-arg, read atomicState.statUpdates
 	int dbgLevel					= getDebugLevel()
 	boolean debugLevelFour 			= (dbgLevel >= 4)
     //def timeNow = now()
@@ -2940,7 +2967,7 @@ void updateSensorData() {
 	HashMap updatesLog 				= atomicState.updatesLog as HashMap
 	boolean forcePoll 				= updatesLog.forcePoll
 	List changedTids 				= updatesLog.changedTids
-    HashMap statUpdates 			= atomicState.statUpdates as HashMap
+    // statUpdates now arrives as a parameter.
     HashMap currentProgramNames 	= atomicState.currentProgramName as HashMap
     HashMap currentPrograms 		= atomicState.currentProgram as HashMap
     HashMap tempClimates 			= atomicState.climates as HashMap
@@ -3193,7 +3220,7 @@ void updateSensorData() {
         } // End updates for this tid condition
 	} // End thermostats loop
 	if (myStatsClimatesChanged) atomicState.myStatsClimates = myStatsClimates
-	atomicState.remoteSensorsData = sensorCollector
+	// was `atomicState.remoteSensorsData = sensorCollector` - now RETURNED to the caller.
     
     int sz = sNames.size()
     if (sz > 0) {
@@ -3206,9 +3233,10 @@ void updateSensorData() {
     if (debugLevelFour) LOG("updateSensorData() - Updated these remoteSensors: ${sensorCollector}", 1, null, 'trace') 
 
 	//if (TIMERS) log.debug "TIMER: Sensors update completed @ ${now() - atomicState.pollEcobeeAPIStart}ms"
+	return sensorCollector ?: [:]
 }
 
-void updateThermostatData() {
+Map updateThermostatData(Map statUpdates) {		// was no-arg, read atomicState.statUpdates
 	//def pollEcobeeAPIStart
 	//if (TIMERS) { pollEcobeeAPIStart = atomicState.pollEcobeeAPIStart; log.debug "TIMER: Entered updateThermostatData() @ ${now() - pollEcobeeAPIStart}ms"; }
 	boolean debugLevelFour 		= debugLevel(4)
@@ -3217,7 +3245,7 @@ void updateThermostatData() {
 	Map updatesLog 				= atomicState.updatesLog
 	boolean forcePoll 			= updatesLog.forcePoll
 	def changedTids 			= updatesLog.changedTids
-    Map statUpdates 			= atomicState.statUpdates
+    // statUpdates now arrives as a parameter.
     if (debugLevelFour) LOG("updateThermostatData() - updatesLog: ${updatesLog}", 1, null, 'trace')
     
 	if (forcePoll) {
@@ -4329,12 +4357,14 @@ void updateThermostatData() {
     if (oftenChanged)		atomicState.changeOften		= changeOften
     
 	atomicState.needPrograms = needPrograms	// should be true if ANY thermostat setpoints changed and the program data wasn't updated
-	atomicState.thermostats = statData
+	// was `atomicState.thermostats = statData` (UNCONDITIONAL, beneath 10 gated writes,
+	// and the single largest recurring write in ESM) - now RETURNED to the caller.
 	Integer nSize = tstatNames.size()
 	if (nSize > 1) tstatNames.sort()
 	LOG("${totalUpdates} update${totalUpdates!=1?'s':''} for ${nSize} thermostat${nSize!=1?'s':''} ${nSize!=0?'('+tstatNames.toString()[1..-2]+')':''}", 2, null, 'info')
     //LOG("${totalUpdates} updates for ${nSize} thermostats",2,null,'info')
 	//if (TIMERS) log.debug "TIMER: Thermostats update completed @ ${now() - atomicState.pollEcobeeAPIStart}ms"
+	return statData ?: [:]
 }
 
 String whichStage(equipStatus, auxHeatMode, heatStages) { 
@@ -4715,6 +4745,10 @@ boolean resumeProgram(child, String deviceId, resumeAll=true) {
         def climate = climates?.find { it.climateRef == climateId }
 		def climateName = climate?.name
 
+        // a resume that leaves a vacation running must reflect the VACATION (program +
+        // setpoints), NOT the scheduled climate - else currentProgram/setpoints desync and freeze via the change gate.
+        // The runIn(5) repoll then matches, so nothing flips back. (Fixes the currentProgram and setpoint freezes seen when resuming while a vacation was still running.)
+        def runningVacation = atomicState.events[deviceId]?.find { it.type == 'vacation' }
         // send the new heat/cool setpoints and ProgramId to the DTH - it will update the rest of the related displayed values itself
         Integer apiPrecision = usingMetric ? 2 : 1					// highest precision available from the API
         Integer userPrecision = getTempDecimals()						// user's requested display precision
@@ -4725,7 +4759,16 @@ boolean resumeProgram(child, String deviceId, resumeAll=true) {
                         [currentProgramId:		climateId],
                       ]
         if (debugLevelFour) LOG("resumeProgram(${statName}, ${resumeAll}) ${updates}",2,null,'info')
-        child.generateEvent(updates)			// force-update the calling device attributes that it can't see
+        if (runningVacation) {
+            // resume revealed the still-running vacation - reflect ITS actual values (program + setpoints),
+            // re-syncing the display so currentProgram/coolingSetpoint do not freeze at the prior hold values.
+            def vacationUpdates = [ [currentProgram:'Vacation'],[currentProgramName:'Vacation'],[currentProgramType:'calendarEvent'],[thermostatHold:'vacation'] ]
+            if (runningVacation.coolHoldTemp != null) vacationUpdates << [coolingSetpoint: myConvertTemperatureIfNeeded((runningVacation.coolHoldTemp.toInteger()/10.0),'F',userPrecision)]
+            if (runningVacation.heatHoldTemp != null) vacationUpdates << [heatingSetpoint: myConvertTemperatureIfNeeded((runningVacation.heatHoldTemp.toInteger()/10.0),'F',userPrecision)]
+            child.generateEvent(vacationUpdates)
+        } else {
+            child.generateEvent(updates)
+        }
 
 		runIn(5, pollChildren, [overwrite: true])	// Pick up the changes
 	} else {
@@ -5144,6 +5187,38 @@ boolean setHold(child, heating, cooling, deviceId, sendHoldType='indefinite', se
 	return result
 }
 
+// stack a hold ON TOP of an active Vacation (hold > vacation in the ecobee event stack),
+// preserving the calendar Vacation + its end date. Revert via resumeProgram(child, deviceId, false) - pops only the hold.
+// Differs from setHold(): does NOT bail on vacation, and does NOT pre-emptively resumeProgram.
+boolean setHoldOverVacation(child, heating, cooling, deviceId, sendHoldType='holdHours', sendHoldHours=2) {
+	if (child == null) child = getChildDevice(getThermostatDNI(deviceId))
+	if (atomicState.connected?.toString() != 'full') {
+		LOG("API not fully connected, queueing setHoldOverVacation(${deviceId})", 2, child, 'warn')
+		queueFailedCall('setHoldOverVacation', child.device.deviceNetworkId, 5, heating, cooling, deviceId, sendHoldType, sendHoldHours)
+		return false
+	}
+	def isMetric = (temperatureScale == "C")
+	def h = roundIt((isMetric ? (cToF(heating as BigDecimal) * 10.0) : ((heating as BigDecimal) * 10.0)), 0)
+	def c = roundIt((isMetric ? (cToF(cooling as BigDecimal) * 10.0) : ((cooling as BigDecimal) * 10.0)), 0)
+	def theHoldType = sendHoldType
+	if (theHoldType == 'holdHours') { theHoldType = 'holdHours","holdHours":"' + sendHoldHours.toString() }
+	LOG("setHoldOverVacation() for ${child.device.displayName} (${deviceId}) - h:${heating}(${h}) c:${cooling}(${c}) ${sendHoldType} ${sendHoldHours}", 2, child, 'trace')
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId +
+		'"},"functions":[{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + '","holdType":"' + theHoldType + '"}}]}'
+	def result = sendJson(child, jsonRequestBody)
+	LOG("setHoldOverVacation() for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
+	if (result) {
+		Integer userPrecision = getTempDecimals()
+		def updates = [ [heatingSetpoint: myConvertTemperatureIfNeeded((h.toInteger()/10.0),'F',userPrecision)],
+						[coolingSetpoint: myConvertTemperatureIfNeeded((c.toInteger()/10.0),'F',userPrecision)],
+						[currentProgramName:'Hold: Temp'],[thermostatHold:'hold'] ]
+		child.generateEvent(updates)
+		runIn(5, pollChildren, [overwrite: true])
+	} else if (atomicState.connected?.toString() != 'full') {
+		queueFailedCall('setHoldOverVacation', child.device.deviceNetworkId, 5, heating, cooling, deviceId, sendHoldType, sendHoldHours)
+	}
+	return result
+}
 // Should only be called by child devices, and they MUST provide sendHoldType and sendHoldHours as of version 1.2.0
 boolean setFanMode(child, fanMode, fanMinOnTime, deviceId, sendHoldType='indefinite', sendHoldHours=2) {
 	if (child == null) child = getChildDevice(getThermostatDNI(deviceId))
@@ -5311,6 +5386,59 @@ boolean setProgram(child, program, String deviceId, sendHoldType='indefinite', s
 //		 verify other Helpers will work with newly-synchronous calls
 //
 /////////////////////////////////////////////////////////////////////////////////////
+// setProgram() clone that holds a named program (e.g. 'Vacation') OVER an active
+// calendar vacation -- bypasses the vacation guard, uses holdClimateRef so currentProgram reads the climate NAME
+// naturally (NO display rewrite, no changeRarely freeze). Resets any prior NON-vacation hold first so it never
+// stacks; a running 'vacation' is left in place as the underlying default. holdHours = failsafe auto-revert to
+// the calendar vacation. Pre-set the per-cycle target via setProgramSetpoints(program, h, c).
+boolean setHoldOverVacationProgram(child, program, String deviceId, sendHoldType='holdHours', sendHoldHours=2) {
+    if (child == null) child = getChildDevice(getThermostatDNI(deviceId))
+    boolean debugLevelFour = debugLevel(4)
+
+    if (atomicState.connected?.toString() != 'full') {
+        LOG("API is not fully connected, queueing call to setHoldOverVacationProgram(${child.device.displayName}, ${program}, ${deviceId}, ${sendHoldType} ${sendHoldHours}", 2, child, 'warn')
+        queueFailedCall('setHoldOverVacationProgram', child.device.deviceNetworkId, 4, program, deviceId, sendHoldType, sendHoldHours)
+        return false
+    }
+
+    LOG("setHoldOverVacationProgram(${program}) for ${child.device.displayName} (${deviceId}) - holdType: ${sendHoldType}${sendHoldHours?', holdHours: '+sendHoldHours.toString():''}", 2, child, 'info')
+
+    // intentionally NO vacation guard -- this holds OVER the calendar vacation. Reset any prior (non-vacation)
+    // hold first so we never stack; a running 'vacation' is left in place as the underlying default.
+    String currentThermostatHold = child.device.currentValue('thermostatHold', true)
+    if ((currentThermostatHold != null) && (currentThermostatHold != 'null') && (currentThermostatHold != '') && (currentThermostatHold != 'vacation')) {
+        LOG("setHoldOverVacationProgram(${program}): resuming prior hold [${currentThermostatHold}] first", 2, child, 'info')
+        resumeProgram(child, deviceId, true)
+    }
+
+    def climates = atomicState.climates[deviceId]
+    def climate = climates?.find { it.name.toString() == program.toString() }
+    def climateRef = climate?.climateRef.toString()
+    if (climate == null) { LOG("setHoldOverVacationProgram(${program}): climate not found", 1, child, 'warn'); return false }
+
+    def theHoldType = sendHoldType
+    if (theHoldType == 'holdHours') { theHoldType = 'holdHours","holdHours":"' + sendHoldHours.toString() }
+    def jsonRequestBody = '{"functions":[{"type":"setHold","params":{"holdClimateRef":"'+climateRef+'","holdType":"'+theHoldType+'"}}],"selection":{"selectionType":"thermostats","selectionMatch":"'+deviceId+'"}}'
+
+    boolean result = sendJson(child, jsonRequestBody)
+    LOG("setHoldOverVacationProgram(${climateRef}) for ${child.device.displayName} (${deviceId}) returned ${result}", 2, child, result?'info':'warn')
+
+    if (result) {
+        Integer userPrecision = getTempDecimals()
+        def updates = [ [heatingSetpoint:    myConvertTemperatureIfNeeded( (climate.heatTemp.toInteger() / 10.0), 'F', userPrecision)],
+                        [coolingSetpoint:    myConvertTemperatureIfNeeded( (climate.coolTemp.toInteger() / 10.0), 'F', userPrecision)],
+                        [currentProgram:     program],
+                        [currentProgramId:   climateRef],
+                        [thermostatHold:     'hold'],
+                        [currentProgramName: "Hold: ${program}"] ]
+        child.generateEvent(updates)
+        runIn(5, pollChildren, [overwrite: true])
+    } else if (atomicState.connected?.toString() != 'full') {
+        queueFailedCall('setHoldOverVacationProgram', child.device.deviceNetworkId, 4, program, deviceId, sendHoldType, sendHoldHours)
+    }
+    return result
+}
+
 boolean addSensorToProgram(child, deviceId, sensorId, programId) {
 	return addSensorToPrograms(child, deviceId, sensorId, [programId])
 }
