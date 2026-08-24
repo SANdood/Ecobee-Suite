@@ -2,8 +2,8 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.3.3",
-  "dateReleased": "2026-08-23",
-  "releaseNotes": "1.9.06 - Bug-fix release. Corrects assignment-vs-comparison and undefined-identifier defects across five Helpers, restores change detection in the Sensor driver, reduces Ecobee Suite Manager atomicState write volume, and adds hold-over-vacation support to the Manager and Thermostat.",
+  "dateReleased": "2026-08-24",
+  "releaseNotes": "1.9.07 - Bug-fix release. Corrects nine undefined-identifier and reversed-value defects in Ecobee Suite Manager and the Thermostat driver, including an offline-thermostat path that stalled all device updates, a failed-call queue that captured nothing, a Smart-Auto setpoint change that updated the display without changing the setpoint, a humidity setpoint command broken two independent ways, and reversed microphone on/off values.",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/796",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.9.06"
+      "version": "1.9.07"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.9.06"
+      "version": "1.9.07"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",

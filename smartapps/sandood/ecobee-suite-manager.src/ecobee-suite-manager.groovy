@@ -40,11 +40,12 @@
  *	1.9.0a - Added new Capabilities support (fanSpeedOptions only, for now)
  *	1.9.00 - Removed all ST code
  *	1.9.06 - Reduced atomicState write volume: thermostats, remoteSensorsData and statUpdates are now passed as parameters rather than persisted (obsolete keys are evicted on update), and an unchanged latestRevisions map is no longer rewritten once per thermostat per poll. Added setHoldOverVacation() and setHoldOverVacationProgram(), which hold a named program over an active calendar vacation without cancelling it; resumeProgram() now reflects a still-running vacation's program and setpoints instead of freezing at the prior hold values.
+ *	1.9.07 - Fixed: an undefined 'templocation' aborted updateThermostatData() on every poll while any thermostat was offline, stalling ALL device updates for exactly as long as the offline state persisted; and an undefined 'dbgfLvl' in queueCall() meant the failed-call queue captured nothing, so commands queued during an API outage were silently lost.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.06" }
+String getVersionNum()		{ return "1.9.07" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -3490,7 +3491,7 @@ Map updateThermostatData(Map statUpdates) {		// was no-arg, read atomicState.sta
                 // Oddly, the runtime.lastModified is returned in UTC, so we have to convert it to the time zone of the thermostat
                 // (Note that each thermostat could actually be in a different time zone)
                	if (!tempLocation) tempLocation	= atomicState.statLocation  // tempLocation[tid]
-                def myTimeZone = (templocation && tempLocation[tid] && tempLocation[tid].timeZone) ? TimeZone.getTimeZone(tempLocation[tid].timeZone) : (location.timeZone?: TimeZone.getTimeZone('UTC'))
+                def myTimeZone = (tempLocation && tempLocation[tid] && tempLocation[tid].timeZone) ? TimeZone.getTimeZone(tempLocation[tid].timeZone) : (location.timeZone?: TimeZone.getTimeZone('UTC'))
                 def disconnectedMS
                 String disconnectedAt
                 if (runtime && runtime?.disconnectedDateTime) {
@@ -4611,7 +4612,7 @@ void queueCall(data) {
 		failedCallQueue = atomicState.callQueue
 		queueSize = failedCallQueue ? failedCallQueue.size() : 0
 	}
-	LOG("queueSize: ${queueSize}, failedCallQueue: ${failedCallQueue}", dbgfLvl, null, 'trace')
+	LOG("queueSize: ${queueSize}, failedCallQueue: ${failedCallQueue}", dbgLvl, null, 'trace')
 	if (queueSize == 0) {
 		failedCallQueue = ["${queueSize}": data]
 	} else {

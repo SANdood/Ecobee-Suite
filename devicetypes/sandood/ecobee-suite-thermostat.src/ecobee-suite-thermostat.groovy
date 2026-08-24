@@ -61,8 +61,9 @@
  *	1.9.04 - Fixed JsonSlurper null error (line 487)
  *	1.9.05 - Added missing 'set' commands (schedule, fanMode, thermostatMode)
  *	1.9.06 - Added setHoldOverVacation() and setHoldOverVacationProgram() commands: place a hold over an active calendar vacation without cancelling it.
+ *	1.9.07 - Fixed: undefined 'deviceId' in setThermostatFanMode(), crashing fanAuto() when already auto and fanCirculate() on a time change; undefined 'runWhen' in raiseSmartSetpoint()/lowerSmartSetpoint(), which updated the display and then threw, so the setpoint never actually changed; undefined 'sendVal' in the timeOfDay case, firing at every day/night transition and aborting the remainder of that event batch; setHumiditySetpointDelay() tested an undefined 'hasDehumidifier' and a mistyped 'humidifierMide', leaving the humidity setpoint command broken two independent ways; undefined 'child' in setEcobeeSetting()'s log call, which threw before the redirect could execute; and microphoneOn()/microphoneOff() set reversed values.
  */
-String getVersionNum() 		{ return "1.9.06" }
+String getVersionNum() 		{ return "1.9.07" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -820,9 +821,9 @@ def generateEvent(List updates) {
 						if (isChange) {
 							def weatherSymbol = device.currentValue('weatherSymbol', true)
 							Integer symbolNum = weatherSymbol as Integer
-							if ((sendVal == 'night') && (symbolNum < 100)) {
+							if ((sendValue == 'night') && (symbolNum < 100)) {
 								symbolNum = symbolNum + 100
-							} else if ((sendVal == 'day') && (symbolNum >= 100)) {
+							} else if ((sendValue == 'day') && (symbolNum >= 100)) {
 								symbolNum = symbolNum - 100
 							}
 							isChange = isStateChange(device, 'weatherSymbol', symbolNum.toString())
@@ -1696,6 +1697,7 @@ void raiseSmartSetpoint(heatingSetpoint, coolingSetpoint) {
 	def adjust = (isMetric ? 0.5 : 1.0)
 	def newHeat = roundIt((heatingSetpoint + adjust), 1)
 	def newCool = roundIt((coolingSetpoint + adjust), 1)
+	def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer	// was undeclared in this function
 
 	if (newHeat > currentTemp) {
 		// turn the heat up
@@ -1723,6 +1725,7 @@ void lowerSmartSetpoint(heatingSetpoint, coolingSetpoint) {
 	def adjust = (isMetric ? 0.5 : 1.0)
 	def newHeat = roundIt((heatingSetpoint - adjust), 1)
 	def newCool = roundIt((coolingSetpoint - adjust), 1)
+	def runWhen = (getParentSetting('arrowPause') ?: 4) as Integer	// was undeclared in this function
 
 	if (newCool < currentTemp) {
 		// turn the cool down
@@ -2211,7 +2214,7 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 				results = parent.setFanMode(this, 'auto', 0, getDeviceId(), sendHoldType, sendHoldHours)
 				autoHold = true
 			} else {
-				results = parent.setFanMinOnTime(this, deviceId, 0)
+				results = parent.setFanMinOnTime(this, getDeviceId(), 0)
 			}
 			if (results) {
 				updates = [[fanMinOnTime: 0],
@@ -2261,7 +2264,7 @@ void setThermostatFanMode(String value, holdType=null, holdHours=2) {
 			}
 			if ((currentFanMode == 'auto') || (currentFanMode == 'circulate')) {
 				if (fanTime != currentFanMinOnTime) {
-					results = parent.setFanMinOnTime(this, deviceId, fanTime)
+					results = parent.setFanMinOnTime(this, getDeviceId(), fanTime)
 				} else results = true
 			} else {
 				results = parent.setFanMode(this, setValue, fanTime, getDeviceId(), sendHoldType, sendHoldHours)
@@ -2411,14 +2414,14 @@ void setHumiditySetpointDelay(setpoint) {
 	LOG("setHumiditySetpointDelay ${setpoint}",4,null,'trace')
 	// verify that the stat hasDehumidifer
 	def hasHumidifier = device.currentValue('hasHumidifier')
-	if (!hasHumidifier || (hasDehumidifier == 'false')) {
+	if (!hasHumidifier || (hasHumidifier == 'false')) {
 		LOG("${device.displayName} is not controlling a humidifier", 1, null, 'warn')
 		return
 	}
 	// log.debug "${device.currentValue('humiditySetpoint')}"
 	def currentSetpoint = device.currentValue('humiditySetpoint', true)
 	def humidifierMode  = device.currentValue('humidifierMode', true)
-	if (humidifierMide == 'auto') {
+	if (humidifierMode == 'auto') {
 		LOG("${device.displayName} is in Auto mode - cannot override Humidity setpoint", 1, null, 'warn')
 		def updates = [[forced: true], [humiditySetpoint: currentSetpoint], [forced: false]]
 		generateEvent(updates)
@@ -2609,7 +2612,7 @@ void setEcobeeSetting( String name, value ) {
 	def result
 	def dItem = EcobeeDirectSettings.find{ it.name == name }
 	if (dItem != null) {
-		LOG("setEcobeeSetting( ${name}, ${value} ) - calling ${dItem.command}( ${value} )", 2, child, 'info')
+		LOG("setEcobeeSetting( ${name}, ${value} ) - calling ${dItem.command}( ${value} )", 2, null, 'info')
 		result = "${dItem.command}"(value)
 	} else {
 		String deviceId = getDeviceId()
@@ -2631,13 +2634,13 @@ void setEcobeeSetting( String name, value ) {
 void microphoneOff() {
 	def isOn = device.currentValue('microphoneEnabled', true)
     if ((isOn != null) && ((isOn == true) || (isOn == 'true'))) {
-    	setEcobeeSetting( 'microphoneEnabled', 'true')
+    	setEcobeeSetting( 'microphoneEnabled', 'false')
     }
 }
 void microphoneOn() {
 	def isOn = device.currentValue('microphoneEnabled', true)
     if ((isOn != null) && ((isOn == false) || (isOn == 'false'))) {
-    	setEcobeeSetting( 'microphoneEnabled', 'false')
+    	setEcobeeSetting( 'microphoneEnabled', 'true')
     }
 }
 // No longer used as of v1.2.21
