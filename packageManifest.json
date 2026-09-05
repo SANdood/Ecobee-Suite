@@ -2,8 +2,8 @@
   "packageName": "Ecobee Suite",
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.3.3",
-  "dateReleased": "2026-08-24",
-  "releaseNotes": "1.9.07 - Bug-fix release. Corrects nine undefined-identifier and reversed-value defects in Ecobee Suite Manager and the Thermostat driver, including an offline-thermostat path that stalled all device updates, a failed-call queue that captured nothing, a Smart-Auto setpoint change that updated the display without changing the setpoint, a humidity setpoint command broken two independent ways, and reversed microphone on/off values.",
+  "dateReleased": "2026-09-05",
+  "releaseNotes": "1.9.08 - Bug-fix release. Thermostat: setDehumidifierMode() no longer offers 'auto', which the ecobee API rejects; setHoldOverVacation() now coerces and range-clamps its setpoint arguments instead of throwing on non-numeric input; heatingSetpointRange and coolingSetpointRange are now written in a single consistent numeric form by every writer, so the value no longer alternates type and re-fires on each poll; duplicate coldTempAlert and coldTempAlertEnabled declarations removed; several stored-but-unread events dropped and database reads reduced. Manager: dead alert code removed, stored state trimmed, a failed command no longer leaves a body that a later token refresh could replay, and an undefined identifier that stalled all device updates while any thermostat was offline is fixed.",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/796",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.9.07"
+      "version": "1.9.08"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",
@@ -131,7 +131,7 @@
       "namespace": "sandood",
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy",
       "required": true,
-      "version": "1.9.07"
+      "version": "1.9.08"
     },
     {
       "id": "1a8e591e-ca09-43da-9695-745eb7ceb625",

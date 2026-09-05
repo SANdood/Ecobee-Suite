@@ -62,8 +62,13 @@
  *	1.9.05 - Added missing 'set' commands (schedule, fanMode, thermostatMode)
  *	1.9.06 - Added setHoldOverVacation() and setHoldOverVacationProgram() commands: place a hold over an active calendar vacation without cancelling it.
  *	1.9.07 - Fixed: undefined 'deviceId' in setThermostatFanMode(), crashing fanAuto() when already auto and fanCirculate() on a time change; undefined 'runWhen' in raiseSmartSetpoint()/lowerSmartSetpoint(), which updated the display and then threw, so the setpoint never actually changed; undefined 'sendVal' in the timeOfDay case, firing at every day/night transition and aborting the remainder of that event batch; setHumiditySetpointDelay() tested an undefined 'hasDehumidifier' and a mistyped 'humidifierMide', leaving the humidity setpoint command broken two independent ways; undefined 'child' in setEcobeeSetting()'s log call, which threw before the redirect could execute; and microphoneOn()/microphoneOff() set reversed values.
+ *	1.9.08 - Fixed: setDehumidifierMode() offered 'auto' in its command UI, but the ecobee API accepts only 'on' and 'off', so choosing it always failed; the ENUM now offers only the documented values, the already-set path returns instead of calling the parent, and the error text no longer names setHumidifierMode.
+ *	1.9.08 - Fixed: setHoldOverVacation() left its heat/cool arguments untyped and applied no range clamping, so a non-numeric value from Rule Machine or the command UI threw inside roundIt(); the arguments are now coerced and clamped against the thermostat's own heat/cool ranges, matching setHeatingSetpoint().
+ *	1.9.08 - Fixed: heatingSetpointRange and coolingSetpointRange were written as a list of Strings by the heatRange/coolRange cases and as numbers by the heatRangeLow/High and coolRangeLow/High cases, so the stored value alternated between the two forms and re-fired on every forced poll; all writers now emit the same numeric form, using a guarded conversion that falls back to the previous string form rather than throwing.
+ *	1.9.08 - Removed the duplicate declarations of coldTempAlert and coldTempAlertEnabled (each was declared twice; both remain declared once), and stopped storing the doRefresh and reservations events and several per-poll events that only carried display text.
+ *	1.9.08 - Reduced database reads: dead code removed from the 'auto' setpoint case, a per-execution cache added across the six setpoint-range attributes, and three triple-stored state keys reduced to the single copy that is actually read. Forced attribute reads fall from 123 to 114.
  */
-String getVersionNum() 		{ return "1.9.07" }
+String getVersionNum() 		{ return "1.9.08" }
 String getVersionLabel() 	{ return "Ecobee Suite Thermostat, version ${getVersionNum()} on ${getPlatform()}" }
 import groovy.json.*
 import groovy.transform.Field
@@ -125,8 +130,6 @@ metadata {
 		attribute 'coolingSetpointMax', 					'NUMBER'
 		attribute 'coolingSetpointMin', 					'NUMBER'
 		attribute 'coolingSetpointRange', 					'vector3'
-		attribute 'coldTempAlert', 							'NUMBER'
-		attribute 'coldTempAlertEnabled', 					'STRING'
 		attribute 'currentProgram',							'STRING'		// Read only
 		attribute 'currentProgramId',						'STRING'		// Read only
 		attribute 'currentProgramName', 					'STRING'		// Read only
@@ -342,7 +345,7 @@ metadata {
 		command "resumeProgram", 			['STRING']
 		command "setCoolingSetpointDelay",	[]
        	command "setDehumidifierMode", 		[[name:'Dehumidifier Mode*', type:'ENUM', description:'Select a (valid) Mode',
-										  	  constraints: ['auto','off','on']]]
+										  	  constraints: ['off','on']]]
        	command "setDehumiditySetpoint",	[[name:'Dehumidity Setpoint*', type:'NUMBER', description:'Dehumidifier RH% setpoint (0-100)']]
        	command "setEcobeeSetting", 		[[name:'Ecobee Setting Name*', type:'STRING', description:'Name of setting to change'],
 										 	 [name:'Ecobee Setting Value*', type:'STRING', description:'New value for this setting']]
@@ -398,13 +401,11 @@ def refresh(force=false) {
 def doRefresh() {
 	// Pressing refresh within 6 seconds of the prior refresh completing will force a complete poll of the Ecobee cloud - otherwise changes only
 	refresh(state.lastDoRefresh?((now()-state.lastDoRefresh)<6000):false)
-	sendEvent(name: 'doRefresh', value: 'refresh', isStateChange: true, displayed: false)
 	runIn(2, 'resetRefreshButton', [overwrite: true])
 	resetUISetpoints()
 	state.lastDoRefresh = now()	// reset the timer after the UI has been updated
 }
 def resetRefreshButton() {
-	sendEvent(name: 'doRefresh', value: 'refresh', isStateChange: true, displayed: false)
 }
 def forceRefresh() {
 	refresh(true)
@@ -434,9 +435,6 @@ def updated() {
 	}
 	
 	resetUISetpoints()
-	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
-	state.defaultHoldHours = settings.myHoldHours
-	state.version = getVersionLabel()
     updateDataValue("myVersion", getVersionLabel())
 	runIn(2, 'forceRefresh', [overwrite: true])
 }
@@ -474,6 +472,17 @@ def generateEvent(List updates) {
 	def precision = device.currentValue('decimalPrecision')
 	if (precision == null) precision = isMetric ? 1 : 0
 	int objectsUpdated = 0
+	// D-5(b) 2026-09-04: in-execution cache for the SIX range attributes ONLY
+	// (heating/cooling/thermostatSetpointMin|Max). Sibling range cases read each other's writes
+	// inside ONE execution - heatingSetpointMin is written at case 'heatRangeLow' and read at
+	// case 'heatRangeHigh'. Those six are written and read NOWHERE else in this driver and have
+	// ZERO references in the manager, so the set is closed by construction.
+	// THE FALLBACK IS THE FORCED READ, NOT A PLAIN READ: a hit returns a value written earlier in
+	// THIS execution, a miss does exactly what the code did before => never staler than before.
+	// The four GATE reads (999/1018/1037/1056) are deliberately NOT cached - they feed the
+	// '!= value' change gates, which is where a type mismatch would invert behaviour.
+	Map rangeCache = [:]
+	def rangeCv = { String n -> rangeCache.containsKey(n) ? rangeCache[n] : device.currentValue(n, true) }
 	List supportedThermostatModes = []
 	if (state.supportedThermostatModes == []) {				// attribute updates will continuously update this if config changes
 		// Initialize for those that are updating the DTH with this version
@@ -688,7 +697,6 @@ def generateEvent(List updates) {
                                     sendEvent(name: 'thermostatSetpoint', value: heatSetp, unit: tu, descriptionText: "Thermostat setpoint is ${heatSetp}°${tu}", displayed: true) // For Google Home
                                     sendEvent(name: 'lastRunningMode', value: 'heat', displayed: false) // For Google Home
                                     updateDataValue('lastRunningMode', 'heat')
-                                    state.lastRunningMode = 'heat'
                                 }
                                 if (realValue.startsWith('cool')) {
                                     // coolingSetpoint should display actual setpoint for "Cooling to..."
@@ -696,7 +704,6 @@ def generateEvent(List updates) {
                                     sendEvent(name: 'thermostatSetpoint', value: coolSetp, unit: tu, descriptionText: "Thermostat setpoint is ${coolSetp}°${tu}", displayed: true) // For Google Home
                                     sendEvent(name: 'lastRunningMode', value: 'cool', displayed: false) // For Google Home
                                     updateDataValue('lastRunningMode', 'cool')
-                                    state.lastRunningMode = 'cool'
                                 }
                                 event = eventFront + [value: realValue, descriptionText: "Thermostat Operating State is ${realValue}", displayed: false]
 
@@ -777,7 +784,6 @@ def generateEvent(List updates) {
 						//LOG("currentProgramName: ${sendValue}", 1, null, 'debug')
 						// always update the button states, even if the value didn't change
 						String progText = ''
-						String priorProgramName = device.currentValue('currentProgramName', true)
 						if (sendValue == 'Vacation') {
 							progText = 'Climate is Vacation'
 						} else if (sendValue.startsWith('Hold: Ec')) {
@@ -900,18 +906,19 @@ def generateEvent(List updates) {
 								break;
 
 							case 'auto':
-								// We need to update the thermostatSetpoint (for Google Home), so we send based upon lastRunningMode (from thermostatOperatingState, not thermostatMode).
-								def newSetpoint
-								lRunMode =  getDataValue("lastRunningMode") 
-								if (lRunMode == 'heat') {
-									newSetpoint = device.currentValue('heatingSetpoint', true)?.toString()
-								} else if (lRunMode == 'cool') {
-									newSetpoint = device.currentValue('coolingSetpoint', true)?.toString()
-								} else {
-                                	def hsp = device.currentValue('heatingSetpoint', true)
-                                    def csp = device.currentValue('coolingSetpoint', true)
-									newSetpoint = ((hsp && (hsp != 'null') && (hsp != "")) && (csp && (csp != 'null') && (csp != ""))) ? (roundIt(((hsp + csp) / 2.0), precision.toInteger())) : 'null'
-								}
+								// D-5(b) 2026-09-04: the newSetpoint computation that stood here was DEAD - assigned
+								// at three branches and NEVER READ before the break, costing FOUR forced DB reads per
+								// poll. Its stated intent (publish thermostatSetpoint for Google Home) was never
+								// implemented - no sendEvent followed it. thermostatSetpoint is maintained regardless
+								// by case 'heatingSetpoint' (521/526), case 'coolingSetpoint' (553/558) and
+								// case 'thermostatOperatingState' (680/687), so this changes no published value.
+								// DO NOT 'complete' it with a sendEvent here without first deciding whether a fourth
+								// writer should compete with 680/687 on a Google Home / Alexa / RM control surface.
+								// The lRunMode assignment below is RETAINED DELIBERATELY: it is declared at 499 and
+								// READ at 520 and 552, and 499 only populates it when the CURRENT tMode is already
+								// 'auto' - so deleting it would change what those two cases see when an update
+								// switches the mode to auto and a setpoint case is processed later in the same list.
+								lRunMode =  getDataValue("lastRunningMode")
 								objectsUpdated++
 								break;
 
@@ -920,7 +927,6 @@ def generateEvent(List updates) {
 								sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true)
 								sendEvent(name: 'lastRunningMode', value: 'heat', displayed: false)
 								updateDataValue('lastRunningMode', 'heat')
-								state.lastRunningMode = 'heat'
 								objectsUpdated++
 								break;
 
@@ -929,7 +935,6 @@ def generateEvent(List updates) {
 								sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true)
 								sendEvent(name: 'lastRunningMode', value: 'cool', displayed: false)
 								updateDataValue('lastRunningMode', 'cool')
-								state.lastRunningMode = 'cool'
 								objectsUpdated++
 								break;
 
@@ -939,7 +944,6 @@ def generateEvent(List updates) {
 								sendEvent(name: 'thermostatSetpoint', value: statSetpoint, unit: tu, descriptionText: "Thermostat setpoint is ${statSetpoint}°${tu}", displayed: true)
 								sendEvent(name: 'lastRunningMode', value: 'heat', displayed: false)
 								updateDataValue('lastRunningMode', 'heat')
-								state.lastRunningMode = 'heat'
 								objectsUpdated++
 								break;
 						}
@@ -1013,13 +1017,15 @@ def generateEvent(List updates) {
 						def ncHspmn = device.currentValue('heatingSetpointMin', true)
 						if (isChange || forceChange || !ncHspmn || (ncHspmn != value)) {
 							sendEvent(name: 'heatingSetpointMin', value: value, unit: tu, displayed: false)
+							rangeCache['heatingSetpointMin'] = value		// D-5(b) range cache
 							objectsUpdated++
 							if ((tMode == 'heat') || (tMode == 'auto')) {
 								sendEvent(name: 'thermostatSetpointMin', value: value, unit: tu, displayed: false)
-								def ncTspmx = device.currentValue('thermostatSetpointMax', true)
+								rangeCache['thermostatSetpointMin'] = value		// D-5(b) range cache
+								def ncTspmx = rangeCv('thermostatSetpointMax')
 								def range = [value, ncTspmx]
 								sendEvent(name: 'thermostatSetpointRange', value: range, unit: tu, displayed: false)
-								def ncHspmx = device.currentValue('heatingSetpointMax', true)
+								def ncHspmx = rangeCv('heatingSetpointMax')
 								range = [value, ncHspmx]
 								sendEvent(name: 'heatingSetpointRange', value: range, unit: tu, displayed: false)
 								objectsUpdated += 3
@@ -1032,13 +1038,15 @@ def generateEvent(List updates) {
 						def ncHspmx = device.currentValue('heatingSetpointMax', true)
 						if (isChange || forceChange || !ncHspmx || (ncHspmx != value)) {
 							sendEvent(name: 'heatingSetpointMax', value: value, unit: tu, displayed: false)
+							rangeCache['heatingSetpointMax'] = value		// D-5(b) range cache
 							objectsUpdated++
 							if (tMode == 'heat') {
 								sendEvent(name: 'thermostatSetpointMax', value: value, unit: tu, displayed: false)
-								def ncTspmn = device.currentValue('thermostatSetpointMin', true)
+								rangeCache['thermostatSetpointMax'] = value		// D-5(b) range cache
+								def ncTspmn = rangeCv('thermostatSetpointMin')
 								def range = [ncTspmn, value]
 								sendEvent(name: 'thermostatSetpointRange', value: range, unit: tu, displayed: false)
-								def ncHspmn = device.currentValue('heatingSetpointMin', true)
+								def ncHspmn = rangeCv('heatingSetpointMin')
 								range = [ncHspmn, value]
 								sendEvent(name: 'heatingSetpointRange', value: range, unit: tu, displayed: false)
 								objectsUpdated += 3
@@ -1051,13 +1059,15 @@ def generateEvent(List updates) {
 						def ncCspmn = device.currentValue('coolingSetpointMin', true)
 						if (isChange || forceChange || (ncCspmn!= value)) {
 							sendEvent(name: 'coolingSetpointMin', value: value, unit: tu, displayed: false)
+							rangeCache['coolingSetpointMin'] = value		// D-5(b) range cache
 							objectsUpdated++
 							if (tMode == 'cool') {
 								sendEvent(name: 'thermostatSetpointMin', value: value, unit: tu, displayed: false)
-								def ncTspmx = device.currentValue('thermostatSetpointMax', true)
+								rangeCache['thermostatSetpointMin'] = value		// D-5(b) range cache
+								def ncTspmx = rangeCv('thermostatSetpointMax')
 								def range = [value, ncTspmx]
 								sendEvent(name: 'thermostatSetpointRange', value: range, unit: tu, displayed: false)
-								def ncCspmx = device.currentValue('coolingSetpointMax', true)
+								def ncCspmx = rangeCv('coolingSetpointMax')
 								range = [value, ncCspmx]
 								sendEvent(name: 'coolingSetpointRange', value: range, unit: tu, displayed: false)
 								objectsUpdated += 3
@@ -1070,13 +1080,15 @@ def generateEvent(List updates) {
 						def ncCspmx = device.currentValue('coolingSetpointMax', true)
 						if (isChange || forceChange || (ncCspmx != value)) {
 							sendEvent(name: 'coolingSetpointMax', value: value, unit: tu, displayed: false)
+							rangeCache['coolingSetpointMax'] = value		// D-5(b) range cache
 							objectsUpdated++
 							if ((tMode == 'cool') || (tMode == 'auto')) {
 								sendEvent(name: 'thermostatSetpointMax', value: value, unit: tu, displayed: false)
-								def ncTspmn = device.currentValue('thermostatSetpointMin', true)
+								rangeCache['thermostatSetpointMax'] = value		// D-5(b) range cache
+								def ncTspmn = rangeCv('thermostatSetpointMin')
 								def range = [ncTspmn, value]
 								sendEvent(name: 'thermostatSetpointRange', value: range, unit: tu, displayed: false)
-								def ncCspmn = device.currentValue('coolingSetpointMin', true)
+								def ncCspmn = rangeCv('coolingSetpointMin')
 								range = [ncCspmn, value]
 								sendEvent(name: 'coolingSetpointRange', value: range, unit: tu, displayed: false)
 								objectsUpdated += 3
@@ -1089,10 +1101,19 @@ def generateEvent(List updates) {
 						if (isChange || forceChange) {
 							def newValue = sendValue.toString().replaceAll("[()]","")
 							def idx = newValue.indexOf('..')
-							def low = newValue.take(idx)
-							def high = newValue.drop(idx+2)
-							def range = [low,high]
-							sendEvent(name: 'heatingSetpointRange', value: range, unit: tu, displayed: false)
+							if (idx > 0) {
+								def low = newValue.take(idx)
+								def high = newValue.drop(idx+2)
+								// Emit BigDecimals so that all three writers of heatingSetpointRange agree: the
+								// heatRangeLow/heatRangeHigh cases send numerics while this case sent Strings, so the stored
+								// value alternated type on every forced poll. Guarded rather than a bare
+								// toBigDecimal(), which would throw inside generateEvent() and abort the rest
+								// of the event batch; on a parse failure fall back to the previous string form.
+								def range = (low.isNumber() && high.isNumber()) ? [low.toBigDecimal(), high.toBigDecimal()] : [low, high]
+								sendEvent(name: 'heatingSetpointRange', value: range, unit: tu, displayed: false)
+							} else {
+								LOG("generateEvent() - malformed heatRange '${sendValue}', heatingSetpointRange not updated", 1, null, 'warn')
+							}
 							event = eventFront + [value: sendValue, unit: tu, displayed: false]
 							objectsUpdated++
 						}
@@ -1102,10 +1123,19 @@ def generateEvent(List updates) {
 						if (isChange || forceChange) {
 							def newValue = sendValue.toString().replaceAll("[()]","")
 							def idx = newValue.indexOf('..')
-							def low = newValue.take(idx)
-							def high = newValue.drop(idx+2)
-							def range = [low,high]
-							sendEvent(name: 'coolingSetpointRange', value: range, unit: tu, displayed: false)
+							if (idx > 0) {
+								def low = newValue.take(idx)
+								def high = newValue.drop(idx+2)
+								// Emit BigDecimals so that all three writers of coolingSetpointRange agree: the
+								// coolRangeLow/coolRangeHigh cases send numerics while this case sent Strings, so the stored
+								// value alternated type on every forced poll. Guarded rather than a bare
+								// toBigDecimal(), which would throw inside generateEvent() and abort the rest
+								// of the event batch; on a parse failure fall back to the previous string form.
+								def range = (low.isNumber() && high.isNumber()) ? [low.toBigDecimal(), high.toBigDecimal()] : [low, high]
+								sendEvent(name: 'coolingSetpointRange', value: range, unit: tu, displayed: false)
+							} else {
+								LOG("generateEvent() - malformed coolRange '${sendValue}', coolingSetpointRange not updated", 1, null, 'warn')
+							}
 							event = eventFront + [value: sendValue, unit: tu, displayed: false]
 							objectsUpdated++
 						}
@@ -1123,14 +1153,15 @@ def generateEvent(List updates) {
                         if (sendText == 'vacation') {
                             descText = "Vacation hold started"
                         } else if (sendText == 'null') {
-                            def thermostatHold = device.currentValue('thermostatHold', true)
                             descText = 'Hold finished'
                         } else if (sendText == 'hold') {
                             String ncCp = device.currentValue('currentProgram', true)
                             String ncSp = device.currentValue('scheduledProgram', true)
                             descText = "Hold for ${ncCp} (${ncSp})" 
                         } else descText = "Hold for ${sendText}"
-                        event = eventFront + [value: sendText, descriptionText: descText, isStateChange: true, displayed: true]
+                        // gated: this stored one event per poll that included the attribute,
+                        // changed or not.
+                        if (isChange || forceChange) event = eventFront + [value: sendText, descriptionText: descText, isStateChange: true, displayed: true]
 						break;
                         
 					case 'holdStatus':
@@ -1242,7 +1273,9 @@ def generateEvent(List updates) {
                     case 'debugLevel':
                         String sendText = (sendValue && (sendValue != 'null') && (sendValue != "")) ? sendValue : 'null'
                         updateDataValue('debugLevel', sendText)
-						event = eventFront + [value: sendText, descriptionText: "debugLevel is ${sendValue}", isStateChange: true, displayed: false]
+						// gated: this fired every poll whether or not debugLevel had changed. The
+						// updateDataValue() above stays unconditional - it is cheap and not an event.
+						if (isChange || forceChange) event = eventFront + [value: sendText, descriptionText: "debugLevel is ${sendValue}", isStateChange: true, displayed: false]
                         break;
 
 					// These are ones we don't need to display or provide descriptionText for (mostly internal or debug use)
@@ -1533,16 +1566,43 @@ void updateThermostatSetpoints() {
 
 // place a hold OVER an active Vacation (preserves the calendar event). Intentionally skips the vacation guard.
 void setHoldOverVacation(heat, cool, String holdType='holdHours', holdHours=2) {
-	if (parent.setHoldOverVacation(this, heat, cool, getDeviceId(), holdType, (holdHours?:2)))
-		generateEvent([coolingSetpoint: roundIt(cool,1), heatingSetpoint: roundIt(heat,1), thermostatHold:'hold', lastHoldType: holdType])
+	// CB-3: coerce and clamp BEFORE the parent call. Previously heat/cool were passed to the
+	// parent unvalidated, and roundIt() then threw on a non-numeric String AFTER the hold had
+	// already been sent to the thermostat - leaving the equipment changed and this device's
+	// attributes un-updated. Clamping mirrors setHeatingSetpoint()/setCoolingSetpoint().
+	BigDecimal heatSP, coolSP
+	try {
+		heatSP = (heat != null) ? heat.toBigDecimal() : null
+		coolSP = (cool != null) ? cool.toBigDecimal() : null
+	} catch (e) {
+		LOG("setHoldOverVacation() ignored - non-numeric setpoint (heat: ${heat}, cool: ${cool})", 1, null, 'warn')
+		return
+	}
+	if ((heatSP == null) || (coolSP == null)) {
+		LOG("setHoldOverVacation() ignored - missing setpoint (heat: ${heat}, cool: ${cool})", 1, null, 'warn')
+		return
+	}
+	boolean isMetric = wantMetric()
+	def hLow = device.currentValue('heatRangeLow', true); def hHigh = device.currentValue('heatRangeHigh', true)
+	if ((hLow != null) && (heatSP < hLow.toBigDecimal())) { heatSP = isMetric ? roundC(hLow.toBigDecimal()) : hLow.toBigDecimal() }
+	else if ((hHigh != null) && (heatSP > hHigh.toBigDecimal())) { heatSP = isMetric ? roundC(hHigh.toBigDecimal()) : hHigh.toBigDecimal() }
+	def cLow = device.currentValue('coolRangeLow', true); def cHigh = device.currentValue('coolRangeHigh', true)
+	if ((cLow != null) && (coolSP < cLow.toBigDecimal())) { coolSP = isMetric ? roundC(cLow.toBigDecimal()) : cLow.toBigDecimal() }
+	else if ((cHigh != null) && (coolSP > cHigh.toBigDecimal())) { coolSP = isMetric ? roundC(cHigh.toBigDecimal()) : cHigh.toBigDecimal() }
+	if (parent.setHoldOverVacation(this, heatSP, coolSP, getDeviceId(), (holdType ?: 'holdHours'), (holdHours?:2))) {
+		generateEvent([coolingSetpoint: roundIt(coolSP,1), heatingSetpoint: roundIt(heatSP,1), thermostatHold:'hold', lastHoldType: (holdType ?: 'holdHours')])
+		runIn(5, 'refresh', [overwrite: true])
+	}
 	else LOG("setHoldOverVacation() failed", 1, null, 'warn')
 }
 
 // hold a named Program (e.g. 'Vacation') OVER an active calendar vacation via
 // holdClimateRef, so currentProgram reads the program name naturally (no display rewrite/freeze). holdHours failsafe.
 void setHoldOverVacationProgram(String program, String holdType='holdHours', holdHours=2) {
-    if (parent.setHoldOverVacationProgram(this, program, getDeviceId(), holdType, (holdHours?:2)))
-        generateEvent([thermostatHold:'hold', lastHoldType: holdType])
+    if (parent.setHoldOverVacationProgram(this, program, getDeviceId(), (holdType ?: 'holdHours'), (holdHours?:2))) {
+        generateEvent([thermostatHold:'hold', lastHoldType: (holdType ?: 'holdHours')])
+        runIn(5, 'refresh', [overwrite: true])
+    }
     else LOG("setHoldOverVacationProgram() failed", 1, null, 'warn')
 }
 
@@ -1597,7 +1657,7 @@ void raiseSetpoint() {
 		def updates = [[thermostatSetpoint: targetValue]]
 		generateEvent(updates)
 		runIn( runWhen, 'changeHeatSetpoint', [data: [value:targetValue]] )
-	} else if (changingCool || (mode == 'cool') || ((mode == 'auto') && !smartAudio && (operatingState.contains('oo') || ncLos?.contains('oo')))) {
+	} else if (changingCool || (mode == 'cool') || ((mode == 'auto') && !smartAuto && (operatingState.contains('oo') || ncLos?.contains('oo')))) {
 		targetValue = roundIt((coolingSetpoint + (isMetric ? 0.5 : 1.0)), 1)
 		LOG("raiseSetpoint() Cooling to ${targetValue}", 4)
 		state.newCoolSetpoint = targetValue		// sendEvent(name: 'newCoolSetpoint', value: targetValue, display: false, isStateChange: true)
@@ -1798,7 +1858,10 @@ void setThermostatMode(String value) {
 				}
 			} else if (tMode == 'off') {
 				// Clean up when turning back on (heat/auto/cool)
-				updates << [equipmentOperatingState:'idle',thermostatOperationsState:'idle',thermostatOperatingStateDisplay:'idle']
+				// The middle key read `thermostatOperationsState` - a typo for the DECLARED
+				// `thermostatOperatingState`. It therefore stored an event on an undeclared attribute
+				// AND left the real operating state un-reset when leaving mode-off. One fix, both defects.
+				updates << [equipmentOperatingState:'idle',thermostatOperatingState:'idle',thermostatOperatingStateDisplay:'idle']
 			}
 			// log.debug "updates: ${updates}"
 			generateEvent(updates)	// force everything to update
@@ -1850,10 +1913,10 @@ void setThermostatHoldHours(holdHours=0) {
     String hours = holdHours.toInteger().toString()
 	
     if (!hours || (hours == '0')) {
-		device.updateSetting('myHoldHours', ""); settings.myHoldHours = null; state.defaultHoldHours = null
+		device.updateSetting('myHoldHours', ""); settings.myHoldHours = null
 		LOG("setThermostatHoldHours(${holdHours}): setting default hold hours to ES Manager setting",2,null,'trace')
 	} else {
-		device.updateSetting('myHoldHours', hours); settings.myHoldHours = hours; state.defaultHoldHours = hours
+		device.updateSetting('myHoldHours', hours); settings.myHoldHours = hours
 		LOG("setThermostatHoldHours(${holdHours}): setting default hold hours to ${hours}",2,null,'trace')
 	}   
 	//log.debug "MyHoldHours = ${settings.myHoldHours}"
@@ -2010,7 +2073,7 @@ void setSchedule(scheduleJson) {
 		if (scheduleJson instanceof Map) {
 			// [name: "scheduleName", holdType: ["nextTransition", "indefinite", "holdHours"], holdHours: number]
 			if (scheduleJson.holdHours && scheduleJson.holdType && scheduleJson.name) {
-				setThermostatProgram( scheduleJson.name?.trim().capitalize(), scheduleJson.holdType?.trim(), scheduleJson.holdHours?.trim())
+				setThermostatProgram( scheduleJson.name?.trim().capitalize(), scheduleJson.holdType?.trim(), (scheduleJson.holdHours?.toString()?.isNumber() ? scheduleJson.holdHours.toString().toInteger() : 2))
 			} else if (scheduleJson.holdType && scheduleJson.name) {
 				setThermostatProgram( scheduleJson.name?.trim().capitalize(), scheduleJson.holdType?.trim())
 			} else if (scheduleJson.name) {
@@ -2306,13 +2369,11 @@ void fanCirculate() {
 void fanOffDisabled() {}
 void fanOff() {
 	LOG('fanOff()', 5, null, 'trace')
-    fanMode = device.currentValue('thermostatFanMode', true)
+    def fanMode = device.currentValue('thermostatFanMode', true)
 	if (fanMode != 'off') {
 		setThermostatFanMode('off')
-		generateQuickEvent('setFanOff', 'off')		// reset the button icon state
 	} else {
 		LOG("Thermostat Fan Mode is 'off' (already)",2,null,'info')
-		generateQuickEvent('setFanOff', 'off')		// reset the button icon state
 	}
 }
 
@@ -2447,17 +2508,18 @@ void setDehumidifierMode(String value) {
 	// verify that the stat hasDehumidifer
 	def hasDehumidifier = device.currentValue('hasDehumidifier')
 	if (!hasDehumidifier || (hasDehumidifier == 'false')) {
-		LOG("${deviceId.displayName} is not controlling a dehumidifier or overcooling", 1, child, 'warn')
+		LOG("${device.displayName} is not controlling a dehumidifier or overcooling", 1, null, 'warn')
 		return
 	}
 
 	if (!value || (value != 'off') && (value != 'on')) {
-		LOG("setHumidifierMode(${value}) - unsupported dehumidifier mode requested")
+		LOG("setDehumidifierMode(${value}) - unsupported dehumidifier mode requested")
 		return
 	}
 	def dehumidifierMode = device.currentValue('dehumidifierMode', true)
 	if (dehumidifierMode == value) {
 		LOG("${device.displayName}'s dehumidifier is already set to ${value}", 2, null, 'info')
+		return
 	}
 	def result = parent.setDehumidifierMode(this, value, getDeviceId())
 	if (result) {
@@ -2485,7 +2547,7 @@ void setDehumiditySetpointDelay(setpoint) {
 	// verify that the stat hasDehumidifer
 	def hasDehumidifier = device.currentValue('hasDehumidifier')
 	if (!hasDehumidifier || (hasDehumidifier == 'false')) {
-		LOG("${device.displayName} is not controlling a dehumidifier nor is it overcooling", 1, child, 'warn')
+		LOG("${device.displayName} is not controlling a dehumidifier nor is it overcooling", 1, null, 'warn')
 		return
 	}
 	def currentSetpoint = device.currentValue('dehumiditySetpoint', true)
@@ -2579,7 +2641,7 @@ void cancelDemandResponse() {
     if (result) {
         LOG('Cancel Demand Response Event succeeded.', 3, null, 'info')
     } else {
-    	LOG("Cancel Demand Response Event FAILED${(currentProgram != 'Eco/Eco+') ? ' - not currently in a Demand Response Event' : ''}.", 1, null, 'warn')
+    	LOG("Cancel Demand Response Event FAILED${((currentProgram != 'Eco') && (currentProgram != 'Eco+')) ? ' - not currently in a Demand Response Event' : ''}.", 1, null, 'warn')
     }
     return
 }
@@ -2802,18 +2864,16 @@ def whatHoldType() {
 
 void makeReservation(String childId, String type='modeOff') {
 	LOG("The thermostat-based Reservation System has been deprecated - please recode for Ecobee Suite Manager-based implementation.",1,null,'error')
-	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
 }
 
 void cancelReservation( String childId, String type='modeOff') {
 	LOG("The thermostat-based Reservation System has been deprecated - please recode for Ecobee Suite Manager-based implementation.",1,null,'error')
-	if (device.currentValue('reservations')) sendEvent(name: 'reservations', value: null, displayed: false)
 }
 
 Integer howManyHours() {
 	Integer sendHoldHours = 2
-	if ((holdHours != null) && holdHours.toString().isNumber()) {
-		sendHoldHours = holdHours.toInteger()
+	if ((settings.myHoldHours != null) && settings.myHoldHours.toString().isNumber()) {
+		sendHoldHours = settings.myHoldHours.toInteger()
 		LOG("Using ${device.displayName} holdHours: ${sendHoldHours}",2,this,'info')
 	} else {
 		def hh = getParentSetting('holdHours')
