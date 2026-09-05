@@ -45,11 +45,12 @@
  *	1.9.07 - Fixed: a command that failed on a transient error left its saved body behind, so a later token refresh could replay a stale command; sendJsonRetry() also passed a String where a device was expected
  *	1.9.07 - Fixed: an undefined 'templocation' aborted updateThermostatData() on every poll while any thermostat was offline, stalling ALL device updates for exactly as long as the offline state persisted; and an undefined 'dbgfLvl' in queueCall() meant the failed-call queue captured nothing, so commands queued during an API outage were silently lost.
  *	1.9.08 - Internal: a failed setpoint write now re-polls instead of relying on the unproven retry queue, and a redundant atomicState write was removed from the program-update path.
+ *	1.9.09 - Fixed: tempSettingsList declared compressorProtectionMinTemp twice, so one changeTemps slot compared that setting to itself on every settings-bearing poll and one list position was permanently wasted; the duplicate is removed (18 entries to 17).
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.08" }
+String getVersionNum()		{ return "1.9.09" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -6419,7 +6420,7 @@ void runEvery3Minutes(handler) {
 										 'ventilatorMinOnTimeHome','ventilatorOffDateTime','ventilatorType', 'fanSpeed'
 										]
 // Temperature Settings
-@Field final List tempSettingsList =	['auxMaxOutdoorTemp','auxOutdoorTempAlert','coldTempAlert','compressorProtectionMinTemp','compressorProtectionMinTemp','coolMaxTemp','coolMinTemp',
+@Field final List tempSettingsList =	['auxMaxOutdoorTemp','auxOutdoorTempAlert','coldTempAlert','compressorProtectionMinTemp','coolMaxTemp','coolMinTemp',
 										 'dehumidifyOvercoolOffset','heatMaxTemp','heatMinTemp','hotTempAlert','maxSetBack','maxSetForward','quickSaveSetBack','quickSaveSetForward','stage1CoolingDifferentialTemp',
 										 'stage1HeatingDifferentialTemp','tempCorrection'
 										]
