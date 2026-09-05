@@ -3,7 +3,7 @@
   "author": "Barry A. Burke",
   "minimumHEVersion": "2.3.3",
   "dateReleased": "2026-09-05",
-  "releaseNotes": "1.9.09 - Fixes a duplicate entry in the Manager's tempSettingsList (compressorProtectionMinTemp was listed twice), which wasted one change-detection slot on every settings-bearing poll. 1.9.08 - Bug-fix release. Thermostat: setDehumidifierMode() no longer offers 'auto', which the ecobee API rejects; setHoldOverVacation() now coerces and range-clamps its setpoint arguments instead of throwing on non-numeric input; heatingSetpointRange and coolingSetpointRange are now written in a single consistent numeric form by every writer, so the value no longer alternates type and re-fires on each poll; duplicate coldTempAlert and coldTempAlertEnabled declarations removed; several stored-but-unread events dropped and database reads reduced. Manager: dead alert code removed, stored state trimmed, a failed command no longer leaves a body that a later token refresh could replay, and an undefined identifier that stalled all device updates while any thermostat was offline is fixed.",
+  "releaseNotes": "1.9.11 - Removes the Hubitat-dead alerts fetch and cache: includeAlerts is no longer requested, the alerts object is no longer stored or change-compared, and alert-revision changes no longer force a full thermostat poll. Alert attributes are unaffected - they derive from settings, not from the alerts object. Also adds a guarded Group C state eviction, because the existing Group B block is one-shot and cannot retire keys on installs that already ran it. 1.9.09 - Fixes a duplicate entry in the Manager's tempSettingsList (compressorProtectionMinTemp was listed twice), which wasted one change-detection slot on every settings-bearing poll. 1.9.08 - Bug-fix release. Thermostat: setDehumidifierMode() no longer offers 'auto', which the ecobee API rejects; setHoldOverVacation() now coerces and range-clamps its setpoint arguments instead of throwing on non-numeric input; heatingSetpointRange and coolingSetpointRange are now written in a single consistent numeric form by every writer, so the value no longer alternates type and re-fires on each poll; duplicate coldTempAlert and coldTempAlertEnabled declarations removed; several stored-but-unread events dropped and database reads reduced. Manager: dead alert code removed, stored state trimmed, a failed command no longer leaves a body that a later token refresh could replay, and an undefined identifier that stalled all device updates while any thermostat was offline is fixed.",
   "communityLink": "https://community.hubitat.com/t/release-universal-ecobee-suite-version-1-8-01/34839/796",
   "apps": [
     {
@@ -13,7 +13,7 @@
       "location": "https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy",
       "required": true,
       "oauth": true,
-      "version": "1.9.09"
+      "version": "1.9.11"
     },
     {
       "id": "79adb376-0b4d-4e3d-b20e-bcc557fdd15d",

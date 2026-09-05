@@ -46,11 +46,13 @@
  *	1.9.07 - Fixed: an undefined 'templocation' aborted updateThermostatData() on every poll while any thermostat was offline, stalling ALL device updates for exactly as long as the offline state persisted; and an undefined 'dbgfLvl' in queueCall() meant the failed-call queue captured nothing, so commands queued during an API outage were silently lost.
  *	1.9.08 - Internal: a failed setpoint write now re-polls instead of relying on the unproven retry queue, and a redundant atomicState write was removed from the program-update path.
  *	1.9.09 - Fixed: tempSettingsList declared compressorProtectionMinTemp twice, so one changeTemps slot compared that setting to itself on every settings-bearing poll and one list position was permanently wasted; the duplicate is removed (18 entries to 17).
+ *	1.9.10 - Removed the Hubitat-dead alerts fetch and cache (E-6): includeAlerts is no longer requested, the alerts object is no longer stored or change-compared, and alert-revision changes no longer force a full thermostat poll. Alert attributes are unaffected - they derive from settings, not from the alerts object - and alertsUpdated is now stamped when those settings refresh.
+ *	1.9.11 - Fixed: the 1.9.10 state eviction never ran. cleanupStates()'s Group B block is one-shot (guarded by removedGroupB), so adding a key to that list does nothing on any install that already ran it, and the retired alerts map stayed in state. Retired keys now evict via their own guarded Group C.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.09" }
+String getVersionNum()		{ return "1.9.11" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1131,6 +1133,22 @@ def cleanupStates() {
             LOG("cleanupStates() - Group B eviction failed (${e})", 1, null, "warn")
         }
     }
+
+    // Group C: keys retired AFTER Group B had already run on existing installs.
+    // Group B is ONE-SHOT (guarded by removedGroupB), so adding a key to that list is a
+    // NO-OP on any install that already ran it - measured on HS 109, 2026-09-05. A key
+    // retired later needs its OWN guarded group, or it is never actually evicted.
+    if (!atomicState.removedGroupC) {
+        try {
+            ['alerts'].each { oldKey ->
+                atomicState.remove(oldKey)
+                state.remove(oldKey)
+            }
+            atomicState.removedGroupC = true
+        } catch (Exception e) {
+            LOG("cleanupStates() - Group C eviction failed (${e})", 1, null, "warn")
+        }
+    }
 }
 
 @Field final int watchdogInterval = 10	// In minutes
@@ -1197,7 +1215,7 @@ def initialize() {
     atomicState.needPrograms = true
 	atomicState.sendJsonRetry = false
 
-	def updatesLog = [thermostatUpdated:true, runtimeUpdated:true, forcePoll:true, getWeather:true, alertsUpdated:true, extendRTUpdated:true ]
+	def updatesLog = [thermostatUpdated:true, runtimeUpdated:true, forcePoll:true, getWeather:true, alertsUpdated:false, extendRTUpdated:true ]
 	atomicState.updatesLog = updatesLog
 	atomicState.hourlyForcedUpdate = 0
 	if (!atomicState.reservations) atomicState.reservations = [:]
@@ -1271,7 +1289,6 @@ def initialize() {
    
 	// Clear out all atomicState object collections (in case a thermostat was deleted or replaced, so we don't slog around useless old data)
 	// also has the effect of forcing ALL the data bits to be sent down to the thermostats/sensors again
-	atomicState.alerts				 = [:]
 	atomicState.audio 				= [:]
 	atomicState.capabilities		= [:]
 	atomicState.changeAlerts 		= [:]
@@ -1971,7 +1988,7 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 	boolean alertsUpdated 		= updatesLog.alertsUpdated
 	boolean runtimeUpdated 		= updatesLog.runtimeUpdated
     boolean needPrograms 		= atomicState.needPrograms
-	boolean getAllStats 		= (runtimeUpdated || thermostatUpdated || alertsUpdated || needPrograms)
+	boolean getAllStats 		= (runtimeUpdated || thermostatUpdated || needPrograms)
 	
 	boolean debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("checkThermostatSummary() - ${thermostatIdsString}",1,null,'trace')
@@ -2022,11 +2039,9 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 							
 						// check if the current tstat is updated
 						boolean tru = false
-						boolean tau = false
 						boolean ttu = false
 						if (lastDetails) {			// if we have prior revision details
 							if (lastDetails[2] != latestDetails[2]) tru = true	// runtime
-							if (lastDetails[1] != latestDetails[1]) tau = true	// alerts
 							// log.debug "alertsChanged? ${tau}"
 							if (needPrograms || (lastDetails[0] != latestDetails[0])) ttu = true	// thermostat 
 						} else {					// no priors, assume all have been updated
@@ -2036,9 +2051,8 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 						//log.debug "${tstat}: thermostat: ${ttu}, runtime: ${tru}, alerts: ${tau}"
                         
 						// update global flags (we update the superset of changes for all requested tstats)
-						if (tru || tau || ttu) {
+						if (tru || ttu) {
 							runtimeUpdated = (runtimeUpdated || tru)		
-							alertsUpdated = (alertsUpdated || tau)
 							thermostatUpdated = (thermostatUpdated || ttu)	
 							result = true
 							if (!getAllStats) tstatsStr = (tstatsStr=="") ? tstat : (tstatsStr.contains(tstat)) ? tstatsStr : tstatsStr + ",${tstat}"
@@ -2237,10 +2251,6 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 		jsonRequestBody += /*',"includeOemCfg":"true"*/ ',"includeLocation":"true"'
 		gw += /*' oemCfg */ ' location'
 	}
-	if (alertsUpdated || forcePoll) {
-		jsonRequestBody += ',"includeAlerts":"true"'
-		gw += ' alerts'
-	}
 	if (runtimeUpdated || forcePoll) {
     	// Always get extended runtime (we only save the 2 datapoints we need anymore)
 		jsonRequestBody += ',"includeRuntime":"true","includeExtendedRuntime":"true"'	// "includeEnergy":"true"'
@@ -2334,7 +2344,6 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	Map tempRuntime 			= [:]	// Now includes the 2 values we need from Extended Runtime
     Map tempSensors 			= [:]
 	Map tempWeather 			= [:]
-	Map tempAlerts 				= [:]
 	Map tempCapabilities		= [:]
 	Map statUpdates 			= [:].withDefault {[]}
 	Map tempStatTime 			= atomicState.statTime
@@ -2601,16 +2610,6 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 						}
 					}
                 }
-                if ((alertsUpdated || forcePoll)) {
-					if (stat.alerts) {
-						if (!tempAlerts) tempAlerts = atomicState.alerts
-						if (!tempAlerts || !tempAlerts[tid] || (tempAlerts[tid] != stat.alerts)) {
-							alertsUpdated = true
-                            statUpdates[tid].add('alerts')
-							tempAlerts[tid] = stat.alerts
-						}
-					}
-				}
 			} // stat ->
 		} else {
 			LOG("pollEcobeeAPICallback() - poll: no thermostatList: ${resp.json}", 1, null, 'error')
@@ -2707,7 +2706,6 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
         if (rtReallyUpdated) 	atomicState.runtime 			= tempRuntime
         if (sensorsUpdated) 	atomicState.remoteSensors 		= tempSensors
         if (weatherUpdated) 	atomicState.weather 			= tempWeather
-        if (alertsUpdated) 		atomicState.alerts 				= tempAlerts
 		if (capabilitiesUpdated) atomicState.capabilities		= tempCapabilities
 		// DELETED `atomicState.statUpdates = statUpdates`. It is written once per poll and
 		// read only by updateThermostatData()/updateSensorData(), both called below from this same
@@ -3164,7 +3162,6 @@ Map updateThermostatData(Map statUpdates) {		// was no-arg, read atomicState.sta
         // Now using per-tid list of things that changed
             boolean rtReallyUpdated 	= statUpdates[tid]?.contains('rtReally')
             boolean runtimeUpdated 		= rtReallyUpdated
-            boolean alertsUpdated 		= statUpdates[tid]?.contains('alerts')
             boolean settingsUpdated 	= statUpdates[tid]?.contains('settings')
             boolean programUpdated 		= statUpdates[tid]?.contains('program')
             boolean climatesUpdated 	= statUpdates[tid]?.contains('climates')
@@ -3743,7 +3740,7 @@ Map updateThermostatData(Map statUpdates) {		// was no-arg, read atomicState.sta
             ////if (TIMERS) log.debug "TIMER: Finished queueing Equip & Cloud for ${tstatName} @ ${now() - atomicState.pollEcobeeAPIStart}ms"
 
         // ALERTS: Alerts & Read Only
-            if (alertsUpdated || settingsUpdated || forcePoll) {
+            if (settingsUpdated || forcePoll) {
                 if (!changeAlerts) changeAlerts = atomicState.changeAlerts as HashMap
                 if (!changeAlerts || !changeAlerts[tid]) changeAlerts[tid] = ["x"]*alertNamesList.size() as List
                 def alertValues = []
@@ -4150,7 +4147,7 @@ Map updateThermostatData(Map statUpdates) {		// was no-arg, read atomicState.sta
             // Helper dependencies, so we send the timestamps even if nothing else changed.
             String tidTime = statTime[tid]
             if (runtimeUpdated) 	data << [runtimeUpdated: 	tidTime]
-            if (alertsUpdated) 		data << [alertsUpdated: 	tidTime]
+            if (settingsUpdated) 	data << [alertsUpdated: 	tidTime]		// E-6: alert attributes derive from settings, so this timestamp stays truthful
             if (settingsUpdated) 	data << [settingsUpdated: 	tidTime]
             if (programUpdated) 	data << [programUpdated: 	tidTime]
             if (climatesUpdated) 	data << [climatesUpdated: 	tidTime]
