@@ -153,6 +153,37 @@ In addition, this release includes the following updates:
   - Added support for the new `fanSpeedOptions` feature of (some) Ecobee thermostats. This includes a small hack to get around an idiosyncracy in the actual implementation - simply choose a `fanSpeed` from the JSON list of options in the `fanSpeedOptions` attribute
   - Added support for an `occupancy` attribute for thermostat and sensor devices, which will have the value `occupied` or `vacant`. This is perhaps a more appropriate attribute than using `motion`, in that it takes Ecobee a few moments to detect (and report) occupancy, and waits 15-30 minutes of no motion in the room to report `vacant`.
 
+#### New in Version 1.9.\*\* (updates since 1.9.00)
+
+Since the 1.9.00 release, I have been working my way through the entire Suite, line by line, hunting down bugs, wasted work and the occasional outright crash. Most of these changes are invisible when everything is working - which is exactly the point - but several of them fix problems that could quietly stop the Suite from doing what you asked it to do. With this update, Ecobee Suite Manager is at version 1.9.16, the Thermostat driver is at 1.9.08, the Sensor driver is at 1.9.06, and six of the Helpers are at 1.9.06 (the rest are unchanged at 1.9.00).
+
+**Ecobee Suite Manager**
+  - **More robust polling** *(1.9.14, 1.9.16)*: A running poll was protected for only 25 seconds, while each of its calls to the Ecobee servers can take up to 30. So a slow (but perfectly healthy) poll could be overlapped by the next one, and the same data processed twice. A poll now "owns" the connection for up to 2 minutes from when it starts, and each poll carries its own token, so a late response from an older poll is simply ignored instead of being processed a second time.
+  - **No more lost commands during Ecobee outages** *(1.9.07, 1.9.14, 1.9.15)*: When the Ecobee servers can't be reached, the commands you send (setpoint changes, program changes and the like) are supposed to be queued and replayed once the connection comes back. It turns out that queue wasn't capturing anything at all - and once that was fixed, it could still overwrite commands that were already waiting after a failed replay. The queue now always appends, replays one command at a time (5 seconds apart), and drops a command (with a log entry) after 5 attempts or 1 hour, so a command that can never succeed won't block everything behind it. Connection *resets* (and dead keep-alive connections) are now treated just like timeouts; previously, a command sent at that exact moment was silently lost. And a command that failed can no longer be replayed later by a token refresh.
+  - **Fixed a Smart Recovery loop that could tie up your hub** *(1.9.13)*: While a thermostat is in Smart Recovery, ES Manager looks ahead to find the *next* scheduled program. That search could loop forever if your schedule held the same program for the rest of the week, or had a missing slot - pinning a hub thread, which is exactly the kind of thing that triggers Hubitat's "Severe Load" warnings. The search is now limited to one week, and the results are unchanged in every case where the old search actually finished.
+  - **Fixed an offline-thermostat stall** *(1.9.07)*: If any one of your thermostats went offline, a coding error stopped updates to *all* of your Ecobee Suite devices until it came back on-line.
+  - **Hold over a Vacation** *(1.9.06)*: The new `setHoldOverVacation()` and `setHoldOverVacationProgram()` commands (see [Thermostat Commands](#thermostatCommands)) let you place a hold *on top of* an active calendar Vacation without cancelling the Vacation. Also, `resumeProgram()` now reflects a Vacation that is still running, instead of freezing at the prior hold's program and setpoints.
+  - **Lighter on your hub** *(1.9.06 - 1.9.12)*: Far less state is written on every poll, a fair amount of dead code is gone (including an alerts fetch that served no purpose on Hubitat - the alert-related attributes are unaffected), and a duplicated settings entry that wasted a change-detection slot on every poll has been removed. The program updater now runs every 4 hours instead of every 30 minutes; Ecobee flags program changes on its own, so the regular polls already catch them. The hourly forced poll that keeps your devices' Health Check happy is unchanged.
+
+**Ecobee Suite Thermostat** *(1.9.06 - 1.9.08)*
+  - Fixed a handful of commands that simply didn't work: `fanAuto()` crashed if the fan was already in auto, `fanCirculate()` crashed when changing the circulation time, `raiseSmartSetpoint()`/`lowerSmartSetpoint()` updated the display but never actually changed the setpoint, `setHumiditySetpoint()` was broken two different ways, and `microphoneOn()`/`microphoneOff()` were reversed. The day/night transition could also abort the rest of an update in progress.
+  - `setDehumidifierMode()` no longer offers 'auto' - the Ecobee API only accepts 'on' and 'off', so choosing 'auto' always failed.
+  - `setHoldOverVacation()` now validates and range-limits its setpoints (just like `setHeatingSetpoint()` does), so a non-numeric value from Rule Machine no longer throws an error.
+  - **Programmers take note:** the `heatingSetpointRange` and `coolingSetpointRange` attributes are now always reported as numbers. Previously, they alternated between a list of Strings and a list of numbers, generating a new event on every forced poll (and making any rule or comparison that used them unreliable).
+  - Fewer events, and fewer database reads on every update from ES Manager.
+
+**Ecobee Suite Sensor** *(1.9.06)*
+  - Temperature (and two other groups of attributes) were sending an event on every update from ES Manager, whether or not the value had changed. Change detection is back, and a periodic update keeps Health Check from marking the sensor offline.
+
+**Helpers** *(1.9.06)*
+  - **Quiet Time**: now saves (and restores) the actual *fan* mode - it was saving the thermostat mode instead - and the hours-based auto-off timer now works. Several other logic errors were also fixed.
+  - **Smart Circulation**: the Quiet Time switch integration and the humidity limit now work as intended.
+  - **Smart Switches**: the reverse action now turns your switches *off* (it was turning them on), and the day-of-week check actually works.
+  - **Smart Zones**: fixed a bug that broke *both* of the Helper's modes, along with the detection of the 'fan only' operating state.
+  - **Smart Mode** and **Thermal Comfort**: minor cleanup (a corrected reservation name in a warning message, and some dead code removed).
+
+A special thank you to the Hubitat community member who shared a patch aimed at those "Severe Load" warnings - reviewing it led directly to the fixes in 1.9.13 and 1.9.14.
+
 #### Special Thanks to Hubitat Staff
 The author extends a special thank you to the Hubitat staff for assistance in getting the code-based Ecobee authentication working, as the documented Hubitat OAuth path doesn't work for Ecobee. Read through the OAuth init code in Ecobee Suite Manager to learn the (clever) trick they helped me employ. 
 
@@ -900,6 +931,8 @@ The complete set of **Thermostat* DTH commands that can be called programmatical
 | ~~setFanMinOnTimeDelay~~ |  | INTERNAL USE ONLY |
 | setHeatingSetpoint(setpoint) |  | There us a 2+ second delay before the setpoint is changed |
 | ~~setHeatingSetpointDelay~~ |  | INTERNAL USE ONLY |
+| setHoldOverVacation(heat, cool, holdType, holdHours) |  | Places a temperature hold *on top of* an active Vacation without cancelling it. `holdType` is one of `holdHours` (default), `nextTransition` or `indefinite`; `holdHours` defaults to 2 |
+| setHoldOverVacationProgram(program, holdType, holdHours) |  | Holds the named Program *on top of* an active Vacation without cancelling it. Same `holdType` and `holdHours` options as above |
 | setHumidifierMode(mode) |  | Mode must be one of `supportedHumidifierModes` |
 | setHumiditySetpoint(setpoint) |  | 35-100 - lower value have special meaning '(trial and error) |
 | setProgramSetpoints(program, heatSetpoint, coolSetpoint) |  |  |
