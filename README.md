@@ -221,22 +221,22 @@ Open the Hubitat Console in your browser of choice, and then:
 1. Click on **<> Apps Code** in the left menu to open the Apps Code page
 2. Click on the **+ New App** button at the top right of the page
 3. From the "New App" edit page, click on the **Import** button at the top of the page
-4. Copy the [Ecobee Suite Manager link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy) and paste it into the "Import Code from Website" overlay
+4. Copy the [Ecobee Suite Manager link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-manager.src/ecobee-suite-manager.groovy) and paste it into the "Import Code from Website" overlay
 5. Click the **Import** button on the overlay
 6. Click the **Save** button in the editor page to complete the installation of the Ecobee Suite Manager app
 7. Repeat steps 1-6 again, using each of the following links to install the rest of the Suite's applications<br>
-	A. [`ecobee Suite Open Contacts`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy)<br>
-	B. [`ecobee Suite Quiet Time`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy)<br>
-	C. [`ecobee Suite Routines`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy)<br> 
-	D. [`ecobee Suite Smart Circulation`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy)<br> 
-	E. [`ecobee Suite Smart Humidity`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy)<br> 
-	F. [`ecobee Suite Smart Mode`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy)<br> 
-	G. [`ecobee Suite Smart Room`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy)<br>
-	H. [`ecobee Suite Smart Switches`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy)<br>
-	I. [`ecobee Suite Smart Vents`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy)<br>
-	J. [`ecobee Suite Smart Zones`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy)<br>
-	K. [`ecobee Suite Thermal Comfort`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy)<br>
-	L. [`ecobee Suite Working From Home`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy)<br>
+	A. [`ecobee Suite Open Contacts`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-open-contacts.src/ecobee-suite-open-contacts.groovy)<br>
+	B. [`ecobee Suite Quiet Time`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-quiet-time.src/ecobee-suite-quiet-time.groovy)<br>
+	C. [`ecobee Suite Routines`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-routines.src/ecobee-suite-routines.groovy)<br> 
+	D. [`ecobee Suite Smart Circulation`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-smart-circulation.src/ecobee-suite-smart-circulation.groovy)<br> 
+	E. [`ecobee Suite Smart Humidity`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-smart-humidity.src/ecobee-suite-smart-humidity.groovy)<br> 
+	F. [`ecobee Suite Smart Mode`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-smart-mode.src/ecobee-suite-smart-mode.groovy)<br> 
+	G. [`ecobee Suite Smart Room`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-smart-room.src/ecobee-suite-smart-room.groovy)<br>
+	H. [`ecobee Suite Smart Switches`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-smart-switches.src/ecobee-suite-smart-switches.groovy)<br>
+	I. [`ecobee Suite Smart Vents`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-smart-vents.src/ecobee-suite-smart-vents.groovy)<br>
+	J. [`ecobee Suite Smart Zones`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-smart-zones.src/ecobee-suite-smart-zones.groovy)<br>
+	K. [`ecobee Suite Thermal Comfort`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-thermal-comfort.src/ecobee-suite-thermal-comfort.groovy)<br>
+	L. [`ecobee Suite Working From Home`](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/smartapps/sandood/ecobee-suite-working-from-home.src/ecobee-suite-working-from-home.groovy)<br>
 
 This completes the applications code loading portion of the Ecobee Suite installation process.
 
@@ -246,10 +246,10 @@ Open the Hubitat Console in your browser of choice, and then:
 1. Click on **<> Drivers Code** in the left menu to open the Drivers Code page
 2. Click on the **+ New Driver** button at the top right of the page
 3. From the "New Driver" edit page, click on the **Import** button at the top of the page
-4. Copy the [Ecobee Suite Sensor link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy) and paste it into the "Import Code from Website" overlay
+4. Copy the [Ecobee Suite Sensor link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/devicetypes/sandood/ecobee-suite-sensor.src/ecobee-suite-sensor.groovy) and paste it into the "Import Code from Website" overlay
 5. Click the **Import** button on the overlay
 6. Click the **Save** button in the editor page to complete the installation of the Ecobee Suite Sensor driver
-7. Repeat steps 1-6 again, using the [Ecobee Suite Thermostat link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/master/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy), this time.
+7. Repeat steps 1-6 again, using the [Ecobee Suite Thermostat link](https://raw.githubusercontent.com/SANdood/Ecobee-Suite/universal-dev/devicetypes/sandood/ecobee-suite-thermostat.src/ecobee-suite-thermostat.groovy), this time.
 
 This completes the drivers code loading portion of the Ecobee Suite installation process.
 
