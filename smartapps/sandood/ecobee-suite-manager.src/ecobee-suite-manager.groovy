@@ -49,11 +49,12 @@
  *	1.9.10 - Removed the Hubitat-dead alerts fetch and cache (E-6): includeAlerts is no longer requested, the alerts object is no longer stored or change-compared, and alert-revision changes no longer force a full thermostat poll. Alert attributes are unaffected - they derive from settings, not from the alerts object - and alertsUpdated is now stamped when those settings refresh.
  *	1.9.11 - Fixed: the 1.9.10 state eviction never ran. cleanupStates()'s Group B block is one-shot (guarded by removedGroupB), so adding a key to that list does nothing on any install that already ran it, and the retired alerts map stayed in state. Retired keys now evict via their own guarded Group C.
  *	1.9.12 - programUpdater now runs every 4 hours instead of every 30 minutes. It sets needPrograms, which forces a full-breadth fetch even when no thermostat revision moved; ecobee bumps thermostatRevision on Program changes (vendor-documented and verified live), so the ordinary delta poll already catches them, and it is retained at low frequency only as a bounded drift scrub. The hourly forcePoll is UNCHANGED - that is what keeps every child inside the 65-minute checkInterval health window.
+ *	1.9.13 - Fixed: the Smart Recovery next-program search could loop forever and pin a hub thread. It ran an unbounded while() over the weekly schedule and exited only on finding a DIFFERENT program, so a schedule holding one program for the rest of the week never exited, and a missing slot re-tested the same slot indefinitely. The search is now bounded to one week (336 half-hour slots) and skips missing slots; when no different program exists, the next-program attributes stay 'null', as they do outside Smart Recovery. Results are unchanged wherever the old search terminated.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.12" }
+String getVersionNum()		{ return "1.9.13" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -3564,11 +3565,14 @@ Map updateThermostatData(Map statUpdates) {		// was no-arg, read atomicState.sta
                 //log.debug "[${tid}] schedClimate = ${schedClimateId}, td: ${td}, ti: ${ti}"
                 ti++
                 def nextClimateId = ''
-                while (!nextClimateId) {
-                    if (ti == 48) { ti = 0; td = (td < 6) ? td + 1 : 0; }
-                    if (schedClimateId != tempSchedule[tid][td][ti]) {
-                        nextClimateId = tempSchedule[tid][td][ti]
-                    } else ti++ 
+                // Bounded to one week (7 days x 48 half-hour slots). The old unbounded while() exited only on a
+                // DIFFERENT program, so a schedule holding one program for the rest of the week never exited, and a
+                // missing slot re-tested the same slot forever - either way pinning a hub thread whenever Smart Recovery was detected.
+                for (int searched = 0; (searched < 336) && !nextClimateId; searched++) {
+                    if (ti >= 48) { ti = 0; td = (td < 6) ? td + 1 : 0; }
+                    def candidate = tempSchedule[tid]?.getAt(td)?.getAt(ti)
+                    if (candidate && (candidate != schedClimateId)) nextClimateId = candidate
+                    ti++
                 }
                 def nextClimate = climates?.find { it.climateRef == nextClimateId }
                 if (nextClimate) {
