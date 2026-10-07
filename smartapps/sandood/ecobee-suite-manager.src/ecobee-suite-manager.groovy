@@ -52,11 +52,12 @@
  *	1.9.13 - Fixed: the Smart Recovery next-program search could loop forever and pin a hub thread. It ran an unbounded while() over the weekly schedule and exited only on finding a DIFFERENT program, so a schedule holding one program for the rest of the week never exited, and a missing slot re-tested the same slot indefinitely. The search is now bounded to one week (336 half-hour slots) and skips missing slots; when no different program exists, the next-program attributes stay 'null', as they do outside Smart Recovery. Results are unchanged wherever the old search terminated.
  *	1.9.14 - Fixed: overlapping polls. A running poll was protected for only 25 seconds, measured from the first SKIPPED request rather than from when the poll started, while its HTTP calls can each take 30, so a slow-but-healthy poll could be overlapped and its data processed twice. Ownership now lasts 120 seconds from the poll's start; each poll cycle carries a token, a response from a superseded cycle is dropped instead of processed, and a cycle can no longer release a newer cycle's ownership (which happened when a token refresh restarted polling from inside the callback). An exception in a poll now releases ownership and is logged with its message.
  *	1.9.14 - Fixed: the failed-call queue lost commands. After any failed replay it reset its "queueing" flag while commands were still pending, so the next queued command started a fresh queue and overwrote them; the queue now always appends. Replay runs one command per execution, five seconds apart, and a replayed command that fails again is not queued a second time. Each queued command is dropped (and logged) after 5 attempts or 1 hour, whichever comes first, so a command that can never succeed no longer blocks everything queued behind it.
+ *	1.9.15 - Fixed: a connection RESET (or a dead keep-alive connection) was not treated as a connection failure. It fell into the generic exception handler, so the API was never marked "warn": the summary check scheduled no quick re-poll, and a command sent at that moment was neither retried nor queued - it was silently lost. Resets are now handled exactly like refused or timed-out connections.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.14" }
+String getVersionNum()		{ return "1.9.15" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -2170,28 +2171,20 @@ boolean checkThermostatSummary(String thermostatIdsString) {
         if (resp) resp = null
 		result = false
 	// These appear to be transient errors, treat them all as if a Timeout... 
-	} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException | 
-			javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | 
+	} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException |
+			javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException |
 			java.net.SocketTimeoutException | java.net.NoRouteToHostException | java.net.UnknownHostException |
 			groovyx.net.http.ResponseParseException | java.lang.reflect.UndeclaredThrowableException e) {
-		LOG("checkThermostatSummary() - ${e} - will retry",1,null,'warn')  // Just log it, and hope for better next time...
-		if (apiConnected() != 'warn') {
-			atomicState.connected = 'warn'
-			updateMyLabel()
-			atomicState.lastPoll = now()
-			atomicState.lastPollDate = getTimestamp()
-			generateEventLocalParams()
-		}
-		def inTimeoutRetry = atomicState.inTimeoutRetry
-		if (inTimeoutRetry == null) inTimeoutRetry = 0
-		atomicState.inPollChildren = false
-		if (inTimeoutRetry < 3) runIn(watchdogInterval, pollChildren, [overwrite: true])
-		atomicState.inTimeoutRetry = inTimeoutRetry + 1
+		summaryTransportFailed(e)
         if (resp) resp = null
 		result = false
 		// throw e
 	} catch (Exception e) {
-		LOG("checkThermostatSummary() - General Exception: ${e}, success: ${resp?.isSuccess()}, status: ${resp?.status}, data: ${resp?.data} - skipping", 1, null, "warn")
+		if (isConnectionFailure(e)) {
+			summaryTransportFailed(e)		// a RESET connection is a transport failure too (see isConnectionFailure())
+		} else {
+			LOG("checkThermostatSummary() - General Exception: ${e}, success: ${resp?.isSuccess()}, status: ${resp?.status}, data: ${resp?.data} - skipping", 1, null, "warn")
+		}
 		result = false
         if (resp) resp = null
 		//throw e
@@ -2202,6 +2195,23 @@ boolean checkThermostatSummary(String thermostatIdsString) {
 	//if (TIMERS) log.debug "TIMER: checkThermostatSummary done (${now()-startMS}ms)"
     if (resp) resp = null
 	return result
+}
+
+// Transport failure during checkThermostatSummary(): mark the API 'warn' and schedule a quick re-poll
+void summaryTransportFailed(e) {
+	LOG("checkThermostatSummary() - ${e} - will retry",1,null,'warn')  // Just log it, and hope for better next time...
+	if (apiConnected() != 'warn') {
+		atomicState.connected = 'warn'
+		updateMyLabel()
+		atomicState.lastPoll = now()
+		atomicState.lastPollDate = getTimestamp()
+		generateEventLocalParams()
+	}
+	def inTimeoutRetry = atomicState.inTimeoutRetry
+	if (inTimeoutRetry == null) inTimeoutRetry = 0
+	atomicState.inPollChildren = false
+	if (inTimeoutRetry < 3) runIn(watchdogInterval, pollChildren, [overwrite: true])
+	atomicState.inTimeoutRetry = inTimeoutRetry + 1
 }
 
 boolean pollEcobeeAPI(thermostatIdsString = '') {
@@ -5847,39 +5857,61 @@ boolean sendJson(child=null, String jsonBody) {
         if (resp) resp = [:]
 	// These appear to be transient errors, treat them all as if a Timeout...
 	} catch (org.apache.http.conn.ConnectTimeoutException | org.apache.http.conn.HttpHostConnectException |
-			 javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException | 
+			 javax.net.ssl.SSLPeerUnverifiedException | javax.net.ssl.SSLHandshakeException |
 			 java.net.SocketTimeoutException | java.net.NoRouteToHostException | java.net.UnknownHostException |
 			 groovyx.net.http.ResponseParseException | java.lang.reflect.UndeclaredThrowableException e) {
-		LOG("sendJson() - ${e} - will retry",1,null,'warn')	 // Just log it, and hope for better next time...
-		if (apiConnected() != 'warn') {
-			atomicState.connected = 'warn'
-			updateMyLabel()
-			generateEventLocalParams()
-		}
-		// If no cached calls, retry 8 times
-		// if cached calls already, or if retries failed, then queue the call
-		//	  Cache Map by thermostat, order, (child & jsonBody)
-		def inTimeoutRetry = atomicState.inTimeoutRetry
-		if (inTimeoutRetry == null) inTimeoutRetry = 0
-		if (inTimeoutRetry < 8) {
-			// retry quickly... save what the deferred retry needs, and ONLY here: this is the
-			// only path that hands this call to a later thread. sendJsonRetry() consumes it.
-			atomicState.savedActionJsonBody = jsonBody
-			atomicState.savedActionChild = child?.deviceNetworkId
-			runIn(2, sendJsonRetry, [overwrite: true])
-		}
-		atomicState.inTimeoutRetry = inTimeoutRetry + 1
+		sendJsonTransportFailed(child, jsonBody, e)
 		result = false
         if (resp) resp = [:]
 	} catch(Exception e) {
-		// Might need to further break down 
-		LOG("sendJson() - Exception: ${e} - won't retry", 1, child, "error")
+		if (isConnectionFailure(e)) {
+			// a RESET connection is a transport failure too: marking the API 'warn' is what makes the
+			// calling command queue itself instead of being silently lost (see isConnectionFailure())
+			sendJsonTransportFailed(child, jsonBody, e)
+		} else {
+			// Might need to further break down
+			LOG("sendJson() - Exception: ${e} - won't retry", 1, child, "error")
+		}
 		result = false
         if (resp) resp = [:]
 		//throw e
 	}
     if (resp) resp = [:]
 	return result
+}
+
+// Transport failure while sending a command: mark the API 'warn' (so the calling command queues itself)
+// and schedule the quick retry
+void sendJsonTransportFailed(child, String jsonBody, e) {
+	LOG("sendJson() - ${e} - will retry",1,null,'warn')	 // Just log it, and hope for better next time...
+	if (apiConnected() != 'warn') {
+		atomicState.connected = 'warn'
+		updateMyLabel()
+		generateEventLocalParams()
+	}
+	// If no cached calls, retry 8 times
+	// if cached calls already, or if retries failed, then queue the call
+	//	  Cache Map by thermostat, order, (child & jsonBody)
+	def inTimeoutRetry = atomicState.inTimeoutRetry
+	if (inTimeoutRetry == null) inTimeoutRetry = 0
+	if (inTimeoutRetry < 8) {
+		// retry quickly... save what the deferred retry needs, and ONLY here: this is the
+		// only path that hands this call to a later thread. sendJsonRetry() consumes it.
+		atomicState.savedActionJsonBody = jsonBody
+		atomicState.savedActionChild = child?.deviceNetworkId
+		runIn(2, sendJsonRetry, [overwrite: true])
+	}
+	atomicState.inTimeoutRetry = inTimeoutRetry + 1
+}
+
+// Transport failures that the explicit catch lists miss. A RESET connection surfaces as java.net.SocketException
+// ("Connection reset", "Broken pipe") and a dead keep-alive connection as org.apache.http.NoHttpResponseException.
+// Both used to fall into the generic catch, so the API was never marked 'warn', and a command sent at that moment
+// was neither retried nor queued. Matched on the exception text, so no further class has to be named in a catch
+// (every class named there must also be permitted by the hub's sandbox).
+boolean isConnectionFailure(e) {
+	String s = e?.toString() ?: ''
+	return ['SocketException', 'NoHttpResponseException', 'Connection reset', 'Broken pipe'].any { s.contains(it) }
 }
 
 boolean sendJsonRetry() {
