@@ -50,11 +50,13 @@
  *	1.9.11 - Fixed: the 1.9.10 state eviction never ran. cleanupStates()'s Group B block is one-shot (guarded by removedGroupB), so adding a key to that list does nothing on any install that already ran it, and the retired alerts map stayed in state. Retired keys now evict via their own guarded Group C.
  *	1.9.12 - programUpdater now runs every 4 hours instead of every 30 minutes. It sets needPrograms, which forces a full-breadth fetch even when no thermostat revision moved; ecobee bumps thermostatRevision on Program changes (vendor-documented and verified live), so the ordinary delta poll already catches them, and it is retained at low frequency only as a bounded drift scrub. The hourly forcePoll is UNCHANGED - that is what keeps every child inside the 65-minute checkInterval health window.
  *	1.9.13 - Fixed: the Smart Recovery next-program search could loop forever and pin a hub thread. It ran an unbounded while() over the weekly schedule and exited only on finding a DIFFERENT program, so a schedule holding one program for the rest of the week never exited, and a missing slot re-tested the same slot indefinitely. The search is now bounded to one week (336 half-hour slots) and skips missing slots; when no different program exists, the next-program attributes stay 'null', as they do outside Smart Recovery. Results are unchanged wherever the old search terminated.
+ *	1.9.14 - Fixed: overlapping polls. A running poll was protected for only 25 seconds, measured from the first SKIPPED request rather than from when the poll started, while its HTTP calls can each take 30, so a slow-but-healthy poll could be overlapped and its data processed twice. Ownership now lasts 120 seconds from the poll's start; each poll cycle carries a token, a response from a superseded cycle is dropped instead of processed, and a cycle can no longer release a newer cycle's ownership (which happened when a token refresh restarted polling from inside the callback). An exception in a poll now releases ownership and is logged with its message.
+ *	1.9.14 - Fixed: the failed-call queue lost commands. After any failed replay it reset its "queueing" flag while commands were still pending, so the next queued command started a fresh queue and overwrote them; the queue now always appends. Replay runs one command per execution, five seconds apart, and a replayed command that fails again is not queued a second time. Each queued command is dropped (and logged) after 5 attempts or 1 hour, whichever comes first, so a command that can never succeed no longer blocks everything queued behind it.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.13" }
+String getVersionNum()		{ return "1.9.14" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1189,7 +1191,8 @@ def initialize() {
 		atomicState.inPollChildren = true
     	atomicState.skipTime = null
 	}
-	
+	atomicState.esmPollToken = null		// any response still in flight belongs to a poll cycle from before this initialize()
+
 	atomicState.connected = "full"
 	atomicState.wifiAlert = false
 	updateMyLabel()
@@ -1224,6 +1227,7 @@ def initialize() {
     
     LOG("Clearing callQueue...",1,null,info)
     atomicState.callQueue = [:]
+    atomicState.replayingCall = null
     atomicState.callsQueued = 0
     atomicState.callsRun = 0
 
@@ -1823,14 +1827,17 @@ void clearChangeLogs(tid) {
     if (temp) { temp[tid] = []; atomicState.changeWeather = temp; temp = [:]; }
 }
 
-void pollChildren(String deviceId="",force=false) { 
-	// Prevent multiple concurrent poll cycles
+@Field final long POLL_OWNERSHIP_MS = 120000L	// covers three 30s HTTP timeouts (token refresh, summary, detail) plus margin
+
+void pollChildren(String deviceId="",force=false) {
+	// Prevent multiple concurrent poll cycles. Ownership is measured from when the running poll STARTED
+	// (pollEcobeeAPIStart) - it used to be measured from the first SKIPPED request, and lasted only 25s
+	// against 30s HTTP timeouts, so a slow-but-healthy poll could be overlapped and processed twice.
 	if (atomicState.inPollChildren) {
-		def skipTime = atomicState.skipTime ?: now()
-		// Give the already running poll 20/25 seconds to complete
-		if ((now() - skipTime) < 25000) {
+		long started = (atomicState.pollEcobeeAPIStart ?: 0L) as Long
+		long held = started ? (now() - started) : 0L
+		if (started && (held < POLL_OWNERSHIP_MS)) {
 			// Already/still polling, capture the arguments and skip this poll request
-			if (atomicState.skipTime != skipTime) atomicState.skipTime = skipTime
             if (force) {
             	forceNextPoll()
                 if (deviceId) {
@@ -1844,14 +1851,32 @@ void pollChildren(String deviceId="",force=false) {
             }
             log.trace "prior poll not finished, skipping..."
 			return
-		} else {
-			atomicState.skipTime = null
 		}
-	} else {
-		atomicState.inPollChildren = true
-        if (atomicState.skipTime) atomicState.skipTime = null
+		if (started) LOG("pollChildren() - the prior poll held ownership for ${(held/1000).toInteger()}s without finishing - taking over", 1, null, 'warn')
 	}
+	// Each poll cycle carries a token through to its async callback. The callback is processed - and may
+	// release ownership - only while its token is still current, so a late response from a superseded cycle
+	// can neither be processed twice nor release a newer cycle's ownership.
+	String token = "${now()}.${randomSeed.nextInt(1000000)}".toString()
+	atomicState.esmPollToken = token
+	atomicState.inPollChildren = true
+	atomicState.pollEcobeeAPIStart = now()
+	if (atomicState.skipTime) atomicState.skipTime = null
+	try {
+		pollChildrenOwned(deviceId, force)
+	} catch (Exception e) {
+		LOG("pollChildren() - ${e}; the next scheduled poll will retry", 1, null, 'error')
+		releasePoll(token)
+	}
+}
 
+// Release poll ownership only if the given cycle still holds it (a null token matches only a cycle started by
+// pre-1.9.14 code, so a response already in flight across the upgrade still releases normally)
+void releasePoll(String token) {
+	if ((atomicState.esmPollToken == token) && atomicState.inPollChildren) atomicState.inPollChildren = false
+}
+
+void pollChildrenOwned(String deviceId, force) {
 	// Just in case we need to re-initialize anything
 	def version = getVersionLabel()
 	if (atomicState.versionLabel != version) {
@@ -1863,8 +1888,7 @@ void pollChildren(String deviceId="",force=false) {
 		return
 	}
 
-    // Start the new poll cycle
-    atomicState.pollEcobeeAPIStart = now()
+    // Start the new poll cycle (pollEcobeeAPIStart is now stamped by pollChildren() when it takes ownership)
 	LOG("Checking for updates...",1,null,'trace')
 	boolean debugLevelFour = debugLevel(4)
 	if (debugLevelFour) LOG("pollChildren(${deviceId}, ${force})", 1, null, 'trace')
@@ -2288,6 +2312,7 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	def pollState = [
 		thermostatIdsString: thermostatIdsString,
 		checkTherms:		 checkTherms,
+		esmPollToken:		 atomicState.esmPollToken,		// ownership token of this poll cycle - see pollChildren()
 	]
 	if (debugLevelFour) pollState += [thermostatIdsString: thermostatIdsString]
 	
@@ -2307,6 +2332,24 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 }
 
 boolean pollEcobeeAPICallback( resp, pollState ) {
+	// Process this response only if its poll cycle still owns the poll (see pollChildren()). A response from a
+	// superseded cycle is dropped - the cycle that superseded it fetches fresh data anyway.
+	String token = pollState?.esmPollToken
+	if (token != atomicState.esmPollToken) {
+		LOG("pollEcobeeAPICallback() - ignoring a response from a superseded poll cycle", 3, null, 'trace')
+		return false
+	}
+	try {
+		return pollEcobeeAPICallbackOwned(resp, pollState)
+	} catch (Exception e) {
+		LOG("pollEcobeeAPICallback() - ${e}; the next scheduled poll will retry", 1, null, 'error')
+		return false
+	} finally {
+		releasePoll(token)
+	}
+}
+
+boolean pollEcobeeAPICallbackOwned( resp, pollState ) {
 	def startMS = now()
 	//atomicState.waitingForCallback = false
 	//boolean timers = atomicState.timers
@@ -2634,8 +2677,8 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 				// Auth_token expired
 				if (debugLevelThree) LOG("Polling: Auth_token expired", 3, null, "trace")
 				atomicState.action = "pollChildren"
-				atomicState.inPollChildren = false
-				if ( refreshAuthToken() ) { 
+				releasePoll(pollState?.esmPollToken as String)
+				if ( refreshAuthToken() ) {
 					// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
 					LOG( 'Polling: Auth_token refreshed', 2, null, 'info')
 				} else {
@@ -2782,7 +2825,9 @@ boolean pollEcobeeAPICallback( resp, pollState ) {
 	} 	
 	
 	if (debugLevelFour) LOG("<===== Leaving pollEcobeeAPICallback() results: ${result}", 1, null, 'trace')
-    atomicState.inPollChildren = false
+	// Token-aware: refreshAuthToken() above can start a NEW poll cycle from inside this callback, and an
+	// unconditional release here used to drop that new cycle's ownership while its request was in flight.
+    releasePoll(pollState?.esmPollToken as String)
 	return result
 }
 
@@ -4436,9 +4481,15 @@ boolean refreshAuthToken(child=null) {
 	return true
 }
 
+@Field final int  CALL_QUEUE_MAX_ATTEMPTS = 5			// a queued command is dropped after this many failed replays...
+@Field final long CALL_QUEUE_MAX_AGE_MS   = 3600000L	// ...or once it is this old (1 hour), whichever comes first
+
 void queueFailedCall(String routine, String DNI, numArgs, arg1=null, arg2=null, arg3=null, arg4=null, arg5=null, arg6=null, arg7=null) {
 	//log.debug "queueCall routine: ${routine}, DNI: ${DNI}, ${arg1}, ${arg2}, ${arg3}, ${arg4}, ${arg5}, ${arg6}, ${arg7}"	 // ${routine}" // , args: ${theArgs}"
 	if ((atomicState.connected == 'full') && atomicState.runningCallQueue) return // don't queue when we are clearing the queue
+	// A command being REPLAYED from the queue that fails again is already queued - re-queueing it would add a
+	// duplicate with a fresh age and attempt count, defeating the caps in runCallQueue()
+	if (atomicState.runningCallQueue && (atomicState.replayingCall == (routine + '|' + DNI))) return
 	runIn(2, queueCall, [overwrite: false, data: [routine: routine, DNI: DNI, args: [arg1, arg2, arg3, arg4, arg5], done: false, numArgs: numArgs]])
 	if (atomicState.callsQueued == null) { atomicState.callsQueued = 0; atomicState.callsRun = 0; }
 	atomicState.callsQueued = atomicState.callsQueued + 1
@@ -4447,116 +4498,132 @@ void queueFailedCall(String routine, String DNI, numArgs, arg1=null, arg2=null, 
 void queueCall(data) {
 	def dbgLvl = 4
 	LOG("queueCall() data: ${data}", dbgLvl, null, 'trace')
-	
-	def failedCallQueue = null
-	def queueSize = 0
-	if (!atomicState.queueingFailedCalls) {
-		atomicState.queueingFailedCalls = true
-	} else {
-		failedCallQueue = atomicState.callQueue
-		queueSize = failedCallQueue ? failedCallQueue.size() : 0
-	}
+
+	// Always APPEND. This used to start a fresh queue whenever queueingFailedCalls was false - and runCallQueue()
+	// cleared that flag even when commands were still pending, so the next queued command OVERWROTE them.
+	// Each entry is stamped so runCallQueue() can enforce the attempt and age caps.
+	def failedCallQueue = atomicState.callQueue ?: [:]
+	def queueSize = failedCallQueue.size()
+	if (!atomicState.queueingFailedCalls) atomicState.queueingFailedCalls = true
 	LOG("queueSize: ${queueSize}, failedCallQueue: ${failedCallQueue}", dbgLvl, null, 'trace')
-	if (queueSize == 0) {
-		failedCallQueue = ["${queueSize}": data]
-	} else {
-		failedCallQueue = failedCallQueue + ["${queueSize}": data]
-	}
-	
+	failedCallQueue = failedCallQueue + ["${queueSize}": ([:] + data + [queuedAt: now(), attempts: 0])]
+
 	LOG("failedCallQueue: ${failedCallQueue}", 3, null, 'trace')
 	//atomicState.callQueue = toJson(failedCallQueue)
 	atomicState.callQueue = failedCallQueue
-	
+
 	// runIn( 5, runCallQueue )
+}
+
+// Re-read the queue and change ONE entry, so a command appended by queueCall() in the meantime is not overwritten
+void updateQueuedCall(int i, Map changes) {
+	def q = atomicState.callQueue ?: [:]
+	def entry = q."${i}"
+	if (entry == null) return
+	q."${i}" = entry + changes
+	atomicState.callQueue = q
 }
 
 void runCallQueue() {
 	def dbgLvl = 1
 	if (debugLevel(dbgLvl)) LOG("runCallQueue() connected: ${atomicState.connected}, callQueue: ${atomicState.callQueue}, runningCallQueue: ${atomicState.runningCallQueue}", dbgLvl, null, 'trace')
-	if (atomicState.connected?.toString() != 'full') return
-    
-    def callQueue = atomicState.callQueue
-	if (callQueue?.size() == 0) {
+	if (atomicState.connected?.toString() != 'full') return		// apiRestored() restarts the queue when the API comes back
+
+    def callQueue = atomicState.callQueue ?: [:]
+	if (callQueue.size() == 0) {
     	atomicState.runningCallQueue = false
         LOG("Call Queue is empty",2,null,'info')
         return
     }
-    
+
 	if (atomicState.runningCallQueue) {
-    	def timeLeft = now() - atomicState.runningCallQueueStarted
-    	if (timeLeft < (callQueue.size() * 15000)) {	// 15 seconds per queued call
-    		LOG("callQueue is already running - ${timeLeft/1000} seconds until restart",,null,'warn')
+    	long elapsed = now() - ((atomicState.runningCallQueueStarted ?: 0L) as Long)
+    	if (elapsed < 120000L) {	// one replayed command (30s HTTP timeout plus its quick retry) fits easily
+    		LOG("callQueue is already running (${(elapsed/1000).toInteger()}s) - not restarting",1,null,'warn')
     		return
         }
     }
 	atomicState.runningCallQueue = true
     atomicState.runningCallQueueStarted = now()
     LOG("callQueue starting...",2,null,'trace')
-	
-	//while (atomicState.connected == 'full') {
+
+	// ONE command per execution, chained 5s apart, so a long queue is never one long execution. An entry past
+	// CALL_QUEUE_MAX_ATTEMPTS or CALL_QUEUE_MAX_AGE_MS is dropped (and logged), so a command that can never
+	// succeed no longer blocks everything queued behind it.
 	boolean failed = false
-	boolean result = true
-	
-	int i
-	for (i=0; i < callQueue.size(); i++) {
-		//log.debug queue."${i}"
-		def cmd = callQueue."${i}"
-		LOG("${i}: ${cmd}", dbgLvl, null, 'debug')
-		if (cmd?.done?.toString() == 'false') {		
-			if (atomicState.connected == 'full') {
-				// execute the command
-                if (cmd.routine == 'setProgramSetpoint') cmd.routine = 'setProgramSetpoints'	// fix for a past mistake **TEMPORARY**
-				def command = "${cmd.routine}(getChildDevice(${cmd.DNI})"
-				cmd.args?.each {
-					if (it == [:]) it = null
+	boolean attempted = false
+	try {
+		for (int i = 0; i < callQueue.size(); i++) {
+			def cmd = callQueue."${i}"
+			if (cmd?.done?.toString() != 'false') continue
+			long age = now() - ((cmd.queuedAt ?: now()) as Long)
+			int attempts = (cmd.attempts ?: 0) as Integer
+			if ((attempts >= CALL_QUEUE_MAX_ATTEMPTS) || (age > CALL_QUEUE_MAX_AGE_MS)) {
+				LOG("callQueue: dropping ${cmd.routine} for ${cmd.DNI} - ${attempts} failed attempt${attempts==1?'':'s'}, queued ${(age/60000).toInteger()} min ago",1,null,'warn')
+				updateQueuedCall(i, [done: true, dropped: true])
+				continue
+			}
+			if (attempted) break			// one command per execution - the rest are chained below
+			attempted = true
+
+			// execute the command
+			String routine = (cmd.routine == 'setProgramSetpoint') ? 'setProgramSetpoints' : cmd.routine	// fix for a past mistake **TEMPORARY**
+			updateQueuedCall(i, [attempts: attempts + 1])		// counted BEFORE the call, so a call that throws still counts
+			atomicState.replayingCall = routine + '|' + cmd.DNI
+			boolean result = false
+			try {
+				def child = getChildDevice(cmd.DNI)
+				switch(cmd.numArgs) {
+					case 0:
+						result = this."${routine}"(child)
+						break;
+					case 1:
+						result = this."${routine}"(child, cmd.args[0])
+						break;
+					case 2:
+						result = this."${routine}"(child, cmd.args[0], cmd.args[1] )
+						break;
+					case 3:
+						result = this."${routine}"(child, cmd.args[0], cmd.args[1], cmd.args[2])
+						break;
+					case 4:
+						result = this."${routine}"(child, cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3])
+						break;
+					case 5:
+						result = this."${routine}"(child, cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4])
+						break;
 				}
-				command += ')'
-                switch(cmd.numArgs) {
-                    case 0:
-                        result = this."${cmd.routine}"(getChildDevice(cmd.DNI))
-                        break;
-                    case 1:
-                        result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0])
-                        break;
-                    case 2:
-                        result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1] )
-                        break;
-                    case 3:
-                        result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2])
-                        break;
-                    case 4:
-                        result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3])
-                        break;
-                    case 5:
-                        result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4])
-                        break;
-                    //case 6:
-                    //	result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4], cmd.args[5])
-                    //	break;
-                    //case 7:
-                    //	result = this."${cmd.routine}"(getChildDevice(cmd.DNI), cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4], cmd.args[5], cmd.args[6])
-                    //	break;
-                }
-                LOG("RESULT: ${result}", dbgLvl, null, 'trace')
-                    
-				if (result) {
-					if (!callQueue) callQueue = atomicState.callQueue
-					cmd = callQueue."${i}"
-					cmd.done = true
-					callQueue."${i}" = cmd
-					atomicState.callQueue = callQueue
-					atomicState.callsRun = atomicState.callsRun + 1
-				} else {
-                LOG("callQueue failed on entry ${i} - aborting",1,null,'error')
-					i = callQueue.size()
-					failed = true
-				}
+			} catch (Exception e) {
+				LOG("callQueue: ${routine} for ${cmd.DNI} threw ${e}",1,null,'error')
+				result = false
+			} finally {
+				atomicState.replayingCall = null
+			}
+			LOG("${i}: ${routine} attempt ${attempts + 1} RESULT: ${result}", dbgLvl, null, 'trace')
+			if (result) {
+				updateQueuedCall(i, [done: true])
+				atomicState.callsRun = (atomicState.callsRun ?: 0) + 1
+			} else {
+				LOG("callQueue: ${routine} for ${cmd.DNI} failed (attempt ${attempts + 1} of ${CALL_QUEUE_MAX_ATTEMPTS}) - will retry",1,null,'warn')
+				failed = true
 			}
 		}
+	} catch (Exception e) {
+		LOG("runCallQueue() - ${e}; pending commands retained",1,null,'error')
+		failed = true
+	} finally {
+		atomicState.runningCallQueue = false
 	}
-	if (!failed) { atomicState.callQueue = [:]; LOG("callQueue completed and cleared", 2, null, 'trace'); }
-	atomicState.runningCallQueue = false
-	atomicState.queueingFailedCalls = false
+
+	def latestQueue = atomicState.callQueue ?: [:]
+	boolean pending = latestQueue.values().any { it?.done?.toString() == 'false' }
+	if (!pending) {
+		atomicState.callQueue = [:]
+		atomicState.queueingFailedCalls = false
+		LOG("callQueue completed and cleared", 2, null, 'trace')
+	} else if (atomicState.connected?.toString() == 'full') {
+		runIn((failed ? 60 : 5), runCallQueue, [overwrite: true])	// next command in 5s; after a failure, retry in 60s
+	}
 }
 
 boolean resumeProgram(child, String deviceId, resumeAll=true) {
