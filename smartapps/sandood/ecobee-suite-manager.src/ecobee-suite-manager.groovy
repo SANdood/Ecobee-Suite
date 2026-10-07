@@ -53,11 +53,12 @@
  *	1.9.14 - Fixed: overlapping polls. A running poll was protected for only 25 seconds, measured from the first SKIPPED request rather than from when the poll started, while its HTTP calls can each take 30, so a slow-but-healthy poll could be overlapped and its data processed twice. Ownership now lasts 120 seconds from the poll's start; each poll cycle carries a token, a response from a superseded cycle is dropped instead of processed, and a cycle can no longer release a newer cycle's ownership (which happened when a token refresh restarted polling from inside the callback). An exception in a poll now releases ownership and is logged with its message.
  *	1.9.14 - Fixed: the failed-call queue lost commands. After any failed replay it reset its "queueing" flag while commands were still pending, so the next queued command started a fresh queue and overwrote them; the queue now always appends. Replay runs one command per execution, five seconds apart, and a replayed command that fails again is not queued a second time. Each queued command is dropped (and logged) after 5 attempts or 1 hour, whichever comes first, so a command that can never succeed no longer blocks everything queued behind it.
  *	1.9.15 - Fixed: a connection RESET (or a dead keep-alive connection) was not treated as a connection failure. It fell into the generic exception handler, so the API was never marked "warn": the summary check scheduled no quick re-poll, and a command sent at that moment was neither retried nor queued - it was silently lost. Resets are now handled exactly like refused or timed-out connections.
+ *	1.9.16 - Fixed: two polls starting at the same instant (e.g. the post-initialize poll and the scheduled poll) could BOTH be processed. Each request re-read the shared poll token when it was sent instead of carrying its own cycle's token, so both requests carried the newer token and both responses were accepted. Each poll cycle now carries its own token, so only the current cycle's response is processed.
  */
 import groovy.json.*
 import groovy.transform.Field
 
-String getVersionNum()		{ return "1.9.15" }
+String getVersionNum()		{ return "1.9.16" }
 String getVersionLabel()	{ return "Ecobee Suite Manager, version ${getVersionNum()} on ${getHubPlatform()}" }
 String getMyNamespace()		{ return "sandood" }
 
@@ -1864,7 +1865,7 @@ void pollChildren(String deviceId="",force=false) {
 	atomicState.pollEcobeeAPIStart = now()
 	if (atomicState.skipTime) atomicState.skipTime = null
 	try {
-		pollChildrenOwned(deviceId, force)
+		pollChildrenOwned(deviceId, force, token)
 	} catch (Exception e) {
 		LOG("pollChildren() - ${e}; the next scheduled poll will retry", 1, null, 'error')
 		releasePoll(token)
@@ -1877,7 +1878,7 @@ void releasePoll(String token) {
 	if ((atomicState.esmPollToken == token) && atomicState.inPollChildren) atomicState.inPollChildren = false
 }
 
-void pollChildrenOwned(String deviceId, force) {
+void pollChildrenOwned(String deviceId, force, String token=null) {
 	// Just in case we need to re-initialize anything
 	def version = getVersionLabel()
 	if (atomicState.versionLabel != version) {
@@ -1955,7 +1956,7 @@ void pollChildrenOwned(String deviceId, force) {
 		//tids.each { names = names == "" ? getThermostatName(it) : names+", "+getThermostatName(it) }
 		//LOG("Polling thermostat${thermostatsToPoll.contains(',')?'s':''} ${names} (${thermostatsToPoll})${forcePoll?' (forced)':''}", 2, null, 'info')
         LOG("Polling ${thermostatsToPoll} ${forcePoll?'(forced)':''}",2,null,'info')
-		pollEcobeeAPI(thermostatsToPoll)		// This will queue the async request, and values will be generated and sent from pollEcobeeAPICallback
+		pollEcobeeAPI(thermostatsToPoll, token)		// This will queue the async request, and values will be generated and sent from pollEcobeeAPICallback
 	} else {	 
 		LOG('No updates', 2, null, 'trace')
         atomicState.inPollChildren = false
@@ -2214,7 +2215,7 @@ void summaryTransportFailed(e) {
 	atomicState.inTimeoutRetry = inTimeoutRetry + 1
 }
 
-boolean pollEcobeeAPI(thermostatIdsString = '') {
+boolean pollEcobeeAPI(thermostatIdsString = '', String token = null) {
 	// boolean timers = atomicState.timers
 	//def pollEcobeeAPIStart = now()
 	//atomicState.pollEcobeeAPIStart = now() //pollEcobeeAPIStart
@@ -2322,7 +2323,7 @@ boolean pollEcobeeAPI(thermostatIdsString = '') {
 	def pollState = [
 		thermostatIdsString: thermostatIdsString,
 		checkTherms:		 checkTherms,
-		esmPollToken:		 atomicState.esmPollToken,		// ownership token of this poll cycle - see pollChildren()
+		esmPollToken:		 (token ?: atomicState.esmPollToken),	// THIS cycle's own token (see pollChildren()) - re-reading atomicState here let two cycles started together both carry the newer one
 	]
 	if (debugLevelFour) pollState += [thermostatIdsString: thermostatIdsString]
 	
