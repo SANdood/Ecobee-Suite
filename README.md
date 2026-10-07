@@ -1,4 +1,4 @@
-![Universal Ecobee Suite, Version 1.8.00](https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Ecobee-Suite-1-9-00-Banner.png) 
+![Universal Ecobee Suite, Version 1.9.00](https://raw.githubusercontent.com/SANdood/Icons/master/Ecobee/Ecobee-Suite-1-9-00-Banner.png) 
 ======================================================
 ### NOTICE: Latest updates posted 14 February 2023 at 7:30am
 
