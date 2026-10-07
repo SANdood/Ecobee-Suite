@@ -182,7 +182,7 @@ Since the 1.9.00 release, I have been working my way through the entire Suite, l
   - **Smart Zones**: fixed a bug that broke *both* of the Helper's modes, along with the detection of the 'fan only' operating state.
   - **Smart Mode** and **Thermal Comfort**: minor cleanup (a corrected reservation name in a warning message, and some dead code removed).
 
-A special thank you to the Hubitat community member who shared a patch aimed at those "Severe Load" warnings - reviewing it led directly to the fixes in 1.9.13 and 1.9.14.
+A special thank you to the Hubitat community member who shared a patch aimed at those "Severe Load" warnings - reviewing it led directly to the fixes in 1.9.13 and 1.9.14. And a special thank you to Claude Fable/Opus for the comprehensive review and repairs - without which I would not have found most of the bugs and issues.
 
 #### Special Thanks to Hubitat Staff
 The author extends a special thank you to the Hubitat staff for assistance in getting the code-based Ecobee authentication working, as the documented Hubitat OAuth path doesn't work for Ecobee. Read through the OAuth init code in Ecobee Suite Manager to learn the (clever) trick they helped me employ. 
