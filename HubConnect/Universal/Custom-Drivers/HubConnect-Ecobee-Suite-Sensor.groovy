@@ -70,9 +70,9 @@ metadata
 		command "removeSensorFromSleep", 	[]
 		
 		command "addSensorToPrograms",		[]	// programs list
-        command "deleteSensorFromPrograms"	[]	// programs list
-        command "removeSensorFromPrograms"	[]
-        command "updateSensorPrograms"		[]	// arguments: (activeList, inactiveList)
+        command "deleteSensorFromPrograms",	[]	// programs list
+        command "removeSensorFromPrograms",	[]
+        command "updateSensorPrograms",		[]	// arguments: (activeList, inactiveList)
 		
 		command "sync",						[]
 	}
@@ -161,15 +161,15 @@ def removeSensorFromSleep()
 }
 def addSensorToPrograms(programsList)
 {
-	parent.sendDeviceEvent(device.deviceNetworkId, "addSensorToPrograms", [programList])
+	parent.sendDeviceEvent(device.deviceNetworkId, "addSensorToPrograms", [programsList])
 }
 def deleteSensorFromPrograms(programsList)
 {
-	parent.sendDeviceEvent(device.deviceNetworkId, "deleteSensorFromPrograms", [programList])
+	parent.sendDeviceEvent(device.deviceNetworkId, "deleteSensorFromPrograms", [programsList])
 }
 def removeSensorFromPrograms(programsList)
 {
-	parent.sendDeviceEvent(device.deviceNetworkId, "removeSensorFromPrograms", [programList])
+	parent.sendDeviceEvent(device.deviceNetworkId, "removeSensorFromPrograms", [programsList])
 }
 def updateSensorPrograms(activeList, inactiveList)
 {
